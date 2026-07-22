@@ -82,6 +82,13 @@ class Settings(BaseSettings):
     SLACK_CLIENT_SECRET: str = os.getenv("SLACK_CLIENT_SECRET", "")
     SLACK_SIGNING_SECRET: str = os.getenv("SLACK_SIGNING_SECRET", "")
 
+    # CRM lead push (HubSpot / Pipedrive). OAuth redirect URIs are derived from
+    # BACKEND_URL, not configured. Self-hosters supply their own OAuth app creds.
+    HUBSPOT_CLIENT_ID: str = os.getenv("HUBSPOT_CLIENT_ID", "")
+    HUBSPOT_CLIENT_SECRET: str = os.getenv("HUBSPOT_CLIENT_SECRET", "")
+    PIPEDRIVE_CLIENT_ID: str = os.getenv("PIPEDRIVE_CLIENT_ID", "")
+    PIPEDRIVE_CLIENT_SECRET: str = os.getenv("PIPEDRIVE_CLIENT_SECRET", "")
+
     # Meta (WhatsApp Cloud API, Messenger, Instagram) — one app, shared webhook.
     # Self-hosters supply their own app; the cloud supplies its approved app.
     META_APP_ID: str = os.getenv("META_APP_ID", "")
