@@ -17,6 +17,7 @@ limitations under the License.
 import { ref, computed, onMounted } from 'vue'
 import { toast } from 'vue-sonner'
 import { leadCaptureService } from '@/services/leadCapture'
+import crmService, { type CrmConnection } from '@/services/crm'
 import type { LeadCaptureConfig, LeadField } from '@/types/leadCapture'
 
 const props = defineProps<{ agentId: string }>()
@@ -31,6 +32,17 @@ const fields = ref<LeadField[]>([])
 const assignmentMode = ref('none')
 const crmSyncTarget = ref('none')
 const slackNotifyEnabled = ref(false)
+
+// Org-level CRM connections, to warn when the chosen target isn't connected.
+// Loaded best-effort: a 403 (plan) or error just means no warning is shown.
+const crmConnections = ref<CrmConnection[]>([])
+const crmTargetUnconnected = computed(() =>
+  crmSyncTarget.value !== 'none' &&
+  !crmConnections.value.some(c => c.provider === crmSyncTarget.value && c.status === 'active')
+)
+const crmTargetName = computed(() =>
+  ({ hubspot: 'HubSpot', pipedrive: 'Pipedrive' } as Record<string, string>)[crmSyncTarget.value] || crmSyncTarget.value
+)
 
 const STANDARD_FIELDS: { key: string; label: string }[] = [
   { key: 'email', label: 'Email' },
@@ -120,6 +132,11 @@ async function load() {
     toast.error('Failed to load lead capture settings')
   } finally {
     loading.value = false
+  }
+  try {
+    crmConnections.value = await crmService.listConnections()
+  } catch {
+    crmConnections.value = []  // plan-gated or unavailable — just no warning
   }
 }
 
@@ -240,12 +257,25 @@ onMounted(load)
             ></textarea>
           </section>
 
-          <!-- When a lead qualifies (routing, coming soon) -->
+          <!-- When a lead qualifies (CRM sync live; routing coming soon) -->
           <section class="lc-card">
-            <h4 class="lc-card-title">When a lead qualifies <span class="lc-soon">Coming soon</span></h4>
-            <p class="lc-card-sub">Routing and CRM sync are configurable now and will activate in an upcoming release.</p>
+            <h4 class="lc-card-title">When a lead qualifies</h4>
+            <p class="lc-card-sub">Push qualified leads straight into your CRM. Assignment and Slack alerts arrive in an upcoming release.</p>
             <div class="lc-route-row">
-              <span>Assign to</span>
+              <span>Sync to CRM</span>
+              <select class="lc-input lc-input-sm" v-model="crmSyncTarget">
+                <option value="none">Don't sync</option>
+                <option value="hubspot">HubSpot</option>
+                <option value="pipedrive">Pipedrive</option>
+                <option value="salesforce" disabled>Salesforce (coming soon)</option>
+              </select>
+            </div>
+            <p v-if="crmTargetUnconnected" class="lc-crm-warning">
+              {{ crmTargetName }} isn't connected — leads won't sync until you
+              <RouterLink to="/settings/integrations">connect it in Integrations</RouterLink>.
+            </p>
+            <div class="lc-route-row">
+              <span>Assign to <span class="lc-soon">Coming soon</span></span>
               <select class="lc-input lc-input-sm" v-model="assignmentMode" disabled>
                 <option value="none">No one — log only</option>
                 <option value="sales_team">Sales team</option>
@@ -253,15 +283,7 @@ onMounted(load)
               </select>
             </div>
             <div class="lc-route-row">
-              <span>Sync to CRM</span>
-              <select class="lc-input lc-input-sm" v-model="crmSyncTarget" disabled>
-                <option value="none">Don't sync</option>
-                <option value="hubspot">HubSpot</option>
-                <option value="salesforce">Salesforce</option>
-              </select>
-            </div>
-            <div class="lc-route-row">
-              <span>Notify in Slack</span>
+              <span>Notify in Slack <span class="lc-soon">Coming soon</span></span>
               <input type="checkbox" v-model="slackNotifyEnabled" disabled />
             </div>
           </section>
@@ -378,6 +400,8 @@ onMounted(load)
 .lc-route-row { display: flex; align-items: center; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid var(--border-color); font-size: 14px; }
 .lc-route-row:last-child { border-bottom: none; }
 .lc-soon { font-size: 10px; padding: 2px 8px; border-radius: 999px; background: var(--o08); color: var(--muted); font-weight: 500; }
+.lc-crm-warning { font-size: 12.5px; color: var(--c-coral); background: var(--coral-bg); border: 1px solid var(--coral-border); border-radius: var(--radius-md); padding: 8px 12px; margin: -4px 0 12px; }
+.lc-crm-warning a { color: inherit; font-weight: 600; }
 .lc-off { background: var(--o05); border: 1px dashed var(--border-color); border-radius: 14px; padding: 24px; text-align: center; font-size: 14px; color: var(--muted); }
 .lc-loading { padding: 40px; text-align: center; color: var(--muted); }
 
