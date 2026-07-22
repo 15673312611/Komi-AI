@@ -60,6 +60,10 @@ from app.models.investigation import (
     InvestigationHypothesis, InvestigationEvent, RCADocument, TicketProposal,
 )
 from app.models.ticket_db_connector import TicketDBConnector, DBConnectorAuditLog
+from app.models.crm import (
+    CrmConnection, CrmSyncJob,
+    CrmProvider, CrmConnectionStatus, CrmSyncJobStatus,
+)
 
 
 
@@ -129,4 +133,9 @@ __all__ = [
     "TicketProposal",
     "TicketDBConnector",
     "DBConnectorAuditLog",
+    "CrmConnection",
+    "CrmSyncJob",
+    "CrmProvider",
+    "CrmConnectionStatus",
+    "CrmSyncJobStatus",
 ]
