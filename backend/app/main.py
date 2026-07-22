@@ -109,6 +109,13 @@ app.include_router(
     tags=["tickets"]
 )
 
+from app.api import crm as crm_api
+app.include_router(
+    crm_api.router,
+    prefix=f"{settings.API_V1_STR}/crm",
+    tags=["crm"]
+)
+
 from app.api import ticket_db_connectors, ticket_webhooks
 app.include_router(
     ticket_db_connectors.router,
