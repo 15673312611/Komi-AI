@@ -155,6 +155,31 @@ services:
     networks:
       - app-network
 
+  crm_sync:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: python -m app.workers.crm_sync
+    env_file:
+      - ./backend/.env
+    environment:
+      - PYTHONUNBUFFERED=1
+      - DEBUG=True
+      - ENVIRONMENT=development
+    volumes:
+      - ./backend:/app
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: always
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - app-network
+
   db:
     build:
       context: .
