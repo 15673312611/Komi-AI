@@ -57,6 +57,22 @@ logger = get_logger(__name__)
 SCOPES = "read_products,read_themes,write_themes,write_script_tags,read_script_tags,read_orders,read_customers"
 
 
+def _require_shopify_agent_in_org(db, agent_id, org_id) -> None:
+    """The agent being configured must belong to the resolved org, else 404.
+
+    agent_id and org_id both arrive as either strings or UUIDs depending on the
+    auth path; a malformed id is simply not found rather than a 500.
+    """
+    from app.repositories.agent import AgentRepository
+    try:
+        agent_uuid = UUID(str(agent_id))
+        org_uuid = UUID(str(org_id))
+    except (ValueError, TypeError):
+        raise HTTPException(status_code=404, detail="Agent not found")
+    if not AgentRepository(db).get_agent_in_org(agent_uuid, org_uuid):
+        raise HTTPException(status_code=404, detail="Agent not found")
+
+
 @router.post("/exchange-token")
 async def exchange_session_token(
     request: Request,
@@ -189,8 +205,20 @@ async def link_shop_to_org(
         if not db_shop:
             raise HTTPException(status_code=404, detail="Shop not found")
 
-        # Update shop with organization_id
         org_id_str = str(current_user.organization_id)
+
+        # Claiming is only for shops nobody owns yet — the same guard
+        # /link-shop/{shop_id} has. Without it, any manage_organization user
+        # could re-point another tenant's installed shop (and its stored
+        # access token) at their own org, and drag that shop's domain onto
+        # their organization record in the process.
+        if db_shop.organization_id and str(db_shop.organization_id) != org_id_str:
+            raise HTTPException(
+                status_code=404,
+                detail="Shop not found"
+            )
+
+        # Update shop with organization_id
         shop_update = ShopifyShopUpdate(organization_id=org_id_str)
         shop_repo.update_shop(shop_id, shop_update)
 
@@ -668,19 +696,26 @@ async def get_agent_shopify_config(
     Supports both session token auth (embedded) and JWT auth (dashboard).
     """
     # Try session token first (for embedded apps)
+    org_id = None
     try:
         shopify_session = await require_shopify_session(request, db)
         # Session token valid - verify agent belongs to shop's organization
         if not shopify_session['organization_id']:
             raise HTTPException(status_code=403, detail="Shop not linked to organization")
-        logger.info(f"GET agent-config using session token for org: {shopify_session['organization_id']}")
+        org_id = shopify_session['organization_id']
+        logger.info(f"GET agent-config using session token for org: {org_id}")
     except HTTPException:
         # Fall back to JWT auth (for dashboard)
         current_user = await get_current_user(request=request, db=db)
         if not check_permissions(current_user, ["manage_organization"]):
             raise HTTPException(status_code=403, detail="Insufficient permissions")
+        org_id = current_user.organization_id
         logger.info(f"GET agent-config using JWT auth for user: {current_user.id}")
-    
+
+    # The comment above always promised this — the agent must be in the
+    # resolved org, else any tenant could read any agent's Shopify config.
+    _require_shopify_agent_in_org(db, agent_id, org_id)
+
     agent_config_repository = AgentShopifyConfigRepository(db)
     config = agent_config_repository.get_agent_shopify_config(agent_id)
     if not config:
@@ -725,7 +760,10 @@ async def save_agent_shopify_config(
         org_id_str = str(current_user.organization_id)
         user_id = current_user.id
         logger.info(f"POST agent-config using JWT auth for user: {current_user.id}")
-    
+
+    # The agent being configured must belong to the resolved org.
+    _require_shopify_agent_in_org(db, agent_id, org_id_str)
+
     # Get the current config for the agent, if it exists
     existing_config = agent_config_repository.get_agent_shopify_config(agent_id)
     

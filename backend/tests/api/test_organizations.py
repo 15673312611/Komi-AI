@@ -377,3 +377,50 @@ def test_get_nonexistent_organization(client):
     response = client.get(f"/api/v1/organizations/{uuid4()}")
     assert response.status_code == 404
     assert "Organization not found" in response.json()["detail"] 
+
+@pytest.fixture
+def other_organization(db) -> Organization:
+    """An organization the test user does not belong to"""
+    org = Organization(
+        id=uuid4(),
+        name="Other Organization",
+        domain="other.example.com",
+        timezone="UTC",
+        business_hours={},
+        settings={},
+        is_active=True
+    )
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+    return org
+
+
+def test_get_another_organization_is_not_found(client, other_organization):
+    """Reading another tenant's organization record is refused"""
+    response = client.get(f"/api/v1/organizations/{other_organization.id}")
+
+    assert response.status_code == 404
+    assert "Organization not found" in response.json()["detail"]
+
+
+def test_update_another_organization_is_not_found(client, db, other_organization):
+    """The domain (and therefore CORS) of another tenant can't be rewritten"""
+    original_domain = other_organization.domain
+
+    response = client.patch(
+        f"/api/v1/organizations/{other_organization.id}",
+        json={"name": "Hijacked", "domain": "attacker.example.com"}
+    )
+
+    assert response.status_code == 404
+    db.refresh(other_organization)
+    assert other_organization.domain == original_domain
+    assert other_organization.name == "Other Organization"
+
+
+def test_get_another_organizations_stats_is_not_found(client, other_organization):
+    """Headcount and conversation volumes stay inside the tenant"""
+    response = client.get(f"/api/v1/organizations/{other_organization.id}/stats")
+
+    assert response.status_code == 404
