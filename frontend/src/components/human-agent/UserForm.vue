@@ -249,33 +249,42 @@ const handleSubmit = () => {
 .user-form {
   display: flex;
   flex-direction: column;
-  gap: var(--space-lg);
-
+  gap: 18px;
 }
 
+/* The global .form-group already adds margin-bottom: var(--space-lg); combined
+   with the flex gap above that doubled the spacing between every field. Zero
+   it and let the single flex gap own the vertical rhythm. */
 .form-group {
   display: flex;
   flex-direction: column;
-  gap: var(--space-xs);
+  gap: 8px;
+  margin-bottom: 0;
 }
 
-.form-input {
-  padding: var(--space-sm);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
+.form-group label {
+  font-size: 13.5px;
+  font-weight: var(--font-weight-medium);
+  color: var(--text3);
 }
+
+/* Inputs deliberately inherit the app-wide .form-input styling from
+   components.css (padding, radius, hover + focus ring) so they match every
+   other form — only the <select> chevron is added below. */
 
 .checkbox-label {
   display: flex;
   align-items: center;
   gap: var(--space-sm);
+  font-size: var(--text-sm);
+  color: var(--text);
 }
 
 .form-actions {
   display: flex;
   justify-content: flex-end;
-  gap: var(--space-md);
-  margin-top: var(--space-md);
+  gap: var(--space-sm);
+  margin-top: var(--space-sm);
 }
 
 .password-strength {
