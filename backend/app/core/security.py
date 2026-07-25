@@ -369,56 +369,6 @@ def get_user_active_sessions(email: str, widget_id: Optional[str] = None) -> lis
     return []
 
 
-def get_all_active_sessions() -> Dict[str, list]:
-    """
-    Get all active sessions across all users.
-    
-    Note: This function uses SCAN for pattern matching user_sessions keys.
-    For better performance with many users, consider maintaining a master set
-    of all active user emails (e.g., "all_active_users") updated alongside
-    token storage operations.
-    
-    Returns:
-        Dictionary with email as key and list of JTI strings as value
-    """
-    try:
-        from app.core.redis import redis_client
-        if redis_client:
-            # Find all keys matching the user_sessions pattern
-            # Filters out widget-specific and widget_keys sets (pattern: user_sessions:EMAIL)
-            all_sessions = {}
-            cursor = 0
-            pattern = "user_sessions:*"
-            
-            while True:
-                cursor, keys = redis_client.scan(cursor, match=pattern)
-                
-                for key in keys:
-                    key_str = key.decode() if isinstance(key, bytes) else key
-                    
-                    # Skip widget-specific and metadata keys (contain ':widget:' or end with ':widget_keys')
-                    if ":widget:" in key_str or key_str.endswith(":widget_keys"):
-                        continue
-                    
-                    # Extract email from key (user_sessions:email@example.com)
-                    email = key_str.replace("user_sessions:", "", 1)
-                    
-                    # Get JTIs for this email
-                    jti_set = redis_client.smembers(key_str)
-                    jti_list = [jti.decode() if isinstance(jti, bytes) else jti for jti in jti_set]
-                    
-                    if jti_list:
-                        all_sessions[email] = jti_list
-                
-                if cursor == 0:
-                    break
-            
-            return all_sessions
-    except Exception as e:
-        logger.error(f"Failed to get all sessions: {str(e)}")
-    return {}
-
-
 def get_existing_valid_token_jti(email: str, widget_id: str, customer_id: str) -> Optional[str]:
     """
     Check if there's an existing valid token JTI for this customer/widget combination.

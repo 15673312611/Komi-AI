@@ -29,7 +29,7 @@ from app.api import webhooks as channel_webhooks
 from app.api import widget_chat  # noqa: F401 - imported for side effects (socket.io handlers registration)
 from fastapi import FastAPI, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
-from app.core.config import settings
+from app.core.config import settings, check_secret_configuration
 from app.services.firebase import initialize_firebase
 from app.database import engine, Base
 import asyncio
@@ -53,6 +53,7 @@ logger = get_logger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
+    check_secret_configuration()
     initialize_firebase()
     await startup_event()
     yield

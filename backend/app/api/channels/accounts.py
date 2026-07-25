@@ -50,7 +50,7 @@ def channel_webhook_url(account) -> str | None:
         return f"{base}/email/{account.id}?token={account.webhook_secret}"
     if account.channel_type == ChannelType.SMS.value:
         provider = (account.settings or {}).get("provider", "twilio")
-        return f"{base}/sms/{provider}/{account.id}"
+        return f"{base}/sms/{provider}/{account.id}?token={account.webhook_secret}"
     return None
 
 

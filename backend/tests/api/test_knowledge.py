@@ -283,6 +283,26 @@ def test_link_knowledge_to_agent(client: TestClient, test_knowledge, test_agent)
     data = response.json()
     assert data["message"] == "Knowledge linked to agent successfully"
 
+def test_vector_store_updates_bind_json_values():
+    """The filters/meta_data JSON embeds the knowledge source title, which a user
+    controls. json.dumps does not escape single quotes, so interpolating it into a
+    '...'::jsonb literal is SQL injection (a title containing ' breaks out). These
+    values must be bound, never f-string-substituted.
+
+    Asserted on the source because the statements target the pgvector table, which
+    the SQLite test database does not have.
+    """
+    import inspect
+    from app.api.knowledge import link_knowledge_to_agent, unlink_knowledge_from_agent
+
+    for handler in (link_knowledge_to_agent, unlink_knowledge_from_agent):
+        source = inspect.getsource(handler)
+        assert "'{new_filters_json}'" not in source, f"{handler.__name__} interpolates filters JSON"
+        assert "'{agent_ids_json}'" not in source, f"{handler.__name__} interpolates agent_ids JSON"
+        assert ":new_filters" in source and ":agent_ids" in source, \
+            f"{handler.__name__} should bind the JSON values as parameters"
+
+
 def test_unlink_knowledge_from_agent(client: TestClient, test_knowledge, test_agent, db):
     """Test unlinking knowledge from an agent"""
     # First link the knowledge

@@ -14,7 +14,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-import traceback
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Depends, Body, Query, status
 from typing import List, Optional
 from app.models.user import User
@@ -170,43 +169,6 @@ class UrlsRequest(BaseModel):
         
         return validated_urls
     
-class ExploreUrlRequest(BaseModel):
-    url: str
-    
-    @field_validator('url')
-    @classmethod
-    def validate_url_format(cls, v):
-        """Validate that URL is in https://domainname format"""
-        if not v:
-            raise ValueError('URL cannot be empty')
-        
-        # Remove trailing slashes and whitespace
-        v = v.strip().rstrip('/')
-        
-        # Check if URL starts with https://
-        if not v.startswith('https://'):
-            raise ValueError('URL must start with https://')
-        
-        # Extract domain part after https://
-        domain_part = v[8:]  # Remove 'https://'
-        
-        # Check if domain part is not empty
-        if not domain_part:
-            raise ValueError('URL must contain a domain name')
-        
-        # Check if domain contains only valid characters and has at least one dot
-        import re
-        # Allow alphanumeric, dots, hyphens, and forward slashes for paths
-        if not re.match(r'^[a-zA-Z0-9.-]+(/.*)?$', domain_part):
-            raise ValueError('Invalid URL format')
-        
-        # Ensure domain has at least one dot (for TLD)
-        domain_only = domain_part.split('/')[0]  # Get just the domain part before any path
-        if '.' not in domain_only:
-            raise ValueError('URL must contain a valid domain with TLD')
-        
-        return v
-
 
 @router.post("/upload/pdf")
 async def upload_pdf_files(
@@ -321,63 +283,6 @@ async def upload_pdf_files(
     except Exception as e:
         logger.error(f"Error uploading PDFs: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to upload files")
-
-
-@router.post("/explore/add-url")
-async def add_explore_url(
-    request: ExploreUrlRequest = Body(...),
-    db: Session = Depends(get_db)
-):
-    """Add URL from explore view without authentication, using environment variables"""
-    try:
-        # Get values from environment
-        agent_id = settings.EXPLORE_AGENT_ID
-        org_id = settings.EXPLORE_SOURCE_ORG_ID
-        user_id = settings.EXPLORE_USER_ID
-        
-        
-        # Check if URL already exists in knowledge base
-        knowledge_repo = KnowledgeRepository(db)
-        existing_sources = knowledge_repo.get_by_sources(UUID(org_id), [request.url])
-        
-        if existing_sources:
-            return {
-                "status": "exists",
-                "message": "URL already exists in knowledge base"
-            }
-        
-        # Create queue item with HIGH priority for explore URLs
-        queue_repo = KnowledgeQueueRepository(db)
-        queue_item = KnowledgeQueue(
-            organization_id=UUID(org_id),
-            agent_id=UUID(agent_id),
-            user_id=user_id,
-            source_type='website',
-            source=request.url,
-            status=QueueStatus.PENDING,
-            priority=10,  # High priority for explore URLs (default is 0)
-            queue_metadata={
-                "max_links": settings.KB_MAX_LINKS
-            }
-        )
-        
-        # Add to queue
-        queue_item = queue_repo.create(queue_item)
-        
-        # DON'T process immediately in API - let the knowledge processor service handle it
-        # The knowledge processor runs as a separate service and polls the queue
-        
-        return {
-            "status": "success",
-            "message": "URL added to knowledge base queue. Processing will start shortly.",
-            "queue_id": queue_item.id
-        }
-        
-    except Exception as e:
-        logger.error(f"Error adding explore URL: {str(e)}")
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=str(e))
-
 
 
 def _get_crawled_urls_info(crawled_urls):
@@ -764,29 +669,33 @@ async def link_knowledge_to_agent(
                 agent_ids_json = json.dumps(agent_ids)
                 new_filters_json = json.dumps(new_filters)
                 
-                # Use direct string substitution for JSON values (safe because they're JSON-serialized)
-                # and parameterized query for the source name
+                # Bind every caller-influenced value as a query parameter. The JSON payloads
+                # embed knowledge.source (a user-supplied title); json.dumps does not escape
+                # single quotes, so interpolating them into a '...'::jsonb literal would allow
+                # SQL injection. Only the system-derived schema/table identifiers are inlined.
                 update_meta_query = text(f"""
                     UPDATE {knowledge.schema}."{knowledge.table_name}"
-                    SET 
-                        filters = '{new_filters_json}'::jsonb,
-                        meta_data = CASE 
-                            WHEN meta_data IS NULL THEN 
-                                jsonb_build_object('agent_id', '{agent_ids_json}'::jsonb)
+                    SET
+                        filters = :new_filters::jsonb,
+                        meta_data = CASE
+                            WHEN meta_data IS NULL THEN
+                                jsonb_build_object('agent_id', :agent_ids::jsonb)
                             WHEN meta_data ? 'agent_id' THEN
                                 jsonb_set(
-                                    meta_data, 
-                                    '{{agent_id}}', 
-                                    '{agent_ids_json}'::jsonb
+                                    meta_data,
+                                    '{{agent_id}}',
+                                    :agent_ids::jsonb
                                 )
-                            ELSE 
-                                meta_data || jsonb_build_object('agent_id', '{agent_ids_json}'::jsonb)
+                            ELSE
+                                meta_data || jsonb_build_object('agent_id', :agent_ids::jsonb)
                         END
                     WHERE name = :source
                 """)
 
                 db.execute(update_meta_query, {
-                    "source": knowledge.source
+                    "source": knowledge.source,
+                    "new_filters": new_filters_json,
+                    "agent_ids": agent_ids_json
                 })
                 db.commit()
                 
@@ -858,29 +767,33 @@ async def unlink_knowledge_from_agent(
                 agent_ids_json = json.dumps(agent_ids)
                 new_filters_json = json.dumps(new_filters)
                 
-                # Use direct string substitution for JSON values (safe because they're JSON-serialized)
-                # and parameterized query for the source name
+                # Bind every caller-influenced value as a query parameter. The JSON payloads
+                # embed knowledge.source (a user-supplied title); json.dumps does not escape
+                # single quotes, so interpolating them into a '...'::jsonb literal would allow
+                # SQL injection. Only the system-derived schema/table identifiers are inlined.
                 update_query = text(f"""
                     UPDATE {knowledge.schema}."{knowledge.table_name}"
-                    SET 
-                        filters = '{new_filters_json}'::jsonb,
-                        meta_data = CASE 
-                            WHEN meta_data IS NULL THEN 
+                    SET
+                        filters = :new_filters::jsonb,
+                        meta_data = CASE
+                            WHEN meta_data IS NULL THEN
                                 NULL
                             WHEN meta_data ? 'agent_id' THEN
                                 jsonb_set(
-                                    meta_data, 
-                                    '{{agent_id}}', 
-                                    '{agent_ids_json}'::jsonb
+                                    meta_data,
+                                    '{{agent_id}}',
+                                    :agent_ids::jsonb
                                 )
-                            ELSE 
+                            ELSE
                                 meta_data
                         END
                     WHERE name = :source
                 """)
 
                 db.execute(update_query, {
-                    "source": knowledge.source
+                    "source": knowledge.source,
+                    "new_filters": new_filters_json,
+                    "agent_ids": agent_ids_json
                 })
                 db.commit()
 
@@ -1125,7 +1038,6 @@ async def delete_queue_item(
     except Exception as e:
         logger.error(f"Error deleting queue item: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
-
 
 
 @router.get("/organization/{org_id}")

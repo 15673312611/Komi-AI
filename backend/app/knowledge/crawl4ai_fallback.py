@@ -18,6 +18,7 @@ import asyncio
 from typing import Optional, Tuple
 from bs4 import BeautifulSoup
 from app.core.logger import get_logger
+from app.knowledge.url_safety import guard_url
 
 logger = get_logger(__name__)
 
@@ -63,7 +64,14 @@ class Crawl4AIFallback:
         :param url: The URL to fetch
         :param take_screenshot: Whether to take a screenshot of the rendered page
         :return: Tuple of (html, markdown, screenshot_base64) or (None, None, None) if failed
+        :raises BlockedHostError: if the URL targets an internal/blocked host
         """
+        # SSRF guard: the httpx crawl path validates through url_safety, but this
+        # browser fallback drives a real Chromium and previously fetched any URL.
+        # Note this covers the initial URL only - redirects and in-page JS navigation
+        # the browser follows on its own need network-layer egress policy too.
+        guard_url(url)
+
         screenshot_base64 = None
         html_content = None
         markdown_content = None

@@ -63,7 +63,8 @@ class VonageProvider(SmsProvider):
     async def verify_webhook(self, req: SmsWebhookRequest, account: ChannelAccount) -> bool:
         secret = self.credentials(account).get("signature_secret")
         if not secret:
-            # No signature configured — rely on the unguessable per-account URL
+            # No signature configured - the route authenticates this account with the
+            # per-account webhook token instead (signs_webhook is False).
             return True
         source = req.json_body or req.params
         return _verify_hmac_signature(source, secret)
