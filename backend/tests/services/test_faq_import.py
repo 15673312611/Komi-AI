@@ -81,6 +81,36 @@ async def test_import_job_inserts_drafts_with_source_label(db, test_organization
 
 
 @pytest.mark.asyncio
+async def test_import_job_falls_back_to_generate_when_no_verbatim_qa(db, test_organization, test_ai_config):
+    """An index/prose page has no verbatim Q&A, so extract_from_faq_page returns
+    nothing. Rather than import 0, the batch is drafted with generate_from_text."""
+    job = FAQGenerationJob(
+        organization_id=test_organization.id,
+        job_type=FAQJobType.IMPORT_URL.value,
+        source_url="https://help.example.com/",
+    )
+    db.add(job)
+    db.commit()
+    db.refresh(job)
+
+    drafted = [GeneratedFAQ(question="Can I use it in my shop?", answer="Yes.", category="General")]
+    mock_generator = SimpleNamespace(
+        extract_from_faq_page=AsyncMock(return_value=[]),          # no verbatim Q&A on the page
+        generate_from_text=AsyncMock(return_value=drafted),        # fallback drafts from content
+        batch_chars=15000,
+    )
+    with patch.object(faq_import, "build_generator", return_value=mock_generator), \
+         patch.object(faq_import, "fetch_page_text", return_value="Industry specific\nUsing it in shops\nView all"):
+        created = await run_import_job(db, job)
+
+    assert created == 1
+    mock_generator.extract_from_faq_page.assert_awaited()   # verbatim tried first
+    mock_generator.generate_from_text.assert_awaited()      # then fell back
+    row = db.query(FAQ).filter(FAQ.organization_id == test_organization.id).one()
+    assert row.question == "Can I use it in my shop?"
+
+
+@pytest.mark.asyncio
 async def test_import_job_propagates_ssrf_block(db, test_organization, test_ai_config):
     job = FAQGenerationJob(
         organization_id=test_organization.id,
