@@ -220,7 +220,9 @@ async def test_run_generation_job_fails_when_all_batches_fail(db, test_organizat
     mock_generator = SimpleNamespace(generate_from_text=AsyncMock(side_effect=RuntimeError("boom")), batch_chars=15000)
     with patch.object(faq_generation, "build_generator", return_value=mock_generator), \
          patch.object(faq_generation, "load_source_pages", return_value=["text"]):
-        with pytest.raises(RuntimeError, match="every content batch"):
+        # The underlying provider error is now surfaced (e.g. an unsupported model),
+        # instead of a generic "every content batch" message.
+        with pytest.raises(RuntimeError, match="boom"):
             await run_generation_job(db, job)
     # One retry per batch.
     assert mock_generator.generate_from_text.await_count == 2

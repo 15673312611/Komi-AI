@@ -53,21 +53,34 @@ _URL_SCHEMES = {"http", "https", "mailto"}
 
 _WHITESPACE_RE = re.compile(r"\s+")
 
+# Intra-help-center links are stored ROOT-RELATIVE (/a/{slug}, or / for the home)
+# so they survive a move between path mode and a subdomain/custom domain. The
+# serving prefix is added here at render time. `/a/` (with the trailing slash)
+# never matches an image path like /api/v1/uploads/...
+_INTERNAL_HREF_RE = re.compile(r'(href=")(/a/[^"]*|/)(")')
 
-def render_article_html(text: str) -> str:
+
+def render_article_html(text: str, base_path: str = "") -> str:
     """Markdown -> sanitized HTML for the public article body. Safe to render
     with Jinja's `| safe` because nh3 strips every tag/attr/scheme off-allowlist
-    and rewrites link rel to neutralise tab-nabbing."""
+    and rewrites link rel to neutralise tab-nabbing.
+
+    `base_path` is the serving prefix ("" at a domain root, "/help/{slug}" in path
+    mode) prepended to root-relative intra-help-center links so cross-article links
+    resolve under whichever mode/domain serves the page."""
     if not text or not text.strip():
         return ""
     raw = _markdown.markdown(text, extensions=_MD_EXTENSIONS, output_format="html")
-    return nh3.clean(
+    html = nh3.clean(
         raw,
         tags=_ALLOWED_TAGS,
         attributes=_ALLOWED_ATTRS,
         url_schemes=_URL_SCHEMES,
         link_rel="noopener noreferrer nofollow",
     )
+    if base_path:
+        html = _INTERNAL_HREF_RE.sub(lambda m: f"{m.group(1)}{base_path}{m.group(2)}{m.group(3)}", html)
+    return html
 
 
 def to_plain_text(text: str) -> str:

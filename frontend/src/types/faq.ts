@@ -120,6 +120,7 @@ export interface HelpCenterSettings {
   title: string | null
   description: string | null
   logo_url: string | null
+  favicon_url: string | null
   brand_color: string
   header_links: HelpCenterHeaderLink[]
   cta_text: string | null

@@ -135,6 +135,15 @@ class Settings(BaseSettings):
     KNOWLEDGE_SUMMARY_MAX_TOKENS: int = int(os.getenv("KNOWLEDGE_SUMMARY_MAX_TOKENS", "4000"))
 
     # Help center (public FAQ site)
+    # How the public help center URL is advertised (live_url):
+    #   "path"      -> {BACKEND_URL}/help/{slug}, served same-origin as the API.
+    #                  Works on localhost/self-host with no DNS/TLS/proxy. Default.
+    #   "subdomain" -> https://{slug}.<HELP_CENTER_BASE_DOMAIN> (cloud). MUST be set
+    #                  on cloud so subdomain help centers keep their branded URL.
+    # A verified custom domain always takes precedence over both. Host-based dispatch
+    # (subdomains + custom domains) stays active regardless; only path dispatch is gated
+    # to "path" mode.
+    HELP_CENTER_PUBLIC_MODE: str = os.getenv("HELP_CENTER_PUBLIC_MODE", "path")
     # Base domain serving {slug}.<base> help centers.
     HELP_CENTER_BASE_DOMAIN: str = os.getenv("HELP_CENTER_BASE_DOMAIN", "chattermate.help")
     # CNAME target customers point their custom help-center domain at.

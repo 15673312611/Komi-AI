@@ -30,6 +30,7 @@ org content safe. Colors: only `--brand`/`--brand-ink` come from the server
   <title>{{ title }}</title>
   <meta name="description" content="{{ description }}">
   <link rel="canonical" href="{{ canonical_url }}">
+  {% if favicon_url %}<link rel="icon" href="{{ favicon_url }}">{% endif %}
   <meta property="og:title" content="{{ title }}">
   <meta property="og:description" content="{{ description }}">
   <meta property="og:type" content="{{ og_type | default('website') }}">
@@ -293,7 +294,7 @@ org content safe. Colors: only `--brand`/`--brand-ink` come from the server
   <!-- ============ HEADER ============ -->
   <header class="hc-header">
     <div class="hc-header-in">
-      <a class="hc-brand" href="/">
+      <a class="hc-brand" href="{{ base_path }}/">
         {% if logo_url %}
           <img class="hc-logo" src="{{ logo_url }}" alt="{{ row.organization.name }} logo">
         {% else %}

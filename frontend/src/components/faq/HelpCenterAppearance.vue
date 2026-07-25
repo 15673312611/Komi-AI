@@ -32,6 +32,8 @@ const emit = defineEmits<{
   'save-now': [payload: HelpCenterSettingsUpdate]
   'upload-logo': [file: File]
   'remove-logo': []
+  'upload-favicon': [file: File]
+  'remove-favicon': []
 }>()
 
 const BRAND_SWATCHES = ['#4338CA', '#0E8C8C', '#CF5B38', '#6D5BD0', '#1F8A5B', '#2A6FDB']
@@ -117,9 +119,23 @@ function removeLink(index: number) {
         <div>
           <label class="mono-label">LOGO</label>
           <HelpCenterLogoField
-            :logo-url="settings.logo_url"
+            :image-url="settings.logo_url"
+            kind="logo"
             @upload="$emit('upload-logo', $event)"
             @remove="$emit('remove-logo')"
+          />
+        </div>
+
+        <div>
+          <label class="mono-label">FAVICON</label>
+          <HelpCenterLogoField
+            :image-url="settings.favicon_url"
+            kind="favicon"
+            :max-bytes="1048576"
+            :output-max="128"
+            square
+            @upload="$emit('upload-favicon', $event)"
+            @remove="$emit('remove-favicon')"
           />
         </div>
 

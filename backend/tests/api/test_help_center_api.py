@@ -88,7 +88,8 @@ def test_settings_get_or_create_assigns_slug_and_defaults(client, test_agent):
     assert r.status_code == 200
     body = r.json()
     assert body["slug"] == "test-organization"
-    assert body["live_url"].startswith("https://test-organization.")
+    # Default (path) mode advertises {BACKEND_URL}/help/{slug}.
+    assert body["live_url"].endswith("/help/test-organization")
     assert body["plan_allowed"] is True  # OSS mode: never locked
     assert body["auto_generate"] is True
     assert body["ai_search_enabled"] is True
