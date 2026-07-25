@@ -157,30 +157,155 @@ def test_article_page_renders_sanitized_markdown(client, db, test_organization, 
     assert "alert(1)" not in r.text
 
 
-def test_article_page_emits_faqpage_json_ld(client, db, test_organization, help_center):
-    """Owner-authored articles must be FAQPage, not QAPage. QAPage is for
-    community Q&A and requires answerCount, which Search Console flags as an
-    error on these pages."""
+def _json_ld(response) -> dict:
+    blocks = re.findall(
+        r'<script type="application/ld\+json">(.*?)</script>', response.text, re.DOTALL
+    )
+    assert blocks, "page emitted no JSON-LD"
+    return json.loads(blocks[0])
+
+
+def _nodes_by_type(graph: dict) -> dict:
+    """Graph nodes keyed by @type (multi-typed nodes land under each type)."""
+    nodes: dict = {}
+    for node in graph["@graph"]:
+        types = node["@type"]
+        for node_type in [types] if isinstance(types, str) else types:
+            nodes[node_type] = node
+    return nodes
+
+
+def test_index_json_ld_graph_keeps_faqpage(client, db, test_organization, help_center, subdomain_mode):
+    """The landing page stays a FAQPage (it really is a list of Q&A), wired into
+    an @graph with the Organization and WebSite nodes."""
+    _publish_faq(db, test_organization.id, answer="Click **Settings**.")
+    r = client.get("/", headers={"host": HOST})
+    assert r.status_code == 200
+
+    nodes = _nodes_by_type(_json_ld(r))
+    assert set(nodes) >= {"Organization", "WebSite", "CollectionPage", "FAQPage"}
+    page = nodes["FAQPage"]
+    # Same node carries both types, and it is wired to the WebSite by @id.
+    assert page["@id"] == nodes["CollectionPage"]["@id"]
+    assert page["isPartOf"]["@id"] == nodes["WebSite"]["@id"]
+    assert nodes["WebSite"]["publisher"]["@id"] == nodes["Organization"]["@id"]
+    question = page["mainEntity"][0]
+    assert question["@type"] == "Question"
+    assert question["name"] == "How do I sign up?"
+    # Answer text is plain text, with the Markdown stripped.
+    assert question["acceptedAnswer"]["text"] == "Click Settings ."
+    assert "QAPage" not in r.text
+
+
+def test_article_json_ld_is_techarticle_with_breadcrumbs(
+    client, db, test_organization, help_center, subdomain_mode
+):
+    """A single help article is a TechArticle, not a FAQPage: Google retired FAQ
+    rich results, while BreadcrumbList still renders in search."""
     faq = _publish_faq(db, test_organization.id, answer="Click **Settings**.")
     faq.slug = "how-do-i-sign-up"
     db.commit()
     r = client.get(f"/a/{faq.slug}", headers={"host": HOST})
     assert r.status_code == 200
 
-    blocks = re.findall(
-        r'<script type="application/ld\+json">(.*?)</script>', r.text, re.DOTALL
+    nodes = _nodes_by_type(_json_ld(r))
+    assert set(nodes) >= {"Organization", "WebSite", "WebPage", "BreadcrumbList", "TechArticle"}
+    assert "FAQPage" not in nodes and "QAPage" not in r.text
+
+    article, page, crumbs = nodes["TechArticle"], nodes["WebPage"], nodes["BreadcrumbList"]
+    assert article["headline"] == "How do I sign up?"
+    assert article["articleSection"] == "Getting started"
+    # Every node is wired by @id, not repeated inline.
+    assert article["mainEntityOfPage"]["@id"] == page["@id"]
+    assert article["publisher"]["@id"] == nodes["Organization"]["@id"]
+    assert page["breadcrumb"]["@id"] == crumbs["@id"]
+    # datePublished comes from the row; dateModified falls back to it when the
+    # article has never been edited (so it can't predate publication).
+    assert article["dateModified"] == article["datePublished"]
+
+    items = crumbs["itemListElement"]
+    assert [c["position"] for c in items] == [1, 2, 3]
+    assert [c["name"] for c in items] == ["Home", "Getting started", "How do I sign up?"]
+    assert items[-1]["item"] == f"https://{HOST}/a/how-do-i-sign-up"
+
+
+def test_article_renders_visible_breadcrumb_matching_markup(
+    client, db, test_organization, help_center
+):
+    """Google requires the BreadcrumbList to match what the page shows, so the
+    trail must actually be rendered — the current page as text, not a link."""
+    faq = _publish_faq(db, test_organization.id)
+    faq.slug = "how-do-i-sign-up"
+    db.commit()
+    r = client.get(f"/a/{faq.slug}", headers={"host": HOST})
+
+    assert '<nav class="hc-crumbs" aria-label="Breadcrumb">' in r.text
+    assert '<a href="/">Home</a>' in r.text
+    assert '<a href="/?topic=Getting%20started">Getting started</a>' in r.text
+    assert 'aria-current="page"' in r.text
+
+
+def test_meta_overrides_win_over_derived_values(client, db, test_organization, help_center):
+    """meta_title/meta_description replace the derived title and excerpt; the
+    canonical URL is unaffected."""
+    faq = _publish_faq(db, test_organization.id, answer="Click **Settings**.")
+    faq.slug = "how-do-i-sign-up"
+    faq.meta_title = "Signing up, step by step"
+    faq.meta_description = "A short custom description."
+    db.commit()
+    r = client.get(f"/a/{faq.slug}", headers={"host": HOST})
+
+    assert "<title>Signing up, step by step</title>" in r.text
+    assert '<meta name="description" content="A short custom description.">' in r.text
+    assert '<meta property="og:title" content="Signing up, step by step">' in r.text
+    # The visible <h1> still shows the real question — meta is search-only.
+    assert "How do I sign up?" in r.text
+
+
+def test_og_image_is_absolute(client, db, test_organization, help_center, subdomain_mode):
+    """Scrapers don't resolve relative og:image URLs, so a stored relative logo
+    path has to be anchored to the serving origin."""
+    help_center.logo_url = "/api/v1/uploads/help_center/logo.png"
+    db.commit()
+    r = client.get("/", headers={"host": HOST})
+
+    expected = f"https://{HOST}/api/v1/uploads/help_center/logo.png"
+    assert f'<meta property="og:image" content="{expected}">' in r.text
+    assert '<meta name="twitter:card" content="summary_large_image">' in r.text
+
+
+def test_custom_domain_page_is_self_contained(
+    client, db, test_organization, help_center, test_widget, monkeypatch
+):
+    """On a verified custom domain the page must advertise ITS OWN origin for
+    canonical/og/assets — public_app serves the uploads mount there — even
+    though the install is otherwise in path mode."""
+    monkeypatch.setattr(settings, "HELP_CENTER_PUBLIC_MODE", "path")
+    monkeypatch.setattr(settings, "BACKEND_URL", "https://api.selfhosted.example")
+    help_center.custom_domain = "help.customer.com"
+    help_center.txt_record_verified = True
+    help_center.cname_record_verified = True
+    help_center.logo_url = "/api/v1/uploads/help_center/logo.png"
+    help_center.agent_id = test_widget.agent_id
+    db.commit()
+
+    r = client.get("/", headers={"host": "help.customer.com"})
+    assert r.status_code == 200
+    # The custom domain wins over path mode — no /help/{slug} anywhere.
+    assert '<link rel="canonical" href="https://help.customer.com/">' in r.text
+    assert "/help/test-org" not in r.text
+    assert (
+        '<meta property="og:image" content="https://help.customer.com/api/v1/uploads/help_center/logo.png">'
+        in r.text
     )
-    assert blocks, "article page emitted no JSON-LD"
-    data = json.loads(blocks[0])
-    assert data["@type"] == "FAQPage"
-    # mainEntity must be a list — FAQPage models one-or-more Questions.
-    assert isinstance(data["mainEntity"], list)
-    question = data["mainEntity"][0]
-    assert question["@type"] == "Question"
-    assert question["name"] == "How do I sign up?"
-    # Answer text is plain text, with the Markdown stripped.
-    assert question["acceptedAnswer"]["text"] == "Click Settings ."
-    assert "QAPage" not in r.text
+
+
+def test_og_card_degrades_without_a_logo(client, db, test_organization, help_center):
+    """No logo means no og:image at all — a broken thumbnail is worse than a
+    text-only card."""
+    r = client.get("/", headers={"host": HOST})
+    assert "og:image" not in r.text
+    assert '<meta name="twitter:card" content="summary">' in r.text
 
 
 def test_search_filters_results(client, db, test_organization, help_center):

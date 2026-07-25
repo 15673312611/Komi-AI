@@ -21,7 +21,13 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 # Reuse the ORM enums so the API contract can never drift from the DB.
-from app.models.faq import DEFAULT_FAQ_CATEGORY, FAQStatus
+from app.models.faq import (
+    DEFAULT_FAQ_CATEGORY,
+    FAQ_META_DESCRIPTION_MAX_LENGTH,
+    FAQ_META_TITLE_MAX_LENGTH,
+    FAQ_SLUG_MAX_LENGTH,
+    FAQStatus,
+)
 from app.models.schemas.pagination import Pagination
 from app.utils.urls import normalize_url
 
@@ -31,6 +37,29 @@ MAX_QUESTION_LENGTH = 300
 # cap only guards against runaway payloads.
 MAX_ANSWER_LENGTH = 20000
 MAX_BULK_IDS = 200
+
+
+class SeoFields(BaseModel):
+    """Optional per-article SEO overrides, shared by create and update.
+
+    Blank strings are coerced to None so clearing a field in the admin UI
+    restores the derived default instead of publishing an empty tag. `slug` is
+    normalized and de-duplicated server-side (see resolve_faq_slug) — validation
+    here only bounds the input, to exactly what the columns accept (values that
+    are too long are rejected rather than silently truncated).
+    """
+    slug: Optional[str] = Field(default=None, max_length=FAQ_SLUG_MAX_LENGTH)
+    meta_title: Optional[str] = Field(default=None, max_length=FAQ_META_TITLE_MAX_LENGTH)
+    meta_description: Optional[str] = Field(
+        default=None, max_length=FAQ_META_DESCRIPTION_MAX_LENGTH
+    )
+
+    @field_validator("slug", "meta_title", "meta_description")
+    @classmethod
+    def _blank_to_none(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return None
+        return v.strip() or None
 
 
 class FAQBase(BaseModel):
@@ -47,11 +76,11 @@ class FAQBase(BaseModel):
         return v
 
 
-class FAQCreate(FAQBase):
+class FAQCreate(FAQBase, SeoFields):
     status: FAQStatus = FAQStatus.DRAFT
 
 
-class FAQUpdate(BaseModel):
+class FAQUpdate(SeoFields):
     """Partial update — omitted fields keep their current values (apply with
     model_dump(exclude_unset=True)), so e.g. a status-only PATCH can't silently
     reset the category to its default."""
@@ -79,6 +108,8 @@ class FAQResponse(BaseModel):
     answer: str
     category: str
     slug: Optional[str] = None
+    meta_title: Optional[str] = None
+    meta_description: Optional[str] = None
     status: FAQStatus
     knowledge_id: Optional[int] = None
     source_label: Optional[str] = None

@@ -27,6 +27,7 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.logger import get_logger
 from app.models.agent import Agent
+from app.models.faq import FAQ_SLUG_MAX_LENGTH
 from app.models.help_center import HelpCenterSettings
 from app.models.knowledge_to_agent import KnowledgeToAgent
 from app.repositories.help_center import HelpCenterRepository
@@ -35,9 +36,6 @@ logger = get_logger(__name__)
 
 SLUG_MAX_LENGTH = 63
 _SLUG_CLEAN_RE = re.compile(r"[^a-z0-9]+")
-
-
-FAQ_SLUG_MAX_LENGTH = 80
 
 
 def slugify_org_name(name: str) -> str:
@@ -68,6 +66,22 @@ def generate_faq_slug(db: Session, organization_id: UUID, question: str) -> str:
 
     repo = FAQRepository(db)
     return _dedupe_slug(_faq_base_slug(question), lambda c: repo.slug_exists(organization_id, c))
+
+
+def resolve_faq_slug(
+    db: Session, organization_id: UUID, requested: str, exclude_id: Optional[UUID] = None
+) -> str:
+    """A hand-typed slug, reduced to the same shape generation produces
+    (lowercase, a-z0-9 and single hyphens, length-capped) and made unique within
+    the org. `exclude_id` is the FAQ being edited, so keeping its own slug is a
+    no-op rather than a collision that appends -2."""
+    from app.repositories.faq import FAQRepository
+
+    repo = FAQRepository(db)
+    return _dedupe_slug(
+        _faq_base_slug(requested),
+        lambda c: repo.slug_exists(organization_id, c, exclude_id=exclude_id),
+    )
 
 
 def assign_faq_slugs(db: Session, faqs) -> None:
