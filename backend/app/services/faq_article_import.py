@@ -24,7 +24,7 @@ import asyncio
 import re
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
-from urllib.parse import urldefrag, urljoin, urlparse
+from urllib.parse import urldefrag, urljoin, urlparse, urlunparse
 
 import httpx
 from bs4 import BeautifulSoup, Tag
@@ -40,7 +40,9 @@ from app.models.faq_generation_job import FAQGenerationJob, FAQJobStage
 from app.models.schemas.faq import MAX_ANSWER_LENGTH, MAX_QUESTION_LENGTH
 from app.repositories.faq import FAQRepository
 from app.repositories.faq_generation_job import FAQGenerationJobRepository
+from app.repositories.help_center import HelpCenterRepository
 from app.services.faq_generation import CategoryMerger, insert_draft_rows, normalize_question
+from app.services.help_center_settings import live_url
 from app.services.faq_import import _FETCH_HEADERS, MIN_STATIC_TEXT_CHARS
 from app.services.help_center_images import (
     FAQ_IMAGE_TYPES,
@@ -112,17 +114,32 @@ class _ArticleConverter(MarkdownConverter):
     """HTML→Markdown converter that absolutizes links and swaps images for
     placeholders after downloading them (SSRF-guarded, size/type-capped)."""
 
-    def __init__(self, base_url: str, client: httpx.Client, **options):
+    def __init__(self, base_url: str, client: httpx.Client, dest_origin: Optional[str] = None, **options):
         super().__init__(**options)
         self._base_url = base_url
         self._client = client
+        # Cross-links to the source help center get their origin swapped to the
+        # destination help center (path preserved), so imported articles don't
+        # link back to the site being migrated away from. None = leave links as-is.
+        self._dest_origin = dest_origin.rstrip("/") if dest_origin else None
+        self._source_domain = _registrable_domain(urlparse(base_url).hostname or "")
         self.images: Dict[int, Tuple[bytes, str]] = {}
 
     def convert_a(self, el, text, parent_tags):
         href = el.get("href")
         if href:
-            el["href"] = urljoin(self._base_url, href)
+            el["href"] = self._localize_link(urljoin(self._base_url, href))
         return super().convert_a(el, text, parent_tags)
+
+    def _localize_link(self, url: str) -> str:
+        """Same-site link → destination help-center origin, path unchanged.
+        Off-site links (and everything when no destination is set) pass through."""
+        if not self._dest_origin:
+            return url
+        parsed = urlparse(url)
+        if parsed.scheme in ("http", "https") and _registrable_domain(parsed.hostname or "") == self._source_domain:
+            return self._dest_origin + urlunparse(("", "", parsed.path, parsed.params, parsed.query, parsed.fragment))
+        return url
 
     def convert_img(self, el, text, parent_tags):
         alt = (el.get("alt") or "").strip()
@@ -395,7 +412,8 @@ def _strip_chrome(node: Tag) -> None:
 
 
 def fetch_article(
-    client: httpx.Client, url: str, category_override: Optional[str] = None
+    client: httpx.Client, url: str, category_override: Optional[str] = None,
+    dest_origin: Optional[str] = None,
 ) -> Optional[Article]:
     """One article page → title + Markdown body (+ images pending re-host).
     category_override (from the category listing that linked here) wins over the
@@ -416,7 +434,9 @@ def fetch_article(
     if first_h1:
         first_h1.extract()
     _strip_chrome(node)
-    converter = _ArticleConverter(base_url=final_url, client=client, heading_style="ATX", bullets="-")
+    converter = _ArticleConverter(
+        base_url=final_url, client=client, dest_origin=dest_origin, heading_style="ATX", bullets="-"
+    )
     markdown = converter.convert_soup(node).strip()
     if not markdown:
         return None
@@ -441,11 +461,25 @@ async def _rehost_images(article: Article) -> str:
     return markdown
 
 
+def _dest_help_center_origin(db, organization_id) -> Optional[str]:
+    """Origin (scheme://host) of the org's ChatterMate help center, used to
+    rewrite imported cross-links off the source site. None when the org has no
+    help center configured — links are then left pointing at the source."""
+    row = HelpCenterRepository(db).get_by_org(organization_id)
+    if not row:
+        return None
+    parsed = urlparse(live_url(row))
+    if not parsed.scheme or not parsed.netloc:
+        return None
+    return f"{parsed.scheme}://{parsed.netloc}"
+
+
 async def run_article_import_job(db, job: FAQGenerationJob) -> int:
     """Execute an IMPORT_ARTICLES job. Returns FAQs created. No LLM involved —
     articles are imported verbatim as Markdown drafts."""
     job_repo = FAQGenerationJobRepository(db)
     job_repo.update_progress(job.id, stage=FAQJobStage.ANALYZING_SOURCES, progress_percentage=5.0)
+    dest_origin = _dest_help_center_origin(db, job.organization_id)
 
     client = httpx.Client(timeout=settings.FAQ_IMPORT_FETCH_TIMEOUT, headers=_FETCH_HEADERS)
     try:
@@ -460,7 +494,7 @@ async def run_article_import_job(db, job: FAQGenerationJob) -> int:
 
         rows: List[FAQ] = []
         for index, (link, category) in enumerate(links):
-            article = await asyncio.to_thread(fetch_article, client, link, category)
+            article = await asyncio.to_thread(fetch_article, client, link, category, dest_origin)
             job_repo.update_progress(
                 job.id, progress_percentage=10.0 + 78.0 * (index + 1) / len(links)
             )

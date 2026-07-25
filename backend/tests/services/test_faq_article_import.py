@@ -187,6 +187,34 @@ def test_converter_skips_oversized_and_wrong_type_images():
         assert "pic" in markdown and "![" not in markdown
 
 
+def test_converter_swaps_same_site_link_origin_to_destination():
+    """dest_origin rewrites the origin of same-site cross-links (relative and
+    absolute) to the destination help center, leaving the path and off-site
+    links untouched."""
+    conv = _ArticleConverter(
+        base_url="https://help.paywithatoa.co.uk/hc/x/articles/1-base",
+        client=MagicMock(), dest_origin="https://support.mycompany.com",
+    )
+    md = conv.convert(
+        '<a href="/hc/x/articles/2-add-employees">rel</a> '
+        '<a href="https://help.paywithatoa.co.uk/hc/x/articles/3-refunds">abs</a> '
+        '<a href="https://stripe.com/docs">ext</a>'
+    )
+    assert "https://support.mycompany.com/hc/x/articles/2-add-employees" in md
+    assert "https://support.mycompany.com/hc/x/articles/3-refunds" in md
+    assert "https://stripe.com/docs" in md            # off-site untouched
+    assert "paywithatoa.co.uk" not in md              # no source origin left
+
+
+def test_converter_without_dest_origin_keeps_source_links():
+    """No destination configured → same-site links stay absolutized to source."""
+    conv = _ArticleConverter(
+        base_url="https://help.paywithatoa.co.uk/hc/x/articles/1-base", client=MagicMock(),
+    )
+    md = conv.convert('<a href="/hc/x/articles/2-add">rel</a>')
+    assert "https://help.paywithatoa.co.uk/hc/x/articles/2-add" in md
+
+
 @pytest.mark.asyncio
 async def test_article_import_job_inserts_drafts(db, test_organization):
     job = FAQGenerationJob(
@@ -217,7 +245,7 @@ async def test_article_import_job_inserts_drafts(db, test_organization):
     # discover now yields (url, category) pairs; the category flows to fetch_article.
     discovered = [(url, "Billing") for url in articles]
     with patch.object(faq_article_import, "discover_article_links", return_value=discovered), \
-         patch.object(faq_article_import, "fetch_article", side_effect=lambda c, url, category: articles[url]):
+         patch.object(faq_article_import, "fetch_article", side_effect=lambda c, url, category, dest_origin: articles[url]):
         created = await run_article_import_job(db, job)
 
     assert created == 1
