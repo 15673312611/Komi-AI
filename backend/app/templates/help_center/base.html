@@ -403,6 +403,11 @@ org content safe. Colors: only `--brand`/`--brand-ink` come from the server
   {% if widget_id %}
   <script>
     window.chattermateId = {{ widget_id | tojson }};
+    // Must be set, exactly like the dashboard's install snippet does: the loader
+    // otherwise falls back to the API URL baked in at build time (the vendor
+    // cloud), so a self-hosted help center would ask the wrong backend for its
+    // widget and the visitor would just see "Chat Unavailable".
+    window.chattermateBaseUrl = {{ widget_api_url | tojson }};
     (function () {
       var s = document.createElement('script');
       s.src = {{ widget_script_url | tojson }};

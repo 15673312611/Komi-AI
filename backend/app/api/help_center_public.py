@@ -139,6 +139,11 @@ async def _chrome_context(row: HelpCenterSettings, base_path: str = "") -> dict:
         # the widget APP it pulls in (/assets/widget.js) is served from
         # VITE_WIDGET_URL by the backend. In prod both resolve to the app domain.
         "widget_script_url": f"{settings.FRONTEND_URL}/webclient/chattermate.min.js",
+        # This install's API root, handed to the loader as window.chattermateBaseUrl
+        # (same contract as the dashboard's embed snippet). Without it the loader
+        # uses its build-time default — the vendor cloud — which no self-hosted
+        # deployment can talk to.
+        "widget_api_url": f"{settings.BACKEND_URL.rstrip('/')}{settings.API_V1_STR}",
     }
 
 

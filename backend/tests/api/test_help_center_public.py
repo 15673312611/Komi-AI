@@ -274,12 +274,29 @@ def test_og_image_is_absolute(client, db, test_organization, help_center, subdom
     assert '<meta name="twitter:card" content="summary_large_image">' in r.text
 
 
+def test_widget_embed_points_at_this_install(
+    client, db, test_organization, help_center, test_widget, monkeypatch
+):
+    """The loader falls back to the API URL baked in at build time (the vendor
+    cloud) unless the page sets window.chattermateBaseUrl. Without it, a
+    self-hosted help center asks the wrong backend for its widget and the
+    visitor gets "Chat Unavailable"."""
+    monkeypatch.setattr(settings, "BACKEND_URL", "https://api.selfhosted.example")
+    help_center.agent_id = test_widget.agent_id
+    db.commit()
+
+    r = client.get("/", headers={"host": HOST})
+    assert f'window.chattermateId = "{test_widget.id}"' in r.text
+    assert 'window.chattermateBaseUrl = "https://api.selfhosted.example/api/v1"' in r.text
+
+
 def test_custom_domain_page_is_self_contained(
     client, db, test_organization, help_center, test_widget, monkeypatch
 ):
     """On a verified custom domain the page must advertise ITS OWN origin for
-    canonical/og/assets — public_app serves the uploads mount there — even
-    though the install is otherwise in path mode."""
+    canonical/og/assets (public_app serves the uploads mount there), while the
+    widget still calls back to the install's API origin cross-origin — which is
+    exactly what domain verification adds to CORS."""
     monkeypatch.setattr(settings, "HELP_CENTER_PUBLIC_MODE", "path")
     monkeypatch.setattr(settings, "BACKEND_URL", "https://api.selfhosted.example")
     help_center.custom_domain = "help.customer.com"
@@ -298,6 +315,7 @@ def test_custom_domain_page_is_self_contained(
         '<meta property="og:image" content="https://help.customer.com/api/v1/uploads/help_center/logo.png">'
         in r.text
     )
+    assert 'window.chattermateBaseUrl = "https://api.selfhosted.example/api/v1"' in r.text
 
 
 def test_og_card_degrades_without_a_logo(client, db, test_organization, help_center):
