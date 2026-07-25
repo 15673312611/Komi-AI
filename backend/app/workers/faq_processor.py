@@ -66,9 +66,15 @@ async def process_faq_job(job_id: int):
             if created:
                 body = f"{created} draft FAQ{'s' if created != 1 else ''} added — review and publish them in Help center."
             elif is_import:
-                body = "Nothing new was imported — the pages were unreadable or duplicated existing FAQs."
+                body = (
+                    "Nothing new was imported — no Q&A was found on the page, or it duplicates "
+                    "existing FAQs. Tip: use Import → Articles to bring in whole articles verbatim (no AI needed)."
+                )
             else:
-                body = "No new FAQs were found — your existing FAQs already cover this content."
+                body = (
+                    "No new FAQs were generated — the model returned nothing for this content. "
+                    "Try a larger/different model, or Import → Articles to import pages directly."
+                )
             await notify_user(
                 db,
                 job.user_id,
