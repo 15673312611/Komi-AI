@@ -51,7 +51,17 @@ from app.services.help_center_public import (
     resolve_help_center,
     widget_id_for,
 )
-from app.services.help_center_settings import live_url
+from app.services.help_center_seo import (
+    absolute_asset_url,
+    article_description,
+    article_json_ld,
+    article_title,
+    breadcrumbs,
+    index_description,
+    index_json_ld,
+    index_title,
+    site_url,
+)
 from app.services.public_rate_limit import allow_request
 
 public_app = FastAPI(title="ChatterMate Help Center", docs_url=None, redoc_url=None, openapi_url=None)
@@ -129,36 +139,30 @@ async def _chrome_context(row: HelpCenterSettings, base_path: str = "") -> dict:
         # the widget APP it pulls in (/assets/widget.js) is served from
         # VITE_WIDGET_URL by the backend. In prod both resolve to the app domain.
         "widget_script_url": f"{settings.FRONTEND_URL}/webclient/chattermate.min.js",
+        # This install's API root, handed to the loader as window.chattermateBaseUrl
+        # (same contract as the dashboard's embed snippet). Without it the loader
+        # uses its build-time default — the vendor cloud — which no self-hosted
+        # deployment can talk to.
+        "widget_api_url": f"{settings.BACKEND_URL.rstrip('/')}{settings.API_V1_STR}",
     }
 
 
-def _question_entity(faq: FAQ) -> dict:
-    """One schema.org Question + acceptedAnswer, from the plain-text form of the
-    (Markdown) answer."""
-    return {
-        "@type": "Question",
-        "name": faq.question,
-        "acceptedAnswer": {"@type": "Answer", "text": to_plain_text(faq.answer)},
-    }
+def _social_context(row: HelpCenterSettings, site: str) -> dict:
+    """Open Graph / Twitter card values shared by both page types.
 
-
-def _faq_page_json_ld(faqs) -> dict:
-    """schema.org FAQPage structured data (Google FAQ rich results).
-
-    FAQPage - not QAPage - is the correct type for these owner-authored answers.
-    QAPage models community/forum pages where users submit competing answers and
-    requires answerCount/upvoteCount, which don't apply here.
+    og:image must be absolute (scrapers don't resolve relative URLs), so a
+    relative logo is anchored to the serving origin. Deliberately NOT signed
+    like the rendered logo: social scrapers cache the URL and re-fetch it long
+    after a signature would expire, so this uses the stored URL — the same
+    unsigned form article images already bake in, which S3 setups serve via a
+    public-read help_center/ prefix.
     """
+    logo_url = absolute_asset_url(row.logo_url, site)
     return {
-        "@context": "https://schema.org",
-        "@type": "FAQPage",
-        "mainEntity": [_question_entity(faq) for faq in faqs],
+        "og_site_name": index_title(row),
+        "og_image": logo_url,
+        "seo_logo_url": logo_url,
     }
-
-
-def _faq_json_ld(groups) -> dict:
-    """FAQPage structured data for the index page's grouped-by-category FAQs."""
-    return _faq_page_json_ld(faq for _category, faqs in groups for faq in faqs)
 
 
 def _card_view(faq: FAQ) -> dict:
@@ -183,17 +187,21 @@ async def index(request: Request, q: str = "", db: Session = Depends(get_db)):
     groups = published_faq_groups(db, row, search=search)
     colors = category_colors([category for category, _faqs in groups])
     card_groups = [(category, [_card_view(faq) for faq in faqs]) for category, faqs in groups]
+    site = site_url(row)
+    social = _social_context(row, site)
+    published = [faq for _category, faqs in groups for faq in faqs]
     context = {
         **await _chrome_context(row, _base_path(request)),
+        **social,
         "request": request,
         "groups": card_groups,
         "colors": colors,
         "search": search or "",
-        "title": row.title or f"{row.organization.name} Help Center",
-        "description": row.description or f"Answers to common questions about {row.organization.name}.",
-        "canonical_url": f"{live_url(row)}/",
+        "title": index_title(row),
+        "description": index_description(row),
+        "canonical_url": f"{site}/",
         "og_type": "website",
-        "json_ld": _faq_json_ld(groups) if groups else None,
+        "json_ld": index_json_ld(row, published, site, social["seo_logo_url"]),
         "ask_enabled": ask_available(row),
     }
     response = templates.TemplateResponse(request, "help_center/index.html", context)
@@ -230,26 +238,32 @@ async def article(slug: str, request: Request, db: Session = Depends(get_db)):
         }
         for rel in related_articles(db, row, faq)
     ]
+    base_path = _base_path(request)
     article_view = {
         "question": faq.question,
         "category": faq.category,
         "color": default_color,
         "read_time": read_time_label(faq.answer),
-        "body_html": render_article_html(faq.answer, _base_path(request)),
+        "body_html": render_article_html(faq.answer, base_path),
         "related": related,
     }
-    canonical = f"{live_url(row)}/a/{faq.slug}"
-    json_ld = _faq_page_json_ld([faq])
+    site = site_url(row)
+    social = _social_context(row, site)
+    crumbs = breadcrumbs(row, faq, base_path, site)
     context = {
-        **await _chrome_context(row, _base_path(request)),
+        **await _chrome_context(row, base_path),
+        **social,
         "request": request,
         "article": article_view,
+        "breadcrumbs": crumbs,
         "topics": topics,
-        "title": f"{faq.question} · {row.organization.name} Help Center",
-        "description": excerpt(faq.answer, 200) or faq.question,
-        "canonical_url": canonical,
+        "title": article_title(row, faq),
+        "description": article_description(faq),
+        "canonical_url": f"{site}/a/{faq.slug}",
         "og_type": "article",
-        "json_ld": json_ld,
+        "json_ld": article_json_ld(
+            row, faq, site, crumbs, social["seo_logo_url"], social["og_image"]
+        ),
     }
     response = templates.TemplateResponse(request, "help_center/article.html", context)
     response.headers["Cache-Control"] = PAGE_CACHE_CONTROL
@@ -293,7 +307,7 @@ async def article_feedback(
 @public_app.get("/sitemap.xml")
 async def sitemap(request: Request, db: Session = Depends(get_db)):
     row = _resolve_or_404(request, db)
-    base = live_url(row)
+    base = site_url(row)
     groups = published_faq_groups(db, row)
     urls = [f"  <url><loc>{base}/</loc></url>"]
     for _category, faqs in groups:
@@ -312,7 +326,7 @@ async def sitemap(request: Request, db: Session = Depends(get_db)):
 @public_app.get("/robots.txt", response_class=PlainTextResponse)
 async def robots(request: Request, db: Session = Depends(get_db)):
     row = _resolve_or_404(request, db)
-    return PlainTextResponse(f"User-agent: *\nAllow: /\nSitemap: {live_url(row)}/sitemap.xml\n")
+    return PlainTextResponse(f"User-agent: *\nAllow: /\nSitemap: {site_url(row)}/sitemap.xml\n")
 
 
 @public_app.get("/healthz")

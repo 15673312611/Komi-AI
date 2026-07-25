@@ -20,6 +20,7 @@ import type {
   FaqItem,
   FaqImportMode,
   FaqListResponse,
+  FaqSeoFields,
   FaqStatus,
   GenerateEstimate,
   HelpCenterDomain,
@@ -64,7 +65,14 @@ export const faqService = {
     }
   },
 
-  async createFaq(payload: { question: string; answer: string; category?: string; status?: FaqStatus }): Promise<FaqItem> {
+  async createFaq(
+    payload: {
+      question: string
+      answer: string
+      category?: string
+      status?: FaqStatus
+    } & Partial<FaqSeoFields>,
+  ): Promise<FaqItem> {
     try {
       const response = await api.post('/help-center/faqs', payload)
       return response.data
@@ -73,7 +81,12 @@ export const faqService = {
     }
   },
 
-  async updateFaq(id: string, payload: Partial<Pick<FaqItem, 'question' | 'answer' | 'category' | 'status'>>): Promise<FaqItem> {
+  async updateFaq(
+    id: string,
+    payload: Partial<
+      Pick<FaqItem, 'question' | 'answer' | 'category' | 'status'> & FaqSeoFields
+    >,
+  ): Promise<FaqItem> {
     try {
       const response = await api.put(`/help-center/faqs/${id}`, payload)
       return response.data

@@ -85,10 +85,15 @@ class FAQRepository:
             query = self._apply_search(query, search)
         return query.order_by(FAQ.category.asc(), FAQ.sort_order.asc(), FAQ.created_at.asc()).all()
 
-    def slug_exists(self, organization_id: UUID, slug: str) -> bool:
-        return self.db.query(
-            self._org_query(organization_id).filter(FAQ.slug == slug).exists()
-        ).scalar()
+    def slug_exists(
+        self, organization_id: UUID, slug: str, exclude_id: Optional[UUID] = None
+    ) -> bool:
+        """Whether another FAQ in the org already owns this slug. `exclude_id`
+        skips one row so re-saving an article doesn't collide with itself."""
+        query = self._org_query(organization_id).filter(FAQ.slug == slug)
+        if exclude_id is not None:
+            query = query.filter(FAQ.id != exclude_id)
+        return self.db.query(query.exists()).scalar()
 
     def get_published_by_slug(self, organization_id: UUID, slug: str) -> Optional[FAQ]:
         """A single published article by its slug (the public /a/{slug} lookup)."""
