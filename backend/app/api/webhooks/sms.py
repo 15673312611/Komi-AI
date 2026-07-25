@@ -17,10 +17,11 @@ limitations under the License.
 import json as jsonlib
 from uuid import UUID
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, Response
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, Response
 from sqlalchemy.orm import Session
 
 from app.api.webhooks.common import is_duplicate_message
+from app.channels.email import verify_webhook_token
 from app.channels.sms import get_provider, SmsWebhookRequest
 from app.channels.sms.adapter import account_provider_name
 from app.core.config import settings
@@ -69,6 +70,7 @@ async def sms_webhook(
     account_id: UUID,
     request: Request,
     background_tasks: BackgroundTasks,
+    token: str = Query(""),
     db: Session = Depends(get_db),
 ):
     """Inbound SMS for any provider. The provider in the path selects the
@@ -82,6 +84,13 @@ async def sms_webhook(
     sms_provider = get_provider(provider)
     if sms_provider is None:
         raise HTTPException(status_code=404, detail="Unknown SMS provider")
+
+    # Providers that do not sign their webhooks (Brevo, or Vonage with no signature
+    # secret) carry no proof of origin, so the route enforces the per-account URL
+    # token - the same protection the email webhook uses. The account id in the path
+    # is not a secret: it is part of the URL handed to the provider.
+    if not sms_provider.signs_webhook and not verify_webhook_token(account, token):
+        raise HTTPException(status_code=403, detail="Invalid token")
 
     sms_req = await _build_request(request, provider, account_id)
     if not await sms_provider.verify_webhook(sms_req, account):

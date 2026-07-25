@@ -262,12 +262,33 @@ class TestSmsChannel:
             credentials={"api_key": "k", "api_secret": "s"},
             display_name="SMS", settings={"provider": "vonage"})
         with patch("app.api.webhooks.sms.process_channel_message", AsyncMock()) as proc:
-            r = client.post(f"/api/v1/webhooks/sms/vonage/{acc.id}",
+            r = client.post(f"/api/v1/webhooks/sms/vonage/{acc.id}?token={acc.webhook_secret}",
                             data={"msisdn": "+44700", "to": "+15551239999",
                                   "text": "hello", "messageId": "v9"})
         assert r.status_code == 200
         proc.assert_awaited_once()
         assert proc.await_args.args[1].text == "hello"
+
+    def test_webhook_without_token_rejected_for_unsigned_provider(self, client, db, test_organization):
+        """Providers with no webhook signature (here Vonage with no signature secret)
+        must be authenticated by the per-account token, or anyone knowing the account
+        id could forge inbound SMS."""
+        from app.repositories.channels import ChannelAccountRepository
+        acc = ChannelAccountRepository(db).create_account(
+            organization_id=test_organization.id, channel_type="sms",
+            external_account_id="+15551237777",
+            credentials={"api_key": "k", "api_secret": "s"},
+            display_name="SMS", settings={"provider": "vonage"})
+        payload = {"msisdn": "+44700", "to": "+15551237777", "text": "hi", "messageId": "v10"}
+
+        with patch("app.api.webhooks.sms.process_channel_message", AsyncMock()) as proc:
+            no_token = client.post(f"/api/v1/webhooks/sms/vonage/{acc.id}", data=payload)
+            wrong_token = client.post(
+                f"/api/v1/webhooks/sms/vonage/{acc.id}?token=not-the-secret", data=payload)
+
+        assert no_token.status_code == 403
+        assert wrong_token.status_code == 403
+        proc.assert_not_awaited()
 
     def test_webhook_provider_mismatch_404(self, client, db, test_organization):
         from app.repositories.channels import ChannelAccountRepository
