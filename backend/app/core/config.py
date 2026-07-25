@@ -21,6 +21,7 @@ from typing import List
 from dotenv import load_dotenv
 from pathlib import Path
 from pydantic import field_validator
+from app.core.logger import get_logger
 
 # Get the absolute path to the backend directory (parent of app directory)
 BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
@@ -223,3 +224,53 @@ class Settings(BaseSettings):
     }
 
 settings = Settings()
+
+logger = get_logger(__name__)
+
+
+# Values that ship in the repo (config defaults / .env.example). They are public,
+# so a deployment still using them can have its tokens forged and its stored
+# credentials decrypted by anyone.
+_INSECURE_DEFAULTS = {
+    "SECRET_KEY": "your-secret-key",
+    "CONVERSATION_SECRET_KEY": "your-conversation-secret-key",
+    "ENCRYPTION_KEY": "RFQ4SzhyRTVYdGtsLUxsc25SaDB0QlZpbTdQRmlVRlpsZUlCaFRlU2Vxbz0=",
+}
+
+# .env.example placeholders - not secret either, and they mean "never configured"
+_PLACEHOLDER_VALUES = {
+    "your_jwt_secret_key_here",
+    "your_conversation_secret_key_here",
+    "your_fernet_encryption_key_here",
+}
+
+
+def check_secret_configuration(config: Settings = settings) -> list[str]:
+    """Warn when auth/encryption secrets are missing or still at their public
+    defaults outside development. Returns the names of the offending settings.
+
+    This warns rather than refusing to boot: existing self-hosted deployments may
+    still be running on the default ENCRYPTION_KEY, and their stored credentials
+    are encrypted under it, so failing hard would lock them out of their own data.
+    """
+    if config.ENVIRONMENT == "development":
+        return []
+
+    insecure = [
+        name for name, default in _INSECURE_DEFAULTS.items()
+        if not getattr(config, name, None)
+        or getattr(config, name) == default
+        or getattr(config, name) in _PLACEHOLDER_VALUES
+    ]
+
+    if insecure:
+        logger.warning(
+            "INSECURE CONFIGURATION: %s still set to the public default/placeholder "
+            "value. Anyone can forge tokens or decrypt stored credentials. Generate "
+            "real values (openssl rand -hex 32 for the secret keys, "
+            "Fernet.generate_key() for ENCRYPTION_KEY) and restart. Note that changing "
+            "ENCRYPTION_KEY makes already-encrypted credentials unreadable.",
+            ", ".join(insecure),
+        )
+
+    return insecure
