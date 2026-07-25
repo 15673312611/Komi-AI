@@ -458,7 +458,30 @@ async def test_exchange_session_token_invalid_token(mock_jwt_decode, mock_get_to
         await exchange_session_token(mock_request, mock_db)
     
     assert exc_info.value.status_code == 400
-    assert "Invalid session token: missing shop domain" in str(exc_info.value.detail)
+    assert "Invalid session token: bad shop domain" in str(exc_info.value.detail)
+
+
+@pytest.mark.asyncio
+@patch('app.services.shopify_session.ShopifySessionService.get_session_token_from_request')
+@patch('app.api.shopify.requests.post')
+@patch('jwt.decode')
+async def test_exchange_session_token_rejects_non_shopify_dest(
+    mock_jwt_decode, mock_requests_post, mock_get_token, mock_db
+):
+    """A token whose `dest` points at a host the caller controls must be rejected
+    before we POST client_secret anywhere - otherwise the exchange leaks the
+    Shopify API secret to that host."""
+    mock_get_token.return_value = "forged_token"
+    mock_jwt_decode.return_value = {"dest": "https://attacker.example"}
+    mock_request = MagicMock()
+
+    from app.api.shopify import exchange_session_token
+    with pytest.raises(HTTPException) as exc_info:
+        await exchange_session_token(mock_request, mock_db)
+
+    assert exc_info.value.status_code == 400
+    assert "bad shop domain" in str(exc_info.value.detail)
+    mock_requests_post.assert_not_called()
 
 
 @pytest.mark.asyncio

@@ -70,21 +70,23 @@ async def exchange_session_token(
     try:
         # 1. Get session token from Authorization header
         from app.services.shopify_session import ShopifySessionService
-        import jwt
-        
+
         session_token = ShopifySessionService.get_session_token_from_request(request)
         if not session_token:
             raise HTTPException(status_code=401, detail="Session token required")
-        
+
         logger.info("Exchanging session token for offline access token")
-        
-        # 2. Decode (without verification) to extract shop
-        decoded = jwt.decode(session_token, options={"verify_signature": False})
+
+        # 2. Verify the session token's signature before trusting any claim. This request
+        #    carries client_secret to the host named by `dest`, so an unverified token
+        #    would let a caller steer our credentials to a host of their choosing.
+        decoded = ShopifySessionService.validate_session_token(session_token)
         shop_domain = decoded.get('dest', '').replace('https://', '').replace('http://', '')
-        
-        if not shop_domain:
-            raise HTTPException(status_code=400, detail="Invalid session token: missing shop domain")
-        
+
+        # `dest` must be a Shopify shop domain, never a caller-chosen host.
+        if not shop_domain or not shop_domain.split('/')[0].endswith('.myshopify.com'):
+            raise HTTPException(status_code=400, detail="Invalid session token: bad shop domain")
+
         logger.info(f"Extracted shop domain from token: {shop_domain}")
         
         # 3. Call Shopify token exchange API
