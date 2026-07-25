@@ -210,6 +210,28 @@ export const faqService = {
     }
   },
 
+  async uploadFavicon(file: File): Promise<HelpCenterSettings> {
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+      const response = await api.post('/help-center/favicon', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      })
+      return response.data
+    } catch (error: any) {
+      throw errorMessage(error, 'Failed to upload favicon')
+    }
+  },
+
+  async removeFavicon(): Promise<HelpCenterSettings> {
+    try {
+      const response = await api.delete('/help-center/favicon')
+      return response.data
+    } catch (error: any) {
+      throw errorMessage(error, 'Failed to remove favicon')
+    }
+  },
+
   async setDomain(domain: string): Promise<HelpCenterDomain> {
     try {
       const response = await api.post('/help-center/domain', { domain })

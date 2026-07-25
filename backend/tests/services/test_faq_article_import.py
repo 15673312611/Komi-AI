@@ -29,6 +29,8 @@ from app.repositories.faq import FAQRepository
 from app.services import faq_article_import
 from app.services.faq_article_import import (
     _ArticleConverter,
+    _article_key,
+    _remap_source_links,
     discover_article_links,
     fetch_article,
     run_article_import_job,
@@ -160,7 +162,7 @@ def test_fetch_article_converts_markdown_strips_chrome_and_collects_images():
     # h1 removed (would duplicate the question), list preserved as Markdown.
     assert "# How to install" not in article.markdown
     assert "1. Download the app." in article.markdown
-    # Link absolutized.
+    # Link absolutized (same-site remapping happens later, in the import job).
     assert "[pricing](https://help.example.com/pricing)" in article.markdown
     # Real image collected as placeholder; data: image reduced to alt text.
     assert "cm-pending-image://0.img" in article.markdown
@@ -187,32 +189,61 @@ def test_converter_skips_oversized_and_wrong_type_images():
         assert "pic" in markdown and "![" not in markdown
 
 
-def test_converter_swaps_same_site_link_origin_to_destination():
-    """dest_origin rewrites the origin of same-site cross-links (relative and
-    absolute) to the destination help center, leaving the path and off-site
-    links untouched."""
-    conv = _ArticleConverter(
-        base_url="https://help.paywithatoa.co.uk/hc/x/articles/1-base",
-        client=MagicMock(), dest_origin="https://support.mycompany.com",
-    )
-    md = conv.convert(
-        '<a href="/hc/x/articles/2-add-employees">rel</a> '
-        '<a href="https://help.paywithatoa.co.uk/hc/x/articles/3-refunds">abs</a> '
-        '<a href="https://stripe.com/docs">ext</a>'
-    )
-    assert "https://support.mycompany.com/hc/x/articles/2-add-employees" in md
-    assert "https://support.mycompany.com/hc/x/articles/3-refunds" in md
-    assert "https://stripe.com/docs" in md            # off-site untouched
-    assert "paywithatoa.co.uk" not in md              # no source origin left
-
-
-def test_converter_without_dest_origin_keeps_source_links():
-    """No destination configured → same-site links stay absolutized to source."""
+def test_converter_absolutizes_links():
+    """The converter absolutizes every link (relative → absolute); same-site
+    remapping happens later in the import job, not here."""
     conv = _ArticleConverter(
         base_url="https://help.paywithatoa.co.uk/hc/x/articles/1-base", client=MagicMock(),
     )
-    md = conv.convert('<a href="/hc/x/articles/2-add">rel</a>')
+    md = conv.convert(
+        '<a href="/hc/x/articles/2-add">rel</a> and <a href="https://stripe.com/d">ext</a>'
+    )
     assert "https://help.paywithatoa.co.uk/hc/x/articles/2-add" in md
+    assert "https://stripe.com/d" in md
+
+
+def test_article_key_extracts_numeric_id():
+    assert _article_key("/hc/atoa/articles/1711032863-how-do-i-add-employees") == "1711032863"
+    assert _article_key("/hc/atoa/articles/1711032863") == "1711032863"
+    assert _article_key("/hc/atoa/categories/account-") is None  # not an article
+
+
+def test_remap_source_links_articles_categories_and_offsite():
+    """Article links → ROOT-RELATIVE /a/{slug} (no origin, so a custom-domain move
+    keeps them working); home/category breadcrumb links dropped. Main-site links
+    (same registrable domain, different host) and all external links untouched."""
+    key_to_slug = {"1711032863": "how-do-i-add-employees"}
+    md = (
+        "[Add staff](https://help.paywithatoa.co.uk/hc/atoa/articles/1711032863-how-do-i-add-employees) "
+        "[Home](https://help.paywithatoa.co.uk/hc/atoa/en) "
+        "[Account](https://help.paywithatoa.co.uk/hc/atoa/en/categories/account-) "
+        "[QR in-store](https://paywithatoa.co.uk/in-store-qr/) "  # main site, NOT the help center
+        "[Stripe](https://stripe.com/docs) "
+        "![img](/api/v1/uploads/help_center/x.png)"
+    )
+    out = _remap_source_links(md, {"help.paywithatoa.co.uk"}, key_to_slug)
+    assert "[Add staff](/a/how-do-i-add-employees)" in out         # root-relative, no origin
+    assert "[Home]" not in out                                     # breadcrumb dropped
+    assert "[Account]" not in out                                  # category breadcrumb dropped
+    assert "[QR in-store](https://paywithatoa.co.uk/in-store-qr/)" in out  # main site kept
+    assert "[Stripe](https://stripe.com/docs)" in out              # off-site untouched
+    assert "help.paywithatoa.co.uk" not in out
+    assert "![img](/api/v1/uploads/help_center/x.png)" in out      # image embed untouched
+
+
+def test_remap_source_links_handles_markdown_titles():
+    """markdownify emits `[x](url "title")` for anchors with a title attribute —
+    a titled help-center link must still be remapped, and a titled off-site link
+    kept intact."""
+    key_to_slug = {"1711032863": "how-do-i-add-employees"}
+    md = (
+        '[Add staff](https://help.paywithatoa.co.uk/hc/atoa/articles/1711032863-x "Tip") '
+        '[Docs](https://stripe.com/docs "Stripe docs")'
+    )
+    out = _remap_source_links(md, {"help.paywithatoa.co.uk"}, key_to_slug)
+    assert "[Add staff](/a/how-do-i-add-employees)" in out          # remapped despite title
+    assert '[Docs](https://stripe.com/docs "Stripe docs")' in out   # off-site title preserved
+    assert "help.paywithatoa.co.uk" not in out
 
 
 @pytest.mark.asyncio
@@ -245,7 +276,7 @@ async def test_article_import_job_inserts_drafts(db, test_organization):
     # discover now yields (url, category) pairs; the category flows to fetch_article.
     discovered = [(url, "Billing") for url in articles]
     with patch.object(faq_article_import, "discover_article_links", return_value=discovered), \
-         patch.object(faq_article_import, "fetch_article", side_effect=lambda c, url, category, dest_origin: articles[url]):
+         patch.object(faq_article_import, "fetch_article", side_effect=lambda c, url, category: articles[url]):
         created = await run_article_import_job(db, job)
 
     assert created == 1
@@ -254,3 +285,62 @@ async def test_article_import_job_inserts_drafts(db, test_organization):
     assert row.answer == "**Billing** steps."
     assert row.source_label == "Imported from help.example.com"
     assert row.knowledge_id is None
+
+
+@pytest.mark.asyncio
+async def test_article_import_job_remaps_cross_links(db, test_organization):
+    """Cross-links remap even when the typed index host differs from the ACTUAL
+    article host (redirect / main-site index → help subdomain): article link →
+    /a/{new-slug}, home breadcrumb dropped, main-site link KEPT."""
+    from app.models.help_center import HelpCenterSettings
+
+    db.add(HelpCenterSettings(
+        organization_id=test_organization.id, slug="acme", enabled=True, brand_color="#4338CA",
+    ))
+    job = FAQGenerationJob(
+        organization_id=test_organization.id,
+        job_type=FAQJobType.IMPORT_ARTICLES.value,
+        source_url="https://example.com/help",  # main-site index, NOT the article host
+    )
+    db.add(job)
+    db.commit()
+    db.refresh(job)
+
+    articles = {
+        "https://help.example.com/hc/articles/1711-install": faq_article_import.Article(
+            url="https://help.example.com/hc/articles/1711-install",  # real host = help subdomain
+            title="How to install", markdown="Install steps.", category_hint="Guides",
+        ),
+        "https://help.example.com/hc/articles/2822-billing": faq_article_import.Article(
+            url="https://help.example.com/hc/articles/2822-billing",
+            title="How billing works",
+            markdown=(
+                "See [install](https://help.example.com/hc/articles/1711-install), "
+                "[home](https://help.example.com/hc/en), "
+                "and [pricing](https://example.com/pricing)."
+            ),
+            category_hint="Billing",
+        ),
+    }
+    discovered = [(url, None) for url in articles]
+    with patch.object(faq_article_import, "discover_article_links", return_value=discovered), \
+         patch.object(faq_article_import, "fetch_article", side_effect=lambda c, url, category: articles[url]):
+        created = await run_article_import_job(db, job)
+
+    assert created == 2
+    install = db.query(FAQ).filter(FAQ.question == "How to install").one()
+    billing = db.query(FAQ).filter(FAQ.question == "How billing works").one()
+    # Article link → root-relative /a/{slug} (prefix added at render); home dropped.
+    assert f"(/a/{install.slug})" in billing.answer
+    assert "http://localhost:8000" not in billing.answer     # no origin baked in
+    assert "[home]" not in billing.answer                    # breadcrumb dropped
+    assert "help.example.com" not in billing.answer          # source-host links remapped/dropped
+    assert "[pricing](https://example.com/pricing)" in billing.answer  # main-site link KEPT
+
+
+def test_remap_cleans_breadcrumb_separator_residue():
+    """Dropping "Home › Account" links must not leave a stray "› ›" line."""
+    md = "[Home](https://help.x.co/en) › [Account](https://help.x.co/categories/2-a)\n\nReal content."
+    out = _remap_source_links(md, {"help.x.co"}, {})
+    assert "›" not in out
+    assert out.lstrip().startswith("Real content.")

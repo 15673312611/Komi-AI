@@ -24,7 +24,7 @@ import asyncio
 import re
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
-from urllib.parse import urldefrag, urljoin, urlparse, urlunparse
+from urllib.parse import urldefrag, urljoin, urlparse
 
 import httpx
 from bs4 import BeautifulSoup, Tag
@@ -40,9 +40,7 @@ from app.models.faq_generation_job import FAQGenerationJob, FAQJobStage
 from app.models.schemas.faq import MAX_ANSWER_LENGTH, MAX_QUESTION_LENGTH
 from app.repositories.faq import FAQRepository
 from app.repositories.faq_generation_job import FAQGenerationJobRepository
-from app.repositories.help_center import HelpCenterRepository
 from app.services.faq_generation import CategoryMerger, insert_draft_rows, normalize_question
-from app.services.help_center_settings import live_url
 from app.services.faq_import import _FETCH_HEADERS, MIN_STATIC_TEXT_CHARS
 from app.services.help_center_images import (
     FAQ_IMAGE_TYPES,
@@ -91,9 +89,6 @@ _GENERIC_SECTIONS = frozenset({
     "browse", "recent articles", "recently updated", "top articles",
 })
 
-# Breadcrumb "back" links whose leading container should be dropped from bodies.
-_BREADCRUMB_ROOTS = frozenset({"home", "all collections", "all categories", "help center", "help centre"})
-
 # Internal scheme marking images collected during conversion, replaced with the
 # re-hosted URL afterwards (conversion is sync; storage is async). The trailing
 # ".img" delimits the index so "…//1.img" is never a prefix of "…//10.img".
@@ -114,32 +109,20 @@ class _ArticleConverter(MarkdownConverter):
     """HTML→Markdown converter that absolutizes links and swaps images for
     placeholders after downloading them (SSRF-guarded, size/type-capped)."""
 
-    def __init__(self, base_url: str, client: httpx.Client, dest_origin: Optional[str] = None, **options):
+    def __init__(self, base_url: str, client: httpx.Client, **options):
         super().__init__(**options)
         self._base_url = base_url
         self._client = client
-        # Cross-links to the source help center get their origin swapped to the
-        # destination help center (path preserved), so imported articles don't
-        # link back to the site being migrated away from. None = leave links as-is.
-        self._dest_origin = dest_origin.rstrip("/") if dest_origin else None
-        self._source_domain = _registrable_domain(urlparse(base_url).hostname or "")
         self.images: Dict[int, Tuple[bytes, str]] = {}
 
     def convert_a(self, el, text, parent_tags):
+        # Absolutize every link; same-site source links are remapped to the
+        # destination help center in a second pass (run_article_import_job),
+        # once every article's new FAQ slug is known.
         href = el.get("href")
         if href:
-            el["href"] = self._localize_link(urljoin(self._base_url, href))
+            el["href"] = urljoin(self._base_url, href)
         return super().convert_a(el, text, parent_tags)
-
-    def _localize_link(self, url: str) -> str:
-        """Same-site link → destination help-center origin, path unchanged.
-        Off-site links (and everything when no destination is set) pass through."""
-        if not self._dest_origin:
-            return url
-        parsed = urlparse(url)
-        if parsed.scheme in ("http", "https") and _registrable_domain(parsed.hostname or "") == self._source_domain:
-            return self._dest_origin + urlunparse(("", "", parsed.path, parsed.params, parsed.query, parsed.fragment))
-        return url
 
     def convert_img(self, el, text, parent_tags):
         alt = (el.get("alt") or "").strip()
@@ -371,7 +354,8 @@ def _strip_chrome(node: Tag) -> None:
     """Remove in-article chrome that shouldn't become FAQ content: nav bars,
     TOCs, footers, help-center platform branding ('Made with Chatwoot') and
     'Last updated' metadata lines. Best-effort — a detached element mid-loop
-    just skips."""
+    just skips. (Breadcrumb "Home › Category" nav links are dropped later, in
+    _remap_source_links, since they often share a container with the title.)"""
     for chrome in node.find_all("nav") + node.find_all("footer"):
         chrome.decompose()
     for chrome in node.find_all(class_=_TOC_RE) + node.find_all(id=_TOC_RE):
@@ -379,17 +363,6 @@ def _strip_chrome(node: Tag) -> None:
             chrome.decompose()
         except Exception:
             pass
-    # Leading breadcrumb ("Home › …"): strip only when the article's FIRST link
-    # is a back-to-index link in a short container. A "Home" link buried in body
-    # prose is never the first anchor, so real content is never removed.
-    first_anchor = node.find("a")
-    if first_anchor and first_anchor.get_text(strip=True).lower() in _BREADCRUMB_ROOTS:
-        container = first_anchor.find_parent(["nav", "ol", "ul", "div"])
-        if container and len(container.get_text(" ", strip=True)) <= 80:
-            try:
-                container.decompose()
-            except Exception:
-                pass
     # Platform-branding link ("Made with Chatwoot" logo): remove only a SMALL
     # enclosing block (the footer badge), never a large content div that merely
     # links out to the platform.
@@ -413,7 +386,6 @@ def _strip_chrome(node: Tag) -> None:
 
 def fetch_article(
     client: httpx.Client, url: str, category_override: Optional[str] = None,
-    dest_origin: Optional[str] = None,
 ) -> Optional[Article]:
     """One article page → title + Markdown body (+ images pending re-host).
     category_override (from the category listing that linked here) wins over the
@@ -435,7 +407,7 @@ def fetch_article(
         first_h1.extract()
     _strip_chrome(node)
     converter = _ArticleConverter(
-        base_url=final_url, client=client, dest_origin=dest_origin, heading_style="ATX", bullets="-"
+        base_url=final_url, client=client, heading_style="ATX", bullets="-"
     )
     markdown = converter.convert_soup(node).strip()
     if not markdown:
@@ -461,25 +433,68 @@ async def _rehost_images(article: Article) -> str:
     return markdown
 
 
-def _dest_help_center_origin(db, organization_id) -> Optional[str]:
-    """Origin (scheme://host) of the org's ChatterMate help center, used to
-    rewrite imported cross-links off the source site. None when the org has no
-    help center configured — links are then left pointing at the source."""
-    row = HelpCenterRepository(db).get_by_org(organization_id)
-    if not row:
+# Markdown links, excluding image embeds (`![alt](src)`). Group 1 = label,
+# group 2 = the http(s) URL; an optional markdown title (`[x](url "title")`, which
+# markdownify emits for anchors with a title attribute) is tolerated and dropped.
+_MD_LINK_RE = re.compile(r'(?<!!)\[([^\]]*)\]\((https?://[^)\s]+)(?:\s+"[^"]*")?\)')
+
+
+def _article_key(path: str) -> Optional[str]:
+    """Stable identifier for an article from its URL path — the numeric id in
+    `/articles/{id}-{slug}` (falling back to the whole segment). Lets a cross-link
+    resolve to the same article regardless of the slug suffix or a missing slug."""
+    lower = path.lower()
+    idx = lower.find(_ARTICLE_MARKER)
+    if idx == -1:
         return None
-    parsed = urlparse(live_url(row))
-    if not parsed.scheme or not parsed.netloc:
-        return None
-    return f"{parsed.scheme}://{parsed.netloc}"
+    segment = path[idx + len(_ARTICLE_MARKER):].split("/")[0].split("?")[0]
+    numeric = re.match(r"\d+", segment)
+    return numeric.group(0) if numeric else (segment.lower() or None)
+
+
+# Leading breadcrumb residue after "Home › Account" links are dropped: chevron /
+# middot separators (never markdown-structural chars like - > | so hr/blockquote/
+# tables are safe).
+_BREADCRUMB_RESIDUE_RE = re.compile(r"^[\s›»·]+")
+
+
+def _remap_source_links(markdown: str, source_hosts: set, key_to_slug: dict) -> str:
+    """Rewrite links to the SOURCE HELP CENTER as ROOT-RELATIVE help-center paths:
+      - article link → /a/{new-slug} (or /  when the article wasn't imported),
+        kept as a link;
+      - home/category link (non-article) → DROPPED — these are breadcrumb/nav
+        chrome ("Home › Account") that shouldn't appear in article bodies.
+
+    Links are stored WITHOUT an origin or /help/{slug} prefix so they survive a
+    move to a custom domain or subdomain — the serving prefix is added at render
+    time (help_center_content.render_article_html). Matching is by EXACT host
+    against the set of hosts the articles were actually fetched from (handles
+    redirects and main-site→help-subdomain splits), so links to the main product
+    site and every other external link are left untouched."""
+    def repl(match):
+        label, url = match.group(1), match.group(2)
+        parsed = urlparse(url)
+        if (parsed.hostname or "").lower() not in source_hosts:
+            return match.group(0)  # off-site (incl. the main product site) — keep
+        key = _article_key(parsed.path)
+        if key is None:
+            return ""  # home / category breadcrumb link — drop entirely
+        slug = key_to_slug.get(key)
+        return f"[{label}](/a/{slug})" if slug else f"[{label}](/)"
+
+    result = _MD_LINK_RE.sub(repl, markdown)
+    # Tidy up after dropped breadcrumbs: strip leading separator residue and
+    # collapse the blank lines those drops leave behind.
+    result = _BREADCRUMB_RESIDUE_RE.sub("", result)
+    return re.sub(r"\n{3,}", "\n\n", result)
 
 
 async def run_article_import_job(db, job: FAQGenerationJob) -> int:
     """Execute an IMPORT_ARTICLES job. Returns FAQs created. No LLM involved —
-    articles are imported verbatim as Markdown drafts."""
+    articles are imported verbatim as Markdown drafts, then a second pass remaps
+    intra-help-center links to the org's new help center."""
     job_repo = FAQGenerationJobRepository(db)
     job_repo.update_progress(job.id, stage=FAQJobStage.ANALYZING_SOURCES, progress_percentage=5.0)
-    dest_origin = _dest_help_center_origin(db, job.organization_id)
 
     client = httpx.Client(timeout=settings.FAQ_IMPORT_FETCH_TIMEOUT, headers=_FETCH_HEADERS)
     try:
@@ -493,8 +508,9 @@ async def run_article_import_job(db, job: FAQGenerationJob) -> int:
         source_label = f"Imported from {urlparse(job.source_url).netloc}"
 
         rows: List[FAQ] = []
+        row_sources: List[str] = []  # each row's source article URL, for link remapping
         for index, (link, category) in enumerate(links):
-            article = await asyncio.to_thread(fetch_article, client, link, category, dest_origin)
+            article = await asyncio.to_thread(fetch_article, client, link, category)
             job_repo.update_progress(
                 job.id, progress_percentage=10.0 + 78.0 * (index + 1) / len(links)
             )
@@ -518,9 +534,37 @@ async def run_article_import_job(db, job: FAQGenerationJob) -> int:
                     created_by=job.user_id,
                 )
             )
+            row_sources.append(article.url)
     finally:
         client.close()
 
     if not rows:
         return 0
-    return insert_draft_rows(db, job, rows)
+    created = insert_draft_rows(db, job, rows)  # assigns each row a unique slug in place
+    _remap_imported_links(db, rows, row_sources)
+    return created
+
+
+def _remap_imported_links(db, rows, row_sources) -> None:
+    """Second pass: rewrite intra-help-center links in the just-imported answers to
+    root-relative help-center paths (article → /a/{slug}, else → home)."""
+    # Match against the hosts the articles were ACTUALLY fetched from (post-redirect,
+    # possibly a help subdomain) — NOT the typed index URL, which may redirect or be
+    # main-site-hosted. Using the real article hosts fixes redirect/subdomain splits
+    # without risking a match on main-site content links.
+    source_hosts = {(urlparse(src).hostname or "").lower() for src in row_sources}
+    source_hosts.discard("")
+    key_to_slug = {}
+    for src, faq in zip(row_sources, rows):
+        key = _article_key(urlparse(src).path)
+        if key:
+            key_to_slug[key] = faq.slug
+
+    dirty = False
+    for faq in rows:
+        remapped = _remap_source_links(faq.answer, source_hosts, key_to_slug)
+        if remapped != faq.answer:
+            faq.answer = remapped[:MAX_ANSWER_LENGTH]
+            dirty = True
+    if dirty:
+        db.commit()

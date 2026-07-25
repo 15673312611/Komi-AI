@@ -54,6 +54,13 @@ _LOGO_TYPES = {"image/png", "image/jpeg", "image/webp"}
 MAX_LOGO_DIM = 4000
 LOGO_FIT_DIM = 512
 
+# Favicon: same raster-only policy (SVG/ICO rejected — stored XSS / unsupported by
+# sanitize_image). Stored small and square-ish; the browser scales the PNG.
+MAX_FAVICON_BYTES = 1 * 1024 * 1024
+_FAVICON_TYPES = {"image/png", "image/jpeg", "image/webp"}
+MAX_FAVICON_DIM = 2000
+FAVICON_FIT_DIM = 128
+
 
 def domain_status_response(row: HelpCenterSettings) -> DomainStatusResponse:
     """DNS-records table for the admin UI, shaped from stored state."""
@@ -98,6 +105,9 @@ async def settings_response(
     # /api/v1/uploads/*.png would 404 there. Anchor to the backend origin.
     response.logo_url = (
         absolute_upload_url(await resolve_public_url(row.logo_url)) if row.logo_url else None
+    )
+    response.favicon_url = (
+        absolute_upload_url(await resolve_public_url(row.favicon_url)) if row.favicon_url else None
     )
     response.live_url = live_url(row)
     response.published_count = FAQRepository(db).count_published(organization_id)
@@ -191,5 +201,45 @@ async def remove_logo(
     check_help_center_access(db, current_user.organization_id)
     row = get_or_create_settings(db, current_user.organization)
     row.logo_url = None
+    row = HelpCenterRepository(db).update(row)
+    return await settings_response(db, row, current_user.organization_id)
+
+
+@router.post("/favicon", response_model=HelpCenterSettingsResponse)
+async def upload_favicon(
+    file: UploadFile = File(...),
+    current_user: User = Depends(require_permissions("manage_knowledge")),
+    db: Session = Depends(get_db),
+):
+    check_help_center_access(db, current_user.organization_id)
+    row = get_or_create_settings(db, current_user.organization)
+
+    content = await file.read()
+    safe_bytes, content_type, ext = sanitize_image(
+        content,
+        allowed_content_types=_FAVICON_TYPES,
+        max_bytes=MAX_FAVICON_BYTES,
+        max_dim=MAX_FAVICON_DIM,
+        fit=FAVICON_FIT_DIM,
+    )
+    file_name = f"{uuid4()}{ext}"
+    row.favicon_url = await store_upload(
+        safe_bytes,
+        f"help_center/{current_user.organization_id}",
+        file_name,
+        content_type=content_type,
+    )
+    row = HelpCenterRepository(db).update(row)
+    return await settings_response(db, row, current_user.organization_id)
+
+
+@router.delete("/favicon", response_model=HelpCenterSettingsResponse)
+async def remove_favicon(
+    current_user: User = Depends(require_permissions("manage_knowledge")),
+    db: Session = Depends(get_db),
+):
+    check_help_center_access(db, current_user.organization_id)
+    row = get_or_create_settings(db, current_user.organization)
+    row.favicon_url = None
     row = HelpCenterRepository(db).update(row)
     return await settings_response(db, row, current_user.organization_id)

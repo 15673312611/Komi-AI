@@ -89,6 +89,8 @@ const {
   saveNow,
   uploadLogo,
   removeLogo,
+  uploadFavicon,
+  removeFavicon,
   domainBusy,
   setDomain,
   verifyDomain,
@@ -410,6 +412,8 @@ onUnmounted(stopPolling)
             @save-now="saveNow"
             @upload-logo="uploadLogo"
             @remove-logo="removeLogo"
+            @upload-favicon="uploadFavicon"
+            @remove-favicon="removeFavicon"
           />
           <HelpCenterPublic
             class="settings-section"

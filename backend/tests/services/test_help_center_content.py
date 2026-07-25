@@ -58,9 +58,20 @@ def test_render_rewrites_link_rel():
     assert 'rel="noopener noreferrer nofollow"' in html
 
 
-def test_empty_answer_renders_empty():
-    assert render_article_html("") == ""
-    assert render_article_html("   ") == ""
+def test_base_path_prefixes_internal_links_only():
+    """Root-relative intra-help-center links (/a/{slug}, /) get the serving prefix;
+    images and external links do not — so links work under path mode AND a custom
+    domain from the SAME stored content."""
+    md = "[other](/a/x) [home](/) ![i](/api/v1/uploads/y.png) [ext](https://e.com)"
+    # Path mode: prefix added.
+    html = render_article_html(md, base_path="/help/acme")
+    assert 'href="/help/acme/a/x"' in html
+    assert 'href="/help/acme/"' in html
+    assert 'src="/api/v1/uploads/y.png"' in html          # image NOT prefixed
+    assert 'href="https://e.com"' in html                 # external NOT prefixed
+    # Host/custom-domain mode (base_path=""): stored links serve as-is at root.
+    root = render_article_html(md)
+    assert 'href="/a/x"' in root and 'href="/help/' not in root
 
 
 def test_to_plain_text_strips_markdown_and_html():

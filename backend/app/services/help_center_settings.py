@@ -144,7 +144,14 @@ def get_or_create_settings(db: Session, organization) -> HelpCenterSettings:
 
 
 def live_url(row: HelpCenterSettings) -> str:
-    """The public URL the help center is (or will be) served at."""
+    """The public URL the help center is (or will be) served at.
+
+    A verified custom domain always wins. Otherwise the URL shape follows
+    HELP_CENTER_PUBLIC_MODE: "subdomain" advertises {slug}.<base> (cloud); the
+    default "path" mode serves same-origin as the API at {BACKEND_URL}/help/{slug}
+    (self-host — no DNS/TLS/proxy needed, and correct scheme+port via BACKEND_URL)."""
     if row.domain_verified:
         return f"https://{row.custom_domain}"
-    return f"https://{row.slug}.{settings.HELP_CENTER_BASE_DOMAIN}"
+    if settings.HELP_CENTER_PUBLIC_MODE == "subdomain":
+        return f"https://{row.slug}.{settings.HELP_CENTER_BASE_DOMAIN}"
+    return f"{settings.BACKEND_URL.rstrip('/')}/help/{row.slug}"

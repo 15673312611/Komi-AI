@@ -21,6 +21,7 @@ is the rate-limited "Ask AI".
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, PlainTextResponse, Response
+from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
@@ -31,7 +32,6 @@ from app.models.faq import FAQ
 from app.models.help_center import HelpCenterSettings
 from app.repositories.faq import FAQRepository
 from app.services.file_storage import resolve_public_url
-from app.services.help_center_images import absolute_upload_url
 from app.services.help_center_content import (
     excerpt,
     read_time_label,
@@ -55,6 +55,17 @@ from app.services.help_center_settings import live_url
 from app.services.public_rate_limit import allow_request
 
 public_app = FastAPI(title="ChatterMate Help Center", docs_url=None, redoc_url=None, openapi_url=None)
+# Serve ONLY help-center images on this app, so relative logo/article-image paths
+# resolve on a subdomain/custom-domain origin (host dispatch). Scoped to the
+# help_center/ subtree — the help center must never expose chat_attachments,
+# knowledge, avatars, etc. (in path mode these paths are served by the main app
+# instead). check_dir=False: the dir may not exist until the first upload; a
+# missing file 404s. Local storage only — S3 URLs never hit this mount.
+public_app.mount(
+    "/api/v1/uploads/help_center",
+    StaticFiles(directory="uploads/help_center", check_dir=False),
+    name="help_center_uploads",
+)
 templates = Jinja2Templates(directory="app/templates")
 
 PAGE_CACHE_CONTROL = "public, max-age=60"
@@ -82,23 +93,36 @@ def _client_ip(request: Request) -> str:
 
 
 def _resolve_or_404(request: Request, db: Session):
-    host = normalize_host(request.headers.get("host"))
-    row = resolve_help_center(db, host)
+    hc = request.scope.get("help_center")
+    if hc:  # path dispatch (/help/{slug}) — org from the path slug, not Host
+        row = resolve_help_center(db, slug=hc["slug"])
+    else:
+        row = resolve_help_center(db, host=normalize_host(request.headers.get("host")))
     if not row:
         raise HTTPException(status_code=404, detail="Help center not found")
     return row
 
 
-async def _chrome_context(row: HelpCenterSettings) -> dict:
-    """Shared header/footer/widget context used by every rendered page."""
+def _base_path(request: Request) -> str:
+    """URL prefix for internal links: "/help/{slug}" under path dispatch, "" otherwise."""
+    return request.scope.get("help_center", {}).get("base_path", "")
+
+
+async def _chrome_context(row: HelpCenterSettings, base_path: str = "") -> dict:
+    """Shared header/footer/widget context used by every rendered page.
+
+    `base_path` is the URL prefix templates prepend to internal links: "" for
+    host dispatch (site at origin root) and "/help/{slug}" for path dispatch."""
     return {
         "row": row,
+        "base_path": base_path,
         "brand_color": row.brand_color,
         "brand_ink": contrast_ink(row.brand_color),
-        # Absolute (api-origin) URL: the public site is host-dispatched to a
-        # limited app that does NOT serve /api/v1/uploads, so a host-relative
-        # path would 404 on the help-center domain. Mirror article images.
-        "logo_url": absolute_upload_url(await resolve_public_url(row.logo_url)) if row.logo_url else None,
+        # Relative (/api/v1/uploads/...) so the logo resolves against whichever
+        # origin serves the page — public_app now mounts uploads for host mode,
+        # and path mode is same-origin as the API. S3 stays absolute (signed).
+        "logo_url": await resolve_public_url(row.logo_url) if row.logo_url else None,
+        "favicon_url": await resolve_public_url(row.favicon_url) if row.favicon_url else None,
         "header_links": row.header_links or [],
         "widget_id": widget_id_for(row),
         # The widget LOADER (chattermate.min.js) is served by the frontend, while
@@ -160,7 +184,7 @@ async def index(request: Request, q: str = "", db: Session = Depends(get_db)):
     colors = category_colors([category for category, _faqs in groups])
     card_groups = [(category, [_card_view(faq) for faq in faqs]) for category, faqs in groups]
     context = {
-        **await _chrome_context(row),
+        **await _chrome_context(row, _base_path(request)),
         "request": request,
         "groups": card_groups,
         "colors": colors,
@@ -211,13 +235,13 @@ async def article(slug: str, request: Request, db: Session = Depends(get_db)):
         "category": faq.category,
         "color": default_color,
         "read_time": read_time_label(faq.answer),
-        "body_html": render_article_html(faq.answer),
+        "body_html": render_article_html(faq.answer, _base_path(request)),
         "related": related,
     }
     canonical = f"{live_url(row)}/a/{faq.slug}"
     json_ld = _faq_page_json_ld([faq])
     context = {
-        **await _chrome_context(row),
+        **await _chrome_context(row, _base_path(request)),
         "request": request,
         "article": article_view,
         "topics": topics,
