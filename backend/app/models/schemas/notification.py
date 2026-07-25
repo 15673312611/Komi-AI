@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from datetime import datetime
 from typing import Optional, Dict
 from app.models.notification import NotificationType
@@ -33,3 +33,19 @@ class NotificationResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class NotificationSettingsOut(BaseModel):
+    """A user's chat push preferences."""
+    notify_new_chat: bool
+    notify_chat_transfer: bool
+    notify_chat_assigned: bool
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class NotificationSettingsUpdate(BaseModel):
+    """Partial update — only the toggles the caller sent are applied."""
+    notify_new_chat: Optional[bool] = None
+    notify_chat_transfer: Optional[bool] = None
+    notify_chat_assigned: Optional[bool] = None

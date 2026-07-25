@@ -34,8 +34,7 @@ from app.agents.structured_output import (
     salvage_groq_json_error,
 )
 from app.agents.transfer_agent import get_agent_availability_response
-from app.models.notification import Notification
-from app.services.user import send_fcm_notification
+from app.services.notifications import ChatNotificationEvent, notify_chat_event
 from app.models.user import User, user_groups
 from datetime import datetime
 from app.repositories.jira import JiraRepository
@@ -993,28 +992,22 @@ Keep your responses concise and focused. Provide clear, actionable information i
             }
         )
         
-        # Get all users in the target group and send notifications
+        # Notify the target group's members who haven't muted transfers
         users = db.query(User).join(user_groups).filter(user_groups.c.group_id == group_id).all()
-        
-        for user in users:
-            # Create notification record
-            notification = Notification(
-                user_id=user.id,
-                title="New Chat Transfer",
-                message=notification_message,
-                type="SYSTEM",
-                notification_metadata={
-                    "session_id": session_id,
-                    "transfer_reason": transfer_reason,
-                    "transfer_description": transfer_description
-                }
-            )
-            db.add(notification)
-            db.commit()
-            
-            # Send FCM notification
-            await send_fcm_notification(str(user.id), notification, db)
-        
+
+        await notify_chat_event(
+            db=db,
+            user_ids=[user.id for user in users],
+            event=ChatNotificationEvent.CHAT_TRANSFER,
+            title="New Chat Transfer",
+            message=notification_message,
+            metadata={
+                "session_id": session_id,
+                "transfer_reason": transfer_reason,
+                "transfer_description": transfer_description
+            }
+        )
+
         # Get availability-based response
         availability_response = await get_agent_availability_response(
             agent=self.agent_data,

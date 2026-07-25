@@ -41,6 +41,20 @@ class ChatRepository:
     def __init__(self, db: Session):
         self.db = db
 
+    def has_customer_messages(self, session_id: UUID | str) -> bool:
+        """Whether the customer has said anything in this session yet.
+
+        The widget opens its session on socket connect, before the visitor
+        types, so this is what distinguishes a real new chat from someone
+        merely opening the chat window.
+        """
+        if isinstance(session_id, str):
+            session_id = UUID(session_id)
+        return self.db.query(ChatHistory.id).filter(
+            ChatHistory.session_id == session_id,
+            ChatHistory.message_type == 'user'
+        ).first() is not None
+
     def get_message_count_for_period(
         self,
         org_id: UUID | str,
