@@ -225,6 +225,13 @@ async def reassign_chat(
         if session.user_id is None:
             raise HTTPException(status_code=400, detail="Chat must be handled by a user to reassign")
 
+        # Capture the previous assignee BEFORE reassigning. reassign_session
+        # re-fetches this same row, so within one DB session the identity map
+        # hands back the very object `session` points at — it mutates
+        # session.user_id to the new owner in place. Reading it afterward would
+        # target the new assignee's room, not the previous one's.
+        previous_user_id = session.user_id
+
         # Update session owner
         success = session_repo.reassign_session(session_id=session_id, to_user_id=to_user_id)
         if not success:
@@ -253,12 +260,13 @@ async def reassign_chat(
             'assigned_to': to_user_id
         }, room=f"user_{to_user_id}")
 
-        # Also notify previous assignee if exists
-        if session.user_id:
+        # Also notify the PREVIOUS assignee that the chat left their queue —
+        # unless it was reassigned to themselves (a no-op).
+        if previous_user_id and str(previous_user_id) != str(to_user_id):
             await sio.emit('room_event', {
                 'type': 'reassigned_from_you',
                 'session_id': session_id
-            }, room=f"user_{session.user_id}")
+            }, room=f"user_{previous_user_id}")
 
         # Push to the new assignee — a socket event only reaches them if the
         # dashboard is already open.

@@ -594,6 +594,63 @@ def test_reassign_chat_success(client_with_error_mock, db, user_with_manage_chat
     assert mock_notify.called
 
 
+def test_reassign_notifies_previous_assignee_not_new_one(
+    client_with_error_mock, db, user_with_manage_chats_permission,
+    user_with_manage_assigned_chats, create_chat_session
+):
+    """The 'reassigned_from_you' event must target the PREVIOUS owner's room.
+
+    reassign_session mutates the loaded session in place, so reading
+    session.user_id after it would wrongly point at the new assignee.
+    """
+    from unittest.mock import AsyncMock
+    previous = user_with_manage_chats_permission
+    new = user_with_manage_assigned_chats
+    session = _assigned_session(db, create_chat_session, previous)
+
+    with patch('app.api.session_to_agent.notify_chat_assigned', new=AsyncMock()), \
+         patch('app.api.session_to_agent.sio.emit', new=AsyncMock()) as mock_emit:
+        response = client_with_error_mock.post(
+            f"/api/v1/session-to-agent/{session.session_id}/reassign",
+            params={"to_user_id": str(new.id)}
+        )
+
+    assert response.status_code == status.HTTP_200_OK
+
+    from_you = [
+        c for c in mock_emit.call_args_list
+        if c.args and isinstance(c.args[1], dict)
+        and c.args[1].get('type') == 'reassigned_from_you'
+    ]
+    assert len(from_you) == 1, "expected exactly one reassigned_from_you emit"
+    assert from_you[0].kwargs.get('room') == f"user_{previous.id}"
+    assert from_you[0].kwargs.get('room') != f"user_{new.id}"
+
+
+def test_reassign_to_same_user_skips_from_you_event(
+    client_with_error_mock, db, user_with_manage_chats_permission, create_chat_session
+):
+    """Reassigning a chat to its current owner is a no-op — no contradictory ping."""
+    from unittest.mock import AsyncMock
+    owner = user_with_manage_chats_permission
+    session = _assigned_session(db, create_chat_session, owner)
+
+    with patch('app.api.session_to_agent.notify_chat_assigned', new=AsyncMock()), \
+         patch('app.api.session_to_agent.sio.emit', new=AsyncMock()) as mock_emit:
+        response = client_with_error_mock.post(
+            f"/api/v1/session-to-agent/{session.session_id}/reassign",
+            params={"to_user_id": str(owner.id)}
+        )
+
+    assert response.status_code == status.HTTP_200_OK
+    from_you = [
+        c for c in mock_emit.call_args_list
+        if c.args and isinstance(c.args[1], dict)
+        and c.args[1].get('type') == 'reassigned_from_you'
+    ]
+    assert from_you == []
+
+
 def test_reassign_chat_other_org_session(client_with_error_mock, db, other_org_user,
                                          user_with_manage_assigned_chats,
                                          user_with_manage_chats_permission, create_chat_session):
