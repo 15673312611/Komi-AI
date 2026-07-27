@@ -185,7 +185,10 @@ async def test_send_fcm_notification_message_structure(mock_db, sample_user, sam
         # Verify message was created with correct parameters: data-only payload
         # (title/body in data so the web SDK doesn't auto-display a duplicate),
         # metadata as JSON (not a Python repr), session_id flattened for SW
-        # deep links
+        # deep links, and high-urgency webpush delivery.
+        mock_messaging.WebpushConfig.assert_called_once_with(
+            headers={'Urgency': 'high', 'TTL': '86400'}
+        )
         mock_messaging.Message.assert_called_once_with(
             data={
                 'title': sample_notification.title,
@@ -196,6 +199,7 @@ async def test_send_fcm_notification_message_structure(mock_db, sample_user, sam
                 'metadata': json.dumps(sample_notification.notification_metadata)
             },
             token=sample_user.fcm_token_web,
+            webpush=mock_messaging.WebpushConfig.return_value,
         )
 
 
