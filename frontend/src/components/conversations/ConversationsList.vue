@@ -358,6 +358,9 @@ onBeforeUnmount(() => {
 .conversations-container {
   display: grid;
   grid-template-columns: 320px 1fr;
+  /* Same as the parent grid: without a bounded row the sidebar's height: 100%
+     resolves against content, so .conversations-list can never scroll. */
+  grid-template-rows: minmax(0, 1fr);
   gap: 0;
   height: 100%;
   width: 100%;
