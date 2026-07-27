@@ -503,7 +503,11 @@ watch(() => currentChat.value?.session_id, () => refreshLinkedTicket())
 .chat-layout {
   display: flex;
   flex-direction: column;
-  height: 70vh;
+  /* Fill .chat-view rather than a fixed viewport fraction — the pane is already
+     sized by the grid, and 70vh left a dead strip below the message input. */
+  height: 100%;
+  flex: 1;
+  min-height: 0;
   width: 100%;
   background: var(--bg);
   position: relative;
@@ -1288,12 +1292,6 @@ watch(() => currentChat.value?.session_id, () => refreshLinkedTicket())
 
 /* Mobile: full-screen chat pane */
 @media (max-width: 768px) {
-  .chat-layout {
-    height: 100%;
-    flex: 1;
-    min-height: 0;
-  }
-
   .back-btn,
   .info-btn {
     display: flex;
