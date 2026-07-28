@@ -237,8 +237,7 @@ async def get_human_agent_session_info(db: Session, customer_id: str) -> dict:
         session_model,user_full_name, user_profile_pic = sessions[0]
         
         if user_full_name:  # If there's a human agent assigned
-            if settings.S3_FILE_STORAGE and user_profile_pic:
-                user_profile_pic = await get_s3_signed_url(user_profile_pic)
+            # HumanAgentResponse signs human_agent_profile_pic on serialization.
 
             # Get human agent info from session
             human_agent_info = {
@@ -355,12 +354,8 @@ async def get_widget_data(
         )
         token_was_generated = True
         
-        # Create a copy of customization to modify photo_url
+        # photo_url is signed by AgentCustomizationResponse on serialization.
         customization = agent.customization
-      
-        if settings.S3_FILE_STORAGE and customization and customization.photo_url:
-            # Get signed URL for the photo
-            customization.photo_url = await get_s3_signed_url(customization.photo_url)
 
         return {
             "id": widget.id,
@@ -396,9 +391,7 @@ async def get_widget_data(
             # Create a copy of customization to modify photo_url
             customization = agent.customization
 
-            if settings.S3_FILE_STORAGE and customization and customization.photo_url:
-                # Get signed URL for the photo
-                customization.photo_url = await get_s3_signed_url(customization.photo_url)
+            # photo_url is signed by AgentCustomizationResponse on serialization.
 
             return {
                 "id": widget.id,
@@ -429,9 +422,7 @@ async def get_widget_data(
     # Create a copy of customization to modify photo_url
     customization = agent.customization
 
-    if settings.S3_FILE_STORAGE and customization and customization.photo_url:
-        # Get signed URL for the photo
-        customization.photo_url = await get_s3_signed_url(customization.photo_url)
+    # photo_url is signed by AgentCustomizationResponse on serialization.
 
     return {
         "id": widget.id,

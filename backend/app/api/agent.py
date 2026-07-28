@@ -32,7 +32,7 @@ import aiofiles
 from uuid import uuid4
 from PIL import Image
 from uuid import UUID
-from app.core.s3 import upload_file_to_s3, get_s3_signed_url
+from app.core.s3 import upload_file_to_s3
 from app.core.config import settings
 from pydantic import BaseModel
 from agno.agent import Agent as AgnoAgent
@@ -280,15 +280,9 @@ async def update_agent(
         # Get knowledge sources for response
         knowledge_items = knowledge_repo.get_by_agent(agent.id)
 
-        # Get signed URL for photo if using S3
+        # photo_url is signed by CustomizationResponse on serialization — do not
+        # assign the signed value onto the ORM object, it gets flushed to the DB.
         customization = agent.customization
-        if settings.S3_FILE_STORAGE and customization and customization.photo_url:
-            try:
-                customization.photo_url = await get_s3_signed_url(customization.photo_url)
-            except Exception as e:
-                logger.error(f"Error getting signed URL for agent photo: {str(e)}")
-                # Don't fail the request if we can't get the signed URL
-                pass
 
         # Prepare response
         response = AgentWithCustomizationResponse(
@@ -349,12 +343,9 @@ async def get_organization_agents(
         for agent in agents:
             knowledge_items = knowledge_repo.get_by_agent(agent.id)
             
-            # Create a copy of the customization to modify the photo_url
+            # photo_url is signed by CustomizationResponse on serialization.
             customization = agent.customization
-            if settings.S3_FILE_STORAGE and customization and customization.photo_url:
-                # Get signed URL for the photo
-                customization.photo_url = await get_s3_signed_url(customization.photo_url)
-            
+
             agent_data = AgentWithCustomizationResponse(
                 id=agent.id,
                 name=agent.name,
@@ -436,10 +427,9 @@ async def create_agent_customization(
         db.commit()
         db.refresh(db_customization)
 
-        # Generate signed URL if using S3 storage
-        if settings.S3_FILE_STORAGE and db_customization.photo_url:
-            db_customization.photo_url = await get_s3_signed_url(db_customization.photo_url)
-
+        # photo_url is signed by CustomizationResponse on serialization. Assigning
+        # it here would leave the refreshed instance dirty and persist the
+        # signature on the next flush.
         return db_customization
 
     except HTTPException as e:
@@ -499,10 +489,9 @@ async def upload_agent_photo(
         db.commit()
         db.refresh(db_customization)
 
-        # Generate signed URL if using S3 storage
-        if settings.S3_FILE_STORAGE and db_customization.photo_url:
-            db_customization.photo_url = await get_s3_signed_url(db_customization.photo_url)
-
+        # photo_url is signed by CustomizationResponse on serialization. Assigning
+        # it here would leave the refreshed instance dirty and persist the
+        # signature on the next flush.
         return db_customization
 
     except HTTPException:
@@ -547,8 +536,6 @@ async def update_agent_groups(
         knowledge_repo = KnowledgeRepository(db)
         knowledge_items = knowledge_repo.get_by_agent(agent.id)
         customization = agent.customization
-        if settings.S3_FILE_STORAGE and customization and customization.photo_url:
-            customization.photo_url = await get_s3_signed_url(customization.photo_url)
         return AgentWithCustomizationResponse(
             id=agent.id,
             name=agent.name,
@@ -607,14 +594,7 @@ async def get_agent_by_id(
     # Check if agent belongs to the authenticated organization
     verify_agent_access(agent, auth_info)
     
-    # Get signed URL for photo if using S3
-    if settings.S3_FILE_STORAGE and agent.customization and agent.customization.photo_url:
-        try:
-            agent.customization.photo_url = await get_s3_signed_url(agent.customization.photo_url)
-        except Exception as e:
-            logger.error(f"Error getting signed URL for agent photo: {str(e)}")
-            # Don't fail the request if we can't get the signed URL
-            pass
+    # photo_url is signed by CustomizationResponse on serialization.
     
     return agent
 

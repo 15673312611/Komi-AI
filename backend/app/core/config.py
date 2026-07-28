@@ -117,6 +117,9 @@ class Settings(BaseSettings):
     S3_REGION: str = os.getenv("S3_REGION", "us-east-1")
     AWS_ACCESS_KEY_ID: str = os.getenv("AWS_ACCESS_KEY_ID", "")
     AWS_SECRET_ACCESS_KEY: str = os.getenv("AWS_SECRET_ACCESS_KEY", "")
+    # Presigned URLs are regenerated on every response, so this only needs to
+    # outlive a single page render. Hard-capped at S3_MAX_PRESIGN_SECONDS.
+    S3_PRESIGN_EXPIRY_SECONDS: int = int(os.getenv("S3_PRESIGN_EXPIRY_SECONDS", "3600"))
 
     # Enhanced Website Knowledge Base Configuration
     KB_MAX_DEPTH: int = int(os.getenv("KB_MAX_DEPTH", "5"))

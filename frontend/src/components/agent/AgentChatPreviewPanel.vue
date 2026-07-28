@@ -338,12 +338,8 @@ const photoUrl = computed(() => {
         )
     }
     
-    // Use signed URL if available (for S3)
-    if (props.customization.photo_url_signed) {
-        return props.customization.photo_url_signed
-    }
-    
-    // Absolute S3/CDN URL — use it directly
+    // Absolute S3/CDN URL — use it directly. The API signs photo_url itself, so
+    // there is no separate signed field to prefer.
     if (isAbsoluteUrl(props.customization.photo_url)) {
         return props.customization.photo_url
     }

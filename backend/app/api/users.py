@@ -198,16 +198,8 @@ async def list_users(
         user_repo = UserRepository(db)
         users = user_repo.get_users_by_organization(current_user.organization_id)
 
-        # Get signed URLs for profile pictures if using S3
-        if settings.S3_FILE_STORAGE:
-            for user in users:
-                if user.profile_pic:
-                    try:
-                        user.profile_pic = await get_s3_signed_url(user.profile_pic)
-                    except Exception as e:
-                        logger.error(f"Error getting signed URL for user profile picture: {str(e)}")
-                        # Don't fail the request if we can't get the signed URL
-                        pass
+        # profile_pic is signed by UserResponse on serialization — assigning the
+        # signed value onto the ORM object would persist it on the next flush.
 
         return users
     except Exception as e:
