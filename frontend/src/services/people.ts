@@ -17,6 +17,18 @@ limitations under the License.
 import api from './api'
 import type { PeopleListResponse, PeopleStats, PersonDetail } from '@/types/people'
 
+export interface CrmCustomerSync {
+  provider: string
+  contact_id: string | null
+  record_url: string | null
+  synced_at: string | null
+}
+
+export interface PersonCrmStatus {
+  connected_providers: string[]
+  synced: CrmCustomerSync[]
+}
+
 export interface ListPeopleParams {
   stage?: string
   search?: string
@@ -53,6 +65,18 @@ export const peopleService = {
     payload: { full_name?: string; phone?: string },
   ): Promise<PersonDetail> {
     const response = await api.patch(`/people/${customerId}`, payload)
+    return response.data
+  },
+
+  /** CRM state for the drawer: connected CRMs + where this person is synced. */
+  async getCrmStatus(customerId: string): Promise<PersonCrmStatus> {
+    const response = await api.get(`/people/${customerId}/crm`)
+    return response.data
+  },
+
+  /** Manual "Sync now": push this person to every connected CRM. */
+  async syncToCrm(customerId: string): Promise<PersonCrmStatus> {
+    const response = await api.post(`/people/${customerId}/crm-sync`)
     return response.data
   },
 }

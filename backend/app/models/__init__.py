@@ -61,7 +61,7 @@ from app.models.investigation import (
 )
 from app.models.ticket_db_connector import TicketDBConnector, DBConnectorAuditLog
 from app.models.crm import (
-    CrmConnection, CrmSyncJob,
+    CrmConnection, CrmSyncJob, CrmCustomerSync,
     CrmProvider, CrmConnectionStatus, CrmSyncJobStatus,
 )
 from app.models.notification_settings import UserNotificationSettings
@@ -137,6 +137,7 @@ __all__ = [
     "DBConnectorAuditLog",
     "CrmConnection",
     "CrmSyncJob",
+    "CrmCustomerSync",
     "CrmProvider",
     "CrmConnectionStatus",
     "CrmSyncJobStatus",

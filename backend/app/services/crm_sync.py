@@ -19,13 +19,15 @@ from typing import Optional
 from sqlalchemy.orm import Session
 
 from app.core.logger import get_logger
-from app.crm.base import CrmAuthError, CrmTransientError
-from app.crm.mapping import build_lead_payload
+from app.crm.base import CrmAuthError, CrmPushResult, CrmTransientError
+from app.crm.mapping import build_customer_payload, build_lead_payload
 from app.crm.registry import get_adapter
 from app.models.crm import CrmConnectionStatus, CrmSyncJob
 from app.models.customer import Customer
 from app.models.lead_capture import CrmSyncTarget, LeadCaptureConfig, LeadCaptureResponse
-from app.repositories.crm import CrmConnectionRepository, CrmSyncJobRepository
+from app.repositories.crm import (
+    CrmConnectionRepository, CrmSyncJobRepository, CrmCustomerSyncRepository,
+)
 from app.services.crm_tokens import get_valid_tokens
 from app.services.feature_gate import feature_allowed
 
@@ -118,6 +120,10 @@ async def process_job(db: Session, job: CrmSyncJob) -> CrmSyncJob:
     if result.ok:
         logger.info(f"Pushed lead {response.id} to {job.provider} "
                     f"({result.action} {result.contact_id})")
+        # Record the per-person link so the People drawer can show it.
+        if response.customer_id:
+            _record_customer_sync(db, job.organization_id, response.customer_id,
+                                  job.provider, result)
         return jobs.complete(job, {
             "action": result.action,
             "contact_id": result.contact_id,
@@ -128,6 +134,76 @@ async def process_job(db: Session, job: CrmSyncJob) -> CrmSyncJob:
         return jobs.schedule_retry(job, result.error or "retryable failure",
                                    retry_after_seconds=result.retry_after_seconds)
     return jobs.fail(job, result.error or "push failed", connection_id=connection.id)
+
+
+class CrmManualSyncError(Exception):
+    """A manual "Sync now" could not be completed (surfaced to the user)."""
+
+
+async def sync_customer_to_crm(db: Session, customer: Customer) -> list:
+    """Manual "Sync now" from the People drawer: push this person to every
+    active CRM connection in their org and record each link. Synchronous so
+    the UI gets an immediate result. Returns the list of recorded links.
+
+    Raises CrmManualSyncError for user-facing failures (no email, no
+    connection, plan gate, or a definitive provider rejection)."""
+    from app.repositories.customer import CustomerRepository
+    # Anonymous visitors carry a placeholder stand-in (…@noemail.com / .channel)
+    # that can't receive mail — never push it to a CRM.
+    if CustomerRepository.is_placeholder_email(customer.email):
+        raise CrmManualSyncError("Add an email to this person before syncing to a CRM.")
+    if not feature_allowed(db, customer.organization_id, "crm_sync"):
+        raise CrmManualSyncError("CRM sync is not available in your current plan.")
+
+    connections = CrmConnectionRepository(db).list_by_org(customer.organization_id)
+    active = [c for c in connections if c.status == CrmConnectionStatus.ACTIVE.value]
+    if not active:
+        raise CrmManualSyncError("Connect a CRM in Settings → Integrations first.")
+
+    payload = build_customer_payload(customer)
+    records, errors = [], []
+    for connection in active:
+        adapter = get_adapter(connection.provider)
+        if adapter is None:
+            continue
+        try:
+            tokens = await get_valid_tokens(db, connection)
+            result = await adapter.push_lead(tokens, payload)
+            if result.auth_failed:
+                tokens = await get_valid_tokens(db, connection, force_refresh=True)
+                result = await adapter.push_lead(tokens, payload)
+        except CrmAuthError:
+            errors.append(f"{connection.provider}: reconnect required")
+            continue
+        except CrmTransientError:
+            errors.append(f"{connection.provider}: temporary error, try again")
+            continue
+        if result.ok:
+            records.append(_record_customer_sync(
+                db, customer.organization_id, customer.id, connection.provider, result))
+        elif result.auth_failed:
+            connections_repo = CrmConnectionRepository(db)
+            connections_repo.set_status(connection, CrmConnectionStatus.EXPIRED.value,
+                                        last_error=result.error)
+            errors.append(f"{connection.provider}: reconnect required")
+        else:
+            errors.append(f"{connection.provider}: {result.error or 'push failed'}")
+
+    if not records and errors:
+        raise CrmManualSyncError("; ".join(errors))
+    return records
+
+
+def _record_customer_sync(db: Session, organization_id, customer_id, provider: str,
+                          result: CrmPushResult):
+    return CrmCustomerSyncRepository(db).record(
+        organization_id=organization_id,
+        customer_id=customer_id,
+        provider=provider,
+        contact_id=result.contact_id,
+        secondary_id=result.secondary_id,
+        record_url=result.record_url,
+    )
 
 
 def _config_for_agent(db: Session, agent_id) -> Optional[LeadCaptureConfig]:

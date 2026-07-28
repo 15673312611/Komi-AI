@@ -24,7 +24,9 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.models.crm import CrmConnection, CrmConnectionStatus, CrmSyncJob, CrmSyncJobStatus
+from app.models.crm import (
+    CrmConnection, CrmConnectionStatus, CrmSyncJob, CrmSyncJobStatus, CrmCustomerSync,
+)
 from app.core.security import encrypt_api_key, decrypt_api_key
 from app.core.logger import get_logger
 
@@ -352,5 +354,46 @@ class CrmSyncJobRepository:
             return job
         except Exception as e:
             logger.error(f"Error finishing CRM sync job: {str(e)}")
+            self.db.rollback()
+            raise
+
+
+class CrmCustomerSyncRepository:
+    """The per-person CRM link shown on the People drawer (one row per
+    customer + provider); upserted on every successful push."""
+
+    def __init__(self, db: Session):
+        self.db = db
+
+    def list_for_customer(self, customer_id: UUID) -> List[CrmCustomerSync]:
+        return self.db.query(CrmCustomerSync).filter(
+            CrmCustomerSync.customer_id == customer_id
+        ).all()
+
+    def record(self, organization_id: UUID, customer_id: UUID, provider: str,
+               contact_id: Optional[str] = None, secondary_id: Optional[str] = None,
+               record_url: Optional[str] = None) -> CrmCustomerSync:
+        """Upsert the customer's link for a provider after a successful push."""
+        try:
+            row = self.db.query(CrmCustomerSync).filter(
+                CrmCustomerSync.customer_id == customer_id,
+                CrmCustomerSync.provider == provider,
+            ).first()
+            if row is None:
+                row = CrmCustomerSync(
+                    organization_id=organization_id,
+                    customer_id=customer_id,
+                    provider=provider,
+                )
+                self.db.add(row)
+            row.contact_id = contact_id
+            row.secondary_id = secondary_id
+            row.record_url = record_url
+            row.synced_at = _utcnow()
+            self.db.commit()
+            self.db.refresh(row)
+            return row
+        except Exception as e:
+            logger.error(f"Error recording CRM customer sync: {str(e)}")
             self.db.rollback()
             raise

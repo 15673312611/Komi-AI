@@ -21,11 +21,26 @@ import pytest
 
 from app.crm.base import CrmPushResult, OAuthTokens
 from app.crm.hubspot import HubSpotAdapter
-from app.models.crm import CrmConnectionStatus, CrmSyncJob, CrmSyncJobStatus
+from app.models.crm import (
+    CrmConnectionStatus, CrmCustomerSync, CrmSyncJob, CrmSyncJobStatus,
+)
+from app.models.customer import Customer
 from app.models.lead_capture import LeadCaptureConfig, LeadCaptureResponse
-from app.repositories.crm import CrmConnectionRepository, CrmSyncJobRepository
-from app.services.crm_sync import enqueue_crm_sync, process_job
+from app.repositories.crm import (
+    CrmConnectionRepository, CrmCustomerSyncRepository, CrmSyncJobRepository,
+)
+from app.services.crm_sync import (
+    CrmManualSyncError, enqueue_crm_sync, process_job, sync_customer_to_crm,
+)
 from app.services.lead_capture import record_lead_capture
+
+
+@pytest.fixture(autouse=True)
+def _allow_crm_feature(monkeypatch):
+    """Default the plan gate open so these tests exercise the sync logic, not
+    the enterprise plan machinery, regardless of whether the enterprise module
+    is installed. Gate-specific tests override this with False."""
+    monkeypatch.setattr("app.services.crm_sync.feature_allowed", lambda *a, **k: True)
 
 
 @pytest.fixture
@@ -205,3 +220,69 @@ class TestLeadCaptureHook:
             summary="s", consent=True,
         )
         assert response is not None  # lead recorded despite the CRM crash
+
+
+class TestAutoSyncRecordsCustomerLink:
+
+    @pytest.mark.asyncio
+    async def test_completed_job_records_customer_sync(self, db, config, lead,
+                                                       connection, monkeypatch):
+        monkeypatch.setattr(HubSpotAdapter, "push_lead", AsyncMock(return_value=OK_RESULT))
+        job = enqueue_crm_sync(db, config, lead)
+        await process_job(db, job)
+        # The People drawer reads this per-person link.
+        link = db.query(CrmCustomerSync).filter_by(
+            customer_id=lead.customer_id, provider="hubspot").first()
+        assert link is not None
+        assert link.record_url == OK_RESULT.record_url
+
+
+@pytest.fixture
+def synced_customer(db, test_organization):
+    cust = Customer(organization_id=test_organization.id,
+                    email="nadia@example.com", full_name="Nadia Rahman")
+    db.add(cust)
+    db.commit()
+    db.refresh(cust)
+    return cust
+
+
+class TestManualSync:
+
+    @pytest.mark.asyncio
+    async def test_pushes_and_records_link(self, db, connection, synced_customer,
+                                           monkeypatch):
+        monkeypatch.setattr(HubSpotAdapter, "push_lead", AsyncMock(return_value=OK_RESULT))
+        records = await sync_customer_to_crm(db, synced_customer)
+        assert len(records) == 1 and records[0].provider == "hubspot"
+        link = CrmCustomerSyncRepository(db).list_for_customer(synced_customer.id)
+        assert link and link[0].record_url == OK_RESULT.record_url
+
+    @pytest.mark.asyncio
+    async def test_requires_email(self, db, connection, test_organization):
+        # Anonymous visitors carry a @noemail.com placeholder, not a real address.
+        anon = Customer(organization_id=test_organization.id,
+                        email="anon-visitor@noemail.com")
+        db.add(anon); db.commit(); db.refresh(anon)
+        with pytest.raises(CrmManualSyncError, match="email"):
+            await sync_customer_to_crm(db, anon)
+
+    @pytest.mark.asyncio
+    async def test_requires_connection(self, db, synced_customer):
+        with pytest.raises(CrmManualSyncError, match="Connect a CRM"):
+            await sync_customer_to_crm(db, synced_customer)
+
+    @pytest.mark.asyncio
+    async def test_plan_gate(self, db, connection, synced_customer, monkeypatch):
+        monkeypatch.setattr("app.services.crm_sync.feature_allowed",
+                            lambda *a, **k: False)
+        with pytest.raises(CrmManualSyncError, match="plan"):
+            await sync_customer_to_crm(db, synced_customer)
+
+    @pytest.mark.asyncio
+    async def test_provider_failure_surfaces(self, db, connection, synced_customer,
+                                             monkeypatch):
+        monkeypatch.setattr(HubSpotAdapter, "push_lead", AsyncMock(
+            return_value=CrmPushResult(ok=False, error="bad request")))
+        with pytest.raises(CrmManualSyncError):
+            await sync_customer_to_crm(db, synced_customer)

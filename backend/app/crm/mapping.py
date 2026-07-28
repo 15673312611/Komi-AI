@@ -59,6 +59,25 @@ def build_lead_payload(
     )
 
 
+def build_customer_payload(customer: Customer) -> LeadPayload:
+    """Build a push payload straight from a person (manual "Sync now"), for a
+    customer that may have no captured-lead row. meta_data holds integrator-set
+    attributes, surfaced as custom fields."""
+    meta = customer.meta_data if isinstance(customer.meta_data, dict) else {}
+    custom_fields = {str(k): str(v) for k, v in meta.items() if v not in (None, "")}
+    lead_source = customer.lead_source if isinstance(customer.lead_source, dict) else {}
+    return LeadPayload(
+        lead_response_id=customer.id,   # metadata only; no lead row exists here
+        email=(customer.email or "").strip().lower(),
+        name=(customer.full_name or None),
+        company=None,
+        phone=(customer.phone or None),
+        summary=None,
+        custom_fields=custom_fields,
+        source_url=lead_source.get("page_url"),
+    )
+
+
 def split_name(name: Optional[str]) -> Tuple[str, str]:
     """Best-effort (first, last) split for CRMs with separate name fields."""
     if not name or not name.strip():

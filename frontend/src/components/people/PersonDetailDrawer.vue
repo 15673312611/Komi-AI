@@ -17,10 +17,13 @@ limitations under the License.
 import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { toast } from 'vue-sonner'
-import { peopleService } from '@/services/people'
+import { peopleService, type PersonCrmStatus } from '@/services/people'
 import channelsService, { type ChannelAccount } from '@/services/channels'
 import NewWhatsAppConversation from '@/components/conversations/NewWhatsAppConversation.vue'
 import type { PersonDetail } from '@/types/people'
+
+const PROVIDER_LABELS: Record<string, string> = { hubspot: 'HubSpot', pipedrive: 'Pipedrive' }
+const providerLabel = (p: string) => PROVIDER_LABELS[p] || p
 
 const props = defineProps<{ customerId: string }>()
 const emit = defineEmits<{ (e: 'close'): void; (e: 'updated', stage?: string): void }>()
@@ -62,6 +65,42 @@ async function saveEdit() {
 }
 
 const attrEntries = computed(() => Object.entries(person.value?.captured_attributes || {}))
+
+// CRM sync state for this person
+const crm = ref<PersonCrmStatus | null>(null)
+const syncing = ref(false)
+const crmConnected = computed(() => (crm.value?.connected_providers.length ?? 0) > 0)
+const crmSynced = computed(() => crm.value?.synced || [])
+const syncedSummary = computed(() =>
+  crmSynced.value.map(s => providerLabel(s.provider)).join(', '))
+const connectedSummary = computed(() =>
+  (crm.value?.connected_providers || []).map(providerLabel).join(', '))
+// The CRM dedupes on email, so a person needs one before they can sync.
+const canSync = computed(() => !!person.value?.email)
+
+async function loadCrm() {
+  try { crm.value = await peopleService.getCrmStatus(props.customerId) }
+  catch { /* non-fatal: the widget just shows nothing */ }
+}
+
+async function syncNow() {
+  syncing.value = true
+  try {
+    crm.value = await peopleService.syncToCrm(props.customerId)
+    toast.success('Synced to CRM')
+  } catch (error: any) {
+    toast.error('Could not sync', {
+      description: error?.response?.data?.detail || 'Please try again',
+    })
+  } finally {
+    syncing.value = false
+  }
+}
+
+function goToIntegrations() {
+  emit('close')
+  router.push('/settings/integrations')
+}
 
 async function load() {
   loading.value = true
@@ -113,7 +152,7 @@ function fmt(d?: string | null) {
   try { return new Date(d).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) } catch { return '' }
 }
 
-onMounted(() => { load(); loadWhatsAppAccounts() })
+onMounted(() => { load(); loadWhatsAppAccounts(); loadCrm() })
 </script>
 
 <template>
@@ -138,10 +177,36 @@ onMounted(() => { load(); loadWhatsAppAccounts() })
           <span v-if="person.qualified" class="pdd-star" title="Qualified">★ Qualified</span>
         </div>
 
-        <!-- Sync (phase 1: not implemented) -->
+        <!-- CRM sync -->
         <div class="pdd-sync">
-          <span class="pdd-sync-text">CRM sync isn't connected yet.</span>
-          <button class="pdd-sync-btn" disabled title="Coming soon">Sync now</button>
+          <!-- No CRM connected for the org -->
+          <template v-if="!crmConnected">
+            <span class="pdd-sync-text">No CRM connected.</span>
+            <button class="pdd-sync-btn" @click="goToIntegrations">Connect</button>
+          </template>
+          <!-- Already synced -->
+          <template v-else-if="crmSynced.length">
+            <span class="pdd-sync-text">
+              Synced to {{ syncedSummary }}
+              <span v-if="crmSynced[0].synced_at" class="pdd-sync-when"> · {{ fmt(crmSynced[0].synced_at) }}</span>
+              <a v-if="crmSynced[0].record_url" :href="crmSynced[0].record_url" target="_blank" rel="noopener" class="pdd-sync-link">View in CRM ↗</a>
+            </span>
+            <button class="pdd-sync-btn" :disabled="syncing || !canSync" @click="syncNow">
+              {{ syncing ? 'Syncing…' : 'Re-sync' }}
+            </button>
+          </template>
+          <!-- Connected but not yet synced -->
+          <template v-else>
+            <span class="pdd-sync-text">Not synced to {{ connectedSummary }} yet.</span>
+            <button
+              class="pdd-sync-btn primary"
+              :disabled="syncing || !canSync"
+              :title="canSync ? '' : 'Add an email first — CRM sync dedupes by email'"
+              @click="syncNow"
+            >
+              {{ syncing ? 'Syncing…' : 'Sync now' }}
+            </button>
+          </template>
         </div>
 
         <button
@@ -261,7 +326,13 @@ onMounted(() => { load(); loadWhatsAppAccounts() })
 .pdd-star { font-size: 12.5px; color: #f59e0b; }
 .pdd-sync { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 14px; background: var(--o05); border: 1px solid var(--border-color); border-radius: 12px; margin-bottom: 12px; }
 .pdd-sync-text { font-size: 13px; color: var(--muted); }
-.pdd-sync-btn { padding: 7px 14px; border-radius: 9px; border: 1px solid var(--border-color); background: transparent; font-size: 13px; opacity: .5; cursor: default; }
+.pdd-sync-when { color: var(--muted); }
+.pdd-sync-link { display: block; margin-top: 4px; color: var(--c-info); font-size: 12px; text-decoration: none; }
+.pdd-sync-link:hover { text-decoration: underline; }
+.pdd-sync-btn { flex-shrink: 0; padding: 7px 14px; border-radius: 9px; border: 1px solid var(--border-color); background: transparent; color: var(--text); font-size: 13px; cursor: pointer; }
+.pdd-sync-btn:hover:not(:disabled) { background: var(--o10); }
+.pdd-sync-btn.primary { background: var(--accent-solid); color: var(--on-accent-solid); border-color: transparent; }
+.pdd-sync-btn:disabled { opacity: .5; cursor: default; }
 .pdd-mark { width: 100%; padding: 10px; border-radius: 10px; border: none; background: var(--accent-solid); color: var(--on-accent-solid); font-weight: 600; font-size: 14px; cursor: pointer; margin-bottom: 22px; }
 .pdd-mark:disabled { opacity: .6; cursor: default; }
 .pdd-identify-hint { font-size: 12px; color: var(--muted); margin: -14px 0 18px; }

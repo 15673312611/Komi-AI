@@ -88,8 +88,11 @@ def _lead_response(db, org, agent, customer):
 @pytest.fixture(autouse=True)
 def _inprocess_oauth_state(monkeypatch):
     """Force the in-process OAuth-state fallback so the callback tests are
-    deterministic whether or not a Redis happens to be reachable in the env."""
+    deterministic whether or not a Redis happens to be reachable in the env,
+    and open the plan gate so these tests exercise the endpoints, not the
+    enterprise plan machinery (present or absent depending on the checkout)."""
     monkeypatch.setattr(crm_api, "get_redis", lambda: None)
+    monkeypatch.setattr(crm_api, "check_feature_access", lambda *a, **k: None)
     crm_api._state_fallback.clear()
 
 

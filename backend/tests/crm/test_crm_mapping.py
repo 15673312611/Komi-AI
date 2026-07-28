@@ -17,7 +17,9 @@ limitations under the License.
 import uuid
 
 from app.crm.base import LeadPayload
-from app.crm.mapping import build_lead_payload, build_note_body, split_name
+from app.crm.mapping import (
+    build_customer_payload, build_lead_payload, build_note_body, split_name,
+)
 from app.models.customer import Customer
 from app.models.lead_capture import LeadCaptureConfig, LeadCaptureResponse
 
@@ -68,6 +70,28 @@ class TestBuildLeadPayload:
     def test_empty_custom_values_dropped(self):
         payload = build_lead_payload(_response(custom_1="", custom_2=None), None, None)
         assert payload.custom_fields == {}
+
+
+class TestBuildCustomerPayload:
+
+    def test_from_customer_fields(self):
+        customer = Customer(
+            id=uuid.uuid4(), email="Nadia@Example.COM", full_name="Nadia Rahman",
+            phone="+15550100", meta_data={"plan": "trial", "empty": ""},
+            lead_source={"page_url": "https://acme.com/pricing"})
+        payload = build_customer_payload(customer)
+        assert payload.email == "nadia@example.com"   # normalized for dedupe
+        assert payload.name == "Nadia Rahman"
+        assert payload.phone == "+15550100"
+        assert payload.custom_fields == {"plan": "trial"}   # blank dropped
+        assert payload.source_url == "https://acme.com/pricing"
+
+    def test_handles_missing_optional_fields(self):
+        customer = Customer(id=uuid.uuid4(), email="x@y.com")
+        payload = build_customer_payload(customer)
+        assert payload.email == "x@y.com"
+        assert payload.custom_fields == {}
+        assert payload.source_url is None
 
 
 class TestSplitName:

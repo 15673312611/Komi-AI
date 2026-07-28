@@ -106,6 +106,39 @@ class CrmConnection(Base):
     organization = relationship("Organization")
 
 
+class CrmCustomerSync(Base):
+    """The current CRM link for a person (one row per customer + provider).
+
+    Written on every successful push — auto (lead capture) and manual ("Sync
+    now" on the People drawer) — so the People page can show whether and where
+    a person is synced without walking the job history.
+    """
+    __tablename__ = "crm_customer_syncs"
+
+    __table_args__ = (
+        UniqueConstraint('customer_id', 'provider', name='uq_crm_customer_sync_customer_provider'),
+    )
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organization_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    customer_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("customers.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    provider = Column(String(32), nullable=False)
+    contact_id = Column(String, nullable=True)       # HubSpot contact / Pipedrive person
+    secondary_id = Column(String, nullable=True)     # Pipedrive lead id
+    record_url = Column(String, nullable=True)       # deep link into the CRM
+    synced_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
 class CrmSyncJob(Base):
     """Queue row for pushing one captured lead to one CRM.
 

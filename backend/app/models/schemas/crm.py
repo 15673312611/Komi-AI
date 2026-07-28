@@ -15,7 +15,7 @@ limitations under the License.
 """
 
 from datetime import datetime
-from typing import Optional
+from typing import List, Optional
 
 from pydantic import BaseModel, ConfigDict
 
@@ -38,3 +38,20 @@ class CrmTestResult(BaseModel):
     ok: bool
     account_name: Optional[str] = None
     error: Optional[str] = None
+
+
+class CrmCustomerSyncOut(BaseModel):
+    """One CRM link for a person, shown on the People drawer."""
+    model_config = ConfigDict(from_attributes=True)
+
+    provider: str
+    contact_id: Optional[str] = None
+    record_url: Optional[str] = None
+    synced_at: Optional[datetime] = None
+
+
+class PersonCrmStatus(BaseModel):
+    """CRM state for a person: which CRMs the org has connected, and where this
+    person is already synced."""
+    connected_providers: List[str]
+    synced: List[CrmCustomerSyncOut]

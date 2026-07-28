@@ -29,9 +29,13 @@ from app.core.auth import (
 )
 from app.models.user import User
 from app.repositories.people import PeopleRepository
+from app.repositories.crm import CrmConnectionRepository, CrmCustomerSyncRepository
+from app.models.crm import CrmConnectionStatus
+from app.services.crm_sync import sync_customer_to_crm, CrmManualSyncError
 from app.models.schemas.people import (
     PeopleListResponse, PeopleStats, PersonDetail, PersonListItem, PersonUpdateRequest,
 )
+from app.models.schemas.crm import CrmCustomerSyncOut, PersonCrmStatus
 
 # Enterprise gating — People is part of Lead Management, a Pro-plan feature where
 # the enterprise module is installed; OSS/community deployments are unrestricted.
@@ -164,3 +168,50 @@ async def update_person(
         raise HTTPException(status_code=400, detail=error)
     detail = repo.get_detail(current_user.organization_id, customer.id)
     return PersonDetail(**detail)
+
+
+def _person_crm_status(db: Session, organization_id, customer_id) -> PersonCrmStatus:
+    connected = [
+        c.provider for c in CrmConnectionRepository(db).list_by_org(organization_id)
+        if c.status == CrmConnectionStatus.ACTIVE.value
+    ]
+    synced = CrmCustomerSyncRepository(db).list_for_customer(customer_id)
+    return PersonCrmStatus(
+        connected_providers=connected,
+        synced=[CrmCustomerSyncOut.model_validate(s) for s in synced],
+    )
+
+
+@router.get("/{customer_id}/crm", response_model=PersonCrmStatus)
+async def get_person_crm(
+    customer_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """CRM state for the drawer: which CRMs the org has connected + where this
+    person is already synced."""
+    _require_people_access(current_user, db)
+    repo = PeopleRepository(db)
+    customer = repo.get_customer(current_user.organization_id, customer_id)
+    if not customer:
+        raise HTTPException(status_code=404, detail="Person not found")
+    return _person_crm_status(db, current_user.organization_id, customer_id)
+
+
+@router.post("/{customer_id}/crm-sync", response_model=PersonCrmStatus)
+async def sync_person_crm(
+    customer_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Manual "Sync now": push this person to every connected CRM, synchronously."""
+    _require_people_access(current_user, db, PEOPLE_WRITE_PERMISSIONS)
+    repo = PeopleRepository(db)
+    customer = repo.get_customer(current_user.organization_id, customer_id)
+    if not customer:
+        raise HTTPException(status_code=404, detail="Person not found")
+    try:
+        await sync_customer_to_crm(db, customer)
+    except CrmManualSyncError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return _person_crm_status(db, current_user.organization_id, customer_id)
