@@ -55,8 +55,10 @@ TARGETS = (
     ("session_to_agents", "session_id",
      ("transfer_description", "end_chat_description", "ticket_summary",
       "ticket_description"), TEXT),
-    # The agno agent memory blob.
-    ("agent_sessions", "session_id", ("memory",), JSON),
+    # The agno agent memory blob. agno's PostgresStorage defaults to the "ai"
+    # schema, and app.agents.encrypted_storage does not override it, so the table
+    # is ai.agent_sessions — schema-qualified here or to_regclass won't find it.
+    ("ai.agent_sessions", "session_id", ("memory",), JSON),
 )
 
 
