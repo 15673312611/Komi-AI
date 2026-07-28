@@ -47,7 +47,6 @@ export interface User {
   created_at?: string
   updated_at?: string
   profile_pic?: string
-  profile_pic_url?: string
   is_online?: boolean
   last_seen?: string
 } 

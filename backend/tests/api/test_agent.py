@@ -539,6 +539,72 @@ def test_create_customization_with_existing(
     customization = response.json()
     assert customization["chat_background_color"] == new_customization_data["chat_background_color"]
 
+def test_customization_response_signs_photo_url_without_persisting_it(
+    client,
+    db,
+    test_user,
+    test_agent,
+    test_customization
+):
+    """The response carries a signed photo_url; the column keeps the bare URL.
+
+    Regression: the endpoints used to assign the signed value onto the ORM
+    instance, which SQLAlchemy then flushed, so stored URLs carried a signature
+    that eventually expired.
+    """
+    from unittest.mock import patch, MagicMock
+
+    stored_url = "https://bucket.s3.us-east-1.amazonaws.com/agents/photo.png"
+    signed_url = f"{stored_url}?AWSAccessKeyId=A&Signature=S&Expires=1"
+    test_customization.photo_url = stored_url
+    db.commit()
+
+    signing_client = MagicMock()
+    signing_client.generate_presigned_url.return_value = signed_url
+
+    with patch('app.core.s3.settings.S3_FILE_STORAGE', True), \
+         patch('app.core.s3.get_s3_client', return_value=signing_client):
+
+        response = client.get(f"/api/agents/{test_agent.id}")
+        assert response.status_code == 200
+        assert response.json()["customization"]["photo_url"] == signed_url
+
+    # The request must not leave the instance dirty. Asserting on the committed
+    # row alone would not catch this: a GET never flushes, so the signature only
+    # reaches the column on some later write in the same session.
+    assert test_customization not in db.dirty
+
+    db.refresh(test_customization)
+    assert test_customization.photo_url == stored_url
+
+
+def test_customization_update_rejects_a_signed_photo_url(
+    client,
+    db,
+    test_agent,
+    test_user,
+    test_customization
+):
+    """A client echoing a signed photo_url back into an update must not store it.
+
+    The agent customization form seeds itself from the GET response and POSTs
+    that value straight back, which is how signatures reached the database.
+    """
+    stored_url = "https://bucket.s3.us-east-1.amazonaws.com/agents/photo.png"
+    signed_url = f"{stored_url}?AWSAccessKeyId=A&Signature=S&Expires=1"
+
+    response = client.post(
+        f"/api/agents/{test_agent.id}/customization",
+        json={"photo_url": signed_url}
+    )
+    assert response.status_code == 200
+
+    db.expire_all()
+    saved = db.query(AgentCustomization).filter_by(agent_id=test_agent.id).first()
+    assert saved.photo_url == stored_url
+    assert "Signature=" not in saved.photo_url
+
+
 def test_create_customization_invalid_agent(
     client,
     db,
@@ -1097,23 +1163,26 @@ def test_get_agent_s3_signed_url_error(
     test_customization
 ):
     """Test getting agent when S3 signed URL generation fails"""
-    from unittest.mock import patch
-    
-    # Set photo URL to simulate S3 storage
-    test_customization.photo_url = "s3://bucket/path/photo.png"
+    from unittest.mock import patch, MagicMock
+
+    stored_url = "https://bucket.s3.us-east-1.amazonaws.com/path/photo.png"
+    test_customization.photo_url = stored_url
     db.commit()
-    
-    with patch('app.core.config.settings.S3_FILE_STORAGE', True), \
-         patch('app.api.agent.get_s3_signed_url') as mock_s3_url:
-        
-        mock_s3_url.side_effect = Exception("S3 error")
-        
+
+    # Signing happens during response serialization now, so fail the boto3 call
+    # itself rather than an endpoint-level helper.
+    failing_client = MagicMock()
+    failing_client.generate_presigned_url.side_effect = Exception("S3 error")
+
+    with patch('app.core.s3.settings.S3_FILE_STORAGE', True), \
+         patch('app.core.s3.get_s3_client', return_value=failing_client):
+
         # Should not fail the request, just log the error
         response = client.get(f"/api/agents/{test_agent.id}")
         assert response.status_code == 200
         agent = response.json()
         # Should still have the original S3 URL since signing failed
-        assert agent["customization"]["photo_url"] == "s3://bucket/path/photo.png"
+        assert agent["customization"]["photo_url"] == stored_url
 
 # Edge case and integration tests
 def test_create_agent_with_all_optional_fields(

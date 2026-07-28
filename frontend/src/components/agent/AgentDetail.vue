@@ -95,7 +95,6 @@ const persistAvatarMeta = async (patch: Record<string, unknown>, photoUrl?: stri
   previewCustomization.value = {
     ...previewCustomization.value,
     photo_url: updated.photo_url,
-    photo_url_signed: (updated as AgentCustomization).photo_url_signed,
     customization_metadata: updated.customization_metadata,
   }
 }
