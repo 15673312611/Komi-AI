@@ -36,3 +36,19 @@ export const endChatMessage = (channel?: string | null): string =>
   canRequestRating(channel)
     ? 'Thank you for contacting us. Do you mind rating our service?'
     : 'Thank you for contacting us.'
+
+interface EndChatCandidate {
+  attributes?: { end_chat?: boolean } | null
+}
+
+/**
+ * Whether a widget message is the one that actually ends the conversation.
+ *
+ * `attributes.end_chat` is the only signal for this — message_type and the
+ * presence of a session_id are not. The takeover notice and form prompts are
+ * ordinary conversation messages that happen to carry a real session_id, and
+ * treating those as an end-chat closed live conversations the moment a human
+ * agent joined.
+ */
+export const isEndChatMessage = (message?: EndChatCandidate | null): boolean =>
+  Boolean(message?.attributes?.end_chat)
