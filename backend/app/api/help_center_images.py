@@ -26,11 +26,8 @@ domain host mode), because article pages are served by whichever one owns the
 origin and the baked path is host-relative.
 """
 
-import os
-from urllib.parse import urlparse
-
 from fastapi import APIRouter, HTTPException
-from fastapi.responses import FileResponse, RedirectResponse
+from fastapi.responses import RedirectResponse
 
 from app.core.config import settings
 from app.core.s3 import sign_s3_key
@@ -42,8 +39,15 @@ router = APIRouter()
 # keep it for a while.
 _MAX_CACHE_SECONDS = 300
 
-# Every URL we are ever willing to redirect to is an S3 object URL.
-_ALLOWED_REDIRECT_SUFFIX = ".amazonaws.com"
+# Allow-list of redirect targets. S3 presigns come back either virtual-hosted
+# (bucket.s3.<region>.amazonaws.com) or path-style against the regional or
+# legacy global endpoint, depending on bucket name and region; local storage
+# goes to our own static mount. Nothing else is ever a valid destination.
+_ALLOWED_REDIRECT_PREFIXES = (
+    f"https://{settings.S3_BUCKET}.s3.",
+    "https://s3.",
+    f"{settings.API_V1_STR}/uploads/",
+)
 
 _NOT_FOUND = HTTPException(status_code=404, detail="Not found")
 
@@ -52,41 +56,31 @@ def _cache_control(max_age: int) -> str:
     return f"public, max-age={max_age}"
 
 
-def _resolved_local_path(file_name: str) -> str:
-    """Absolute path of a stored image, guaranteed to sit inside the upload dir.
-
-    The name is already matched against ARTICLE_IMAGE_NAME_RE, so it cannot
-    contain a separator; resolving and re-checking containment is belt-and-braces
-    against symlinks and any future loosening of that pattern.
-    """
-    base = os.path.realpath(os.path.join("uploads", UPLOAD_FOLDER))
-    resolved = os.path.realpath(os.path.join(base, os.path.basename(file_name)))
-    if os.path.commonpath([base, resolved]) != base:
-        raise _NOT_FOUND
-    return resolved
-
-
 @router.get("/images/{file_name}", include_in_schema=False)
 async def get_article_image(file_name: str):
-    """Resolve a baked article-image path to the actual image."""
+    """Resolve a baked article-image path to the actual image.
+
+    Both branches redirect rather than serve bytes: S3 to a freshly signed URL,
+    local storage to the /api/v1/uploads mount that already serves that
+    directory on both the main app and public_app.
+    """
     if not ARTICLE_IMAGE_NAME_RE.match(file_name):
         raise _NOT_FOUND
 
     if settings.S3_FILE_STORAGE:
-        signed = sign_s3_key(f"{UPLOAD_FOLDER}/{os.path.basename(file_name)}")
-        host = urlparse(signed).hostname or ""
-        if not host.endswith(_ALLOWED_REDIRECT_SUFFIX):
-            # sign_s3_url returns its input unchanged when it cannot sign; never
-            # bounce a visitor somewhere that is not S3.
-            raise _NOT_FOUND
+        target = sign_s3_key(f"{UPLOAD_FOLDER}/{file_name}")
         # Never cache the redirect longer than the signature it points at, or a
         # cached target outlives its own presign and starts 403ing.
         max_age = min(_MAX_CACHE_SECONDS, settings.S3_PRESIGN_EXPIRY_SECONDS // 2)
-        return RedirectResponse(
-            signed, status_code=307, headers={"Cache-Control": _cache_control(max_age)}
-        )
+    else:
+        target = f"{settings.API_V1_STR}/uploads/{UPLOAD_FOLDER}/{file_name}"
+        max_age = _MAX_CACHE_SECONDS
 
-    path = _resolved_local_path(file_name)
-    if not os.path.isfile(path):
+    if not target.startswith(_ALLOWED_REDIRECT_PREFIXES):
+        # sign_s3_url hands back its input unchanged when it cannot sign; never
+        # bounce a visitor anywhere outside the allow-list.
         raise _NOT_FOUND
-    return FileResponse(path, headers={"Cache-Control": _cache_control(_MAX_CACHE_SECONDS)})
+
+    return RedirectResponse(
+        target, status_code=307, headers={"Cache-Control": _cache_control(max_age)}
+    )

@@ -59,25 +59,19 @@ def test_s3_mode_redirects_to_a_freshly_signed_url(client):
     )
 
 
-def test_local_mode_serves_the_file_from_disk(client, tmp_path, monkeypatch):
-    """The local flow must keep working with S3_FILE_STORAGE=false."""
-    monkeypatch.chdir(tmp_path)
-    upload_dir = tmp_path / "uploads" / UPLOAD_FOLDER
-    upload_dir.mkdir(parents=True)
-    (upload_dir / VALID_NAME).write_bytes(b"\x89PNG local bytes")
+def test_local_mode_redirects_to_the_uploads_mount(client):
+    """The local flow must keep working with S3_FILE_STORAGE=false.
 
+    Delivery is delegated to the /api/v1/uploads static mount, which both the
+    main app and public_app already serve this directory from.
+    """
     with patch.object(settings, 'S3_FILE_STORAGE', False):
         response = client.get(_url(VALID_NAME))
 
-    assert response.status_code == 200
-    assert response.content == b"\x89PNG local bytes"
-
-
-def test_local_mode_404s_a_missing_file(client, tmp_path, monkeypatch):
-    monkeypatch.chdir(tmp_path)
-    with patch.object(settings, 'S3_FILE_STORAGE', False):
-        response = client.get(_url(VALID_NAME))
-    assert response.status_code == 404
+    assert response.status_code == 307
+    assert response.headers["location"] == (
+        f"{settings.API_V1_STR}/uploads/{UPLOAD_FOLDER}/{VALID_NAME}"
+    )
 
 
 def test_never_redirects_off_s3(client):
@@ -100,14 +94,19 @@ async def test_local_upload_then_serve_round_trip(client, tmp_path, monkeypatch)
         baked = await store_article_image(b"\x89PNG round trip", "image/png")
         assert baked.startswith(f"{settings.API_V1_STR}/help-center/images/")
 
-        # The bytes really landed under the local uploads dir.
         name = baked.rsplit("/", 1)[-1]
-        assert os.path.isfile(os.path.join("uploads", UPLOAD_FOLDER, name))
-
         response = client.get(baked)
 
-    assert response.status_code == 200
-    assert response.content == b"\x89PNG round trip"
+    # The route resolves the baked path to the mount, and the bytes really are
+    # on disk where that mount serves from.
+    assert response.status_code == 307
+    assert response.headers["location"] == (
+        f"{settings.API_V1_STR}/uploads/{UPLOAD_FOLDER}/{name}"
+    )
+    served_from = os.path.join("uploads", UPLOAD_FOLDER, name)
+    assert os.path.isfile(served_from)
+    with open(served_from, "rb") as f:
+        assert f.read() == b"\x89PNG round trip"
 
 
 @pytest.mark.parametrize("name", [
