@@ -24,6 +24,7 @@ export type SaveState = 'idle' | 'saving' | 'saved' | 'error'
 
 const AUTOSAVE_DEBOUNCE_MS = 800
 const MAX_LOGO_BYTES = 2 * 1024 * 1024
+const MAX_FAVICON_BYTES = 1 * 1024 * 1024
 
 /** Appearance/settings editing with debounced autosave — the design has no
  * Save button ("changes apply instantly to your published help center"). */
@@ -117,6 +118,32 @@ export function useHelpCenterSettings(settings: Ref<HelpCenterSettings | null>) 
     }
   }
 
+  async function uploadFavicon(file: File): Promise<void> {
+    if (file.size > MAX_FAVICON_BYTES) {
+      toast.error('Favicon must be 1 MB or smaller')
+      return
+    }
+    saveState.value = 'saving'
+    try {
+      applyResponse(await faqService.uploadFavicon(file))
+      saveState.value = 'saved'
+    } catch (error: any) {
+      saveState.value = 'error'
+      toast.error(error.message)
+    }
+  }
+
+  async function removeFavicon(): Promise<void> {
+    saveState.value = 'saving'
+    try {
+      applyResponse(await faqService.removeFavicon())
+      saveState.value = 'saved'
+    } catch (error: any) {
+      saveState.value = 'error'
+      toast.error(error.message)
+    }
+  }
+
   // Domain lifecycle (explicit Verify button — never autosaved).
   const domainBusy = ref(false)
 
@@ -168,6 +195,8 @@ export function useHelpCenterSettings(settings: Ref<HelpCenterSettings | null>) 
     saveNow,
     uploadLogo,
     removeLogo,
+    uploadFavicon,
+    removeFavicon,
     domainBusy,
     setDomain,
     verifyDomain,

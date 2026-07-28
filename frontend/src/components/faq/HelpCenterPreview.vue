@@ -27,7 +27,10 @@ const ink = computed(() => contrastInk(brand.value))
 const address = computed(() => {
   const domain = props.settings.domain
   if (domain?.domain_status === 'verified' && domain.custom_domain) return domain.custom_domain
-  return `${props.settings.slug || 'your-company'}.chattermate.help`
+  // live_url is mode-aware (path {origin}/help/{slug} or {slug}.{base}); show it
+  // without the scheme so the preview matches wherever the site is actually served.
+  if (props.settings.live_url) return props.settings.live_url.replace(/^https?:\/\//, '')
+  return props.settings.slug || 'your-company'
 })
 
 const rootStyle = computed(() => ({ '--hc-brand': brand.value, '--hc-ink': ink.value }))

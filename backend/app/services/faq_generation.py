@@ -243,6 +243,7 @@ async def draft_batches(
 
     accepted: List[Tuple[BatchT, GeneratedFAQ]] = []
     failures = 0
+    last_error: Optional[Exception] = None
     for index, batch in enumerate(batches):
         faqs = None
         for attempt in range(1 + retries_per_batch):
@@ -250,6 +251,7 @@ async def draft_batches(
                 faqs = await extract(batch, dedup)
                 break
             except Exception as e:
+                last_error = e
                 logger.warning(f"FAQ batch {index + 1}/{len(batches)} attempt {attempt + 1} failed: {e}")
         if faqs is None:
             failures += 1
@@ -259,7 +261,10 @@ async def draft_batches(
             job.id, progress_percentage=30.0 + 60.0 * (index + 1) / len(batches)
         )
     if batches and failures == len(batches):
-        raise RuntimeError("FAQ generation failed for every content batch.")
+        # Surface the underlying provider error (e.g. an unsupported/decommissioned
+        # model) instead of a generic message, so the UI can tell the user what to fix.
+        detail = f" — {last_error}" if last_error else ""
+        raise RuntimeError(f"The AI model could not generate FAQs from this content{detail}")
     return accepted
 
 

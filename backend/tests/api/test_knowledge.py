@@ -249,7 +249,24 @@ def test_add_sitemap(client: TestClient, test_organization, db):
     ).first()
     assert item is not None
     assert item.source_type == "sitemap"
-    assert item.queue_metadata.get("max_links") == 10  # non-enterprise default
+    # Non-enterprise honors the configurable KB_MAX_LINKS (not a hardcoded default).
+    assert item.queue_metadata.get("max_links") == settings.KB_MAX_LINKS
+
+
+def test_add_website_honors_kb_max_links(client: TestClient, test_organization, db):
+    """A self-hosted (non-enterprise) website crawl records KB_MAX_LINKS, not a
+    hardcoded 10, so the setting actually controls crawl scope (issue #237)."""
+    with patch("app.core.config.settings.KB_MAX_LINKS", 200):
+        response = client.post("/api/v1/knowledge/add/urls", json={
+            "org_id": str(test_organization.id),
+            "websites": ["https://example.com/docs"],
+        })
+        assert response.status_code == 200
+        item = db.query(KnowledgeQueue).filter(
+            KnowledgeQueue.source == "https://example.com/docs"
+        ).first()
+        assert item is not None
+        assert item.queue_metadata.get("max_links") == 200
 
 
 def test_link_knowledge_to_agent(client: TestClient, test_knowledge, test_agent):
@@ -265,6 +282,26 @@ def test_link_knowledge_to_agent(client: TestClient, test_knowledge, test_agent)
     assert response.status_code == 200
     data = response.json()
     assert data["message"] == "Knowledge linked to agent successfully"
+
+def test_vector_store_updates_bind_json_values():
+    """The filters/meta_data JSON embeds the knowledge source title, which a user
+    controls. json.dumps does not escape single quotes, so interpolating it into a
+    '...'::jsonb literal is SQL injection (a title containing ' breaks out). These
+    values must be bound, never f-string-substituted.
+
+    Asserted on the source because the statements target the pgvector table, which
+    the SQLite test database does not have.
+    """
+    import inspect
+    from app.api.knowledge import link_knowledge_to_agent, unlink_knowledge_from_agent
+
+    for handler in (link_knowledge_to_agent, unlink_knowledge_from_agent):
+        source = inspect.getsource(handler)
+        assert "'{new_filters_json}'" not in source, f"{handler.__name__} interpolates filters JSON"
+        assert "'{agent_ids_json}'" not in source, f"{handler.__name__} interpolates agent_ids JSON"
+        assert ":new_filters" in source and ":agent_ids" in source, \
+            f"{handler.__name__} should bind the JSON values as parameters"
+
 
 def test_unlink_knowledge_from_agent(client: TestClient, test_knowledge, test_agent, db):
     """Test unlinking knowledge from an agent"""
@@ -783,3 +820,89 @@ def test_add_text_endpoint_registered():
     assert any(
         hasattr(route, 'path') and route.path == '/add/text' for route in router.routes
     ), "add/text endpoint should be registered" 
+
+class TestExploreProgressIsScopedToTheExploreOrg:
+    """The explore progress poll is public, so it must only ever expose the
+    shared explore organization's jobs — queue ids are sequential."""
+
+    def test_another_orgs_queue_item_is_not_exposed(self, client, test_knowledge_queue):
+        """test_knowledge_queue belongs to a normal tenant, not the explore org"""
+        response = client.get(
+            f"/api/v1/knowledge/explore/progress/{test_knowledge_queue.id}")
+
+        assert response.status_code == 404
+        body = response.json()
+        # The tenant's crawl source must not leak in any form
+        assert "test.pdf" not in str(body)
+
+    def test_explore_org_queue_item_is_exposed(self, client, db, test_user):
+        """The public explore flow still gets its own job's progress"""
+        from app.models.organization import Organization
+
+        explore_org = Organization(
+            id=UUID(settings.EXPLORE_SOURCE_ORG_ID),
+            name="Explore Org",
+            domain="explore.example.com",
+            timezone="UTC"
+        )
+        db.add(explore_org)
+        db.commit()
+
+        queue = KnowledgeQueue(
+            organization_id=explore_org.id,
+            user_id=test_user.id,
+            source_type="website",
+            source="https://explore.example.com",
+            status=QueueStatus.PENDING,
+            created_at=datetime.now(timezone.utc)
+        )
+        db.add(queue)
+        db.commit()
+        db.refresh(queue)
+
+        response = client.get(f"/api/v1/knowledge/explore/progress/{queue.id}")
+
+        assert response.status_code == 200
+
+
+class TestKnowledgeLinkAgentIsOrgScoped:
+    """A knowledge source may only be linked to an agent in the same org."""
+
+    def _foreign_agent(self, db):
+        from app.models.organization import Organization
+        other_org = Organization(
+            id=uuid4(), name="Other Org", domain="other-kn.example.com", timezone="UTC")
+        db.add(other_org)
+        db.commit()
+        agent = Agent(
+            id=uuid4(),
+            name="Foreign Agent",
+            agent_type=AgentType.CUSTOMER_SUPPORT,
+            instructions=["x"],
+            organization_id=other_org.id,
+            is_active=True,
+        )
+        db.add(agent)
+        db.commit()
+        db.refresh(agent)
+        return agent
+
+    def test_link_rejects_agent_from_another_org(self, client, db, test_knowledge):
+        foreign_agent = self._foreign_agent(db)
+
+        response = client.post(
+            f"/api/v1/knowledge/link?knowledge_id={test_knowledge.id}"
+            f"&agent_id={foreign_agent.id}")
+
+        assert response.status_code == 404
+        assert response.json()["detail"] == "Agent not found"
+
+    def test_unlink_rejects_agent_from_another_org(self, client, db, test_knowledge):
+        foreign_agent = self._foreign_agent(db)
+
+        response = client.delete(
+            f"/api/v1/knowledge/unlink?knowledge_id={test_knowledge.id}"
+            f"&agent_id={foreign_agent.id}")
+
+        assert response.status_code == 404
+        assert response.json()["detail"] == "Agent not found"

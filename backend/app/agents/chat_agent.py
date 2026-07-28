@@ -18,6 +18,7 @@ import traceback
 from agno.agent import Agent
 from app.utils.agno_utils import create_model
 from app.core.logger import get_logger
+from app.channels.constants import is_widget_channel
 from app.tools.knowledge_search_byagent import KnowledgeSearchByAgent
 from app.tools.mcp_manager import ChatAgentMCPMixin
 from app.database import get_db, SessionLocal, engine
@@ -33,8 +34,7 @@ from app.agents.structured_output import (
     salvage_groq_json_error,
 )
 from app.agents.transfer_agent import get_agent_availability_response
-from app.models.notification import Notification
-from app.services.user import send_fcm_notification
+from app.services.notifications import ChatNotificationEvent, notify_chat_event
 from app.models.user import User, user_groups
 from datetime import datetime
 from app.repositories.jira import JiraRepository
@@ -324,6 +324,24 @@ class ChatAgent(ChatAgentMCPMixin):
             # Load lead-capture config (prompt-driven, like transfer_to_human: a toggle;
             # the agent collects details conversationally and reports structured output).
             # Extract plain values while the session is open so they survive the block.
+            # Known identity of an already-identified customer (authenticated
+            # generate-token visitor, or one whose email/name we captured
+            # earlier). Injected into the ticket instructions so the agent
+            # doesn't ask an identified customer to repeat their email/name.
+            self.known_customer_email = None
+            self.known_customer_name = None
+            if customer_id:
+                try:
+                    from app.repositories.customer import CustomerRepository
+                    cust = CustomerRepository(db).get_by_id(customer_id)
+                    if cust:
+                        if not CustomerRepository.is_placeholder_email(cust.email):
+                            self.known_customer_email = cust.email
+                        if (cust.full_name or "").strip():
+                            self.known_customer_name = cust.full_name.strip()
+                except Exception as e:
+                    logger.error(f"Failed to load customer identity: {e}")
+
             self.lead_capture_enabled = False
             self.lead_capture_fields = []
             self.lead_capture_require_consent = True
@@ -589,7 +607,32 @@ Keep your responses concise and focused. Provide clear, actionable information i
             # Add native ticketing instructions when AI ticketing drives the
             # ticket tools (explicit agent Jira config takes precedence below)
             if self.ticketing_enabled and not self.transfer_to_human and not (self.agent_data and self.agent_data.jira_enabled):
-                ticket_instructions = """
+                # For an already-identified customer, hand the agent their known
+                # email/name so it passes them straight to create_ticket instead
+                # of asking the customer to repeat details we already have.
+                if self.known_customer_email or self.known_customer_name:
+                    known_bits = []
+                    if self.known_customer_name:
+                        known_bits.append(f'name "{self.known_customer_name}"')
+                    if self.known_customer_email:
+                        known_bits.append(f'account email "{self.known_customer_email}"')
+                    identity_instruction = (
+                        "This customer is already identified — " + ", ".join(known_bits) + ". "
+                        "Pass these directly as customer_name and customer_email when calling "
+                        "create_ticket. Do NOT ask the customer to provide or confirm their "
+                        "email or name again."
+                    )
+                else:
+                    identity_instruction = (
+                        "BEFORE creating a ticket, collect the customer's identity so the support "
+                        "AI can look them up in the connected systems: their account email, and "
+                        "their registered name. If they've already given the email or name in this "
+                        "conversation, use those values. If not, ask for them in one short message "
+                        "and wait for the reply before calling create_ticket. Then pass them as "
+                        "customer_email and customer_name. Never invent an email or name; if the "
+                        "customer declines, create the ticket without them."
+                    )
+                ticket_instructions = f"""
                 You have access to native support-ticket tools:
                 1. check_existing_ticket — check if this conversation already has a ticket (always call this first)
                 2. create_ticket — open a support ticket that the team's AI investigator and humans will work on
@@ -601,15 +644,7 @@ Keep your responses concise and focused. Provide clear, actionable information i
                 - You've tried to resolve the issue but were unable to do so
                 - No ticket already exists for this conversation
 
-                BEFORE creating a ticket, collect the customer's identity so the support
-                AI can look them up in the connected systems:
-                - their account email, and
-                - their registered name.
-                If they've already given the email or name in this conversation, use those
-                values. If not, ask for them in one short message and wait for the reply
-                before calling create_ticket. Then pass them as customer_email and
-                customer_name. Never invent an email or name; if the customer declines,
-                create the ticket without them.
+                {identity_instruction}
 
                 After creating a ticket, tell the customer their ticket number and that the team is investigating.
                 Priorities are: urgent, high, medium, low.
@@ -868,9 +903,10 @@ Keep your responses concise and focused. Provide clear, actionable information i
         session_repo = SessionToAgentRepository(db)
         
         # Determine if rating should be requested
-        if self.channel != 'web':
-            # Rating is a web-widget-only feature: external channels have no
+        if not is_widget_channel(self.channel):
+            # Rating is a widget-only feature: external channels have no
             # rating UI, so asking there leaves the customer a dead-end prompt.
+            # Shopify counts as the widget — see WIDGET_CHANNELS.
             should_request_rating = False
         elif force_rating is not None:
             # Use the forced setting from workflow configuration
@@ -956,28 +992,22 @@ Keep your responses concise and focused. Provide clear, actionable information i
             }
         )
         
-        # Get all users in the target group and send notifications
+        # Notify the target group's members who haven't muted transfers
         users = db.query(User).join(user_groups).filter(user_groups.c.group_id == group_id).all()
-        
-        for user in users:
-            # Create notification record
-            notification = Notification(
-                user_id=user.id,
-                title="New Chat Transfer",
-                message=notification_message,
-                type="SYSTEM",
-                notification_metadata={
-                    "session_id": session_id,
-                    "transfer_reason": transfer_reason,
-                    "transfer_description": transfer_description
-                }
-            )
-            db.add(notification)
-            db.commit()
-            
-            # Send FCM notification
-            await send_fcm_notification(str(user.id), notification, db)
-        
+
+        await notify_chat_event(
+            db=db,
+            user_ids=[user.id for user in users],
+            event=ChatNotificationEvent.CHAT_TRANSFER,
+            title="New Chat Transfer",
+            message=notification_message,
+            metadata={
+                "session_id": session_id,
+                "transfer_reason": transfer_reason,
+                "transfer_description": transfer_description
+            }
+        )
+
         # Get availability-based response
         availability_response = await get_agent_availability_response(
             agent=self.agent_data,

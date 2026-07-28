@@ -503,7 +503,11 @@ watch(() => currentChat.value?.session_id, () => refreshLinkedTicket())
 .chat-layout {
   display: flex;
   flex-direction: column;
-  height: 70vh;
+  /* Fill .chat-view rather than a fixed viewport fraction — the pane is already
+     sized by the grid, and 70vh left a dead strip below the message input. */
+  height: 100%;
+  flex: 1;
+  min-height: 0;
   width: 100%;
   background: var(--bg);
   position: relative;
@@ -1045,7 +1049,7 @@ watch(() => currentChat.value?.session_id, () => refreshLinkedTicket())
   margin: var(--space-xs) 0;
   width: 100%;
   padding: var(--space-xs);
-  background: rgba(0, 0, 0, 0.02);
+  background: var(--o03);
   border-radius: 20px;
 }
 
@@ -1064,7 +1068,7 @@ watch(() => currentChat.value?.session_id, () => refreshLinkedTicket())
   scroll-snap-type: x mandatory;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: thin;
-  scrollbar-color: rgba(0, 0, 0, 0.3) rgba(0, 0, 0, 0.1);
+  scrollbar-color: var(--o25) var(--o08);
 }
 
 .product-card-compact {
@@ -1120,7 +1124,7 @@ watch(() => currentChat.value?.session_id, () => refreshLinkedTicket())
   line-clamp: 2;
   -webkit-box-orient: vertical;
   min-height: 2.8em;
-  color: black;
+  color: var(--text);
 }
 
 .product-variant-compact {
@@ -1131,7 +1135,7 @@ watch(() => currentChat.value?.session_id, () => refreshLinkedTicket())
 .product-price-compact {
   font-size: var(--text-sm);
   font-weight: 600;
-  color: black;
+  color: var(--text);
 }
 
 .view-details-button-compact {
@@ -1288,12 +1292,6 @@ watch(() => currentChat.value?.session_id, () => refreshLinkedTicket())
 
 /* Mobile: full-screen chat pane */
 @media (max-width: 768px) {
-  .chat-layout {
-    height: 100%;
-    flex: 1;
-    min-height: 0;
-  }
-
   .back-btn,
   .info-btn {
     display: flex;

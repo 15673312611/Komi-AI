@@ -14,11 +14,13 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_serializer, field_validator
 from typing import Optional, Dict, List
 from typing_extensions import Annotated
 from uuid import UUID
 import enum
+
+from app.core.s3 import sign_s3_url, strip_s3_signature
 
 # Cap launcher/welcome copy so it can't balloon the widget (the launcher nudge is
 # also clamped to 4 lines client-side). Limits match the frontend input maxlengths
@@ -62,6 +64,17 @@ DEFAULT_QUICK_ACTIONS = [
 
 class CustomizationBase(BaseModel):
     photo_url: Optional[str] = None
+
+    @field_validator('photo_url')
+    @classmethod
+    def _strip_photo_url_signature(cls, v: Optional[str]) -> Optional[str]:
+        """Keep the bare S3 URL as the stored value.
+
+        CustomizationResponse serializes photo_url signed, and the agent
+        customization form POSTs the value it was given straight back, so
+        without this the expiring signature would be written to the column.
+        """
+        return strip_s3_signature(v)
     chat_background_color: Optional[str] = "#F8F9FA"
     chat_bubble_color: Optional[str] = "#E9ECEF"
     chat_text_color: Optional[str] = "#212529"
@@ -98,28 +111,11 @@ class CustomizationResponse(CustomizationBase):
     id: int
     agent_id: UUID
 
-    @property
-    def photo_url_signed(self) -> Optional[str]:
-        """Get signed URL for photo if using S3"""
-        if not self.photo_url:
-            return None
-        
-        from app.core.config import settings
-        if settings.S3_FILE_STORAGE:
-            from app.core.s3 import get_s3_signed_url
-            import asyncio
-            return asyncio.run(get_s3_signed_url(self.photo_url))
-        return self.photo_url
-
-
+    @field_serializer('photo_url')
+    def _sign_photo_url(self, v: Optional[str]) -> Optional[str]:
+        """Sign on the way out, every response. Signing is a local HMAC (~0.05ms),
+        so there is nothing to gain by caching the result in the database."""
+        return sign_s3_url(v) if v else v
 
     class Config:
         from_attributes = True
-        json_schema_extra = {
-            "properties": {
-                "photo_url_signed": {
-                    "type": "string",
-                    "description": "Signed URL for agent photo if using S3"
-                }
-            }
-        }

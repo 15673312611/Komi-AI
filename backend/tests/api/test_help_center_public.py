@@ -26,7 +26,8 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.api.help_center_public import public_app
-from app.core.help_center_host import is_help_center_host
+from app.core.config import settings
+from app.core.help_center_host import HelpCenterHostMiddleware, is_help_center_host
 from app.database import get_db
 from app.models.faq import FAQ, FAQStatus
 from app.models.help_center import HelpCenterSettings
@@ -76,6 +77,33 @@ def _publish_faq(db, org_id, question="How do I sign up?", answer="Use your <b>e
     ))
 
 
+@pytest.fixture
+def subdomain_mode(monkeypatch):
+    """Advertise {slug}.{base} URLs (cloud config) for tests that assert them."""
+    monkeypatch.setattr(settings, "HELP_CENTER_PUBLIC_MODE", "subdomain")
+
+
+async def _not_found_app(scope, receive, send):
+    """Main-app stand-in: anything not dispatched to public_app 404s as 'main app'."""
+    await send({"type": "http.response.start", "status": 404,
+                "headers": [(b"content-type", b"text/plain")]})
+    await send({"type": "http.response.body", "body": b"main app"})
+
+
+@pytest.fixture
+def path_client(db, monkeypatch):
+    """Client through the real dispatch middleware in PATH mode, so /help/{slug}
+    requests exercise path dispatch (public_app is bypassed by the plain client)."""
+    monkeypatch.setattr(settings, "HELP_CENTER_PUBLIC_MODE", "path")
+
+    def override_db():
+        yield db
+
+    public_app.dependency_overrides[get_db] = override_db
+    yield TestClient(HelpCenterHostMiddleware(_not_found_app, public_app))
+    public_app.dependency_overrides.clear()
+
+
 # ---------- helpers ----------
 
 def test_slug_for_host():
@@ -93,7 +121,7 @@ def test_contrast_ink():
 
 # ---------- rendering ----------
 
-def test_page_renders_published_only_and_escapes(client, db, test_organization, help_center):
+def test_page_renders_published_only_and_escapes(client, db, test_organization, help_center, subdomain_mode):
     _publish_faq(db, test_organization.id)
     FAQRepository(db).create(FAQ(
         organization_id=test_organization.id, question="Secret draft?",
@@ -129,30 +157,173 @@ def test_article_page_renders_sanitized_markdown(client, db, test_organization, 
     assert "alert(1)" not in r.text
 
 
-def test_article_page_emits_faqpage_json_ld(client, db, test_organization, help_center):
-    """Owner-authored articles must be FAQPage, not QAPage. QAPage is for
-    community Q&A and requires answerCount, which Search Console flags as an
-    error on these pages."""
+def _json_ld(response) -> dict:
+    blocks = re.findall(
+        r'<script type="application/ld\+json">(.*?)</script>', response.text, re.DOTALL
+    )
+    assert blocks, "page emitted no JSON-LD"
+    return json.loads(blocks[0])
+
+
+def _nodes_by_type(graph: dict) -> dict:
+    """Graph nodes keyed by @type (multi-typed nodes land under each type)."""
+    nodes: dict = {}
+    for node in graph["@graph"]:
+        types = node["@type"]
+        for node_type in [types] if isinstance(types, str) else types:
+            nodes[node_type] = node
+    return nodes
+
+
+def test_index_json_ld_graph_keeps_faqpage(client, db, test_organization, help_center, subdomain_mode):
+    """The landing page stays a FAQPage (it really is a list of Q&A), wired into
+    an @graph with the Organization and WebSite nodes."""
+    _publish_faq(db, test_organization.id, answer="Click **Settings**.")
+    r = client.get("/", headers={"host": HOST})
+    assert r.status_code == 200
+
+    nodes = _nodes_by_type(_json_ld(r))
+    assert set(nodes) >= {"Organization", "WebSite", "CollectionPage", "FAQPage"}
+    page = nodes["FAQPage"]
+    # Same node carries both types, and it is wired to the WebSite by @id.
+    assert page["@id"] == nodes["CollectionPage"]["@id"]
+    assert page["isPartOf"]["@id"] == nodes["WebSite"]["@id"]
+    assert nodes["WebSite"]["publisher"]["@id"] == nodes["Organization"]["@id"]
+    question = page["mainEntity"][0]
+    assert question["@type"] == "Question"
+    assert question["name"] == "How do I sign up?"
+    # Answer text is plain text, with the Markdown stripped.
+    assert question["acceptedAnswer"]["text"] == "Click Settings ."
+    assert "QAPage" not in r.text
+
+
+def test_article_json_ld_is_techarticle_with_breadcrumbs(
+    client, db, test_organization, help_center, subdomain_mode
+):
+    """A single help article is a TechArticle, not a FAQPage: Google retired FAQ
+    rich results, while BreadcrumbList still renders in search."""
     faq = _publish_faq(db, test_organization.id, answer="Click **Settings**.")
     faq.slug = "how-do-i-sign-up"
     db.commit()
     r = client.get(f"/a/{faq.slug}", headers={"host": HOST})
     assert r.status_code == 200
 
-    blocks = re.findall(
-        r'<script type="application/ld\+json">(.*?)</script>', r.text, re.DOTALL
+    nodes = _nodes_by_type(_json_ld(r))
+    assert set(nodes) >= {"Organization", "WebSite", "WebPage", "BreadcrumbList", "TechArticle"}
+    assert "FAQPage" not in nodes and "QAPage" not in r.text
+
+    article, page, crumbs = nodes["TechArticle"], nodes["WebPage"], nodes["BreadcrumbList"]
+    assert article["headline"] == "How do I sign up?"
+    assert article["articleSection"] == "Getting started"
+    # Every node is wired by @id, not repeated inline.
+    assert article["mainEntityOfPage"]["@id"] == page["@id"]
+    assert article["publisher"]["@id"] == nodes["Organization"]["@id"]
+    assert page["breadcrumb"]["@id"] == crumbs["@id"]
+    # datePublished comes from the row; dateModified falls back to it when the
+    # article has never been edited (so it can't predate publication).
+    assert article["dateModified"] == article["datePublished"]
+
+    items = crumbs["itemListElement"]
+    assert [c["position"] for c in items] == [1, 2, 3]
+    assert [c["name"] for c in items] == ["Home", "Getting started", "How do I sign up?"]
+    assert items[-1]["item"] == f"https://{HOST}/a/how-do-i-sign-up"
+
+
+def test_article_renders_visible_breadcrumb_matching_markup(
+    client, db, test_organization, help_center
+):
+    """Google requires the BreadcrumbList to match what the page shows, so the
+    trail must actually be rendered — the current page as text, not a link."""
+    faq = _publish_faq(db, test_organization.id)
+    faq.slug = "how-do-i-sign-up"
+    db.commit()
+    r = client.get(f"/a/{faq.slug}", headers={"host": HOST})
+
+    assert '<nav class="hc-crumbs" aria-label="Breadcrumb">' in r.text
+    assert '<a href="/">Home</a>' in r.text
+    assert '<a href="/?topic=Getting%20started">Getting started</a>' in r.text
+    assert 'aria-current="page"' in r.text
+
+
+def test_meta_overrides_win_over_derived_values(client, db, test_organization, help_center):
+    """meta_title/meta_description replace the derived title and excerpt; the
+    canonical URL is unaffected."""
+    faq = _publish_faq(db, test_organization.id, answer="Click **Settings**.")
+    faq.slug = "how-do-i-sign-up"
+    faq.meta_title = "Signing up, step by step"
+    faq.meta_description = "A short custom description."
+    db.commit()
+    r = client.get(f"/a/{faq.slug}", headers={"host": HOST})
+
+    assert "<title>Signing up, step by step</title>" in r.text
+    assert '<meta name="description" content="A short custom description.">' in r.text
+    assert '<meta property="og:title" content="Signing up, step by step">' in r.text
+    # The visible <h1> still shows the real question — meta is search-only.
+    assert "How do I sign up?" in r.text
+
+
+def test_og_image_is_absolute(client, db, test_organization, help_center, subdomain_mode):
+    """Scrapers don't resolve relative og:image URLs, so a stored relative logo
+    path has to be anchored to the serving origin."""
+    help_center.logo_url = "/api/v1/uploads/help_center/logo.png"
+    db.commit()
+    r = client.get("/", headers={"host": HOST})
+
+    expected = f"https://{HOST}/api/v1/uploads/help_center/logo.png"
+    assert f'<meta property="og:image" content="{expected}">' in r.text
+    assert '<meta name="twitter:card" content="summary_large_image">' in r.text
+
+
+def test_widget_embed_points_at_this_install(
+    client, db, test_organization, help_center, test_widget, monkeypatch
+):
+    """The loader falls back to the API URL baked in at build time (the vendor
+    cloud) unless the page sets window.chattermateBaseUrl. Without it, a
+    self-hosted help center asks the wrong backend for its widget and the
+    visitor gets "Chat Unavailable"."""
+    monkeypatch.setattr(settings, "BACKEND_URL", "https://api.selfhosted.example")
+    help_center.agent_id = test_widget.agent_id
+    db.commit()
+
+    r = client.get("/", headers={"host": HOST})
+    assert f'window.chattermateId = "{test_widget.id}"' in r.text
+    assert 'window.chattermateBaseUrl = "https://api.selfhosted.example/api/v1"' in r.text
+
+
+def test_custom_domain_page_is_self_contained(
+    client, db, test_organization, help_center, test_widget, monkeypatch
+):
+    """On a verified custom domain the page must advertise ITS OWN origin for
+    canonical/og/assets (public_app serves the uploads mount there), while the
+    widget still calls back to the install's API origin cross-origin — which is
+    exactly what domain verification adds to CORS."""
+    monkeypatch.setattr(settings, "HELP_CENTER_PUBLIC_MODE", "path")
+    monkeypatch.setattr(settings, "BACKEND_URL", "https://api.selfhosted.example")
+    help_center.custom_domain = "help.customer.com"
+    help_center.txt_record_verified = True
+    help_center.cname_record_verified = True
+    help_center.logo_url = "/api/v1/uploads/help_center/logo.png"
+    help_center.agent_id = test_widget.agent_id
+    db.commit()
+
+    r = client.get("/", headers={"host": "help.customer.com"})
+    assert r.status_code == 200
+    # The custom domain wins over path mode — no /help/{slug} anywhere.
+    assert '<link rel="canonical" href="https://help.customer.com/">' in r.text
+    assert "/help/test-org" not in r.text
+    assert (
+        '<meta property="og:image" content="https://help.customer.com/api/v1/uploads/help_center/logo.png">'
+        in r.text
     )
-    assert blocks, "article page emitted no JSON-LD"
-    data = json.loads(blocks[0])
-    assert data["@type"] == "FAQPage"
-    # mainEntity must be a list — FAQPage models one-or-more Questions.
-    assert isinstance(data["mainEntity"], list)
-    question = data["mainEntity"][0]
-    assert question["@type"] == "Question"
-    assert question["name"] == "How do I sign up?"
-    # Answer text is plain text, with the Markdown stripped.
-    assert question["acceptedAnswer"]["text"] == "Click Settings ."
-    assert "QAPage" not in r.text
+    assert 'window.chattermateBaseUrl = "https://api.selfhosted.example/api/v1"' in r.text
+
+
+def test_og_card_degrades_without_a_logo(client, db, test_organization, help_center):
+    """No logo means no og:image at all — a broken thumbnail is worse than a
+    text-only card."""
+    r = client.get("/", headers={"host": HOST})
+    assert "og:image" not in r.text
+    assert '<meta name="twitter:card" content="summary">' in r.text
 
 
 def test_search_filters_results(client, db, test_organization, help_center):
@@ -175,11 +346,75 @@ def test_lapsed_plan_hides_site(client, db, test_organization, help_center):
         assert client.get("/", headers={"host": HOST}).status_code == 404
 
 
-def test_sitemap_and_robots(client, db, test_organization, help_center):
+def test_sitemap_and_robots(client, db, test_organization, help_center, subdomain_mode):
     sitemap = client.get("/sitemap.xml", headers={"host": HOST})
     assert sitemap.status_code == 200 and f"https://{HOST}/" in sitemap.text
     robots = client.get("/robots.txt", headers={"host": HOST})
     assert "Sitemap:" in robots.text
+
+
+# ---------- path dispatch (self-host default) ----------
+
+def test_path_dispatch_serves_index(path_client, db, test_organization, help_center):
+    _publish_faq(db, test_organization.id)
+    r = path_client.get("/help/test-org")
+    assert r.status_code == 200
+    assert "How do I sign up?" in r.text
+    # Internal links carry the /help/{slug} base_path prefix.
+    assert 'href="/help/test-org/a/' in r.text
+    # Canonical follows path mode (BACKEND_URL/help/{slug}).
+    assert '<link rel="canonical" href="http' in r.text and "/help/test-org/" in r.text
+
+
+def test_path_dispatch_nested_article(path_client, db, test_organization, help_center):
+    faq = _publish_faq(db, test_organization.id, answer="Click **Settings**.")
+    faq.slug = "how-do-i-sign-up"
+    db.commit()
+    r = path_client.get("/help/test-org/a/how-do-i-sign-up")
+    assert r.status_code == 200
+    assert "<strong>Settings</strong>" in r.text
+
+
+def test_path_dispatch_unknown_slug_404(path_client, db):
+    assert path_client.get("/help/nope").status_code == 404
+
+
+def test_public_app_only_serves_help_center_uploads():
+    """The help-center app must expose ONLY help_center images — never the whole
+    uploads/ tree (chat_attachments, knowledge, avatars, …) or /assets."""
+    from starlette.routing import Mount
+    mount_paths = {r.path for r in public_app.routes if isinstance(r, Mount)}
+    assert "/api/v1/uploads/help_center" in mount_paths
+    assert "/api/v1/uploads" not in mount_paths   # not the whole tree
+    assert "/assets" not in mount_paths
+
+
+def test_path_dispatch_trailing_slash_served_not_redirected(path_client, db, test_organization, help_center):
+    """A trailing slash must serve the article, not 307 to the origin root without
+    the /help/{slug} prefix (which would 404)."""
+    faq = _publish_faq(db, test_organization.id)
+    faq.slug = "how-do-i-sign-up"
+    db.commit()
+    r = path_client.get("/help/test-org/a/how-do-i-sign-up/")
+    assert r.status_code == 200
+    assert "How do I sign up?" in r.text
+
+
+def test_path_dispatch_feedback_post(path_client, db, test_organization, help_center):
+    faq = _publish_faq(db, test_organization.id)
+    faq.slug = "how-do-i-sign-up"
+    db.commit()
+    r = path_client.post("/help/test-org/a/how-do-i-sign-up/feedback", json={"helpful": True})
+    assert r.status_code == 200
+
+
+def test_path_dispatch_inert_in_subdomain_mode(db, monkeypatch):
+    """In subdomain mode, /help/{slug} is NOT claimed — it falls through to the
+    main app (cloud safety: no path serving, no duplicate content)."""
+    monkeypatch.setattr(settings, "HELP_CENTER_PUBLIC_MODE", "subdomain")
+    client = TestClient(HelpCenterHostMiddleware(_not_found_app, public_app))
+    r = client.get("/help/test-org")
+    assert r.status_code == 404 and r.text == "main app"
 
 
 # ---------- ask ----------

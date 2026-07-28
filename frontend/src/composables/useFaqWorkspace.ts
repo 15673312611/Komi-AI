@@ -100,6 +100,11 @@ export function useFaqWorkspace(organizationId: () => string | undefined) {
   const isNewFaq = ref(false)
   const draftQuestion = ref('')
   const draftAnswer = ref('')
+  // Per-article SEO overrides. Empty means "derive it" — the server normalizes
+  // a hand-typed slug and treats blanks as cleared, so no client-side slugify.
+  const draftSlug = ref('')
+  const draftMetaTitle = ref('')
+  const draftMetaDescription = ref('')
   const isSaving = ref(false)
 
   let pollTimer: ReturnType<typeof setInterval> | null = null
@@ -341,11 +346,18 @@ export function useFaqWorkspace(organizationId: () => string | undefined) {
     }
   }
 
+  function setSeoDraft(faq: FaqItem | null): void {
+    draftSlug.value = faq?.slug || ''
+    draftMetaTitle.value = faq?.meta_title || ''
+    draftMetaDescription.value = faq?.meta_description || ''
+  }
+
   function startEdit(faq: FaqItem): void {
     editingId.value = faq.id
     isNewFaq.value = false
     draftQuestion.value = faq.question
     draftAnswer.value = faq.answer
+    setSeoDraft(faq)
   }
 
   function startAdd(): void {
@@ -353,6 +365,7 @@ export function useFaqWorkspace(organizationId: () => string | undefined) {
     isNewFaq.value = true
     draftQuestion.value = ''
     draftAnswer.value = ''
+    setSeoDraft(null)
   }
 
   function cancelEdit(): void {
@@ -360,6 +373,7 @@ export function useFaqWorkspace(organizationId: () => string | undefined) {
     isNewFaq.value = false
     draftQuestion.value = ''
     draftAnswer.value = ''
+    setSeoDraft(null)
   }
 
   async function saveEdit(): Promise<void> {
@@ -369,13 +383,21 @@ export function useFaqWorkspace(organizationId: () => string | undefined) {
       toast.error('Both a question and an answer are required')
       return
     }
+    // Blank SEO fields are sent through so clearing one in the UI clears it
+    // server-side, restoring the derived title/description (and, for the slug,
+    // keeping whatever is already assigned).
+    const seo = {
+      slug: draftSlug.value.trim(),
+      meta_title: draftMetaTitle.value.trim(),
+      meta_description: draftMetaDescription.value.trim(),
+    }
     isSaving.value = true
     try {
       if (isNewFaq.value) {
-        const created = await faqService.createFaq({ question, answer })
+        const created = await faqService.createFaq({ question, answer, ...seo })
         faqs.value = [...faqs.value, created]
       } else if (editingId.value) {
-        const updated = await faqService.updateFaq(editingId.value, { question, answer })
+        const updated = await faqService.updateFaq(editingId.value, { question, answer, ...seo })
         faqs.value = faqs.value.map((f) => (f.id === updated.id ? updated : f))
       }
       cancelEdit()
@@ -432,6 +454,9 @@ export function useFaqWorkspace(organizationId: () => string | undefined) {
     isNewFaq,
     draftQuestion,
     draftAnswer,
+    draftSlug,
+    draftMetaTitle,
+    draftMetaDescription,
     isSaving,
     refresh,
     fetchSettings,

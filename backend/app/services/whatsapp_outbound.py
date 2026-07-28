@@ -24,6 +24,7 @@ from sqlalchemy.orm import Session
 from app.channels import get_adapter
 from app.channels.constants import DEFAULT_TEMPLATE_LANGUAGE
 from app.services.channel_chat import placeholder_name
+from app.services.chat_notifications import notify_new_chat
 from app.channels.meta_base import fetch_message_templates
 from app.core.logger import get_logger
 from app.models.channels import ChannelAccount
@@ -220,13 +221,14 @@ async def start_outbound_conversation(
     else:
         customer = _resolve_customer(db, account, phone, customer_id, customer_name)
         session_id = uuid.uuid4()
-        SessionToAgentRepository(db).create_session(
+        new_session = SessionToAgentRepository(db).create_session(
             session_id=session_id,
             agent_id=str(agent_id),
             customer_id=str(customer.id),
             organization_id=str(account.organization_id),
             channel=account.channel_type,
         )
+        await notify_new_chat(db, new_session)
         conversation = conv_repo.create(
             channel_account_id=account.id,
             channel_type=account.channel_type,

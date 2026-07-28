@@ -16,8 +16,10 @@ limitations under the License.
 
 from sqlalchemy.orm import Session
 from app.models.user import User
+from app.models.role import Role
+from app.models.permission import Permission, role_permissions
 from uuid import UUID
-from typing import List, Optional
+from typing import Iterable, List, Optional
 from app.core.logger import get_logger
 
 logger = get_logger(__name__)
@@ -32,6 +34,31 @@ class UserRepository:
         return self.db.query(User)\
             .filter(User.organization_id == organization_id)\
             .order_by(User.created_at.desc())\
+            .all()
+
+    def get_users_with_any_permission(
+        self, organization_id: str | UUID, permission_names: Iterable[str]
+    ) -> List[User]:
+        """Active users in an org whose role grants any of `permission_names`.
+
+        Used to pick notification recipients for chats nobody owns yet, so the
+        push only reaches people who can actually open the conversation.
+        """
+        if isinstance(organization_id, str):
+            organization_id = UUID(organization_id)
+
+        names = list(permission_names)
+        if not names:
+            return []
+
+        return self.db.query(User)\
+            .join(Role, User.role_id == Role.id)\
+            .join(role_permissions, role_permissions.c.role_id == Role.id)\
+            .join(Permission, Permission.id == role_permissions.c.permission_id)\
+            .filter(User.organization_id == organization_id)\
+            .filter(User.is_active == True)\
+            .filter(Permission.name.in_(names))\
+            .distinct()\
             .all()
 
     def get_active_users_count(self, organization_id: str | UUID) -> int:

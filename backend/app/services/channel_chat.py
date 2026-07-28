@@ -39,6 +39,7 @@ from app.repositories.channels import (
     AgentChannelConfigRepository,
 )
 from app.repositories.session_to_agent import SessionToAgentRepository
+from app.services.chat_notifications import notify_new_chat
 from app.services.lead_capture import record_lead_from_response
 from app.services.message_delivery import DeliveryResult, deliver_to_customer
 
@@ -81,10 +82,12 @@ async def process_channel_message(account_id, inbound: InboundMessage) -> None:
         # real one via the platform API — only then, not on every message.
         if adapter is not None:
             await _enrich_customer_name(db, adapter, account, inbound, customer_id)
-        session_record, conversation = _get_or_create_session(
+        session_record, conversation, is_new_session = _get_or_create_session(
             db, account, inbound, agent_id, customer_id, org_id
         )
         session_id = str(session_record.session_id)
+        if is_new_session:
+            await notify_new_chat(db, session_record)
 
         # Merge channel-specific per-conversation state (e.g. email threading
         # headers) so outbound replies can use it.
@@ -332,7 +335,11 @@ def _agent_changed(session_record, agent_id) -> bool:
 
 def _get_or_create_session(db: Session, account: ChannelAccount, inbound: InboundMessage,
                            agent_id, customer_id: str, org_id: str):
-    """Find the open session for this platform conversation or start a new one."""
+    """Find the open session for this platform conversation or start a new one.
+
+    Returns (session, conversation, is_new) — callers use is_new to notify the
+    team only when a conversation actually starts.
+    """
     conv_repo = ChannelConversationRepository(db)
     session_repo = SessionToAgentRepository(db)
 
@@ -341,7 +348,7 @@ def _get_or_create_session(db: Session, account: ChannelAccount, inbound: Inboun
         session_record = session_repo.get_session(conversation.session_id)
         if not _agent_changed(session_record, agent_id):
             conv_repo.touch_inbound(conversation)
-            return session_record, conversation
+            return session_record, conversation, False
         # Retire the thread so the newly configured agent starts clean. Closing
         # the session is what makes get_active skip it, so the create below
         # opens a fresh conversation for the same platform thread.
@@ -368,7 +375,7 @@ def _get_or_create_session(db: Session, account: ChannelAccount, inbound: Inboun
         agent_id=agent_id,
         customer_id=uuid.UUID(customer_id),
     )
-    return session_record, conversation
+    return session_record, conversation, True
 
 
 def _store_customer_message(db: Session, inbound: InboundMessage, session_record,

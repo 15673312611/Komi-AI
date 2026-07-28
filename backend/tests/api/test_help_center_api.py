@@ -88,7 +88,8 @@ def test_settings_get_or_create_assigns_slug_and_defaults(client, test_agent):
     assert r.status_code == 200
     body = r.json()
     assert body["slug"] == "test-organization"
-    assert body["live_url"].startswith("https://test-organization.")
+    # Default (path) mode advertises {BACKEND_URL}/help/{slug}.
+    assert body["live_url"].endswith("/help/test-organization")
     assert body["plan_allowed"] is True  # OSS mode: never locked
     assert body["auto_generate"] is True
     assert body["ai_search_enabled"] is True
@@ -144,6 +145,65 @@ def test_faq_crud_flow(client, db, test_organization):
 
     assert client.delete(f"{BASE}/faqs/{faq_id}").status_code == 204
     assert client.get(f"{BASE}/faqs").json()["pagination"]["total"] == 0
+
+
+def test_faq_seo_fields_round_trip(client):
+    """Slug and meta overrides are settable at create and edit time."""
+    created = client.post(f"{BASE}/faqs", json={
+        "question": "What does it cost?", "answer": "From $19.",
+        "slug": "Pricing & Plans!", "meta_title": "Pricing",
+        "meta_description": "What ChatterMate costs.",
+    })
+    assert created.status_code == 201
+    # A hand-typed slug is normalized the same way a generated one is.
+    assert created.json()["slug"] == "pricing-plans"
+    assert created.json()["meta_title"] == "Pricing"
+
+    faq_id = created.json()["id"]
+    updated = client.put(f"{BASE}/faqs/{faq_id}", json={"slug": "our-pricing"})
+    assert updated.json()["slug"] == "our-pricing"
+    # Untouched overrides survive a partial update.
+    assert updated.json()["meta_description"] == "What ChatterMate costs."
+
+
+def test_faq_slug_is_deduped_but_stable_for_its_own_row(client):
+    """A taken slug gets a numeric suffix; re-saving a row's own slug is a
+    no-op rather than a self-collision that renames the article."""
+    first = client.post(f"{BASE}/faqs", json={
+        "question": "A", "answer": "a", "slug": "pricing",
+    }).json()
+    second = client.post(f"{BASE}/faqs", json={
+        "question": "B", "answer": "b", "slug": "pricing",
+    }).json()
+    assert first["slug"] == "pricing"
+    assert second["slug"] == "pricing-2"
+
+    resaved = client.put(f"{BASE}/faqs/{first['id']}", json={"slug": "pricing"})
+    assert resaved.json()["slug"] == "pricing"
+
+
+def test_blank_seo_values_clear_overrides_but_keep_the_slug(client):
+    """Emptying a field in the UI restores the derived default. The slug has no
+    derived-at-render fallback, so a blank one keeps the assigned value instead
+    of leaving the article unreachable."""
+    faq = client.post(f"{BASE}/faqs", json={
+        "question": "What does it cost?", "answer": "From $19.", "meta_title": "Pricing",
+    }).json()
+    cleared = client.put(f"{BASE}/faqs/{faq['id']}", json={"meta_title": "", "slug": ""})
+    assert cleared.json()["meta_title"] is None
+    assert cleared.json()["slug"] == faq["slug"]
+
+
+def test_faq_seo_fields_reject_oversized_values(client):
+    """Lengths are bounded at the API so a value can never exceed its column."""
+    over_title = client.post(f"{BASE}/faqs", json={
+        "question": "Q", "answer": "a", "meta_title": "x" * 121,
+    })
+    over_description = client.post(f"{BASE}/faqs", json={
+        "question": "Q", "answer": "a", "meta_description": "x" * 301,
+    })
+    assert over_title.status_code == 422
+    assert over_description.status_code == 422
 
 
 def test_faq_cross_org_is_404(client, db):

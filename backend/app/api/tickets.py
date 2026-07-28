@@ -134,9 +134,13 @@ def _activity_out(activity) -> TicketActivityOut:
     return out
 
 
-def _get_ticket_or_404(db: Session, ticket_id: UUID, user: User) -> Ticket:
+def _get_ticket_or_404(
+    db: Session, ticket_id: UUID, user: User, for_update: bool = False
+) -> Ticket:
     from app.repositories.ticket import TicketRepository
-    ticket = TicketRepository(db).get_by_id(ticket_id, user.organization_id)
+    ticket = TicketRepository(db).get_by_id(
+        ticket_id, user.organization_id, for_update=for_update
+    )
     if ticket is None:
         raise HTTPException(status_code=404, detail="Ticket not found")
     return ticket
@@ -267,6 +271,23 @@ async def draft_from_session(
     }
 
 
+def _validate_assignment_references(db: Session, org_id, assignee_user_id, group_id) -> None:
+    """A ticket may only be assigned to a user or group in the caller's org.
+
+    Both create and update run this, so a ticket (and its assignment activity
+    log) can never point at a user or group from another tenant.
+    """
+    if assignee_user_id is not None:
+        assignee = db.query(User).filter(User.id == assignee_user_id).first()
+        if assignee is None or str(assignee.organization_id) != str(org_id):
+            raise HTTPException(status_code=404, detail="Assignee not found")
+    if group_id is not None:
+        from app.models.user import UserGroup
+        group = db.query(UserGroup).filter(UserGroup.id == group_id).first()
+        if group is None or str(group.organization_id) != str(org_id):
+            raise HTTPException(status_code=404, detail="Group not found")
+
+
 def _validate_create_references(db: Session, payload: TicketCreate, org_id) -> None:
     """Every referenced entity must belong to the caller's organization."""
     if payload.customer_id is not None:
@@ -274,10 +295,8 @@ def _validate_create_references(db: Session, payload: TicketCreate, org_id) -> N
         customer = db.query(Customer).filter(Customer.id == payload.customer_id).first()
         if customer is None or str(customer.organization_id) != str(org_id):
             raise HTTPException(status_code=404, detail="Customer not found")
-    if payload.assignee_user_id is not None:
-        assignee = db.query(User).filter(User.id == payload.assignee_user_id).first()
-        if assignee is None or str(assignee.organization_id) != str(org_id):
-            raise HTTPException(status_code=404, detail="Assignee not found")
+    _validate_assignment_references(
+        db, org_id, payload.assignee_user_id, payload.group_id)
 
 
 @router.post("", response_model=TicketDetailResponse, status_code=201)
@@ -377,10 +396,15 @@ async def update_ticket(
                 actor_type=TicketActorType.USER, actor_user_id=current_user.id,
             )
         if "assignee_user_id" in data or "group_id" in data:
+            new_assignee = data.pop("assignee_user_id", ticket.assignee_user_id)
+            new_group = data.pop("group_id", ticket.group_id)
+            # Same org guard as create — the update path bypassed it entirely.
+            _validate_assignment_references(
+                db, current_user.organization_id, new_assignee, new_group)
             service.assign(
                 ticket,
-                data.pop("assignee_user_id", ticket.assignee_user_id),
-                data.pop("group_id", ticket.group_id),
+                new_assignee,
+                new_group,
                 actor_user_id=current_user.id,
             )
         customer_email = data.pop("customer_email", None)
@@ -454,7 +478,10 @@ async def resolve_ticket(
 ):
     check_ticketing_access(db, current_user.organization_id)
     service = _service(db)
-    ticket = _get_ticket_or_404(db, ticket_id, current_user)
+    # Lock the row so a double-submitted resolve serializes: the second request
+    # blocks until the first commits, then sees RESOLVED_PENDING_CONFIRMATION
+    # and skips re-notifying the customer.
+    ticket = _get_ticket_or_404(db, ticket_id, current_user, for_update=True)
     try:
         await service.resolve(
             ticket,

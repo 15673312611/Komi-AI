@@ -21,6 +21,7 @@ from typing import List
 from dotenv import load_dotenv
 from pathlib import Path
 from pydantic import field_validator
+from app.core.logger import get_logger
 
 # Get the absolute path to the backend directory (parent of app directory)
 BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
@@ -60,11 +61,12 @@ class Settings(BaseSettings):
     FRONTEND_URL: str = os.getenv("FRONTEND_URL", "http://localhost:5173")
     BACKEND_URL: str = os.getenv("BACKEND_URL", "http://localhost:8000")
     VITE_WIDGET_URL: str = os.getenv("VITE_WIDGET_URL", "http://localhost:5173")
-    APP_BASE_URL: str = os.getenv("APP_BASE_URL", "http://localhost:8000")
 
-    # ENCRYPTION_KEY is deliberately absent: app.core.encryption owns it, reads the
-    # env var directly and refuses to start without it outside development. A
-    # default here would silently hand production a demo key.
+    # app.core.encryption owns the actual key loading (reads the env var directly and
+    # refuses to start without it outside development). This mirror exists only so
+    # check_secret_configuration can audit it; the demo default is what that audit
+    # flags in production.
+    ENCRYPTION_KEY: str = os.getenv("ENCRYPTION_KEY", "RFQ4SzhyRTVYdGtsLUxsc25SaDB0QlZpbTdQRmlVRlpsZUlCaFRlU2Vxbz0=")
 
     # SMTP Settings
     SMTP_SERVER: str = os.getenv("SMTP_SERVER", "smtp.gmail.com")
@@ -119,6 +121,9 @@ class Settings(BaseSettings):
     S3_REGION: str = os.getenv("S3_REGION", "us-east-1")
     AWS_ACCESS_KEY_ID: str = os.getenv("AWS_ACCESS_KEY_ID", "")
     AWS_SECRET_ACCESS_KEY: str = os.getenv("AWS_SECRET_ACCESS_KEY", "")
+    # Presigned URLs are regenerated on every response, so this only needs to
+    # outlive a single page render. Hard-capped at S3_MAX_PRESIGN_SECONDS.
+    S3_PRESIGN_EXPIRY_SECONDS: int = int(os.getenv("S3_PRESIGN_EXPIRY_SECONDS", "3600"))
 
     # Enhanced Website Knowledge Base Configuration
     KB_MAX_DEPTH: int = int(os.getenv("KB_MAX_DEPTH", "5"))
@@ -138,6 +143,15 @@ class Settings(BaseSettings):
     KNOWLEDGE_SUMMARY_MAX_TOKENS: int = int(os.getenv("KNOWLEDGE_SUMMARY_MAX_TOKENS", "4000"))
 
     # Help center (public FAQ site)
+    # How the public help center URL is advertised (live_url):
+    #   "path"      -> {BACKEND_URL}/help/{slug}, served same-origin as the API.
+    #                  Works on localhost/self-host with no DNS/TLS/proxy. Default.
+    #   "subdomain" -> https://{slug}.<HELP_CENTER_BASE_DOMAIN> (cloud). MUST be set
+    #                  on cloud so subdomain help centers keep their branded URL.
+    # A verified custom domain always takes precedence over both. Host-based dispatch
+    # (subdomains + custom domains) stays active regardless; only path dispatch is gated
+    # to "path" mode.
+    HELP_CENTER_PUBLIC_MODE: str = os.getenv("HELP_CENTER_PUBLIC_MODE", "path")
     # Base domain serving {slug}.<base> help centers.
     HELP_CENTER_BASE_DOMAIN: str = os.getenv("HELP_CENTER_BASE_DOMAIN", "chattermate.help")
     # CNAME target customers point their custom help-center domain at.
@@ -217,3 +231,53 @@ class Settings(BaseSettings):
     }
 
 settings = Settings()
+
+logger = get_logger(__name__)
+
+
+# Values that ship in the repo (config defaults / .env.example). They are public,
+# so a deployment still using them can have its tokens forged and its stored
+# credentials decrypted by anyone.
+_INSECURE_DEFAULTS = {
+    "SECRET_KEY": "your-secret-key",
+    "CONVERSATION_SECRET_KEY": "your-conversation-secret-key",
+    "ENCRYPTION_KEY": "RFQ4SzhyRTVYdGtsLUxsc25SaDB0QlZpbTdQRmlVRlpsZUlCaFRlU2Vxbz0=",
+}
+
+# .env.example placeholders - not secret either, and they mean "never configured"
+_PLACEHOLDER_VALUES = {
+    "your_jwt_secret_key_here",
+    "your_conversation_secret_key_here",
+    "your_fernet_encryption_key_here",
+}
+
+
+def check_secret_configuration(config: Settings = settings) -> list[str]:
+    """Warn when auth/encryption secrets are missing or still at their public
+    defaults outside development. Returns the names of the offending settings.
+
+    This warns rather than refusing to boot: existing self-hosted deployments may
+    still be running on the default ENCRYPTION_KEY, and their stored credentials
+    are encrypted under it, so failing hard would lock them out of their own data.
+    """
+    if config.ENVIRONMENT == "development":
+        return []
+
+    insecure = [
+        name for name, default in _INSECURE_DEFAULTS.items()
+        if not getattr(config, name, None)
+        or getattr(config, name) == default
+        or getattr(config, name) in _PLACEHOLDER_VALUES
+    ]
+
+    if insecure:
+        logger.warning(
+            "INSECURE CONFIGURATION: %s still set to the public default/placeholder "
+            "value. Anyone can forge tokens or decrypt stored credentials. Generate "
+            "real values (openssl rand -hex 32 for the secret keys, "
+            "Fernet.generate_key() for ENCRYPTION_KEY) and restart. Note that changing "
+            "ENCRYPTION_KEY makes already-encrypted credentials unreadable.",
+            ", ".join(insecure),
+        )
+
+    return insecure

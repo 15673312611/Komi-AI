@@ -14,9 +14,11 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_serializer
 from typing import List, Optional
 from uuid import UUID
+
+from app.core.s3 import sign_s3_url
 
 
 class WidgetBase(BaseModel):
@@ -47,29 +49,13 @@ class AgentCustomizationResponse(BaseModel):
     show_citations: Optional[bool] = None
     collect_email: Optional[bool] = None
 
-    @property
-    def photo_url_signed(self) -> Optional[str]:
-        """Get signed URL for photo if using S3"""
-        if not self.photo_url:
-            return None
-        
-        from app.core.config import settings
-        if settings.S3_FILE_STORAGE:
-            from app.core.s3 import get_s3_signed_url
-            import asyncio
-            return asyncio.run(get_s3_signed_url(self.photo_url))
-        return self.photo_url
+    @field_serializer('photo_url')
+    def _sign_photo_url(self, v: Optional[str]) -> Optional[str]:
+        """Sign on the way out, every response — never stored signed."""
+        return sign_s3_url(v) if v else v
 
     class Config:
         from_attributes = True
-        json_schema_extra = {
-            "properties": {
-                "photo_url_signed": {
-                    "type": "string",
-                    "description": "Signed URL for agent photo if using S3"
-                }
-            }
-        }
 
 
 class AgentResponse(BaseModel):
@@ -84,29 +70,13 @@ class HumanAgentResponse(BaseModel):
     human_agent_name: Optional[str] = None
     human_agent_profile_pic: Optional[str] = None
 
-    @property
-    def human_agent_profile_pic_url(self) -> Optional[str]:
-        """Get signed URL for profile picture if using S3"""
-        if not self.human_agent_profile_pic:
-            return None
-        
-        from app.core.config import settings
-        if settings.S3_FILE_STORAGE:
-            from app.core.s3 import get_s3_signed_url
-            import asyncio
-            return asyncio.run(get_s3_signed_url(self.human_agent_profile_pic))
-        return self.human_agent_profile_pic
+    @field_serializer('human_agent_profile_pic')
+    def _sign_profile_pic(self, v: Optional[str]) -> Optional[str]:
+        """Sign on the way out, every response — never stored signed."""
+        return sign_s3_url(v) if v else v
 
     class Config:
         from_attributes = True
-        json_schema_extra = {
-            "properties": {
-                "human_agent_profile_pic_url": {
-                    "type": "string",
-                    "description": "Signed URL for profile picture if using S3"
-                }
-            }
-        }
 
 
 class WidgetResponse(BaseModel):

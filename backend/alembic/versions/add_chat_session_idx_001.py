@@ -17,7 +17,7 @@ limitations under the License.
 """index chat_history on (session_id, created_at)
 
 Revision ID: add_chat_session_idx_001
-Revises: merge_tkt_csat_001
+Revises: hc_img_paths_001
 Create Date: 2026-07-22
 
 chat_history had no index on session_id — only the primary key — so every lookup of
@@ -30,7 +30,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = 'add_chat_session_idx_001'
-down_revision = 'merge_tkt_csat_001'
+down_revision = 'hc_img_paths_001'
 branch_labels = None
 depends_on = None
 

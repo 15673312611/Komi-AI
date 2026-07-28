@@ -25,6 +25,11 @@ from sqlalchemy.sql import func
 from app.database import Base
 
 DEFAULT_FAQ_CATEGORY = "General"
+# Column widths, kept here so the API schemas bound input to exactly what the
+# columns accept instead of restating the numbers (see models.schemas.faq).
+FAQ_SLUG_MAX_LENGTH = 80
+FAQ_META_TITLE_MAX_LENGTH = 120
+FAQ_META_DESCRIPTION_MAX_LENGTH = 300
 
 
 class FAQStatus(str, enum.Enum):
@@ -52,10 +57,17 @@ class FAQ(Base):
     # Answer is authored/stored as Markdown; rendered to sanitized HTML on the
     # public article page (app.services.help_center_content).
     answer = Column(Text, nullable=False)
-    # URL slug for the public article page (/a/{slug}). Assigned once from the
-    # question and kept stable so published article URLs don't churn on edits.
+    # URL slug for the public article page (/a/{slug}). Assigned from the
+    # question at creation and kept stable so published article URLs don't churn
+    # on edits — but editable by hand for SEO (app.api.help_center.faqs).
     # Unique per org (see ix_faqs_org_slug); NULL until assigned.
-    slug = Column(String(80), nullable=True)
+    slug = Column(String(FAQ_SLUG_MAX_LENGTH), nullable=True)
+    # Per-article SEO overrides for the public page's <title> and meta
+    # description. NULL means "derive from the content": the question and an
+    # excerpt of the answer (see app.api.help_center_public). Lengths mirror
+    # help_center_settings.title/description.
+    meta_title = Column(String(FAQ_META_TITLE_MAX_LENGTH), nullable=True)
+    meta_description = Column(String(FAQ_META_DESCRIPTION_MAX_LENGTH), nullable=True)
     # Free-form category assigned by the LLM grouping step (or the user).
     category = Column(String(100), nullable=False, default=DEFAULT_FAQ_CATEGORY)
     # Plain string (values from FAQStatus), like knowledge_queue.status — new

@@ -58,15 +58,22 @@ couldn't find that in the help center and suggest starting a chat or contacting
 support. Never invent facts, prices, policies, or URLs."""
 
 
-def resolve_help_center(db: Session, host: str) -> Optional[HelpCenterSettings]:
-    """Host header → enabled help center row, or None (renders as 404).
-    Custom domains only match once verified; plan lapses hide the site."""
+def resolve_help_center(
+    db: Session, host: Optional[str] = None, slug: Optional[str] = None
+) -> Optional[HelpCenterSettings]:
+    """Enabled help center row, or None (renders as 404). Resolves by explicit
+    `slug` (path dispatch) when given, else by Host header (subdomain slug or a
+    verified custom domain). Custom domains only match once verified; plan
+    lapses hide the site."""
     repo = HelpCenterRepository(db)
-    slug = slug_for_host(host)
-    if slug:
+    if slug is not None:
         row = repo.get_by_slug(slug)
     else:
-        row = repo.get_by_verified_domain(host)
+        host_slug = slug_for_host(host or "")
+        if host_slug:
+            row = repo.get_by_slug(host_slug)
+        else:
+            row = repo.get_by_verified_domain(host or "")
     if not row or not row.enabled:
         return None
     if not help_center_allowed(db, row.organization_id):

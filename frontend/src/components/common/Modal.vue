@@ -15,17 +15,24 @@ limitations under the License.
 -->
 
 <script setup lang="ts">
-defineProps<{
+const props = withDefaults(defineProps<{
   title?: string
-}>()
+  // When true, clicking the backdrop does NOT close the modal — for forms
+  // where an accidental outside-click would discard the user's input.
+  persistent?: boolean
+}>(), { persistent: false })
 
-defineEmits<{
+const emit = defineEmits<{
   close: []
 }>()
+
+const onOverlayClick = () => {
+  if (!props.persistent) emit('close')
+}
 </script>
 
 <template>
-  <div class="modal-overlay" @click="$emit('close')">
+  <div class="modal-overlay" @click="onOverlayClick">
     <div class="modal-content" @click.stop>
       <div class="modal-header">
         <h3 class="modal-title">

@@ -203,6 +203,38 @@ async def test_plain_json_fallback_on_structured_output_failure():
 
 
 @pytest.mark.asyncio
+async def test_groq_empty_capture_falls_back_to_plain_json():
+    """Groq answered but never invoked the json tool (capture stays empty) — the
+    batch would otherwise be silently dropped (0 FAQs). Fall back to plain-JSON."""
+    fallback_response = MagicMock()
+    fallback_response.content = (
+        '{"faqs": [{"question": "How do I add employees?", '
+        '"answer": "Open Settings and invite them.", "category": "Account"}]}'
+    )
+    attempts = []
+
+    def fake_agent(**kwargs):
+        agent = MagicMock()
+        if not attempts:
+            attempts.append("groq-tool")
+            # Model replies but never calls the registered json tool → capture empty.
+            agent.arun = AsyncMock(return_value=MagicMock(content="Sorry, I cannot."))
+        else:
+            attempts.append("fallback")
+            assert "ONLY a JSON object" in kwargs["instructions"]
+            assert kwargs["response_model"] is None
+            assert kwargs["tools"] == []
+            agent.arun = AsyncMock(return_value=fallback_response)
+        return agent
+
+    with patch("app.agents.faq_generator.create_model", return_value=MagicMock()), \
+         patch("agno.agent.Agent", side_effect=fake_agent):
+        faqs = await _agent("GROQ").generate_from_text("HR docs...")
+    assert attempts == ["groq-tool", "fallback"]
+    assert [f.question for f in faqs] == ["How do I add employees?"]
+
+
+@pytest.mark.asyncio
 async def test_metering_hook_counts_fallback_call_too():
     """on_llm_call fires once per ACTUAL provider call — the fallback's second
     call must be billed, not hidden inside one 'attempt'."""

@@ -26,6 +26,12 @@ export interface Notification {
   created_at: string
 }
 
+export interface NotificationSettings {
+  notify_new_chat: boolean
+  notify_chat_transfer: boolean
+  notify_chat_assigned: boolean
+}
+
 export const notificationService = {
   async getNotifications(skip = 0, limit = 50): Promise<Notification[]> {
     const response = await api.get(`/notifications?skip=${skip}&limit=${limit}`)
@@ -39,5 +45,15 @@ export const notificationService = {
   async getUnreadCount(): Promise<number> {
     const response = await api.get('/notifications/unread-count')
     return response.data.count
+  },
+
+  async getSettings(): Promise<NotificationSettings> {
+    const response = await api.get('/notifications/settings')
+    return response.data
+  },
+
+  async updateSettings(patch: Partial<NotificationSettings>): Promise<NotificationSettings> {
+    const response = await api.put('/notifications/settings', patch)
+    return response.data
   },
 }

@@ -69,26 +69,42 @@ class UserGroupRepository:
         return False
 
     def add_user(self, group_id: UUID, user_id: UUID) -> bool:
-        """Add user to group"""
+        """Add user to group.
+
+        The user is looked up within the group's own organization, so a group
+        can never gain a member from another tenant regardless of what user_id
+        a caller supplies — group membership drives chat routing and
+        assigned-chat visibility, so a foreign member would leak conversations.
+        """
         group = self.get_group(group_id)
-        user = self.db.query(User).filter(User.id == user_id).first()
-        
-        if not group or not user:
+        if not group:
             return False
-            
+
+        user = self.db.query(User).filter(
+            User.id == user_id,
+            User.organization_id == group.organization_id
+        ).first()
+        if not user:
+            return False
+
         if user not in group.users:
             group.users.append(user)
             self.db.commit()
         return True
 
     def remove_user(self, group_id: UUID, user_id: UUID) -> bool:
-        """Remove user from group"""
+        """Remove user from group (within the group's organization)."""
         group = self.get_group(group_id)
-        user = self.db.query(User).filter(User.id == user_id).first()
-        
-        if not group or not user:
+        if not group:
             return False
-            
+
+        user = self.db.query(User).filter(
+            User.id == user_id,
+            User.organization_id == group.organization_id
+        ).first()
+        if not user:
+            return False
+
         if user in group.users:
             group.users.remove(user)
             self.db.commit()

@@ -14,10 +14,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, field_serializer
 from typing import Optional, List
 from uuid import UUID
 from datetime import datetime
+
+from app.core.s3 import sign_s3_url
 
 from app.models.schemas.role import RoleResponse
 
@@ -66,30 +68,13 @@ class UserResponse(UserBase):
     groups: Optional[List[UserGroupResponse]] = None    
     role: Optional[RoleResponse] = None
 
-    @property
-    def profile_pic_url(self) -> Optional[str]:
-        """Get signed URL for profile picture if using S3"""
-        if not self.profile_pic:
-            return None
-        
-        from app.core.config import settings
-        if settings.S3_FILE_STORAGE:
-            from app.core.s3 import get_s3_signed_url
-            import asyncio
-            # Run synchronously since this is a property
-            return asyncio.run(get_s3_signed_url(self.profile_pic))
-        return self.profile_pic
+    @field_serializer('profile_pic')
+    def _sign_profile_pic(self, v: Optional[str]) -> Optional[str]:
+        """Sign on the way out, every response — never stored signed."""
+        return sign_s3_url(v) if v else v
 
     class Config:
         from_attributes = True
-        json_schema_extra = {
-            "properties": {
-                "profile_pic_url": {
-                    "type": "string",
-                    "description": "Signed URL for profile picture if using S3"
-                }
-            }
-        }
 
 
 

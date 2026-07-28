@@ -43,6 +43,16 @@ from uuid import UUID
 from app.core.cors import update_cors_middleware
 from app.core.application import app  # Import the FastAPI app instance from the new location
 
+# Disposable-address rejection lives in the enterprise module: the hosted signup
+# flow is what attracts throwaway signups, and the community edition has no
+# reason to carry an 8k-domain blocklist. Absent, every address is accepted.
+try:
+    from app.enterprise.services.email_validation import ensure_not_disposable
+
+    HAS_EMAIL_VALIDATION = True
+except ImportError:
+    HAS_EMAIL_VALIDATION = False
+
 logger = get_logger(__name__)
 router = APIRouter(
     tags=["organizations"]
@@ -57,6 +67,9 @@ async def create_organization(
 ):
     """Create a new organization with an admin user and default roles"""
     try:
+        if HAS_EMAIL_VALIDATION:
+            ensure_not_disposable(org_data.admin_email)
+
         # Check if any organization exists
         existing_orgs = db.query(Organization).first()
         
@@ -253,6 +266,29 @@ async def check_domain_availability(
         )
 
 
+def get_own_organization_or_404(db: Session, org_id: UUID, current_user: User) -> Organization:
+    """Load an organization the caller actually belongs to.
+
+    These routes take the org id from the path, so without this a user of one
+    tenant could read — and with manage_organization, rewrite — another
+    tenant's record. 404 rather than 403: the existence of another
+    organization isn't the caller's business either.
+    """
+    if current_user.organization_id != org_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Organization not found"
+        )
+
+    org = db.query(Organization).filter(Organization.id == org_id).first()
+    if not org:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Organization not found"
+        )
+    return org
+
+
 @router.get("/{org_id}", response_model=OrganizationResponse)
 async def get_organization(
     org_id: UUID,
@@ -261,13 +297,7 @@ async def get_organization(
 ):
     """Get organization by ID"""
     try:
-        org = db.query(Organization).filter(Organization.id == org_id).first()
-        if not org:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Organization not found"
-            )
-        return org
+        return get_own_organization_or_404(db, org_id, current_user)
     except HTTPException as he:
         raise he
     except Exception as e:
@@ -288,12 +318,7 @@ async def update_organization(
 ):
     """Update organization details including business hours"""
     try:
-        org = db.query(Organization).filter(Organization.id == org_id).first()
-        if not org:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Organization not found"
-            )
+        org = get_own_organization_or_404(db, org_id, current_user)
 
         # Update only provided fields
         update_data = org_data.model_dump(exclude_unset=True)
@@ -595,12 +620,7 @@ async def get_organization_stats(
     db: Session = Depends(get_db)
 ):
     """Get organization statistics"""
-    org = db.query(Organization).filter(Organization.id == org_id).first()
-    if not org:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Organization not found"
-        )
+    org = get_own_organization_or_404(db, org_id, current_user)
 
     # --- Members ---
     total_users = db.query(User).filter(User.organization_id == org_id).count()

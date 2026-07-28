@@ -1178,8 +1178,11 @@ const openNotificationsFromSheet = () => {
         display: none;
     }
 
-    /* Full-height pages (Inbox): shrink the content area instead of padding it */
+    /* Full-height pages (Inbox): shrink the content area instead of padding it.
+       flex: 0 0 auto is required — the default flex: 1 zeroes the flex basis and
+       grows back to the full 100dvh, putting the page bottom under the nav. */
     .dashboard-layout.has-bottom-nav.header-hidden .content {
+        flex: 0 0 auto;
         height: calc(100dvh - var(--bottom-nav-height) - var(--safe-bottom));
         padding-bottom: 0;
     }

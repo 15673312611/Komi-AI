@@ -22,6 +22,10 @@ export interface FaqItem {
   answer: string
   category: string
   slug?: string | null
+  /** Per-article SEO overrides. Null means the public page derives them from
+   *  the question and answer. */
+  meta_title?: string | null
+  meta_description?: string | null
   status: FaqStatus
   knowledge_id: number | null
   source_label: string | null
@@ -30,6 +34,10 @@ export interface FaqItem {
   created_at?: string | null
   updated_at?: string | null
 }
+
+/** Editable per-article SEO fields. Blank strings are sent as-is and cleared
+ *  server-side, restoring the derived defaults. */
+export type FaqSeoFields = Pick<FaqItem, 'slug' | 'meta_title' | 'meta_description'>
 
 export interface FaqPagination {
   total: number
@@ -120,6 +128,7 @@ export interface HelpCenterSettings {
   title: string | null
   description: string | null
   logo_url: string | null
+  favicon_url: string | null
   brand_color: string
   header_links: HelpCenterHeaderLink[]
   cta_text: string | null

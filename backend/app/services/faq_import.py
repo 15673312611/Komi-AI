@@ -143,7 +143,14 @@ async def _extract_and_insert(
             )
     else:
         async def extract(batch: str, dedup: DedupState):
-            return await generator.extract_from_faq_page(batch, existing_questions=dedup.for_prompt)
+            faqs = await generator.extract_from_faq_page(batch, existing_questions=dedup.for_prompt)
+            if not faqs:
+                # The page had no verbatim Q&A — an index/category listing or free-form
+                # prose. Rather than import nothing, draft FAQs from the same content.
+                faqs = await generator.generate_from_text(
+                    batch, existing_questions=dedup.for_prompt, existing_categories=categories.names
+                )
+            return faqs
 
     accepted = await draft_batches(db, job, batches, extract, retries_per_batch=0)
 

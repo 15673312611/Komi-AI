@@ -29,6 +29,7 @@ from app.core.auth_utils import authenticate_socket, authenticate_socket_convers
 from app.database import get_db
 from app.repositories.ai_config import AIConfigRepository
 from app.repositories.widget import WidgetRepository
+from app.repositories.agent_shopify_config_repository import AgentShopifyConfigRepository
 from app.core.security import decrypt_api_key
 from app.repositories.session_to_agent import SessionToAgentRepository
 from app.repositories.chat import ChatRepository
@@ -43,6 +44,7 @@ from app.core.s3 import get_s3_signed_url
 from app.models.session_to_agent import SessionStatus
 from app.agents.transfer_agent import get_agent_availability_response
 from app.repositories.agent import AgentRepository
+from app.services.chat_notifications import notify_new_chat
 from app.services.lead_capture import record_lead_from_response
 from app.services.message_delivery import deliver_to_customer
 from app.repositories.rating import RatingRepository
@@ -202,13 +204,20 @@ async def widget_connect(sid, environ, auth):
             session_id = str(active_session.session_id)
             logger.debug(f"Active session: {session_id}")  
         else:
-            # Create new session if none exists
+            # Create new session if none exists. Stamp the channel now, the way
+            # the messaging channels do: an agent wired to a Shopify store is
+            # serving that storefront, and the inbox labels the conversation
+            # accordingly. Still a widget surface — see WIDGET_CHANNELS.
             new_session_id = str(uuid.uuid4())
+            shopify_config = AgentShopifyConfigRepository(db).get_agent_shopify_config(
+                str(widget.agent_id)
+            )
             session_repo.create_session(
                 session_id=new_session_id,
                 agent_id=widget.agent_id,
                 customer_id=customer_id,
-                organization_id=org_id
+                organization_id=org_id,
+                channel='shopify' if shopify_config and shopify_config.enabled else 'web'
             )
             session_id = new_session_id
             logger.debug(f"New session: {session_id}")
@@ -447,7 +456,13 @@ async def handle_widget_chat(sid, data):
         
         if str(active_session.session_id) != session_id:
             raise ValueError("Session mismatch")
-        
+
+        # The session opens when the widget connects, so the chat only really
+        # starts on the customer's first message — notify there, not on connect,
+        # or merely opening the chat window would ping the team.
+        if not ChatRepository(db).has_customer_messages(session_id):
+            await notify_new_chat(db, active_session)
+
         # Check if agent uses workflow and no human agent has taken over
         if active_session.workflow_id and active_session.user_id is None:
             # Handle workflow chat using the dedicated service

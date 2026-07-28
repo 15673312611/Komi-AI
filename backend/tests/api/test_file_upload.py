@@ -31,6 +31,18 @@ from tests.conftest import TestingSessionLocal, create_tables, engine
 from app.database import Base
 
 
+# Downloads are only ever served for chat attachments, which live at
+# chat_attachments/<org_id>/<file> — the path's org segment is what authorizes
+# the read, so every download test needs a real org id on both sides.
+ORG_ID = "bab82aab-d095-46f8-bf16-da638671bcf4"
+OTHER_ORG_ID = "11111111-2222-3333-4444-555555555555"
+ATTACHMENT_KEY = f"chat_attachments/{ORG_ID}/file.txt"
+
+
+def auth_user(org_id=ORG_ID):
+    return {"type": "user", "user_id": "123", "org_id": org_id}
+
+
 # Create test FastAPI app
 test_app = FastAPI()
 test_app.include_router(router, prefix="/api/v1/files")
@@ -150,7 +162,7 @@ class TestGetCurrentUserOrWidget:
             # Mock successful token verification
             mock_verify_token.return_value = {
                 "widget_id": "widget_123",
-                "org_id": "org_456",
+                "org_id": ORG_ID,
                 "customer_id": "customer_789"
             }
             
@@ -160,7 +172,7 @@ class TestGetCurrentUserOrWidget:
             
             assert result["type"] == "widget"
             assert result["widget_id"] == "widget_123"
-            assert result["org_id"] == "org_456"
+            assert result["org_id"] == ORG_ID
             assert result["customer_id"] == "customer_789"
     
     @pytest.mark.asyncio
@@ -196,11 +208,11 @@ class TestDownloadFileLocal:
                  patch('os.path.exists') as mock_exists, \
                  patch('builtins.open', create=True) as mock_open:
                 
-                mock_auth.return_value = {"type": "user", "user_id": "123"}
+                mock_auth.return_value = auth_user()
                 mock_exists.return_value = True
                 mock_open.return_value.__enter__.return_value.read.return_value = b"Test file content"
                 
-                response = client.get("/api/v1/files/download/test/file.txt")
+                response = client.get(f"/api/v1/files/download/{ATTACHMENT_KEY}")
                 
                 assert response.status_code == 200
                 assert response.headers["content-type"] == "text/plain; charset=utf-8"
@@ -215,30 +227,29 @@ class TestDownloadFileLocal:
              patch('app.api.file_upload.get_current_user_or_widget') as mock_auth, \
              patch('os.path.exists') as mock_exists:
             
-            mock_auth.return_value = {"type": "user", "user_id": "123"}
+            mock_auth.return_value = auth_user()
             mock_exists.return_value = False
             
-            response = client.get("/api/v1/files/download/nonexistent/file.txt")
+            response = client.get(f"/api/v1/files/download/chat_attachments/{ORG_ID}/nonexistent.txt")
             
             assert response.status_code == 404
             assert "File not found" in response.json()["detail"]
     
     def test_download_file_local_without_auth(self, client):
-        """Test file download without authentication (should still work)"""
+        """Unauthenticated downloads are refused, not served anyway"""
         with patch.object(settings, 'S3_FILE_STORAGE', False), \
              patch('app.api.file_upload.get_current_user_or_widget') as mock_auth, \
              patch('os.path.exists') as mock_exists, \
              patch('builtins.open', create=True) as mock_open:
-            
-            # Mock auth failure but file should still be served
+
             from fastapi import HTTPException
             mock_auth.side_effect = HTTPException(status_code=401)
             mock_exists.return_value = True
             mock_open.return_value.__enter__.return_value.read.return_value = b"Test file content"
-            
-            response = client.get("/api/v1/files/download/test/file.txt")
-            
-            assert response.status_code == 200
+
+            response = client.get(f"/api/v1/files/download/{ATTACHMENT_KEY}")
+
+            assert response.status_code == 401
 
 
 class TestDownloadFileS3:
@@ -251,7 +262,7 @@ class TestDownloadFileS3:
              patch('app.api.file_upload.get_current_user_or_widget') as mock_auth, \
              patch('app.core.s3.get_s3_client') as mock_s3_client:
             
-            mock_auth.return_value = {"type": "user", "user_id": "123"}
+            mock_auth.return_value = auth_user()
             
             # Mock S3 client
             mock_client = Mock()
@@ -268,11 +279,11 @@ class TestDownloadFileS3:
             mock_response['Body'].read.side_effect = [b"Test content", b""]  # First chunk, then empty
             mock_client.get_object.return_value = mock_response
             
-            response = client.get("/api/v1/files/download/test/file.txt")
+            response = client.get(f"/api/v1/files/download/{ATTACHMENT_KEY}")
             
             assert response.status_code == 200
-            mock_client.head_object.assert_called_once_with(Bucket='test-bucket', Key='test/file.txt')
-            mock_client.get_object.assert_called_once_with(Bucket='test-bucket', Key='test/file.txt')
+            mock_client.head_object.assert_called_once_with(Bucket='test-bucket', Key=ATTACHMENT_KEY)
+            mock_client.get_object.assert_called_once_with(Bucket='test-bucket', Key=ATTACHMENT_KEY)
     
     def test_download_file_s3_not_found(self, client):
         """Test S3 file download when file doesn't exist"""
@@ -281,7 +292,7 @@ class TestDownloadFileS3:
              patch('app.api.file_upload.get_current_user_or_widget') as mock_auth, \
              patch('app.core.s3.get_s3_client') as mock_s3_client:
             
-            mock_auth.return_value = {"type": "user", "user_id": "123"}
+            mock_auth.return_value = auth_user()
             
             # Mock S3 client
             mock_client = Mock()
@@ -297,7 +308,7 @@ class TestDownloadFileS3:
             mock_client.exceptions.NoSuchKey = ClientError
             mock_client.head_object.side_effect = no_such_key_error
             
-            response = client.get("/api/v1/files/download/nonexistent/file.txt")
+            response = client.get(f"/api/v1/files/download/chat_attachments/{ORG_ID}/nonexistent.txt")
             
             assert response.status_code == 404
             assert "File not found" in response.json()["detail"]
@@ -308,10 +319,10 @@ class TestDownloadFileS3:
              patch('app.api.file_upload.get_current_user_or_widget') as mock_auth, \
              patch('app.core.s3.get_s3_client') as mock_s3_client:
             
-            mock_auth.return_value = {"type": "user", "user_id": "123"}
+            mock_auth.return_value = auth_user()
             mock_s3_client.side_effect = Exception("S3 client creation failed")
             
-            response = client.get("/api/v1/files/download/test/file.txt")
+            response = client.get(f"/api/v1/files/download/{ATTACHMENT_KEY}")
             
             assert response.status_code == 500
             assert "Failed to create S3 client" in response.json()["detail"]
@@ -323,7 +334,7 @@ class TestDownloadFileS3:
              patch('app.api.file_upload.get_current_user_or_widget') as mock_auth, \
              patch('app.core.s3.get_s3_client') as mock_s3_client:
             
-            mock_auth.return_value = {"type": "user", "user_id": "123"}
+            mock_auth.return_value = auth_user()
             
             # Mock S3 client
             mock_client = Mock()
@@ -338,7 +349,7 @@ class TestDownloadFileS3:
             mock_client.exceptions.NoSuchKey = ClientError
             mock_client.get_object.side_effect = Exception("S3 get_object failed")
             
-            response = client.get("/api/v1/files/download/test/file.txt")
+            response = client.get(f"/api/v1/files/download/{ATTACHMENT_KEY}")
             
             assert response.status_code == 500
             assert "Failed to retrieve file from S3" in response.json()["detail"]
@@ -354,7 +365,7 @@ class TestDownloadFilePathHandling:
              patch('app.api.file_upload.get_current_user_or_widget') as mock_auth, \
              patch('app.core.s3.get_s3_client') as mock_s3_client:
             
-            mock_auth.return_value = {"type": "user", "user_id": "123"}
+            mock_auth.return_value = auth_user()
             
             # Mock S3 client
             mock_client = Mock()
@@ -369,13 +380,13 @@ class TestDownloadFilePathHandling:
             mock_response['Body'].read.side_effect = [b"image data", b""]
             mock_client.get_object.return_value = mock_response
             
-            response = client.get("/api/v1/files/download//uploads/chat_attachments/org-id/image.jpg")
+            response = client.get(f"/api/v1/files/download//uploads/chat_attachments/{ORG_ID}/image.jpg")
             
             assert response.status_code == 200
-            # Path is "/uploads/chat_attachments/org-id/image.jpg", should remove "/uploads/" prefix
+            # The "/uploads/" prefix is stripped to get the storage key
             mock_client.head_object.assert_called_once_with(
-                Bucket='test-bucket', 
-                Key='chat_attachments/org-id/image.jpg'
+                Bucket='test-bucket',
+                Key=f'chat_attachments/{ORG_ID}/image.jpg'
             )
     
     def test_download_file_path_without_uploads_prefix(self, client):
@@ -385,7 +396,7 @@ class TestDownloadFilePathHandling:
              patch('app.api.file_upload.get_current_user_or_widget') as mock_auth, \
              patch('app.core.s3.get_s3_client') as mock_s3_client:
             
-            mock_auth.return_value = {"type": "user", "user_id": "123"}
+            mock_auth.return_value = auth_user()
             
             # Mock S3 client
             mock_client = Mock()
@@ -400,13 +411,13 @@ class TestDownloadFilePathHandling:
             mock_response['Body'].read.side_effect = [b"pdf data", b""]
             mock_client.get_object.return_value = mock_response
             
-            response = client.get("/api/v1/files/download/chat_attachments/org-id/document.pdf")
+            response = client.get(f"/api/v1/files/download/chat_attachments/{ORG_ID}/document.pdf")
             
             assert response.status_code == 200
             # Should use path as-is for S3 key
             mock_client.head_object.assert_called_once_with(
                 Bucket='test-bucket', 
-                Key='chat_attachments/org-id/document.pdf'
+                Key=f'chat_attachments/{ORG_ID}/document.pdf'
             )
 
 
@@ -420,16 +431,12 @@ class TestDownloadFileAuthentication:
              patch('os.path.exists') as mock_exists, \
              patch('builtins.open', create=True) as mock_open:
             
-            mock_auth.return_value = {
-                "type": "user", 
-                "user_id": "123",
-                "org_id": "org_456"
-            }
+            mock_auth.return_value = auth_user()
             mock_exists.return_value = True
             mock_open.return_value.__enter__.return_value.read.return_value = b"Test content"
             
             headers = {"Authorization": "Bearer valid_jwt_token"}
-            response = client.get("/api/v1/files/download/test/file.txt", headers=headers)
+            response = client.get(f"/api/v1/files/download/{ATTACHMENT_KEY}", headers=headers)
             
             assert response.status_code == 200
     
@@ -443,14 +450,14 @@ class TestDownloadFileAuthentication:
             mock_auth.return_value = {
                 "type": "widget",
                 "widget_id": "widget_123",
-                "org_id": "org_456",
+                "org_id": ORG_ID,
                 "customer_id": "customer_789"
             }
             mock_exists.return_value = True
             mock_open.return_value.__enter__.return_value.read.return_value = b"Test content"
             
             headers = {"X-Conversation-Token": "valid_conversation_token"}
-            response = client.get("/api/v1/files/download/test/file.txt", headers=headers)
+            response = client.get(f"/api/v1/files/download/{ATTACHMENT_KEY}", headers=headers)
             
             assert response.status_code == 200
 
@@ -466,12 +473,12 @@ class TestDownloadFileContentTypes:
              patch('builtins.open', create=True) as mock_open, \
              patch('mimetypes.guess_type') as mock_guess_type:
             
-            mock_auth.return_value = {"type": "user", "user_id": "123"}
+            mock_auth.return_value = auth_user()
             mock_exists.return_value = True
             mock_open.return_value.__enter__.return_value.read.return_value = b"fake image data"
             mock_guess_type.return_value = ("image/jpeg", None)
             
-            response = client.get("/api/v1/files/download/test/image.jpg")
+            response = client.get(f"/api/v1/files/download/chat_attachments/{ORG_ID}/image.jpg")
             
             assert response.status_code == 200
             assert response.headers["content-type"] == "image/jpeg"
@@ -484,12 +491,12 @@ class TestDownloadFileContentTypes:
              patch('builtins.open', create=True) as mock_open, \
              patch('mimetypes.guess_type') as mock_guess_type:
             
-            mock_auth.return_value = {"type": "user", "user_id": "123"}
+            mock_auth.return_value = auth_user()
             mock_exists.return_value = True
             mock_open.return_value.__enter__.return_value.read.return_value = b"unknown file data"
             mock_guess_type.return_value = (None, None)
             
-            response = client.get("/api/v1/files/download/test/unknown.xyz")
+            response = client.get(f"/api/v1/files/download/chat_attachments/{ORG_ID}/unknown.xyz")
             
             assert response.status_code == 200
             assert response.headers["content-type"] == "application/octet-stream"
@@ -501,12 +508,14 @@ class TestDownloadFileErrorHandling:
     def test_download_file_general_exception(self, client):
         """Test file download with unexpected exception"""
         with patch.object(settings, 'S3_FILE_STORAGE', False), \
+             patch('app.api.file_upload.get_current_user_or_widget') as mock_auth, \
              patch('os.path.exists') as mock_exists:
-            
+
+            mock_auth.return_value = auth_user()
             # Mock os.path.exists to raise an exception
             mock_exists.side_effect = Exception("Unexpected error")
-            
-            response = client.get("/api/v1/files/download/test/file.txt")
+
+            response = client.get(f"/api/v1/files/download/{ATTACHMENT_KEY}")
             
             assert response.status_code == 500
             assert "Failed to download file" in response.json()["detail"]
@@ -518,7 +527,7 @@ class TestDownloadFileErrorHandling:
              patch('app.api.file_upload.get_current_user_or_widget') as mock_auth, \
              patch('app.core.s3.get_s3_client') as mock_s3_client:
             
-            mock_auth.return_value = {"type": "user", "user_id": "123"}
+            mock_auth.return_value = auth_user()
             
             # Mock S3 client
             mock_client = Mock()
@@ -540,7 +549,72 @@ class TestDownloadFileErrorHandling:
             mock_response['Body'].read.side_effect = [b"Test content", b""]
             mock_client.get_object.return_value = mock_response
             
-            response = client.get("/api/v1/files/download/test/file.txt")
+            response = client.get(f"/api/v1/files/download/{ATTACHMENT_KEY}")
             
             # Should still succeed because get_object works
             assert response.status_code == 200
+
+
+class TestDownloadFileAuthorization:
+    """The download path is authorization data, not just a lookup key"""
+
+    def _serve(self, client, path, auth):
+        with patch.object(settings, 'S3_FILE_STORAGE', False), \
+             patch('app.api.file_upload.get_current_user_or_widget') as mock_auth, \
+             patch('os.path.exists') as mock_exists, \
+             patch('builtins.open', create=True) as mock_open:
+
+            mock_auth.return_value = auth
+            mock_exists.return_value = True
+            mock_open.return_value.__enter__.return_value.read.return_value = b"secret"
+
+            return client.get(f"/api/v1/files/download/{path}")
+
+    def test_another_orgs_attachment_is_not_served(self, client):
+        response = self._serve(
+            client,
+            f"chat_attachments/{OTHER_ORG_ID}/file.txt",
+            auth_user(),
+        )
+
+        assert response.status_code == 404
+        assert response.json()["detail"] == "File not found"
+
+    def test_widget_token_is_scoped_to_its_own_org(self, client):
+        response = self._serve(
+            client,
+            f"chat_attachments/{OTHER_ORG_ID}/file.txt",
+            {"type": "widget", "widget_id": "w1", "org_id": ORG_ID, "customer_id": "c1"},
+        )
+
+        assert response.status_code == 404
+
+    @pytest.mark.parametrize("path", [
+        "chat_attachments/../../etc/passwd",
+        f"chat_attachments/{ORG_ID}/../../../etc/passwd",
+        "uploads/../../etc/passwd",
+        "etc/passwd",
+        # Not an attachment: only chat_attachments is servable here.
+        f"profile_pics/{ORG_ID}/avatar.png",
+        # Missing the filename segment.
+        f"chat_attachments/{ORG_ID}",
+        # Org segment must be a real uuid.
+        "chat_attachments/not-an-org/file.txt",
+    ])
+    def test_paths_outside_the_attachment_layout_are_refused(self, client, path):
+        response = self._serve(client, path, auth_user())
+
+        # Traversal attempts are normalized by the client and never match the
+        # route at all, so assert the property that matters for every case:
+        # nothing is served.
+        assert response.status_code == 404
+        assert b"secret" not in response.content
+
+    def test_auth_without_an_org_gets_nothing(self, client):
+        response = self._serve(
+            client,
+            ATTACHMENT_KEY,
+            {"type": "user", "user_id": "123", "org_id": None},
+        )
+
+        assert response.status_code == 404

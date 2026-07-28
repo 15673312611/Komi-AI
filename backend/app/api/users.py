@@ -52,6 +52,16 @@ try:
 except ImportError:
     HAS_ENTERPRISE = False
 
+# Disposable-address rejection lives in the enterprise module: the hosted signup
+# flow is what attracts throwaway signups, and the community edition has no
+# reason to carry an 8k-domain blocklist. Absent, every address is accepted.
+try:
+    from app.enterprise.services.email_validation import ensure_not_disposable
+
+    HAS_EMAIL_VALIDATION = True
+except ImportError:
+    HAS_EMAIL_VALIDATION = False
+
 logger = get_logger(__name__)
 router = APIRouter(
     tags=["users"]
@@ -62,6 +72,20 @@ security = HTTPBearer()
 UPLOAD_DIR = "uploads/user"
 ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif"}
 MAX_FILE_SIZE = 5 * 1024 * 1024  # 5MB
+
+
+def _require_role_in_org(db, role_id, org_id) -> None:
+    """A user may only be given a role defined in their own organization.
+
+    Role ids are sequential integers, so without this an admin could bind a
+    user to another tenant's role — inheriting that role's permissions and
+    breaking the other org's "is this role in use" accounting.
+    """
+    if role_id is None:
+        return
+    role = db.query(Role).filter(Role.id == role_id).first()
+    if not role or role.organization_id != org_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Role not found")
 
 def get_file_extension(filename: str) -> str:
     return os.path.splitext(filename)[1].lower()
@@ -99,8 +123,11 @@ async def create_user(
 ):
     """Create a new user"""
     try:
+        if HAS_EMAIL_VALIDATION:
+            ensure_not_disposable(user_data.email)
+
         user_repo = UserRepository(db)
-        
+
         # Check if email already exists
         if user_repo.get_user_by_email(user_data.email):
             raise HTTPException(
@@ -127,9 +154,12 @@ async def create_user(
                         detail=f"Maximum number of users ({subscription.quantity}) reached for your plan. Please upgrade your plan to add more users."
                     )
         
+        # The role must belong to the caller's own organization.
+        _require_role_in_org(db, user_data.role_id, current_user.organization_id)
+
         # Hash the password
         hashed_password = User.get_password_hash(user_data.password)
-        
+
         # Create user with organization from current user
         new_user = user_repo.create_user(
             email=user_data.email,
@@ -168,16 +198,8 @@ async def list_users(
         user_repo = UserRepository(db)
         users = user_repo.get_users_by_organization(current_user.organization_id)
 
-        # Get signed URLs for profile pictures if using S3
-        if settings.S3_FILE_STORAGE:
-            for user in users:
-                if user.profile_pic:
-                    try:
-                        user.profile_pic = await get_s3_signed_url(user.profile_pic)
-                    except Exception as e:
-                        logger.error(f"Error getting signed URL for user profile picture: {str(e)}")
-                        # Don't fail the request if we can't get the signed URL
-                        pass
+        # profile_pic is signed by UserResponse on serialization — assigning the
+        # signed value onto the ORM object would persist it on the next flush.
 
         return users
     except Exception as e:
@@ -755,8 +777,11 @@ async def update_profile(
         if hasattr(data, 'role_id'):
             delattr(data, 'role_id')
         
-        # If updating email, check if it's already taken
+        # If updating email, check it's a real mailbox and not already taken.
+        # Same bounce risk as signup, and otherwise a trivial way around that gate.
         if data.email and data.email != current_user.email:
+            if HAS_EMAIL_VALIDATION:
+                ensure_not_disposable(data.email)
             existing_user = user_repo.get_user_by_email(data.email)
             if existing_user:
                 raise HTTPException(
@@ -821,9 +846,14 @@ async def update_user(
     
     if not user or user.organization_id != current_user.organization_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
-    
+
+    # A supplied role must belong to the caller's org, not another tenant's.
+    _require_role_in_org(db, user_data.role_id, current_user.organization_id)
+
     # Check if updating email and if it's already taken
     if user_data.email and user_data.email != user.email:
+        if HAS_EMAIL_VALIDATION:
+            ensure_not_disposable(user_data.email)
         existing_user = user_repo.get_user_by_email(user_data.email)
         if existing_user:
             raise HTTPException(

@@ -63,6 +63,7 @@ class HelpCenterSettings(Base):
     title = Column(String(120), nullable=True)
     description = Column(String(300), nullable=True)
     logo_url = Column(String, nullable=True)
+    favicon_url = Column(String, nullable=True)
     brand_color = Column(String(9), nullable=False, default=DEFAULT_BRAND_COLOR)
     # [{"label": str, "url": str}, ...]
     header_links = Column(JSON, nullable=False, default=lambda: [])
