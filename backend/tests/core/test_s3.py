@@ -201,42 +201,40 @@ async def test_upload_file_to_s3_without_content_type():
 
 
 @pytest.mark.asyncio
-async def test_upload_file_to_s3_client_error():
-    """Test file upload to S3 with ClientError - should fallback to local storage"""
-    file_content = b"test content"
-    
-    with patch('app.core.s3.get_s3_client') as mock_get_client, \
-         patch('app.core.s3._save_file_locally') as mock_save_locally:
+@pytest.mark.parametrize("error", [
+    ClientError({'Error': {'Code': 'TestException', 'Message': 'Test error message'}}, 'PutObject'),
+    Exception("Test exception"),
+])
+async def test_upload_file_to_s3_raises_instead_of_falling_back(error):
+    """A failed S3 upload must fail the request, not silently write to local disk.
+
+    The old fallback returned a /api/v1/uploads/... path the caller could not
+    distinguish from success — durable-looking, but gone on the next container
+    restart.
+    """
+    with patch('app.core.s3.get_s3_client') as mock_get_client:
         mock_client = MagicMock()
-        mock_client.put_object.side_effect = ClientError(
-            {'Error': {'Code': 'TestException', 'Message': 'Test error message'}},
-            'PutObject'
-        )
+        mock_client.put_object.side_effect = error
         mock_get_client.return_value = mock_client
-        mock_save_locally.return_value = "/uploads/folder/file.txt"
-        
-        result = await upload_file_to_s3(file_content, "folder", "file.txt")
-        
-        # Should fallback to local storage and return local URL
-        assert result == "/uploads/folder/file.txt"
+
+        with pytest.raises(HTTPException) as exc_info:
+            await upload_file_to_s3(b"test content", "folder", "file.txt")
+
+        assert exc_info.value.status_code == 500
 
 
 @pytest.mark.asyncio
-async def test_upload_file_to_s3_general_exception():
-    """Test file upload to S3 with a general exception - should fallback to local storage"""
-    file_content = b"test content"
-    
-    with patch('app.core.s3.get_s3_client') as mock_get_client, \
-         patch('app.core.s3._save_file_locally') as mock_save_locally:
+async def test_upload_file_to_s3_does_not_create_the_bucket():
+    """Provisioning belongs in deployment; the runtime identity should not need
+    s3:CreateBucket, nor pay a head_bucket round-trip on every upload."""
+    with patch('app.core.s3.get_s3_client') as mock_get_client:
         mock_client = MagicMock()
-        mock_client.put_object.side_effect = Exception("Test exception")
         mock_get_client.return_value = mock_client
-        mock_save_locally.return_value = "/uploads/folder/file.txt"
-        
-        result = await upload_file_to_s3(file_content, "folder", "file.txt")
-        
-        # Should fallback to local storage and return local URL
-        assert result == "/uploads/folder/file.txt"
+
+        await upload_file_to_s3(b"test content", "folder", "file.txt")
+
+        mock_client.head_bucket.assert_not_called()
+        mock_client.create_bucket.assert_not_called()
 
 
 @pytest.mark.asyncio

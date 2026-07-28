@@ -18,10 +18,8 @@ limitations under the License.
 S3 Storage Utilities
 """
 import asyncio
-import os
 from functools import lru_cache, partial
 import boto3
-from botocore.exceptions import ClientError
 from app.core.config import settings
 from app.core.logger import get_logger
 from fastapi import HTTPException
@@ -55,22 +53,34 @@ def strip_s3_signature(url: Optional[str]) -> Optional[str]:
     return urlunparse(urlparse(url)._replace(query='', fragment=''))
 
 
-def _url_for_key(s3_key: str) -> str:
+def url_for_s3_key(s3_key: str) -> str:
     """The canonical stored URL for an object key. Single source of truth for
     the URL shape — _key_from_url must be able to round-trip whatever this
-    produces."""
+    produces.
+
+    Buckets whose name contains a dot get path-style: the wildcard on
+    *.s3.<region>.amazonaws.com only covers one label, so the virtual-hosted
+    form (my.bucket.s3.<region>.amazonaws.com) fails TLS verification in any
+    strict client.
+    """
+    if '.' in settings.S3_BUCKET:
+        return f"https://s3.{settings.S3_REGION}.amazonaws.com/{settings.S3_BUCKET}/{s3_key}"
     return f"https://{settings.S3_BUCKET}.s3.{settings.S3_REGION}.amazonaws.com/{s3_key}"
 
 
 def _key_from_url(s3_url: str) -> str:
-    """Extract the object key from either S3 URL format."""
+    """Extract the object key from either S3 URL format.
+
+    Virtual-hosted puts the bucket in the host (bucket.s3...amazonaws.com/key);
+    path-style puts it in the first path segment, against either the legacy
+    global endpoint or a regional one (s3.<region>.amazonaws.com/bucket/key).
+    """
     parsed_url = urlparse(s3_url)
     path_parts = parsed_url.path.strip('/').split('/')
-    if parsed_url.netloc == 's3.amazonaws.com':
-        # Format: https://s3.amazonaws.com/bucket/key
-        return '/'.join(path_parts[1:])
-    # Format: https://bucket.s3.region.amazonaws.com/key
-    return '/'.join(path_parts)
+    if parsed_url.netloc.startswith(f"{settings.S3_BUCKET}."):
+        return '/'.join(path_parts)
+    # Path-style: drop the leading bucket segment.
+    return '/'.join(path_parts[1:])
 
 
 @lru_cache(maxsize=1)
@@ -133,6 +143,12 @@ def sign_s3_url(s3_url: str, expiration: Optional[int] = None) -> str:
         return s3_url
 
 
+def sign_s3_key(s3_key: str, expiration: Optional[int] = None) -> str:
+    """Signed URL for an object key, for callers that hold a key rather than a
+    stored URL (help-center article images resolve by key)."""
+    return sign_s3_url(url_for_s3_key(s3_key), expiration)
+
+
 async def get_s3_signed_url(s3_url: str, expiration: Optional[int] = None) -> str:
     """Awaitable shim over sign_s3_url for the existing `await` call sites.
 
@@ -155,39 +171,19 @@ async def upload_file_to_s3(
         content_type: Optional MIME type
     Returns:
         The S3 URL of the uploaded file
-    Falls back to local storage if S3 fails
+    Raises:
+        HTTPException: if the object cannot be stored or verified
+
+    The bucket is expected to exist already — provisioning it belongs in
+    deployment, not on the request path, and the runtime identity should not
+    hold s3:CreateBucket.
     """
     try:
         s3_client = get_s3_client()
-        
+
         # Construct S3 key (path)
         s3_key = f"{folder}/{filename}"
-        
-        # Try to create the bucket if it doesn't exist
-        try:
-            s3_client.head_bucket(Bucket=settings.S3_BUCKET)
-            logger.debug(f"Bucket {settings.S3_BUCKET} already exists")
-        except ClientError as e:
-            error_code = e.response['Error']['Code']
-            if error_code in ('404', 'NoSuchBucket'):
-                # Bucket doesn't exist, try to create it
-                try:
-                       # For AWS, use LocationConstraint for non-us-east-1 regions
-                    if settings.S3_REGION != 'us-east-1':
-                        s3_client.create_bucket(
-                                Bucket=settings.S3_BUCKET,
-                                CreateBucketConfiguration={'LocationConstraint': settings.S3_REGION}
-                        )
-                    else:
-                        s3_client.create_bucket(Bucket=settings.S3_BUCKET)
-                    logger.info(f"Created S3 bucket: {settings.S3_BUCKET}")
-                except Exception as create_err:
-                    logger.warning(f"Could not create S3 bucket: {str(create_err)}. Falling back to local storage.")
-                    return await _save_file_locally(file_content, folder, filename)
-            else:
-                # Different error, log and continue
-                logger.warning(f"Error checking bucket {settings.S3_BUCKET}: {error_code} - {str(e)}")
-        
+
         # Upload to S3
         extra_args = {}
         if content_type:
@@ -221,45 +217,21 @@ async def upload_file_to_s3(
                         detail="File upload verification failed"
                     )
 
-        url = _url_for_key(s3_key)
+        url = url_for_s3_key(s3_key)
 
-        logger.info(f"Successfully uploaded file to S3")
+        logger.info(f"Successfully uploaded file to S3: {s3_key}")
         return url
 
-    except ClientError as e:
-        logger.warning(f"S3 upload failed with ClientError: {str(e)}. Falling back to local storage.")
-        return await _save_file_locally(file_content, folder, filename)
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.exception(f"S3 upload failed with unexpected error: {str(e)}")
-        logger.warning(f"Falling back to local storage.")
-        return await _save_file_locally(file_content, folder, filename)
+        # Deliberately no local-disk fallback: on a containerised deploy the
+        # uploads dir is not durable, so falling back silently returns a URL
+        # that works once and 404s after the next restart, with the caller
+        # none the wiser. Fail the request instead.
+        logger.exception(f"S3 upload failed: {str(e)}")
+        raise HTTPException(status_code=500, detail="File upload failed")
 
-
-async def _save_file_locally(
-    file_content: bytes,
-    folder: str,
-    filename: str
-) -> str:
-    """
-    Fallback function to save file locally when S3 fails
-    """
-    try:
-        upload_dir = os.path.join("uploads", folder)
-        os.makedirs(upload_dir, exist_ok=True)
-        
-        file_path = os.path.join(upload_dir, filename)
-        with open(file_path, "wb") as f:
-            f.write(file_content)
-
-        # Must match the static mount ({API_V1_STR}/uploads) and store_upload's
-        # own local branch — a bare "/uploads/..." 404s and never gets recognised
-        # as a signable S3 URL either, so logos/images render broken.
-        file_url = f"{settings.API_V1_STR}/uploads/{folder}/{filename}"
-
-        return file_url
-    except Exception as e:
-        logger.error(f"Failed to save file locally: {str(e)}")
-        raise HTTPException(status_code=500, detail="Failed to save file")
 
 async def download_file_from_s3(s3_url: str) -> bytes:
     """Download an object's bytes (worker-side readback of stored uploads).
