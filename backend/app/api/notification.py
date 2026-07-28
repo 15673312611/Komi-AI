@@ -21,7 +21,12 @@ from app.database import get_db
 from app.models.user import User
 from app.core.auth import get_current_user
 from app.models.notification import Notification
-from app.models.schemas.notification import NotificationResponse
+from app.models.schemas.notification import (
+    NotificationResponse,
+    NotificationSettingsOut,
+    NotificationSettingsUpdate,
+)
+from app.repositories.notification_settings import UserNotificationSettingsRepository
 from app.core.logger import get_logger
 from app.services.user import send_fcm_notification
 
@@ -106,6 +111,51 @@ async def get_unread_count(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to get unread count"
+        )
+
+
+@router.get("/settings", response_model=NotificationSettingsOut)
+async def get_notification_settings(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get the current user's chat notification preferences"""
+    try:
+        return UserNotificationSettingsRepository(db).get_or_create(current_user.id)
+    except Exception as e:
+        logger.error(f"Error fetching notification settings: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to fetch notification settings"
+        )
+
+
+@router.put("/settings", response_model=NotificationSettingsOut)
+async def update_notification_settings(
+    payload: NotificationSettingsUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Update the current user's chat notification preferences.
+
+    Always scoped to the caller — there is no way to address another user's
+    settings, so no permission check beyond authentication is needed.
+    """
+    try:
+        settings = UserNotificationSettingsRepository(db).get_or_create(current_user.id)
+
+        for key, value in payload.model_dump(exclude_unset=True).items():
+            setattr(settings, key, value)
+
+        db.commit()
+        db.refresh(settings)
+        return settings
+    except Exception as e:
+        logger.error(f"Error updating notification settings: {str(e)}")
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to update notification settings"
         )
 
 

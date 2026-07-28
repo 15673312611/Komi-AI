@@ -179,7 +179,9 @@ const saveAgent = async () => {
 </script>
 
 <template>
-  <div class="cc-modal" @click.self="emit('close')">
+  <!-- Intentionally no backdrop-click dismiss: these forms hold credentials
+       the user is mid-entry on, so only the × / Cancel buttons close it. -->
+  <div class="cc-modal">
     <div class="cc-modal-content">
       <div class="cc-modal-header">
         <h3>{{ isManage ? form.title.replace('Connect', 'Manage') : form.title }}</h3>

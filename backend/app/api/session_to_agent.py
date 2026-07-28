@@ -14,8 +14,11 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+from uuid import UUID
+
 from app.repositories.session_to_agent import SessionToAgentRepository
 from app.repositories.chat import ChatRepository
+from app.repositories.user import UserRepository
 from app.models.schemas.chat import ChatDetailResponse
 from app.core.socketio import sio
 from fastapi import APIRouter, HTTPException, Depends, status
@@ -24,6 +27,7 @@ from app.core.logger import get_logger
 from app.models.user import User
 from app.core.auth import get_current_user, has_any_permission
 from app.database import get_db
+from app.services.chat_notifications import notify_chat_assigned
 from app.services.message_delivery import deliver_to_customer
 
 
@@ -31,13 +35,22 @@ logger = get_logger(__name__)
 
 router = APIRouter()
 
-# Claiming a chat is a "manage" action: either the org-wide grant or the
-# assigned-chats one an agent holds.
-TAKEOVER_PERMISSIONS = ("manage_all_chats", "manage_assigned_chats")
+# Claiming or handing on a chat is a "manage" action: either the org-wide
+# grant or the assigned-chats one an agent holds.
+MANAGE_CHAT_PERMISSIONS = ("manage_all_chats", "manage_assigned_chats")
 
 # Shown to the customer when a human takes over an external-channel chat. The
 # widget surfaces the handover in its own UI, so only channels need a message.
 HANDOVER_NOTICE = "You're now connected with a member of our team."
+
+
+def _is_uuid(value: str) -> bool:
+    """Guard the repository lookup: a malformed id is a 404, not a 500."""
+    try:
+        UUID(str(value))
+        return True
+    except (ValueError, TypeError, AttributeError):
+        return False
 
 
 async def _notify_customer_of_handover(db: Session, session, user: User) -> None:
@@ -78,7 +91,7 @@ async def takeover_chat(
         # manage_all_chats, not "manage_chats" — the latter is not a real
         # permission and never matched. has_any_permission also honours the
         # super_admin bypass the previous hand-rolled set check ignored.
-        if not has_any_permission(current_user, TAKEOVER_PERMISSIONS):
+        if not has_any_permission(current_user, MANAGE_CHAT_PERMISSIONS):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Not enough permissions"
@@ -176,9 +189,11 @@ async def reassign_chat(
 ):
     """Reassign a chat session to a different user"""
     try:
-        # Permission: need manage_chats
-        user_permissions = {p.name for p in current_user.role.permissions}
-        if not ("manage_chats" in user_permissions or "manage_assigned_chats" in user_permissions):
+        # Same grants as claiming a chat — and has_any_permission honours the
+        # super_admin bypass the previous hand-rolled set check ignored. It
+        # also checked "manage_chats", which is not a real permission and so
+        # never matched.
+        if not has_any_permission(current_user, MANAGE_CHAT_PERMISSIONS):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Not enough permissions"
@@ -189,11 +204,33 @@ async def reassign_chat(
         if not session:
             raise HTTPException(status_code=404, detail="Chat session not found")
 
+        # A session id is guessable and was never scoped here: without this a
+        # user could hand off a conversation belonging to another organization.
+        if session.organization_id != current_user.organization_id:
+            raise HTTPException(status_code=404, detail="Chat session not found")
+
+        # The new owner must be a real, active member of the same org —
+        # otherwise a chat (and its assignment notification) could be pushed
+        # onto someone outside it. A 404 here doesn't confirm whether an id
+        # exists elsewhere.
+        target_user = UserRepository(db).get_user(to_user_id) if _is_uuid(to_user_id) else None
+        if (target_user is None
+                or not target_user.is_active
+                or target_user.organization_id != current_user.organization_id):
+            raise HTTPException(status_code=404, detail="User not found")
+
         # Only allow reassignment for open sessions handled by a user (not AI)
         if str(session.status.name).lower() != 'open':
             raise HTTPException(status_code=400, detail="Only open sessions can be reassigned")
         if session.user_id is None:
             raise HTTPException(status_code=400, detail="Chat must be handled by a user to reassign")
+
+        # Capture the previous assignee BEFORE reassigning. reassign_session
+        # re-fetches this same row, so within one DB session the identity map
+        # hands back the very object `session` points at — it mutates
+        # session.user_id to the new owner in place. Reading it afterward would
+        # target the new assignee's room, not the previous one's.
+        previous_user_id = session.user_id
 
         # Update session owner
         success = session_repo.reassign_session(session_id=session_id, to_user_id=to_user_id)
@@ -223,12 +260,17 @@ async def reassign_chat(
             'assigned_to': to_user_id
         }, room=f"user_{to_user_id}")
 
-        # Also notify previous assignee if exists
-        if session.user_id:
+        # Also notify the PREVIOUS assignee that the chat left their queue —
+        # unless it was reassigned to themselves (a no-op).
+        if previous_user_id and str(previous_user_id) != str(to_user_id):
             await sio.emit('room_event', {
                 'type': 'reassigned_from_you',
                 'session_id': session_id
-            }, room=f"user_{session.user_id}")
+            }, room=f"user_{previous_user_id}")
+
+        # Push to the new assignee — a socket event only reaches them if the
+        # dashboard is already open.
+        await notify_chat_assigned(db, session, to_user_id, assigned_by=current_user.id)
 
         return ChatDetailResponse(**chat)
     except HTTPException:

@@ -44,6 +44,7 @@ from app.core.s3 import get_s3_signed_url
 from app.models.session_to_agent import SessionStatus
 from app.agents.transfer_agent import get_agent_availability_response
 from app.repositories.agent import AgentRepository
+from app.services.chat_notifications import notify_new_chat
 from app.services.lead_capture import record_lead_from_response
 from app.services.message_delivery import deliver_to_customer
 from app.repositories.rating import RatingRepository
@@ -455,7 +456,13 @@ async def handle_widget_chat(sid, data):
         
         if str(active_session.session_id) != session_id:
             raise ValueError("Session mismatch")
-        
+
+        # The session opens when the widget connects, so the chat only really
+        # starts on the customer's first message — notify there, not on connect,
+        # or merely opening the chat window would ping the team.
+        if not ChatRepository(db).has_customer_messages(session_id):
+            await notify_new_chat(db, active_session)
+
         # Check if agent uses workflow and no human agent has taken over
         if active_session.workflow_id and active_session.user_id is None:
             # Handle workflow chat using the dedicated service

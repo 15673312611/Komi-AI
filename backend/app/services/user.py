@@ -52,6 +52,15 @@ async def send_fcm_notification(user_id: str, notification: Notification, db):
                 'metadata': json.dumps(metadata, default=str)
             },
             token=user.fcm_token_web,
+            # These are web-push tokens, so the priority knob is the WebPush
+            # `Urgency` header — NOT AndroidConfig/APNSConfig, which only apply
+            # to native FCM SDK tokens and are ignored for web push. High
+            # urgency asks the push service to deliver promptly even while the
+            # device is idle / in battery-saver instead of batching it; TTL
+            # keeps it deliverable for a day if the device is offline.
+            webpush=messaging.WebpushConfig(
+                headers={'Urgency': 'high', 'TTL': '86400'},
+            ),
         )
 
         # Send message
