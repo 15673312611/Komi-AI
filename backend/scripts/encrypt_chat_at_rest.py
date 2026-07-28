@@ -33,6 +33,7 @@ file path — the crypto logic itself is never duplicated here.
 import argparse
 import importlib.util
 import os
+import re
 import sys
 from pathlib import Path
 from types import ModuleType
@@ -99,6 +100,14 @@ def _encrypt(crypto, value, kind):
     return crypto.encrypt_value(value) if kind == TEXT else Jsonb(crypto.encrypt_json(value))
 
 
+def _table_exists(conn, table) -> bool:
+    """agent_sessions is created lazily by agno on the first agent run, so a fresh
+    or agent-less database legitimately lacks it — skip rather than crash."""
+    with conn.cursor() as cur:
+        cur.execute("SELECT to_regclass(%s)", (table,))
+        return cur.fetchone()[0] is not None
+
+
 def backfill(conn, crypto, table, pk, columns, kind, batch_size, dry_run) -> int:
     """Encrypt every plaintext value across one table's columns in a single pass.
 
@@ -160,6 +169,9 @@ def main() -> int:
     if not database_url:
         print("DATABASE_URL is not set", file=sys.stderr)
         return 1
+    # The app's URL carries a SQLAlchemy driver suffix (postgresql+psycopg://) that
+    # libpq — and therefore psycopg.connect — does not understand. Strip it.
+    database_url = re.sub(r"^(postgresql|postgres)\+\w+://", r"\1://", database_url)
     crypto = load_encryption()
     # Belt and braces: the module raises on a missing key outside development, but a
     # host that happens to export ENVIRONMENT=development would get a generated key,
@@ -173,6 +185,9 @@ def main() -> int:
 
     with psycopg.connect(database_url) as conn:
         for table, pk, columns, kind in TARGETS:
+            if not _table_exists(conn, table):
+                print(f"  {table}: table not present, skipping", flush=True)
+                continue
             total += backfill(conn, crypto, table, pk, columns, kind,
                               args.batch_size, args.dry_run)
 
