@@ -80,6 +80,16 @@ def test_local_mode_404s_a_missing_file(client, tmp_path, monkeypatch):
     assert response.status_code == 404
 
 
+def test_never_redirects_off_s3(client):
+    """Defence in depth: only ever bounce a visitor to an S3 host."""
+    with patch.object(settings, 'S3_FILE_STORAGE', True), \
+         patch('app.api.help_center_images.sign_s3_key', return_value="https://evil.example.com/x"):
+        response = client.get(_url(VALID_NAME))
+
+    assert response.status_code == 404
+    assert "location" not in response.headers
+
+
 @pytest.mark.asyncio
 async def test_local_upload_then_serve_round_trip(client, tmp_path, monkeypatch):
     """End-to-end with S3_FILE_STORAGE=false: the path store_article_image bakes
