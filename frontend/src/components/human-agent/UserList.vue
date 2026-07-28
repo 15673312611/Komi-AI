@@ -458,7 +458,7 @@ onMounted(async () => {
     </template>
 
     <!-- Edit User Modal -->
-    <Modal v-if="showEditModal" @close="showEditModal = false">
+    <Modal v-if="showEditModal" persistent @close="showEditModal = false">
       <template #title>Edit User</template>
       <template #content>
         <UserForm 
@@ -492,7 +492,7 @@ onMounted(async () => {
     </Modal>
 
     <!-- Create User Modal -->
-    <Modal v-if="showCreateModal" @close="showCreateModal = false">
+    <Modal v-if="showCreateModal" persistent @close="showCreateModal = false">
       <template #title>Create New User</template>
       <template #content>
         <UserForm

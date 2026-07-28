@@ -110,6 +110,7 @@ class HelpCenterSettingsResponse(BaseModel):
     title: Optional[str] = None
     description: Optional[str] = None
     logo_url: Optional[str] = None
+    favicon_url: Optional[str] = None
     brand_color: str
     header_links: List[HeaderLink] = []
     cta_text: Optional[str] = None

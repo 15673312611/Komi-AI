@@ -17,6 +17,7 @@ limitations under the License.
 from sqlalchemy import Column, String, DateTime, ForeignKey, Enum as SQLEnum, JSON, Float
 from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.postgresql import UUID
+from app.core.encryption import EncryptedText
 from app.database import Base
 import enum
 from sqlalchemy.sql import func
@@ -56,15 +57,17 @@ class SessionToAgent(Base):
 
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     transfer_reason = Column(String, nullable=True)
-    transfer_description = Column(String, nullable=True)
+    # The free-text fields below are AI-written summaries of the conversation, so
+    # they are encrypted at rest alongside the messages themselves.
+    transfer_description = Column(EncryptedText, nullable=True)
     end_chat_reason = Column(SQLEnum(EndChatReasonType), nullable=True)
-    end_chat_description = Column(String, nullable=True)
-    
+    end_chat_description = Column(EncryptedText, nullable=True)
+
     # Ticket-related fields
     ticket_id = Column(String, nullable=True)
     ticket_status = Column(String, nullable=True)
-    ticket_summary = Column(String, nullable=True)
-    ticket_description = Column(String, nullable=True)
+    ticket_summary = Column(EncryptedText, nullable=True)
+    ticket_description = Column(EncryptedText, nullable=True)
     integration_type = Column(String, nullable=True)
     ticket_priority = Column(String, nullable=True)
 

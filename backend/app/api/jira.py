@@ -39,6 +39,20 @@ router = APIRouter()
 jira_service = JiraService()
 logger = get_logger(__name__)
 
+
+def _require_jira_agent_in_org(db, agent_id, org_id) -> None:
+    """The agent must belong to the caller's org, else 404.
+
+    A malformed agent_id is treated as not-found rather than a 500.
+    """
+    from app.repositories.agent import AgentRepository
+    try:
+        agent_uuid = uuid.UUID(str(agent_id))
+    except (ValueError, TypeError):
+        raise HTTPException(status_code=404, detail="Agent not found")
+    if not AgentRepository(db).get_agent_in_org(agent_uuid, org_id):
+        raise HTTPException(status_code=404, detail="Agent not found")
+
 # Create a temporary in-memory store for OAuth states
 # This is a simple solution that doesn't require database changes
 # In production, you might want to use Redis or a database table
@@ -493,9 +507,10 @@ async def save_agent_jira_config(
     """
     Save Jira configuration for an agent.
     """
-    # Check if agent belongs to the organization
-    # This would typically be done with a query to your agent table
-    
+    # The agent must belong to the caller's org — otherwise any tenant could
+    # flip another tenant's project_key / issue_type and hijack escalation.
+    _require_jira_agent_in_org(db, agent_id, organization.id)
+
     # Check if Jira is connected
     token = db.query(JiraToken).filter(
         JiraToken.organization_id == organization.id
@@ -537,9 +552,9 @@ async def get_agent_jira_config(
     """
     Get Jira configuration for an agent.
     """
-    # Check if agent belongs to the organization
-    # This would typically be done with a query to your agent table
-    
+    # The agent must belong to the caller's org before its config is exposed.
+    _require_jira_agent_in_org(db, agent_id, organization.id)
+
     config = db.query(AgentJiraConfig).filter(
         AgentJiraConfig.agent_id == agent_id
     ).first()

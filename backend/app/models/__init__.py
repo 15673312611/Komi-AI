@@ -64,6 +64,7 @@ from app.models.crm import (
     CrmConnection, CrmSyncJob,
     CrmProvider, CrmConnectionStatus, CrmSyncJobStatus,
 )
+from app.models.notification_settings import UserNotificationSettings
 
 
 
@@ -123,6 +124,7 @@ __all__ = [
     "TicketActivityType",
     "TicketActorType",
     "OrganizationTicketSettings",
+    "UserNotificationSettings",
     "InvestigationRun",
     "InvestigationRunType",
     "InvestigationRunStatus",

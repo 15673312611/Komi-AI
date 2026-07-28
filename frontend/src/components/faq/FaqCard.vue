@@ -16,6 +16,7 @@ limitations under the License.
 
 <script setup lang="ts">
 import type { FaqItem } from '@/types/faq'
+import FaqSeoFields from './FaqSeoFields.vue'
 import MarkdownEditor from './MarkdownEditor.vue'
 
 const props = defineProps<{
@@ -25,6 +26,11 @@ const props = defineProps<{
   saving?: boolean
   draftQuestion: string
   draftAnswer: string
+  /** Per-article SEO drafts. Optional so callers that don't expose the SEO
+   *  section (and tests) can leave them out — they default to empty. */
+  draftSlug?: string
+  draftMetaTitle?: string
+  draftMetaDescription?: string
   locked?: boolean
   /** Selection mode is on somewhere in the list (keeps checkboxes visible). */
   selectable?: boolean
@@ -40,6 +46,9 @@ const emit = defineEmits<{
   'toggle-select': []
   'update:draftQuestion': [value: string]
   'update:draftAnswer': [value: string]
+  'update:draftSlug': [value: string]
+  'update:draftMetaTitle': [value: string]
+  'update:draftMetaDescription': [value: string]
 }>()
 
 function onQuestionInput(event: Event) {
@@ -81,6 +90,15 @@ function answerPreview(md: string): string {
         @update:model-value="$emit('update:draftAnswer', $event)"
       />
       <p class="edit-hint">Markdown supported — headings, <strong>bold</strong>, lists, links and images.</p>
+      <FaqSeoFields
+        :slug="draftSlug"
+        :meta-title="draftMetaTitle"
+        :meta-description="draftMetaDescription"
+        :question="draftQuestion"
+        @update:slug="$emit('update:draftSlug', $event)"
+        @update:meta-title="$emit('update:draftMetaTitle', $event)"
+        @update:meta-description="$emit('update:draftMetaDescription', $event)"
+      />
       <div class="edit-actions">
         <button class="btn-save" type="button" :disabled="saving" @click="$emit('save')">
           {{ saving ? 'Saving…' : 'Save' }}

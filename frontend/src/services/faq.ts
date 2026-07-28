@@ -20,6 +20,7 @@ import type {
   FaqItem,
   FaqImportMode,
   FaqListResponse,
+  FaqSeoFields,
   FaqStatus,
   GenerateEstimate,
   HelpCenterDomain,
@@ -64,7 +65,14 @@ export const faqService = {
     }
   },
 
-  async createFaq(payload: { question: string; answer: string; category?: string; status?: FaqStatus }): Promise<FaqItem> {
+  async createFaq(
+    payload: {
+      question: string
+      answer: string
+      category?: string
+      status?: FaqStatus
+    } & Partial<FaqSeoFields>,
+  ): Promise<FaqItem> {
     try {
       const response = await api.post('/help-center/faqs', payload)
       return response.data
@@ -73,7 +81,12 @@ export const faqService = {
     }
   },
 
-  async updateFaq(id: string, payload: Partial<Pick<FaqItem, 'question' | 'answer' | 'category' | 'status'>>): Promise<FaqItem> {
+  async updateFaq(
+    id: string,
+    payload: Partial<
+      Pick<FaqItem, 'question' | 'answer' | 'category' | 'status'> & FaqSeoFields
+    >,
+  ): Promise<FaqItem> {
     try {
       const response = await api.put(`/help-center/faqs/${id}`, payload)
       return response.data
@@ -207,6 +220,28 @@ export const faqService = {
       return response.data
     } catch (error: any) {
       throw errorMessage(error, 'Failed to remove logo')
+    }
+  },
+
+  async uploadFavicon(file: File): Promise<HelpCenterSettings> {
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+      const response = await api.post('/help-center/favicon', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      })
+      return response.data
+    } catch (error: any) {
+      throw errorMessage(error, 'Failed to upload favicon')
+    }
+  },
+
+  async removeFavicon(): Promise<HelpCenterSettings> {
+    try {
+      const response = await api.delete('/help-center/favicon')
+      return response.data
+    } catch (error: any) {
+      throw errorMessage(error, 'Failed to remove favicon')
     }
   },
 

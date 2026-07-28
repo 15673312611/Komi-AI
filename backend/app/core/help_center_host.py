@@ -26,6 +26,7 @@ so dispatch and resolution can never disagree.
 """
 
 import asyncio
+import re
 import time
 from typing import Optional
 
@@ -35,6 +36,10 @@ from app.core.logger import get_logger
 logger = get_logger(__name__)
 
 DOMAIN_CACHE_TTL_SECONDS = 60
+
+# Path-based dispatch (self-host): {BACKEND_URL}/help/{slug}/... on the main
+# origin. Group 1 is the help-center slug, group 2 the remainder ("/", "/a/x").
+_HELP_PATH_RE = re.compile(r"^/help/([^/]+)(/.*)?$")
 
 
 def normalize_host(raw_host: Optional[str]) -> str:
@@ -121,7 +126,24 @@ class HelpCenterHostMiddleware:
         self.public_app = public_app
 
     async def __call__(self, scope, receive, send):
-        if scope["type"] == "http" and is_help_center_host(_host_from_scope(scope)):
-            await self.public_app(scope, receive, send)
-            return
+        if scope["type"] == "http":
+            # Path dispatch (self-host default): /help/{slug}/... on the main
+            # origin. Gated to path mode so cloud never serves the /help/ form.
+            if settings.HELP_CENTER_PUBLIC_MODE == "path":
+                match = _HELP_PATH_RE.match(scope.get("path", ""))
+                if match:
+                    slug = match.group(1)
+                    # Drop a trailing slash from the remainder ourselves: letting
+                    # Starlette's redirect_slashes handle it would 307 to a
+                    # Location built from the rewritten (prefix-stripped) path,
+                    # sending the visitor to the origin root without /help/{slug}.
+                    remainder = (match.group(2) or "").rstrip("/") or "/"
+                    scope["help_center"] = {"slug": slug, "base_path": f"/help/{slug}"}
+                    scope["path"] = remainder
+                    scope["raw_path"] = remainder.encode("latin-1")
+                    await self.public_app(scope, receive, send)
+                    return
+            if is_help_center_host(_host_from_scope(scope)):
+                await self.public_app(scope, receive, send)
+                return
         await self.app(scope, receive, send)

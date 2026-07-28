@@ -23,13 +23,15 @@ from fastapi.staticfiles import StaticFiles
 import socketio
 from app.api import chat, organizations, users, ai_setup, knowledge, agent, notification, widget, widget_apps, user_groups, roles, analytics, jira, shopify, workflow, workflow_node, mcp_tool, file_upload, token, lead_capture, people, tickets
 from app.api import help_center as help_center_api
+from app.api import help_center_images
 from app.api import channels as channels_api
 from app.api import webhooks as channel_webhooks
 # Import widget_chat to register socket.io event handlers for /widget namespace
 from app.api import widget_chat  # noqa: F401 - imported for side effects (socket.io handlers registration)
 from fastapi import FastAPI, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
-from app.core.config import settings
+from app.core.config import settings, check_secret_configuration
+from app.core.encryption import verify_encryption_key
 from app.services.firebase import initialize_firebase
 from app.database import engine, Base
 import asyncio
@@ -53,6 +55,10 @@ logger = get_logger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
+    # First: a bad ENCRYPTION_KEY must stop the boot, not surface as an unreadable
+    # conversation once the app is already serving traffic.
+    verify_encryption_key()
+    check_secret_configuration()
     initialize_firebase()
     await startup_event()
     yield
@@ -157,6 +163,15 @@ app.include_router(
 
 app.include_router(
     help_center_api.router,
+    prefix=f"{settings.API_V1_STR}/help-center",
+    tags=["help-center"]
+)
+
+# Public: article images baked into FAQ Markdown. Same prefix as the admin
+# router above but unauthenticated — article pages are public. Also registered
+# on public_app for host mode.
+app.include_router(
+    help_center_images.router,
     prefix=f"{settings.API_V1_STR}/help-center",
     tags=["help-center"]
 )
@@ -298,6 +313,29 @@ async def head_health_check():
         "status": "healthy",
         "version": settings.VERSION
     }
+
+
+@app.get("/health/help-center-domain", include_in_schema=False, operation_id="help_center_domain_tls_check")
+async def help_center_domain_tls_check(domain: str = ""):
+    """On-demand-TLS "ask" gate for the edge proxy (e.g. Caddy).
+
+    Returns 200 only when ``domain`` is a help-center host we actually serve —
+    a ``{slug}.HELP_CENTER_BASE_DOMAIN`` subdomain or a DB-verified custom
+    domain — so the edge provisions a certificate for those and refuses every
+    other name pointed at us. Public by design (the edge calls it
+    unauthenticated) but it leaks nothing: the answer is a bare status code and
+    the lookup reuses the same in-memory cache/slug check as host dispatch, so
+    there is no per-request database hit.
+    """
+    from fastapi import Response
+
+    from app.core.help_center_host import is_help_center_host, normalize_host
+
+    host = normalize_host(domain)
+    if host and is_help_center_host(host):
+        return Response(status_code=200)
+    return Response(status_code=404)
+
 
 # Create upload directories if they don't exist
 if not os.path.exists("uploads"):

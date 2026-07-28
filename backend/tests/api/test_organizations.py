@@ -28,6 +28,21 @@ from app.api import organizations as organizations_router
 from app.core.auth import get_current_user, require_permissions
 from tests.conftest import engine, TestingSessionLocal, create_tables, Base
 
+# The disposable-address gate is enterprise-only; a community checkout has no
+# blocklist and accepts everything.
+try:
+    from app.enterprise.services.email_validation import DISPOSABLE_EMAIL_MESSAGE
+
+    HAS_EMAIL_VALIDATION = True
+except ImportError:
+    DISPOSABLE_EMAIL_MESSAGE = ""
+    HAS_EMAIL_VALIDATION = False
+
+requires_email_validation = pytest.mark.skipif(
+    not HAS_EMAIL_VALIDATION, reason="enterprise email validation not installed"
+)
+
+
 # Create a test FastAPI app
 app = FastAPI()
 app.include_router(
@@ -304,6 +319,41 @@ def test_create_organization_duplicate(client, test_organization):
     assert response.status_code == 403
     assert "Organization already exists" in response.json()["detail"]
 
+@requires_email_validation
+def test_create_organization_rejects_disposable_admin_email(client, db):
+    """Signup with a throwaway admin address is refused and creates nothing"""
+    app.dependency_overrides[get_db] = lambda: db
+
+    db.query(User).delete()
+    db.commit()
+    db.query(Organization).delete()
+    db.commit()
+
+    org_data = {
+        "name": "Throwaway Org",
+        "domain": "throwaway.com",
+        "timezone": "UTC",
+        "business_hours": {
+            "monday": {"start": "09:00", "end": "17:00", "enabled": True},
+            "tuesday": {"start": "09:00", "end": "17:00", "enabled": True},
+            "wednesday": {"start": "09:00", "end": "17:00", "enabled": True},
+            "thursday": {"start": "09:00", "end": "17:00", "enabled": True},
+            "friday": {"start": "09:00", "end": "17:00", "enabled": True},
+            "saturday": {"start": "09:00", "end": "17:00", "enabled": False},
+            "sunday": {"start": "09:00", "end": "17:00", "enabled": False}
+        },
+        "admin_email": "someone@yopmail.com",
+        "admin_name": "Throwaway Admin",
+        "admin_password": "adminpass123"
+    }
+
+    response = client.post("/api/v1/organizations", json=org_data)
+    assert response.status_code == 400
+    assert response.json()["detail"] == DISPOSABLE_EMAIL_MESSAGE
+    assert db.query(Organization).count() == 0
+    assert db.query(User).count() == 0
+
+
 def test_update_organization_invalid_hours(client, test_organization):
     """Test updating organization with invalid business hours"""
     update_data = {
@@ -327,3 +377,50 @@ def test_get_nonexistent_organization(client):
     response = client.get(f"/api/v1/organizations/{uuid4()}")
     assert response.status_code == 404
     assert "Organization not found" in response.json()["detail"] 
+
+@pytest.fixture
+def other_organization(db) -> Organization:
+    """An organization the test user does not belong to"""
+    org = Organization(
+        id=uuid4(),
+        name="Other Organization",
+        domain="other.example.com",
+        timezone="UTC",
+        business_hours={},
+        settings={},
+        is_active=True
+    )
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+    return org
+
+
+def test_get_another_organization_is_not_found(client, other_organization):
+    """Reading another tenant's organization record is refused"""
+    response = client.get(f"/api/v1/organizations/{other_organization.id}")
+
+    assert response.status_code == 404
+    assert "Organization not found" in response.json()["detail"]
+
+
+def test_update_another_organization_is_not_found(client, db, other_organization):
+    """The domain (and therefore CORS) of another tenant can't be rewritten"""
+    original_domain = other_organization.domain
+
+    response = client.patch(
+        f"/api/v1/organizations/{other_organization.id}",
+        json={"name": "Hijacked", "domain": "attacker.example.com"}
+    )
+
+    assert response.status_code == 404
+    db.refresh(other_organization)
+    assert other_organization.domain == original_domain
+    assert other_organization.name == "Other Organization"
+
+
+def test_get_another_organizations_stats_is_not_found(client, other_organization):
+    """Headcount and conversation volumes stay inside the tenant"""
+    response = client.get(f"/api/v1/organizations/{other_organization.id}/stats")
+
+    assert response.status_code == 404

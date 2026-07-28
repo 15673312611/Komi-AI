@@ -448,6 +448,9 @@ const handleChatClosed = (_sessionId?: string) => {
 .main-content {
   display: grid;
   grid-template-columns: 1fr 350px;
+  /* Bound the implicit row: an auto row is content-sized, so the list/chat
+     panes inherit no height limit and their inner overflow never scrolls. */
+  grid-template-rows: minmax(0, 1fr);
   flex: 1;
   min-height: 0;
   width: 100%;

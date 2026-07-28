@@ -19,11 +19,10 @@ from typing import Optional, Dict
 import uuid
 from jose import JWTError, jwt
 from passlib.context import CryptContext
-from cryptography.fernet import Fernet
 from app.core.config import  settings
+from app.core.encryption import CURRENT_KEY_ID, get_keys
 from app.core.logger import get_logger
 import base64
-import os
 
 logger = get_logger(__name__)
 
@@ -36,26 +35,14 @@ REFRESH_TOKEN_EXPIRE_DAYS = 7
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-def get_or_create_key():
-    """Get encryption key from environment variable or generate a new one"""
-    env_key = os.getenv('ENCRYPTION_KEY')
-    if env_key:
-        try:
-            # Try to decode the base64 key
-            return base64.b64decode(env_key)
-        except Exception as e:
-            logger.error(f"Invalid encryption key format: {str(e)}")
-    
-    # Generate new key if not found in env
-    key = Fernet.generate_key()
-    # Convert to base64 string for easy env var storage
-    env_key = base64.b64encode(key).decode()
-    logger.info(f"Generated new encryption key. Please set ENCRYPTION_KEY={env_key} in your environment")
-    return key
+def _fernet():
+    """The shared encryption-at-rest key, loaded by app.core.encryption.
 
-# Initialize Fernet with key
-ENCRYPTION_KEY = get_or_create_key()
-fernet = Fernet(ENCRYPTION_KEY)
+    API keys predate the ``enc:v1:`` wire format and stay bare Fernet tokens, so
+    they are encrypted here rather than through encrypt_value/decrypt_value — but
+    the key itself has exactly one owner.
+    """
+    return get_keys()[CURRENT_KEY_ID]
 
 
 def create_access_token(data: dict) -> str:
@@ -90,7 +77,7 @@ def verify_conversation_token(token: str) -> Optional[dict]:
 def encrypt_api_key(api_key: str) -> str:
     """Encrypt API key before storing in database"""
     try:
-        return fernet.encrypt(api_key.encode()).decode()
+        return _fernet().encrypt(api_key.encode()).decode()
     except Exception as e:
         logger.error(f"Encryption error: {str(e)}")
         raise ValueError("Failed to encrypt API key")
@@ -99,7 +86,7 @@ def encrypt_api_key(api_key: str) -> str:
 def decrypt_api_key(encrypted_key: str) -> str:
     """Decrypt API key from database"""
     try:
-        return fernet.decrypt(encrypted_key.encode()).decode()
+        return _fernet().decrypt(encrypted_key.encode()).decode()
     except Exception as e:
         logger.error(f"Decryption error: {str(e)}")
         raise ValueError("Failed to decrypt API key")
@@ -369,56 +356,6 @@ def get_user_active_sessions(email: str, widget_id: Optional[str] = None) -> lis
     return []
 
 
-def get_all_active_sessions() -> Dict[str, list]:
-    """
-    Get all active sessions across all users.
-    
-    Note: This function uses SCAN for pattern matching user_sessions keys.
-    For better performance with many users, consider maintaining a master set
-    of all active user emails (e.g., "all_active_users") updated alongside
-    token storage operations.
-    
-    Returns:
-        Dictionary with email as key and list of JTI strings as value
-    """
-    try:
-        from app.core.redis import redis_client
-        if redis_client:
-            # Find all keys matching the user_sessions pattern
-            # Filters out widget-specific and widget_keys sets (pattern: user_sessions:EMAIL)
-            all_sessions = {}
-            cursor = 0
-            pattern = "user_sessions:*"
-            
-            while True:
-                cursor, keys = redis_client.scan(cursor, match=pattern)
-                
-                for key in keys:
-                    key_str = key.decode() if isinstance(key, bytes) else key
-                    
-                    # Skip widget-specific and metadata keys (contain ':widget:' or end with ':widget_keys')
-                    if ":widget:" in key_str or key_str.endswith(":widget_keys"):
-                        continue
-                    
-                    # Extract email from key (user_sessions:email@example.com)
-                    email = key_str.replace("user_sessions:", "", 1)
-                    
-                    # Get JTIs for this email
-                    jti_set = redis_client.smembers(key_str)
-                    jti_list = [jti.decode() if isinstance(jti, bytes) else jti for jti in jti_set]
-                    
-                    if jti_list:
-                        all_sessions[email] = jti_list
-                
-                if cursor == 0:
-                    break
-            
-            return all_sessions
-    except Exception as e:
-        logger.error(f"Failed to get all sessions: {str(e)}")
-    return {}
-
-
 def get_existing_valid_token_jti(email: str, widget_id: str, customer_id: str) -> Optional[str]:
     """
     Check if there's an existing valid token JTI for this customer/widget combination.
@@ -479,7 +416,6 @@ def generate_widget_api_key() -> str:
         str: API key in format 'wak_<base64url>'
     """
     import secrets
-    import base64
 
     # Generate 32 random bytes (256 bits of entropy)
     random_bytes = secrets.token_bytes(32)

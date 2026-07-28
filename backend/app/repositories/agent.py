@@ -63,6 +63,18 @@ class AgentRepository:
             Agent.id == agent_id
         ).first()
 
+    def get_agent_in_org(self, agent_id, org_id) -> Optional[Agent]:
+        """Get an agent only if it belongs to org_id.
+
+        The single choke point for "is this agent mine?" — endpoints that take
+        an agent_id from the caller use this so an agent from another tenant
+        can never be read or reconfigured.
+        """
+        return self.db.query(Agent).filter(
+            Agent.id == agent_id,
+            Agent.organization_id == org_id
+        ).first()
+
     def get_org_agents(self, org_id: UUID, active_only: bool = True) -> List[Agent]:
         """Get all templates for an organization"""
         query = self.db.query(Agent).filter(

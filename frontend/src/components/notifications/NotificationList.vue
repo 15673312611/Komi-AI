@@ -16,8 +16,12 @@ limitations under the License.
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { notificationService, type Notification } from '@/services/notification'
 import { getNotificationIcon } from './notificationIcons'
+import { conversationSessionUrl } from '@/pwa/pushContract'
+
+const router = useRouter()
 
 const props = defineProps<{
     isOpen: boolean
@@ -54,6 +58,25 @@ const markAsRead = async (id: number) => {
         }
     } catch (err) {
         console.error('Error marking notification as read:', err)
+    }
+}
+
+// Chat notifications (new chat, transfer, assignment) carry the session id in
+// their metadata; clicking one marks it read and deep-links to that
+// conversation, closing the drawer.
+const sessionIdOf = (notification: Notification): string | undefined => {
+    const id = notification.notification_metadata?.session_id
+    return id ? String(id) : undefined
+}
+
+const handleNotificationClick = async (notification: Notification) => {
+    if (!notification.is_read) {
+        await markAsRead(notification.id)
+    }
+    const sessionId = sessionIdOf(notification)
+    if (sessionId) {
+        emit('close')
+        router.push(conversationSessionUrl(sessionId))
     }
 }
 
@@ -153,7 +176,8 @@ onMounted(fetchNotifications)
 
             <div v-else class="notifications">
                 <div v-for="notification in filteredNotifications" :key="notification.id" class="notification-item"
-                    :class="{ unread: !notification.is_read }" @click="markAsRead(notification.id)">
+                    :class="{ unread: !notification.is_read, linkable: sessionIdOf(notification) }"
+                    @click="handleNotificationClick(notification)">
                     <span class="notification-icon-wrap">
                         <img v-if="getNotificationIcon(notification.type.toLowerCase())"
                             :src="getNotificationIcon(notification.type.toLowerCase())" class="notification-type-icon"
@@ -350,6 +374,27 @@ onMounted(fetchNotifications)
 
 .notification-item:hover {
     background: var(--o03);
+}
+
+/* Chat notifications deep-link to their conversation — hint it on hover. */
+.notification-item.linkable {
+    position: relative;
+}
+
+.notification-item.linkable::after {
+    content: 'Open ›';
+    position: absolute;
+    right: 18px;
+    bottom: 10px;
+    font-size: 11px;
+    font-weight: var(--font-weight-medium);
+    color: var(--accent-ink);
+    opacity: 0;
+    transition: opacity 0.15s ease;
+}
+
+.notification-item.linkable:hover::after {
+    opacity: 1;
 }
 
 .notification-item.unread {

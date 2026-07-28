@@ -22,8 +22,38 @@ import { validatePassword, type PasswordStrength } from '@/utils/validators'
 import userAvatar from '@/assets/user.svg'
 import type { User } from '@/types/user'
 import { isAbsoluteUrl } from '@/utils/avatars'
+import { useNotificationSettings } from '@/composables/useNotificationSettings'
+import { useNotifications } from '@/composables/useNotifications'
+import type { NotificationSettings } from '@/services/notification'
 
 const { user } = useAuth()
+
+const {
+  settings: notificationSettings,
+  isLoading: notificationsLoading,
+  isSaving: notificationsSaving,
+  save: saveNotificationSetting
+} = useNotificationSettings()
+const { hasPermission: hasPushPermission, enableNotifications } = useNotifications()
+
+// One row per toggle so the markup stays a single loop.
+const NOTIFICATION_TOGGLES: { key: keyof NotificationSettings; title: string; desc: string }[] = [
+  {
+    key: 'notify_new_chat',
+    title: 'New chats',
+    desc: 'When a new conversation starts, including ones the AI is handling.'
+  },
+  {
+    key: 'notify_chat_transfer',
+    title: 'Chats transferred to my group',
+    desc: 'When an AI agent hands a conversation to a group you belong to.'
+  },
+  {
+    key: 'notify_chat_assigned',
+    title: 'Chats assigned to me',
+    desc: 'When a teammate reassigns a conversation to you.'
+  }
+]
 
 const profilePicFile = ref<File | null>(null)
 const profilePicPreview = ref<string>('')
@@ -410,6 +440,41 @@ const handleProfilePicClick = () => {
         <span class="saved-text">{{ message }}</span>
       </div>
     </form>
+
+    <!-- Notifications: saved on toggle, so deliberately outside the profile form -->
+    <div class="settings-card notifications-card">
+      <h3 class="card-title">Notifications</h3>
+      <p class="card-subtitle">Choose which chat events send you a push notification.</p>
+
+      <div v-if="!hasPushPermission" class="permission-notice">
+        <font-awesome-icon icon="fa-solid fa-bell-slash" class="permission-icon" />
+        <span class="permission-text">
+          Your browser isn't allowed to show notifications yet, so nothing below will reach you.
+        </span>
+        <button type="button" class="upload-button" @click="enableNotifications">Enable</button>
+      </div>
+
+      <div v-if="notificationsLoading" class="notification-hint">Loading your preferences…</div>
+
+      <template v-else-if="notificationSettings">
+        <div v-for="toggle in NOTIFICATION_TOGGLES" :key="toggle.key" class="notification-row">
+          <div class="notification-meta">
+            <div class="notification-title">{{ toggle.title }}</div>
+            <div class="notification-desc">{{ toggle.desc }}</div>
+          </div>
+          <label class="switch">
+            <input
+              type="checkbox"
+              :checked="notificationSettings[toggle.key]"
+              :disabled="notificationsSaving"
+              @change="saveNotificationSetting({ [toggle.key]: !notificationSettings[toggle.key] })"
+            >
+            <span class="slider" :class="{ enabled: notificationSettings[toggle.key] }"></span>
+          </label>
+        </div>
+        <div class="notification-hint">Saved automatically.</div>
+      </template>
+    </div>
   </div>
 </template>
 
@@ -465,6 +530,111 @@ const handleProfilePicClick = () => {
   font-size: 13.5px;
   color: var(--muted);
   margin: -16px 0 20px;
+}
+
+/* Notifications card */
+.notifications-card {
+  margin-top: 18px;
+}
+
+.permission-notice {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  margin-bottom: 20px;
+  border: 1px solid var(--o08);
+  border-radius: var(--radius-btn);
+  background: var(--bg2);
+}
+
+.permission-icon {
+  color: var(--muted);
+  flex-shrink: 0;
+}
+
+.permission-text {
+  flex: 1;
+  font-size: 13.5px;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.notification-row {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 16px 0;
+  border-top: 1px solid var(--o07);
+}
+
+.notification-meta {
+  flex: 1;
+  min-width: 0;
+}
+
+.notification-title {
+  font-size: 14.5px;
+  font-weight: var(--font-weight-medium);
+  color: var(--text);
+}
+
+.notification-desc {
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.45;
+  margin-top: 3px;
+}
+
+.notification-hint {
+  font-size: 12.5px;
+  color: var(--muted);
+  padding-top: 14px;
+  border-top: 1px solid var(--o07);
+}
+
+/* Toggle switch (46x26) — matches the agent settings toggles */
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 46px;
+  height: 26px;
+  flex-shrink: 0;
+}
+
+.switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.slider {
+  position: absolute;
+  cursor: pointer;
+  inset: 0;
+  background: var(--toggle-track-off);
+  transition: background 0.15s;
+  border-radius: var(--radius-pill);
+}
+
+.slider.enabled {
+  background: var(--toggle-on-teal);
+}
+
+.slider:before {
+  position: absolute;
+  content: "";
+  height: 20px;
+  width: 20px;
+  left: 3px;
+  top: 3px;
+  background: var(--toggle-knob);
+  transition: transform 0.15s;
+  border-radius: 50%;
+}
+
+input:checked + .slider:before {
+  transform: translateX(20px);
 }
 
 /* Avatar row */

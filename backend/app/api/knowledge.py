@@ -14,7 +14,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-import traceback
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Depends, Body, Query, status
 from typing import List, Optional
 from app.models.user import User
@@ -65,6 +64,15 @@ ALLOWED_PDF_TYPES = ("application/pdf",)
 
 # Import processor status from shared module
 from app.core.processor import PROCESSOR_STATUS
+
+
+def resolve_plan_max_links(subscription) -> int:
+    """Per-source sub-page crawl cap: the enterprise plan's ``max_sub_pages``
+    when enterprise is active, otherwise the self-host configurable
+    ``KB_MAX_LINKS`` (so self-hosted installs actually control crawl scope)."""
+    if HAS_ENTERPRISE and subscription:
+        return subscription.plan.max_sub_pages
+    return settings.KB_MAX_LINKS
 
 
 class UrlsRequest(BaseModel):
@@ -161,43 +169,6 @@ class UrlsRequest(BaseModel):
         
         return validated_urls
     
-class ExploreUrlRequest(BaseModel):
-    url: str
-    
-    @field_validator('url')
-    @classmethod
-    def validate_url_format(cls, v):
-        """Validate that URL is in https://domainname format"""
-        if not v:
-            raise ValueError('URL cannot be empty')
-        
-        # Remove trailing slashes and whitespace
-        v = v.strip().rstrip('/')
-        
-        # Check if URL starts with https://
-        if not v.startswith('https://'):
-            raise ValueError('URL must start with https://')
-        
-        # Extract domain part after https://
-        domain_part = v[8:]  # Remove 'https://'
-        
-        # Check if domain part is not empty
-        if not domain_part:
-            raise ValueError('URL must contain a domain name')
-        
-        # Check if domain contains only valid characters and has at least one dot
-        import re
-        # Allow alphanumeric, dots, hyphens, and forward slashes for paths
-        if not re.match(r'^[a-zA-Z0-9.-]+(/.*)?$', domain_part):
-            raise ValueError('Invalid URL format')
-        
-        # Ensure domain has at least one dot (for TLD)
-        domain_only = domain_part.split('/')[0]  # Get just the domain part before any path
-        if '.' not in domain_only:
-            raise ValueError('URL must contain a valid domain with TLD')
-        
-        return v
-
 
 @router.post("/upload/pdf")
 async def upload_pdf_files(
@@ -235,6 +206,8 @@ async def upload_pdf_files(
                 # 404 (not 403) so we don't reveal another org's agent existence.
                 raise HTTPException(status_code=404, detail="Agent not found")
 
+        # Bound for the non-enterprise path (resolve_plan_max_links below).
+        subscription = None
         # Check enterprise subscription limits if enterprise module is available
         if HAS_ENTERPRISE:
             knowledge_repo = KnowledgeRepository(db)
@@ -295,7 +268,7 @@ async def upload_pdf_files(
                 source=file_path,
                 status=QueueStatus.PENDING,
                 queue_metadata={
-                    "max_links": subscription.plan.max_sub_pages if HAS_ENTERPRISE and subscription else 10
+                    "max_links": resolve_plan_max_links(subscription)
                 }
             )
             queued_items.append(queue_repo.create(queue_item))
@@ -310,63 +283,6 @@ async def upload_pdf_files(
     except Exception as e:
         logger.error(f"Error uploading PDFs: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to upload files")
-
-
-@router.post("/explore/add-url")
-async def add_explore_url(
-    request: ExploreUrlRequest = Body(...),
-    db: Session = Depends(get_db)
-):
-    """Add URL from explore view without authentication, using environment variables"""
-    try:
-        # Get values from environment
-        agent_id = settings.EXPLORE_AGENT_ID
-        org_id = settings.EXPLORE_SOURCE_ORG_ID
-        user_id = settings.EXPLORE_USER_ID
-        
-        
-        # Check if URL already exists in knowledge base
-        knowledge_repo = KnowledgeRepository(db)
-        existing_sources = knowledge_repo.get_by_sources(UUID(org_id), [request.url])
-        
-        if existing_sources:
-            return {
-                "status": "exists",
-                "message": "URL already exists in knowledge base"
-            }
-        
-        # Create queue item with HIGH priority for explore URLs
-        queue_repo = KnowledgeQueueRepository(db)
-        queue_item = KnowledgeQueue(
-            organization_id=UUID(org_id),
-            agent_id=UUID(agent_id),
-            user_id=user_id,
-            source_type='website',
-            source=request.url,
-            status=QueueStatus.PENDING,
-            priority=10,  # High priority for explore URLs (default is 0)
-            queue_metadata={
-                "max_links": 20  # Default to 10 links
-            }
-        )
-        
-        # Add to queue
-        queue_item = queue_repo.create(queue_item)
-        
-        # DON'T process immediately in API - let the knowledge processor service handle it
-        # The knowledge processor runs as a separate service and polls the queue
-        
-        return {
-            "status": "success",
-            "message": "URL added to knowledge base queue. Processing will start shortly.",
-            "queue_id": queue_item.id
-        }
-        
-    except Exception as e:
-        logger.error(f"Error adding explore URL: {str(e)}")
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=str(e))
-
 
 
 def _get_crawled_urls_info(crawled_urls):
@@ -408,16 +324,23 @@ async def get_explore_progress(
 ):
     """Get progress status for knowledge base processing"""
     try:
-        queue_repo = KnowledgeQueueRepository(db)
-        queue_item = queue_repo.get_by_id(queue_id)
-        
+        # Deliberately unauthenticated — it polls the job the equally public
+        # /explore/add-url just created. That makes scoping it to the shared
+        # explore org essential: queue ids are sequential, so an unscoped
+        # lookup let anyone walk every tenant's ingestion jobs and read their
+        # source URLs and crawled-page lists.
+        queue_item = db.query(KnowledgeQueue).filter(
+            KnowledgeQueue.id == queue_id,
+            KnowledgeQueue.organization_id == UUID(settings.EXPLORE_SOURCE_ORG_ID)
+        ).first()
+
         # Refresh the item to get the latest data from the database
         if queue_item:
             db.refresh(queue_item)
-        
+
         if not queue_item:
             raise HTTPException(status_code=404, detail="Queue item not found")
-        
+
         # Get processing stage information
         stage_info = {
             "not_started": {"label": "Initializing", "step": 1, "total": 4},
@@ -480,7 +403,10 @@ async def get_explore_progress(
             "is_complete": status_str.upper() in ["COMPLETED", "FAILED"],
             "error_message": getattr(queue_item, 'error_message', None)
         }
-        
+
+    except HTTPException:
+        # Otherwise the not-found above is reported as a 500 echoing its detail.
+        raise
     except Exception as e:
         logger.error(f"Error getting progress for queue {queue_id}: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -510,6 +436,8 @@ async def add_urls(
                 # 404 (not 403) so we don't reveal another org's agent existence.
                 raise HTTPException(status_code=404, detail="Agent not found")
 
+        # Bound for the non-enterprise path (resolve_plan_max_links below).
+        subscription = None
         # Check enterprise subscription limits if enterprise module is available
         if HAS_ENTERPRISE:
             knowledge_repo = KnowledgeRepository(db)
@@ -539,7 +467,7 @@ async def add_urls(
         # Per-source sub-page cap: the plan limit, optionally narrowed by the
         # request's crawl scope (e.g. "this page only" -> max_links=1), never
         # allowed to exceed the plan limit.
-        plan_sub_pages = subscription.plan.max_sub_pages if (HAS_ENTERPRISE and subscription) else 10
+        plan_sub_pages = resolve_plan_max_links(subscription)
         website_max_links = (
             min(request.max_links, plan_sub_pages) if request.max_links else plan_sub_pages
         )
@@ -708,6 +636,12 @@ async def link_knowledge_to_agent(
         except ValueError:
             raise HTTPException(status_code=400, detail="Invalid agent ID format")
 
+        # The agent must belong to the caller's org, not just the knowledge.
+        # 404 (not 403) so we don't reveal another org's agent existence.
+        agent = AgentRepository(db).get_agent(agent_uuid)
+        if not agent or agent.organization_id != current_user.organization_id:
+            raise HTTPException(status_code=404, detail="Agent not found")
+
         # Check if link already exists
         existing_link = link_repo.get_by_ids(knowledge_id, agent_uuid)
         if existing_link:
@@ -751,29 +685,33 @@ async def link_knowledge_to_agent(
                 agent_ids_json = json.dumps(agent_ids)
                 new_filters_json = json.dumps(new_filters)
                 
-                # Use direct string substitution for JSON values (safe because they're JSON-serialized)
-                # and parameterized query for the source name
+                # Bind every caller-influenced value as a query parameter. The JSON payloads
+                # embed knowledge.source (a user-supplied title); json.dumps does not escape
+                # single quotes, so interpolating them into a '...'::jsonb literal would allow
+                # SQL injection. Only the system-derived schema/table identifiers are inlined.
                 update_meta_query = text(f"""
                     UPDATE {knowledge.schema}."{knowledge.table_name}"
-                    SET 
-                        filters = '{new_filters_json}'::jsonb,
-                        meta_data = CASE 
-                            WHEN meta_data IS NULL THEN 
-                                jsonb_build_object('agent_id', '{agent_ids_json}'::jsonb)
+                    SET
+                        filters = :new_filters::jsonb,
+                        meta_data = CASE
+                            WHEN meta_data IS NULL THEN
+                                jsonb_build_object('agent_id', :agent_ids::jsonb)
                             WHEN meta_data ? 'agent_id' THEN
                                 jsonb_set(
-                                    meta_data, 
-                                    '{{agent_id}}', 
-                                    '{agent_ids_json}'::jsonb
+                                    meta_data,
+                                    '{{agent_id}}',
+                                    :agent_ids::jsonb
                                 )
-                            ELSE 
-                                meta_data || jsonb_build_object('agent_id', '{agent_ids_json}'::jsonb)
+                            ELSE
+                                meta_data || jsonb_build_object('agent_id', :agent_ids::jsonb)
                         END
                     WHERE name = :source
                 """)
 
                 db.execute(update_meta_query, {
-                    "source": knowledge.source
+                    "source": knowledge.source,
+                    "new_filters": new_filters_json,
+                    "agent_ids": agent_ids_json
                 })
                 db.commit()
                 
@@ -811,6 +749,11 @@ async def unlink_knowledge_from_agent(
         if not knowledge or knowledge.organization_id != current_user.organization_id:
             raise HTTPException(status_code=404, detail="Knowledge source not found or unauthorized access")
 
+        # And the agent must be in the caller's org too.
+        agent = AgentRepository(db).get_agent(agent_uuid)
+        if not agent or agent.organization_id != current_user.organization_id:
+            raise HTTPException(status_code=404, detail="Agent not found")
+
         # Delete the link
         success = link_repo.delete_by_ids(knowledge_id, agent_uuid)
         if not success:
@@ -845,29 +788,33 @@ async def unlink_knowledge_from_agent(
                 agent_ids_json = json.dumps(agent_ids)
                 new_filters_json = json.dumps(new_filters)
                 
-                # Use direct string substitution for JSON values (safe because they're JSON-serialized)
-                # and parameterized query for the source name
+                # Bind every caller-influenced value as a query parameter. The JSON payloads
+                # embed knowledge.source (a user-supplied title); json.dumps does not escape
+                # single quotes, so interpolating them into a '...'::jsonb literal would allow
+                # SQL injection. Only the system-derived schema/table identifiers are inlined.
                 update_query = text(f"""
                     UPDATE {knowledge.schema}."{knowledge.table_name}"
-                    SET 
-                        filters = '{new_filters_json}'::jsonb,
-                        meta_data = CASE 
-                            WHEN meta_data IS NULL THEN 
+                    SET
+                        filters = :new_filters::jsonb,
+                        meta_data = CASE
+                            WHEN meta_data IS NULL THEN
                                 NULL
                             WHEN meta_data ? 'agent_id' THEN
                                 jsonb_set(
-                                    meta_data, 
-                                    '{{agent_id}}', 
-                                    '{agent_ids_json}'::jsonb
+                                    meta_data,
+                                    '{{agent_id}}',
+                                    :agent_ids::jsonb
                                 )
-                            ELSE 
+                            ELSE
                                 meta_data
                         END
                     WHERE name = :source
                 """)
 
                 db.execute(update_query, {
-                    "source": knowledge.source
+                    "source": knowledge.source,
+                    "new_filters": new_filters_json,
+                    "agent_ids": agent_ids_json
                 })
                 db.commit()
 
@@ -1112,7 +1059,6 @@ async def delete_queue_item(
     except Exception as e:
         logger.error(f"Error deleting queue item: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
-
 
 
 @router.get("/organization/{org_id}")

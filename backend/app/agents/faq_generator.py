@@ -212,6 +212,9 @@ class FAQGeneratorAgent:
         tools = []
         response_model = FAQExtractionResult
         structured_outputs = True
+        # Keep the original instructions for the plain-JSON fallback — the Groq
+        # branch augments a separate copy with tool-calling guidance.
+        agent_instructions = instructions
         if self._use_groq_json_tool:
             tools.append(
                 build_groq_json_tool(
@@ -220,11 +223,11 @@ class FAQGeneratorAgent:
                     description="Return the final extracted FAQ list. Call exactly once.",
                 )
             )
-            instructions = instructions + _GROQ_FAQ_INSTRUCTION
+            agent_instructions = instructions + _GROQ_FAQ_INSTRUCTION
             response_model = None
             structured_outputs = False
 
-        agent = self._build_agent(instructions, tools, response_model, structured_outputs)
+        agent = self._build_agent(agent_instructions, tools, response_model, structured_outputs)
 
         try:
             self._count_call()
@@ -232,10 +235,13 @@ class FAQGeneratorAgent:
         except Exception as arun_exc:
             if self._use_groq_json_tool:
                 salvaged = salvage_groq_json_error(arun_exc)
-                if not salvaged:
-                    raise
-                logger.warning("Groq FAQ json tool call unparseable (likely truncated); salvaging fields")
-                return self._validate(salvaged)
+                if salvaged:
+                    logger.warning("Groq FAQ json tool call unparseable (likely truncated); salvaging fields")
+                    return self._validate(salvaged)
+                # Tool call errored with nothing to salvage — fall back to the
+                # provider-agnostic plain-JSON path rather than failing the batch.
+                logger.warning(f"Groq FAQ json tool call failed ({arun_exc}); falling back to plain-JSON extraction")
+                return await self._extract_plain_json(instructions, message)
             # Some providers (Ollama/HuggingFace/Mistral via agno) fail on
             # native structured outputs — retry once with a plain-JSON prompt.
             logger.warning(
@@ -245,7 +251,14 @@ class FAQGeneratorAgent:
             return await self._extract_plain_json(instructions, message)
 
         if self._use_groq_json_tool:
-            return self._validate(capture)
+            faqs = self._validate(capture)
+            if faqs:
+                return faqs
+            # Groq answered but never emitted a usable tool call (common with
+            # some Groq models) — `capture` is empty, so the batch would be
+            # silently dropped. Fall back to plain-JSON extraction.
+            logger.warning("Groq FAQ json tool produced no output; falling back to plain-JSON extraction")
+            return await self._extract_plain_json(instructions, message)
         try:
             return self._parse_native(response)
         except _UnparseableOutput:

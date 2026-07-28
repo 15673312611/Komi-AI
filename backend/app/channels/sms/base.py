@@ -75,8 +75,9 @@ class SmsProvider(ABC):
     signs_webhook: ClassVar[bool] = False
 
     async def verify_webhook(self, req: SmsWebhookRequest, account: ChannelAccount) -> bool:
-        """Authenticate an inbound webhook. Default: accept (route enforces the
-        per-account URL token for unsigned providers)."""
+        """Authenticate an inbound webhook. Default: accept - providers that leave
+        signs_webhook False have no signature to check, and the route authenticates
+        them with the per-account URL token instead."""
         return True
 
     @abstractmethod

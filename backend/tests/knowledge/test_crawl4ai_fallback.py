@@ -195,6 +195,26 @@ class TestCrawl4AIFallback:
         assert markdown is None
         assert screenshot is None
     
+    @pytest.mark.asyncio
+    @patch('app.knowledge.crawl4ai_fallback.CRAWL4AI_AVAILABLE', True)
+    @patch('app.knowledge.crawl4ai_fallback.AsyncWebCrawler')
+    async def test_async_fetch_blocks_internal_hosts(self, mock_crawler_class):
+        """The browser fallback must refuse internal/link-local targets. Without this
+        guard it is an SSRF primitive: a real Chromium fetching cloud metadata and
+        internal services, bypassing the httpx path's url_safety checks."""
+        from app.knowledge.url_safety import BlockedHostError
+
+        fallback = Crawl4AIFallback()
+        fallback._is_available = True
+
+        for url in ("http://169.254.169.254/latest/meta-data/",
+                    "http://127.0.0.1:8000/internal",
+                    "http://10.0.0.5/admin"):
+            with pytest.raises(BlockedHostError):
+                await fallback._async_fetch(url, take_screenshot=False)
+
+        mock_crawler_class.assert_not_called()
+
     @patch('app.knowledge.crawl4ai_fallback.CRAWL4AI_AVAILABLE', False)
     def test_fetch_with_browser_not_available(self):
         """Test fetch_with_browser when Crawl4AI is not available"""

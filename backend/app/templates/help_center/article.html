@@ -13,7 +13,8 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 
-A single help-center article: breadcrumb, rich Markdown body, "Was this helpful?"
+A single help-center article: breadcrumb trail (which must stay in step with the
+BreadcrumbList JSON-LD), rich Markdown body, "Was this helpful?"
 feedback, and related articles. `article.body_html` is the ONLY value rendered
 `| safe` — it is pre-sanitized to an HTML allowlist by help_center_content;
 every other value stays autoescaped.
@@ -28,7 +29,7 @@ every other value stays autoescaped.
       <div class="hc-aside-label">BROWSE TOPICS</div>
       <div class="hc-topics">
         {% for topic in topics %}
-        <a class="hc-topic{% if topic.active %} active{% endif %}" href="/?topic={{ topic.category | urlencode }}" style="--ic: {{ topic.color }};">
+        <a class="hc-topic{% if topic.active %} active{% endif %}" href="{{ base_path }}/?topic={{ topic.category | urlencode }}" style="--ic: {{ topic.color }};">
           <span class="hc-topic-icon">
             <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"></path></svg>
           </span>
@@ -53,10 +54,16 @@ every other value stays autoescaped.
     <!-- ---- ARTICLE ---- -->
     <main class="hc-main">
       <article class="hc-article" style="--ic: {{ article.color }};">
-        <a class="hc-back" href="/?topic={{ article.category | urlencode }}">
-          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"></path></svg>
-          All {{ article.category }} articles
-        </a>
+        <nav class="hc-crumbs" aria-label="Breadcrumb">
+          {%- for crumb in breadcrumbs %}
+          {%- if not loop.first %}<span class="hc-crumb-sep" aria-hidden="true">›</span>{% endif %}
+          {%- if crumb.href %}
+          <a href="{{ crumb.href }}">{{ crumb.label }}</a>
+          {%- else %}
+          <span class="hc-crumb-current" aria-current="page" title="{{ crumb.label }}">{{ crumb.label }}</span>
+          {%- endif %}
+          {%- endfor %}
+        </nav>
         <div class="hc-article-meta">
           <span class="hc-article-tag">{{ article.category }}</span>
           <span class="hc-article-time">{{ article.read_time }}</span>
@@ -83,7 +90,7 @@ every other value stays autoescaped.
           <div class="hc-related-label">RELATED ARTICLES</div>
           <div class="hc-related-grid">
             {% for r in article.related %}
-            <a class="hc-related-card" href="/a/{{ r.slug }}" style="--ic: {{ r.color }};">
+            <a class="hc-related-card" href="{{ base_path }}/a/{{ r.slug }}" style="--ic: {{ r.color }};">
               <span class="hc-related-top">
                 <span class="hc-related-icon">
                   <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"></path></svg>

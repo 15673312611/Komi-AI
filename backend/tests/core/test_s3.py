@@ -18,7 +18,14 @@ import pytest
 from unittest.mock import patch, MagicMock, AsyncMock
 from fastapi import UploadFile, HTTPException
 from io import BytesIO
-from app.core.s3 import get_s3_client, get_s3_signed_url, upload_file_to_s3, delete_file_from_s3
+from app.core.s3 import (
+    S3_MAX_PRESIGN_SECONDS,
+    delete_file_from_s3,
+    get_s3_client,
+    get_s3_signed_url,
+    strip_s3_signature,
+    upload_file_to_s3,
+)
 from app.core.config import settings
 from botocore.exceptions import ClientError
 
@@ -28,9 +35,12 @@ def test_get_s3_client():
     with patch('boto3.client') as mock_boto3_client:
         mock_client = MagicMock()
         mock_boto3_client.return_value = mock_client
-        
+
+        # The client is lru_cached; drop any instance an earlier test built so
+        # boto3.client is actually invoked here.
+        get_s3_client.cache_clear()
         client = get_s3_client()
-        
+
         # Verify boto3.client was called with correct parameters
         mock_boto3_client.assert_called_once_with(
             's3',
@@ -64,10 +74,51 @@ async def test_get_s3_signed_url_with_s3_storage_enabled():
                 'Bucket': settings.S3_BUCKET,
                 'Key': 'test/file.jpg'
             },
-            ExpiresIn=2592000  # Default 30 days
+            ExpiresIn=settings.S3_PRESIGN_EXPIRY_SECONDS
         )
-        
+
         assert result == expected_signed_url
+
+
+@pytest.mark.asyncio
+async def test_get_s3_signed_url_clamps_expiry_to_s3_maximum():
+    """A caller asking for longer than S3 allows is clamped, not passed through.
+
+    AWS rejects SigV4 presigns above S3_MAX_PRESIGN_SECONDS with
+    AuthorizationQueryParametersError, which 403s every signed image.
+    """
+    test_s3_url = f"https://{settings.S3_BUCKET}.s3.{settings.S3_REGION}.amazonaws.com/test/file.jpg"
+
+    with patch('app.core.s3.settings.S3_FILE_STORAGE', True), \
+         patch('app.core.s3.get_s3_client') as mock_get_client:
+
+        mock_client = MagicMock()
+        mock_get_client.return_value = mock_client
+
+        # The pre-fix default: 30 days.
+        await get_s3_signed_url(test_s3_url, expiration=2592000)
+
+        assert mock_client.generate_presigned_url.call_args.kwargs['ExpiresIn'] == S3_MAX_PRESIGN_SECONDS
+
+
+@pytest.mark.parametrize("stored,expected", [
+    (
+        "https://b.s3.us-east-1.amazonaws.com/k.png?AWSAccessKeyId=A&Signature=S&Expires=1",
+        "https://b.s3.us-east-1.amazonaws.com/k.png",
+    ),
+    (
+        "https://b.s3.us-east-1.amazonaws.com/k.png",
+        "https://b.s3.us-east-1.amazonaws.com/k.png",
+    ),
+    ("/api/v1/uploads/help_center/k.png", "/api/v1/uploads/help_center/k.png"),
+    ("data:image/png;base64,AAAA", "data:image/png;base64,AAAA"),
+    (None, None),
+    ("", ""),
+])
+def test_strip_s3_signature(stored, expected):
+    """Signed URLs must never reach the database — clients round-trip response
+    values straight back into update payloads."""
+    assert strip_s3_signature(stored) == expected
 
 
 @pytest.mark.asyncio
@@ -150,42 +201,40 @@ async def test_upload_file_to_s3_without_content_type():
 
 
 @pytest.mark.asyncio
-async def test_upload_file_to_s3_client_error():
-    """Test file upload to S3 with ClientError - should fallback to local storage"""
-    file_content = b"test content"
-    
-    with patch('app.core.s3.get_s3_client') as mock_get_client, \
-         patch('app.core.s3._save_file_locally') as mock_save_locally:
+@pytest.mark.parametrize("error", [
+    ClientError({'Error': {'Code': 'TestException', 'Message': 'Test error message'}}, 'PutObject'),
+    Exception("Test exception"),
+])
+async def test_upload_file_to_s3_raises_instead_of_falling_back(error):
+    """A failed S3 upload must fail the request, not silently write to local disk.
+
+    The old fallback returned a /api/v1/uploads/... path the caller could not
+    distinguish from success — durable-looking, but gone on the next container
+    restart.
+    """
+    with patch('app.core.s3.get_s3_client') as mock_get_client:
         mock_client = MagicMock()
-        mock_client.put_object.side_effect = ClientError(
-            {'Error': {'Code': 'TestException', 'Message': 'Test error message'}},
-            'PutObject'
-        )
+        mock_client.put_object.side_effect = error
         mock_get_client.return_value = mock_client
-        mock_save_locally.return_value = "/uploads/folder/file.txt"
-        
-        result = await upload_file_to_s3(file_content, "folder", "file.txt")
-        
-        # Should fallback to local storage and return local URL
-        assert result == "/uploads/folder/file.txt"
+
+        with pytest.raises(HTTPException) as exc_info:
+            await upload_file_to_s3(b"test content", "folder", "file.txt")
+
+        assert exc_info.value.status_code == 500
 
 
 @pytest.mark.asyncio
-async def test_upload_file_to_s3_general_exception():
-    """Test file upload to S3 with a general exception - should fallback to local storage"""
-    file_content = b"test content"
-    
-    with patch('app.core.s3.get_s3_client') as mock_get_client, \
-         patch('app.core.s3._save_file_locally') as mock_save_locally:
+async def test_upload_file_to_s3_does_not_create_the_bucket():
+    """Provisioning belongs in deployment; the runtime identity should not need
+    s3:CreateBucket, nor pay a head_bucket round-trip on every upload."""
+    with patch('app.core.s3.get_s3_client') as mock_get_client:
         mock_client = MagicMock()
-        mock_client.put_object.side_effect = Exception("Test exception")
         mock_get_client.return_value = mock_client
-        mock_save_locally.return_value = "/uploads/folder/file.txt"
-        
-        result = await upload_file_to_s3(file_content, "folder", "file.txt")
-        
-        # Should fallback to local storage and return local URL
-        assert result == "/uploads/folder/file.txt"
+
+        await upload_file_to_s3(b"test content", "folder", "file.txt")
+
+        mock_client.head_bucket.assert_not_called()
+        mock_client.create_bucket.assert_not_called()
 
 
 @pytest.mark.asyncio

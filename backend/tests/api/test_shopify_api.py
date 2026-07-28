@@ -458,7 +458,30 @@ async def test_exchange_session_token_invalid_token(mock_jwt_decode, mock_get_to
         await exchange_session_token(mock_request, mock_db)
     
     assert exc_info.value.status_code == 400
-    assert "Invalid session token: missing shop domain" in str(exc_info.value.detail)
+    assert "Invalid session token: bad shop domain" in str(exc_info.value.detail)
+
+
+@pytest.mark.asyncio
+@patch('app.services.shopify_session.ShopifySessionService.get_session_token_from_request')
+@patch('app.api.shopify.requests.post')
+@patch('jwt.decode')
+async def test_exchange_session_token_rejects_non_shopify_dest(
+    mock_jwt_decode, mock_requests_post, mock_get_token, mock_db
+):
+    """A token whose `dest` points at a host the caller controls must be rejected
+    before we POST client_secret anywhere - otherwise the exchange leaks the
+    Shopify API secret to that host."""
+    mock_get_token.return_value = "forged_token"
+    mock_jwt_decode.return_value = {"dest": "https://attacker.example"}
+    mock_request = MagicMock()
+
+    from app.api.shopify import exchange_session_token
+    with pytest.raises(HTTPException) as exc_info:
+        await exchange_session_token(mock_request, mock_db)
+
+    assert exc_info.value.status_code == 400
+    assert "bad shop domain" in str(exc_info.value.detail)
+    mock_requests_post.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -509,18 +532,90 @@ async def test_link_shop_to_org_success(mock_shop_repo, mock_check_permissions, 
     
     mock_shop = MagicMock()
     mock_shop.id = shop_id
+    # Unclaimed: installed but never linked to an organization yet.
+    mock_shop.organization_id = None
     mock_shop_repo_instance.get_shop.return_value = mock_shop
-    
+
     mock_request = MagicMock()
     mock_request.json = AsyncMock(return_value={"shop_id": shop_id})
-    
+
     # Act
     from app.api.shopify import link_shop_to_org
     response = await link_shop_to_org(mock_request, mock_db, mock_user)
-    
+
     # Assert
     assert response["success"] is True
     assert response["shop_id"] == shop_id
+    assert response["organization_id"] == org_id
+
+
+@pytest.mark.asyncio
+@patch('app.api.shopify.get_current_user')
+@patch('app.api.shopify.check_permissions')
+@patch('app.api.shopify.ShopifyShopRepository')
+async def test_link_shop_already_owned_by_another_org(
+    mock_shop_repo, mock_check_permissions, mock_get_user, mock_db
+):
+    """A shop another organization already installed can't be re-pointed"""
+    shop_id = str(uuid.uuid4())
+
+    mock_user = MagicMock()
+    mock_user.id = str(uuid.uuid4())
+    mock_user.organization_id = str(uuid.uuid4())
+    mock_get_user.return_value = mock_user
+    mock_check_permissions.return_value = True
+
+    mock_shop_repo_instance = MagicMock()
+    mock_shop_repo.return_value = mock_shop_repo_instance
+
+    mock_shop = MagicMock()
+    mock_shop.id = shop_id
+    mock_shop.organization_id = str(uuid.uuid4())  # someone else's
+    mock_shop_repo_instance.get_shop.return_value = mock_shop
+
+    mock_request = MagicMock()
+    mock_request.json = AsyncMock(return_value={"shop_id": shop_id})
+
+    from app.api.shopify import link_shop_to_org
+    with pytest.raises(HTTPException) as exc_info:
+        await link_shop_to_org(mock_request, mock_db, mock_user)
+
+    assert exc_info.value.status_code == 404
+    assert not mock_shop_repo_instance.update_shop.called
+
+
+@pytest.mark.asyncio
+@patch('app.api.shopify.get_current_user')
+@patch('app.api.shopify.check_permissions')
+@patch('app.api.shopify.ShopifyShopRepository')
+async def test_link_shop_already_owned_by_same_org_is_allowed(
+    mock_shop_repo, mock_check_permissions, mock_get_user, mock_db
+):
+    """Re-linking your own shop stays idempotent"""
+    shop_id = str(uuid.uuid4())
+    org_id = str(uuid.uuid4())
+
+    mock_user = MagicMock()
+    mock_user.id = str(uuid.uuid4())
+    mock_user.organization_id = org_id
+    mock_get_user.return_value = mock_user
+    mock_check_permissions.return_value = True
+
+    mock_shop_repo_instance = MagicMock()
+    mock_shop_repo.return_value = mock_shop_repo_instance
+
+    mock_shop = MagicMock()
+    mock_shop.id = shop_id
+    mock_shop.organization_id = org_id
+    mock_shop_repo_instance.get_shop.return_value = mock_shop
+
+    mock_request = MagicMock()
+    mock_request.json = AsyncMock(return_value={"shop_id": shop_id})
+
+    from app.api.shopify import link_shop_to_org
+    response = await link_shop_to_org(mock_request, mock_db, mock_user)
+
+    assert response["success"] is True
     assert response["organization_id"] == org_id
 
 

@@ -37,7 +37,6 @@ export interface AgentCustomization {
     id?: number;
     agent_id?: string;
     photo_url?: string;
-    photo_url_signed?: string;
     chat_background_color?: string;
     chat_bubble_color?: string;
     chat_text_color?: string;

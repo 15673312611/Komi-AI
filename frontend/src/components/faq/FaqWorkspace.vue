@@ -61,6 +61,9 @@ const {
   isNewFaq,
   draftQuestion,
   draftAnswer,
+  draftSlug,
+  draftMetaTitle,
+  draftMetaDescription,
   isSaving,
   selectedIds,
   selectionActive,
@@ -89,6 +92,8 @@ const {
   saveNow,
   uploadLogo,
   removeLogo,
+  uploadFavicon,
+  removeFavicon,
   domainBusy,
   setDomain,
   verifyDomain,
@@ -328,6 +333,9 @@ onUnmounted(stopPolling)
               :saving="isSaving"
               v-model:draft-question="draftQuestion"
               v-model:draft-answer="draftAnswer"
+              v-model:draft-slug="draftSlug"
+              v-model:draft-meta-title="draftMetaTitle"
+              v-model:draft-meta-description="draftMetaDescription"
               @save="saveEdit"
               @cancel="cancelEdit"
             />
@@ -386,8 +394,14 @@ onUnmounted(stopPolling)
                 :selected="selectedIds.has(faq.id)"
                 :draft-question="draftQuestion"
                 :draft-answer="draftAnswer"
+                :draft-slug="draftSlug"
+                :draft-meta-title="draftMetaTitle"
+                :draft-meta-description="draftMetaDescription"
                 @update:draft-question="draftQuestion = $event"
                 @update:draft-answer="draftAnswer = $event"
+                @update:draft-slug="draftSlug = $event"
+                @update:draft-meta-title="draftMetaTitle = $event"
+                @update:draft-meta-description="draftMetaDescription = $event"
                 @toggle-select="toggleSelect(faq.id)"
                 @toggle-status="togglePublish(faq)"
                 @edit="startEdit(faq)"
@@ -410,6 +424,8 @@ onUnmounted(stopPolling)
             @save-now="saveNow"
             @upload-logo="uploadLogo"
             @remove-logo="removeLogo"
+            @upload-favicon="uploadFavicon"
+            @remove-favicon="removeFavicon"
           />
           <HelpCenterPublic
             class="settings-section"

@@ -22,6 +22,12 @@ import os
 import aiofiles
 
 from app.core.config import settings
+from app.core.s3 import (
+    delete_file_from_s3,
+    download_file_from_s3,
+    get_s3_signed_url,
+    upload_file_to_s3,
+)
 
 
 async def store_upload(content: bytes, folder: str, file_name: str, content_type: str) -> str:
@@ -29,7 +35,6 @@ async def store_upload(content: bytes, folder: str, file_name: str, content_type
     URL (sign with resolve_public_url before handing to clients); local mode
     returns the path under the /api/v1/uploads static mount."""
     if settings.S3_FILE_STORAGE:
-        from app.core.s3 import upload_file_to_s3
         return await upload_file_to_s3(content, folder, file_name, content_type=content_type)
     upload_dir = os.path.join("uploads", folder)
     os.makedirs(upload_dir, exist_ok=True)
@@ -44,7 +49,6 @@ async def load_upload(stored: str) -> bytes:
     returned. Used by workers running in a different container than the API
     (shared local uploads mount or S3)."""
     if stored.startswith("http"):
-        from app.core.s3 import download_file_from_s3
         return await download_file_from_s3(stored)
     # `{API_V1_STR}/uploads/...` → local `uploads/...`
     marker = f"{settings.API_V1_STR}/uploads/"
@@ -57,7 +61,6 @@ async def delete_upload(stored: str) -> None:
     """Best-effort removal of a stored upload (temp import files)."""
     try:
         if stored.startswith("http"):
-            from app.core.s3 import delete_file_from_s3
             await delete_file_from_s3(stored)
             return
         marker = f"{settings.API_V1_STR}/uploads/"
@@ -71,6 +74,5 @@ async def resolve_public_url(stored_url: str) -> str:
     """Client-facing URL for a stored upload: signed for private S3 objects,
     verbatim otherwise."""
     if stored_url and settings.S3_FILE_STORAGE and stored_url.startswith("http"):
-        from app.core.s3 import get_s3_signed_url
         return await get_s3_signed_url(stored_url)
     return stored_url

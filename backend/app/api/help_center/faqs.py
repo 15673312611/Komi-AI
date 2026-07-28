@@ -43,7 +43,7 @@ from app.services.help_center_images import (
     MAX_FAQ_IMAGE_BYTES,
     store_article_image,
 )
-from app.services.help_center_settings import generate_faq_slug
+from app.services.help_center_settings import generate_faq_slug, resolve_faq_slug
 
 router = APIRouter()
 
@@ -95,13 +95,22 @@ async def create_faq(
     db: Session = Depends(get_db),
 ):
     check_help_center_access(db, current_user.organization_id)
+    org_id = current_user.organization_id
     faq = FAQ(
-        organization_id=current_user.organization_id,
+        organization_id=org_id,
         question=payload.question,
         answer=payload.answer,
         category=payload.category,
         status=payload.status,
-        slug=generate_faq_slug(db, current_user.organization_id, payload.question),
+        # A hand-typed slug is normalized and de-duplicated the same way a
+        # generated one is; omitting it derives the slug from the question.
+        slug=(
+            resolve_faq_slug(db, org_id, payload.slug)
+            if payload.slug
+            else generate_faq_slug(db, org_id, payload.question)
+        ),
+        meta_title=payload.meta_title,
+        meta_description=payload.meta_description,
         source_label="Added manually",
         created_by=current_user.id,
     )
@@ -140,10 +149,18 @@ async def update_faq(
 ):
     check_help_center_access(db, current_user.organization_id)
     faq = _get_owned_faq(faq_id, current_user, db)
-    for field, value in payload.model_dump(exclude_unset=True).items():
+    updates = payload.model_dump(exclude_unset=True)
+    # The slug is never taken verbatim from the client — normalize and dedupe it
+    # (excluding this row, so re-saving an unchanged slug isn't a self-collision).
+    requested_slug = updates.pop("slug", None)
+    for field, value in updates.items():
         setattr(faq, field, value)
+    if requested_slug:
+        faq.slug = resolve_faq_slug(
+            db, current_user.organization_id, requested_slug, exclude_id=faq.id
+        )
     # Backfill a slug for legacy/generated FAQs the first time they're edited;
-    # keep an existing slug stable so published article URLs never change.
+    # otherwise keep it stable so published article URLs never change on their own.
     if not faq.slug:
         faq.slug = generate_faq_slug(db, current_user.organization_id, faq.question)
     return FAQResponse.model_validate(FAQRepository(db).update(faq))

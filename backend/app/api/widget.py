@@ -42,6 +42,24 @@ from app.core.s3 import get_s3_signed_url
 router = APIRouter()
 logger = get_logger(__name__)
 
+
+def _widget_runtime_config() -> dict:
+    """Runtime API/WS URLs to hand the widget iframe as ``window.APP_CONFIG``.
+
+    Derived from ``BACKEND_URL`` so a self-hosted widget talks to the configured
+    backend instead of the vendor cloud. On the hosted deployment BACKEND_URL is
+    ``https://api.chattermate.chat``, which yields exactly the widget's baked-in
+    defaults, so injecting this is a no-op there.
+    """
+    api_base = settings.BACKEND_URL.rstrip("/")
+    if api_base.startswith("https://"):
+        ws_url = "wss://" + api_base[len("https://"):]
+    elif api_base.startswith("http://"):
+        ws_url = "ws://" + api_base[len("http://"):]
+    else:
+        ws_url = api_base
+    return {"API_URL": f"{api_base}/api/v1", "WS_URL": ws_url}
+
 @router.post("", response_model=WidgetResponse)
 def create_new_widget(
     widget: WidgetCreate,
@@ -182,6 +200,12 @@ async def get_widget_html(widget_id: str, agent_name: str, agent_customization: 
             <link rel="preconnect" href="https://fonts.googleapis.com">
             <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
             <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Instrument+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+            <script>
+                // Runtime backend config so the widget connects to THIS install's
+                // backend instead of falling back to the baked cloud default.
+                // Declared before the widget module loads.
+                window.APP_CONFIG = {json.dumps(_widget_runtime_config())};
+            </script>
             <script type="module" crossorigin src="{widget_url}/assets/widget.js"></script>
             <link rel="stylesheet" crossorigin href="{widget_url}/assets/widget.css">
             <script>
@@ -213,8 +237,7 @@ async def get_human_agent_session_info(db: Session, customer_id: str) -> dict:
         session_model,user_full_name, user_profile_pic = sessions[0]
         
         if user_full_name:  # If there's a human agent assigned
-            if settings.S3_FILE_STORAGE and user_profile_pic:
-                user_profile_pic = await get_s3_signed_url(user_profile_pic)
+            # HumanAgentResponse signs human_agent_profile_pic on serialization.
 
             # Get human agent info from session
             human_agent_info = {
@@ -331,12 +354,8 @@ async def get_widget_data(
         )
         token_was_generated = True
         
-        # Create a copy of customization to modify photo_url
+        # photo_url is signed by AgentCustomizationResponse on serialization.
         customization = agent.customization
-      
-        if settings.S3_FILE_STORAGE and customization and customization.photo_url:
-            # Get signed URL for the photo
-            customization.photo_url = await get_s3_signed_url(customization.photo_url)
 
         return {
             "id": widget.id,
@@ -372,9 +391,7 @@ async def get_widget_data(
             # Create a copy of customization to modify photo_url
             customization = agent.customization
 
-            if settings.S3_FILE_STORAGE and customization and customization.photo_url:
-                # Get signed URL for the photo
-                customization.photo_url = await get_s3_signed_url(customization.photo_url)
+            # photo_url is signed by AgentCustomizationResponse on serialization.
 
             return {
                 "id": widget.id,
@@ -405,9 +422,7 @@ async def get_widget_data(
     # Create a copy of customization to modify photo_url
     customization = agent.customization
 
-    if settings.S3_FILE_STORAGE and customization and customization.photo_url:
-        # Get signed URL for the photo
-        customization.photo_url = await get_s3_signed_url(customization.photo_url)
+    # photo_url is signed by AgentCustomizationResponse on serialization.
 
     return {
         "id": widget.id,
@@ -437,32 +452,37 @@ async def end_chat_acknowledgment(
     """Acknowledge end_chat event from widget and close session on backend"""
     try:
         logger.info(f"End chat request received: widget_id={widget_id}, session_id={session_id}, reason={reason}, has_token={bool(authorization)}")
-        
-        from app.repositories.session_to_agent import SessionToAgentRepository
-        from app.core.security import verify_conversation_token
-        
-        # Validate token if provided
-        customer_id = None
-        if authorization and authorization.startswith('Bearer '):
-            token = authorization.split(' ')[1]
-            try:
-                token_data = verify_conversation_token(token)
-                if token_data:
-                    customer_id = token_data.get("sub")
-                    verified_widget_id = token_data.get("widget_id")
-                    if verified_widget_id != widget_id:
-                        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Widget mismatch")
-            except Exception:
-                raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
-        
-        # Close the session
+
+        # A conversation token is REQUIRED. This used to validate the token only
+        # when one was sent, so a request with no Authorization header fell
+        # straight through and closed any session by id, unauthenticated.
+        if not authorization or not authorization.startswith('Bearer '):
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
+
+        try:
+            token_data = verify_conversation_token(authorization.split(' ')[1])
+        except Exception:
+            token_data = None
+        if not token_data:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+
+        customer_id = token_data.get("sub")
+        if token_data.get("widget_id") != widget_id:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Widget mismatch")
+
+        # The token proves who the caller is, not that this session is theirs —
+        # without this any visitor could close another customer's conversation.
         session_repo = SessionToAgentRepository(db)
+        session = session_repo.get_session(session_id)
+        if not session or str(session.customer_id) != str(customer_id):
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found")
+
         success = session_repo.close_session(
             session_id=session_id,
             reason=reason,
             description=description
         )
-        
+
         if success:
             logger.info(f"End chat acknowledged: widget_id={widget_id}, session_id={session_id}, reason={reason}")
             return {

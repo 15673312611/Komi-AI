@@ -538,3 +538,184 @@ def test_takeover_chat_closed_session(client_with_error_mock, db, user_with_mana
     
     assert response.status_code == status.HTTP_400_BAD_REQUEST
     assert "Failed to take over chat" in response.json()["detail"] 
+
+@pytest.fixture
+def other_org_user(db, test_role_with_manage_chats) -> User:
+    """A user (and their org) entirely separate from the caller's."""
+    other_org = Organization(
+        id=uuid4(),
+        name="Other Organization",
+        domain="other.example.com",
+        business_hours={},
+        settings={}
+    )
+    db.add(other_org)
+    db.commit()
+
+    user = User(
+        id=uuid4(),
+        email="outsider@example.com",
+        hashed_password="hashed_password",
+        is_active=True,
+        organization_id=other_org.id,
+        full_name="Outsider",
+        role_id=test_role_with_manage_chats.id
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+def _assigned_session(db, create_chat_session, user):
+    """An open session already handled by a human — reassignable."""
+    session = create_chat_session()
+    session.user_id = user.id
+    db.commit()
+    db.refresh(session)
+    return session
+
+
+def test_reassign_chat_success(client_with_error_mock, db, user_with_manage_chats_permission,
+                               user_with_manage_assigned_chats, create_chat_session):
+    """Reassigning to a colleague in the same org pushes them a notification"""
+    session = _assigned_session(db, create_chat_session, user_with_manage_chats_permission)
+
+    with patch('app.api.session_to_agent.notify_chat_assigned') as mock_notify:
+        mock_notify.return_value = None
+        response = client_with_error_mock.post(
+            f"/api/v1/session-to-agent/{session.session_id}/reassign",
+            params={"to_user_id": str(user_with_manage_assigned_chats.id)}
+        )
+
+    assert response.status_code == status.HTTP_200_OK
+    db.refresh(session)
+    assert session.user_id == user_with_manage_assigned_chats.id
+    assert mock_notify.called
+
+
+def test_reassign_notifies_previous_assignee_not_new_one(
+    client_with_error_mock, db, user_with_manage_chats_permission,
+    user_with_manage_assigned_chats, create_chat_session
+):
+    """The 'reassigned_from_you' event must target the PREVIOUS owner's room.
+
+    reassign_session mutates the loaded session in place, so reading
+    session.user_id after it would wrongly point at the new assignee.
+    """
+    from unittest.mock import AsyncMock
+    previous = user_with_manage_chats_permission
+    new = user_with_manage_assigned_chats
+    session = _assigned_session(db, create_chat_session, previous)
+
+    with patch('app.api.session_to_agent.notify_chat_assigned', new=AsyncMock()), \
+         patch('app.api.session_to_agent.sio.emit', new=AsyncMock()) as mock_emit:
+        response = client_with_error_mock.post(
+            f"/api/v1/session-to-agent/{session.session_id}/reassign",
+            params={"to_user_id": str(new.id)}
+        )
+
+    assert response.status_code == status.HTTP_200_OK
+
+    from_you = [
+        c for c in mock_emit.call_args_list
+        if c.args and isinstance(c.args[1], dict)
+        and c.args[1].get('type') == 'reassigned_from_you'
+    ]
+    assert len(from_you) == 1, "expected exactly one reassigned_from_you emit"
+    assert from_you[0].kwargs.get('room') == f"user_{previous.id}"
+    assert from_you[0].kwargs.get('room') != f"user_{new.id}"
+
+
+def test_reassign_to_same_user_skips_from_you_event(
+    client_with_error_mock, db, user_with_manage_chats_permission, create_chat_session
+):
+    """Reassigning a chat to its current owner is a no-op — no contradictory ping."""
+    from unittest.mock import AsyncMock
+    owner = user_with_manage_chats_permission
+    session = _assigned_session(db, create_chat_session, owner)
+
+    with patch('app.api.session_to_agent.notify_chat_assigned', new=AsyncMock()), \
+         patch('app.api.session_to_agent.sio.emit', new=AsyncMock()) as mock_emit:
+        response = client_with_error_mock.post(
+            f"/api/v1/session-to-agent/{session.session_id}/reassign",
+            params={"to_user_id": str(owner.id)}
+        )
+
+    assert response.status_code == status.HTTP_200_OK
+    from_you = [
+        c for c in mock_emit.call_args_list
+        if c.args and isinstance(c.args[1], dict)
+        and c.args[1].get('type') == 'reassigned_from_you'
+    ]
+    assert from_you == []
+
+
+def test_reassign_chat_other_org_session(client_with_error_mock, db, other_org_user,
+                                         user_with_manage_assigned_chats,
+                                         user_with_manage_chats_permission, create_chat_session):
+    """A session belonging to another org is invisible, not reassignable"""
+    session = _assigned_session(db, create_chat_session, user_with_manage_chats_permission)
+    session.organization_id = other_org_user.organization_id
+    db.commit()
+
+    response = client_with_error_mock.post(
+        f"/api/v1/session-to-agent/{session.session_id}/reassign",
+        params={"to_user_id": str(user_with_manage_assigned_chats.id)}
+    )
+
+    assert response.status_code == status.HTTP_404_NOT_FOUND
+    assert response.json()["detail"] == "Chat session not found"
+    db.refresh(session)
+    assert session.user_id == user_with_manage_chats_permission.id
+
+
+def test_reassign_chat_target_in_another_org(client_with_error_mock, db, other_org_user,
+                                             user_with_manage_chats_permission, create_chat_session):
+    """A chat can't be handed to someone outside the caller's org"""
+    session = _assigned_session(db, create_chat_session, user_with_manage_chats_permission)
+
+    response = client_with_error_mock.post(
+        f"/api/v1/session-to-agent/{session.session_id}/reassign",
+        params={"to_user_id": str(other_org_user.id)}
+    )
+
+    assert response.status_code == status.HTTP_404_NOT_FOUND
+    assert response.json()["detail"] == "User not found"
+    db.refresh(session)
+    assert session.user_id == user_with_manage_chats_permission.id
+
+
+def test_reassign_chat_unknown_target(client_with_error_mock, db,
+                                      user_with_manage_chats_permission, create_chat_session):
+    """An unknown user id is a 404, and a malformed one isn't a 500"""
+    session = _assigned_session(db, create_chat_session, user_with_manage_chats_permission)
+
+    for target in (str(uuid4()), "not-a-uuid"):
+        response = client_with_error_mock.post(
+            f"/api/v1/session-to-agent/{session.session_id}/reassign",
+            params={"to_user_id": target}
+        )
+        assert response.status_code == status.HTTP_404_NOT_FOUND, target
+        assert response.json()["detail"] == "User not found"
+
+
+def test_reassign_chat_no_permission(client_with_error_mock, db, regular_user,
+                                     user_with_manage_chats_permission,
+                                     user_with_manage_assigned_chats, create_chat_session):
+    """Without a manage grant, reassignment is forbidden"""
+    session = _assigned_session(db, create_chat_session, user_with_manage_chats_permission)
+
+    async def override_get_current_user():
+        return regular_user
+
+    app.dependency_overrides[get_current_user] = override_get_current_user
+    try:
+        response = client_with_error_mock.post(
+            f"/api/v1/session-to-agent/{session.session_id}/reassign",
+            params={"to_user_id": str(user_with_manage_assigned_chats.id)}
+        )
+    finally:
+        app.dependency_overrides[get_current_user] = lambda: user_with_manage_chats_permission
+
+    assert response.status_code == status.HTTP_403_FORBIDDEN

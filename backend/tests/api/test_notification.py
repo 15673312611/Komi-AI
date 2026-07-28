@@ -20,6 +20,7 @@ from app.database import get_db
 from fastapi import FastAPI
 from app.models.user import User
 from app.models.notification import Notification, NotificationType
+from app.models.notification_settings import UserNotificationSettings
 from app.models.role import Role
 from app.models.organization import Organization
 from datetime import datetime, timezone
@@ -219,6 +220,111 @@ def test_get_unread_count(
     response = client.get("/api/notifications/unread-count")
     assert response.status_code == 200
     assert response.json()["count"] == 2  # Two unread notifications from fixture
+
+def test_get_or_create_survives_insert_race(db, test_user):
+    """A concurrent first-insert (IntegrityError) re-reads instead of 500ing"""
+    from unittest.mock import patch
+    from sqlalchemy.exc import IntegrityError
+    from app.repositories.notification_settings import UserNotificationSettingsRepository
+
+    repo = UserNotificationSettingsRepository(db)
+
+    # The row the winning racer inserted; our repo's first get() is forced to
+    # miss it (as if the winner hadn't committed yet when we looked).
+    winner_row = UserNotificationSettings(user_id=test_user.id)
+    db.add(winner_row)
+    db.commit()
+
+    real_get = repo.get
+    calls = {"n": 0}
+
+    def get_missing_first(user_id):
+        calls["n"] += 1
+        return None if calls["n"] == 1 else real_get(user_id)
+
+    with patch.object(repo, "get", side_effect=get_missing_first), \
+         patch.object(db, "commit", side_effect=IntegrityError("dup", {}, Exception())):
+        result = repo.get_or_create(test_user.id)
+
+    assert result is not None
+    assert result.user_id == test_user.id
+
+
+def test_get_settings_creates_defaults(
+    client,
+    db,
+    test_user
+):
+    """First read lazily creates the row with the shipped defaults"""
+    response = client.get("/api/notifications/settings")
+    assert response.status_code == 200
+    assert response.json() == {
+        "notify_new_chat": False,
+        "notify_chat_transfer": True,
+        "notify_chat_assigned": True,
+    }
+
+    settings = db.query(UserNotificationSettings)\
+        .filter_by(user_id=test_user.id).first()
+    assert settings is not None
+
+
+def test_update_settings_is_partial(
+    client,
+    db,
+    test_user
+):
+    """Only the toggles sent are changed; the rest keep their values"""
+    response = client.put(
+        "/api/notifications/settings",
+        json={"notify_new_chat": True}
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["notify_new_chat"] is True
+    assert body["notify_chat_transfer"] is True
+    assert body["notify_chat_assigned"] is True
+
+    response = client.put(
+        "/api/notifications/settings",
+        json={"notify_chat_transfer": False}
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["notify_new_chat"] is True
+    assert body["notify_chat_transfer"] is False
+
+
+def test_settings_are_per_user(
+    client,
+    db,
+    test_user
+):
+    """Updating the caller's settings never touches another user's row"""
+    other_user = User(
+        id=uuid4(),
+        email="other-settings@example.com",
+        full_name="Other User",
+        hashed_password="hashed_password",
+        organization_id=test_user.organization_id
+    )
+    db.add(other_user)
+    db.commit()
+
+    other_settings = UserNotificationSettings(user_id=other_user.id)
+    db.add(other_settings)
+    db.commit()
+
+    response = client.put(
+        "/api/notifications/settings",
+        json={"notify_new_chat": True, "notify_chat_assigned": False}
+    )
+    assert response.status_code == 200
+
+    db.refresh(other_settings)
+    assert other_settings.notify_new_chat is False
+    assert other_settings.notify_chat_assigned is True
+
 
 def test_send_test_notification(
     client,
