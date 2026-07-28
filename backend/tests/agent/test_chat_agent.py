@@ -200,7 +200,7 @@ async def test_chat_agent_initialization(test_organization_id, test_agent, mock_
     # Mock the AI config repository and use MockAgentStorage
     with patch('app.agents.chat_agent.AgentShopifyConfigRepository') as mock_shopify_config_repo, \
          patch('app.agents.chat_agent.JiraRepository') as mock_jira_repo, \
-         patch('app.agents.chat_agent.PostgresAgentStorage', return_value=MockAgentStorage()):
+         patch('app.agents.chat_agent.EncryptedPostgresAgentStorage', return_value=MockAgentStorage()):
         mock_shopify_config_repo.return_value.get_agent_shopify_config.return_value = None
         
         # Create a proper AgentWithJiraConfig mock
@@ -251,7 +251,7 @@ async def test_chat_agent_get_response(test_organization_id, test_agent, test_us
     # Mock the AI config repository and use MockAgentStorage
     with patch('app.agents.chat_agent.AgentShopifyConfigRepository') as mock_shopify_config_repo, \
          patch('app.agents.chat_agent.JiraRepository') as mock_jira_repo, \
-         patch('app.agents.chat_agent.PostgresAgentStorage', return_value=MockAgentStorage()):
+         patch('app.agents.chat_agent.EncryptedPostgresAgentStorage', return_value=MockAgentStorage()):
         mock_shopify_config_repo.return_value.get_agent_shopify_config.return_value = None
         
         # Create a proper AgentWithJiraConfig mock
@@ -334,7 +334,7 @@ async def test_chat_agent_error_handling(test_organization_id, test_agent, test_
     # Mock the AI config repository and use MockAgentStorage
     with patch('app.agents.chat_agent.AgentShopifyConfigRepository') as mock_shopify_config_repo, \
          patch('app.agents.chat_agent.JiraRepository') as mock_jira_repo, \
-         patch('app.agents.chat_agent.PostgresAgentStorage', return_value=MockAgentStorage()):
+         patch('app.agents.chat_agent.EncryptedPostgresAgentStorage', return_value=MockAgentStorage()):
         mock_shopify_config_repo.return_value.get_agent_shopify_config.return_value = None
         
         # Create a proper AgentWithJiraConfig mock

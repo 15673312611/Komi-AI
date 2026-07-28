@@ -35,6 +35,7 @@ from app.models.chat_history import ChatHistory
 from app.models.lead_capture import LeadCaptureResponse
 from app.models.session_to_agent import SessionToAgent
 from app.models.agent import Agent
+from app.repositories.chat import ChatRepository
 
 
 class PeopleRepository:
@@ -309,20 +310,19 @@ class PeopleRepository:
             .limit(20)
             .all()
         )
+        # One query for all previews, sharing the chat inbox's definition of
+        # "most recent message" rather than restating it here.
+        last_messages = ChatRepository(self.db).get_last_messages(
+            [s.session_id for s in sessions])
+
         out = []
         for s in sessions:
             agent = self.db.query(Agent).filter(Agent.id == s.agent_id).first() if s.agent_id else None
-            last_msg = (
-                self.db.query(ChatHistory.message)
-                .filter(ChatHistory.session_id == s.session_id)
-                .order_by(desc(ChatHistory.created_at))
-                .first()
-            )
             out.append({
                 "session_id": s.session_id,
                 "agent_name": (agent.display_name or agent.name) if agent else None,
                 "status": s.status.value if s.status else None,
-                "last_message": last_msg[0] if last_msg else None,
+                "last_message": last_messages.get(s.session_id),
                 "created_at": s.assigned_at,
             })
         return out

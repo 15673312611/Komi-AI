@@ -16,6 +16,7 @@ limitations under the License.
 
 import pytest
 from datetime import datetime
+from sqlalchemy import text
 from app.repositories.chat import ChatRepository
 from app.models.chat_history import ChatHistory
 from app.models.customer import Customer
@@ -164,6 +165,61 @@ def test_get_recent_chats(chat_repo, test_data):
     assert chat["message_count"] == 3
     assert chat["status"] == SessionStatus.OPEN
     assert chat["group_id"] == str(test_data["group"].id)
+
+
+def test_get_recent_chats_preview_is_the_latest_message(chat_repo, test_data, db):
+    """The preview is the newest message, decrypted — not the lexicographic max,
+    which is what an aggregate over ciphertext would return."""
+    db.add(ChatHistory(
+        organization_id=test_data["org_id"],
+        session_id=test_data["session_id"],
+        customer_id=test_data["customer"].id,
+        agent_id=test_data["agent"].id,
+        user_id=test_data["user"].id,
+        # Sorts before every "Test message N" alphabetically, so a max() would miss it.
+        message="A final reply from the agent",
+        message_type="text",
+    ))
+    db.commit()
+
+    chats = chat_repo.get_recent_chats(
+        organization_id=test_data["org_id"],
+        user_id=test_data["user"].id,
+        user_groups=[str(test_data["group"].id)]
+    )
+
+    assert chats[0]["last_message"] == "A final reply from the agent"
+
+
+def test_get_recent_chats_preview_reads_legacy_plaintext(chat_repo, test_data, db):
+    """Rows written before encryption at rest have no prefix and must still show."""
+    legacy = ChatHistory(
+        organization_id=test_data["org_id"],
+        session_id=test_data["session_id"],
+        customer_id=test_data["customer"].id,
+        agent_id=test_data["agent"].id,
+        user_id=test_data["user"].id,
+        message="placeholder",
+        message_type="text",
+        created_at=datetime(2030, 1, 1),
+    )
+    db.add(legacy)
+    db.commit()
+    # Overwrite in raw SQL so the value stays plaintext, as it would be in a row
+    # written before encryption at rest.
+    db.execute(
+        text("UPDATE chat_history SET message = :message WHERE id = :id"),
+        {"message": "legacy plaintext message", "id": legacy.id},
+    )
+    db.commit()
+
+    chats = chat_repo.get_recent_chats(
+        organization_id=test_data["org_id"],
+        user_id=test_data["user"].id,
+        user_groups=[str(test_data["group"].id)]
+    )
+
+    assert chats[0]["last_message"] == "legacy plaintext message"
 
 @pytest.mark.asyncio
 async def test_check_session_access(chat_repo, test_data):

@@ -31,6 +31,7 @@ from app.api import widget_chat  # noqa: F401 - imported for side effects (socke
 from fastapi import FastAPI, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings, check_secret_configuration
+from app.core.encryption import verify_encryption_key
 from app.services.firebase import initialize_firebase
 from app.database import engine, Base
 import asyncio
@@ -54,6 +55,9 @@ logger = get_logger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
+    # First: a bad ENCRYPTION_KEY must stop the boot, not surface as an unreadable
+    # conversation once the app is already serving traffic.
+    verify_encryption_key()
     check_secret_configuration()
     initialize_firebase()
     await startup_event()

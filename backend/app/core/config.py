@@ -62,6 +62,10 @@ class Settings(BaseSettings):
     BACKEND_URL: str = os.getenv("BACKEND_URL", "http://localhost:8000")
     VITE_WIDGET_URL: str = os.getenv("VITE_WIDGET_URL", "http://localhost:5173")
 
+    # app.core.encryption owns the actual key loading (reads the env var directly and
+    # refuses to start without it outside development). This mirror exists only so
+    # check_secret_configuration can audit it; the demo default is what that audit
+    # flags in production.
     ENCRYPTION_KEY: str = os.getenv("ENCRYPTION_KEY", "RFQ4SzhyRTVYdGtsLUxsc25SaDB0QlZpbTdQRmlVRlpsZUlCaFRlU2Vxbz0=")
 
     # SMTP Settings

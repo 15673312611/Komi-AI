@@ -14,13 +14,22 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-from sqlalchemy import Column, Integer, String, JSON, ForeignKey, TIMESTAMP, func, UUID, Interval, Float
+from sqlalchemy import Column, Integer, String, JSON, ForeignKey, TIMESTAMP, func, UUID, Interval, Float, Index, text
 from sqlalchemy.orm import relationship
+from app.core.encryption import EncryptedText
 from app.database import Base
 
 
 class ChatHistory(Base):
     __tablename__ = "chat_history"
+    __table_args__ = (
+        # Every read of a conversation filters by session_id and orders by
+        # (created_at, id) — the inbox previews, get_session_history, the AI's
+        # context window. Declared here as well as in the migration so autogenerate
+        # never proposes dropping it and the sqlite test schema matches Postgres.
+        Index('ix_chat_history_session_created', 'session_id',
+              text('created_at DESC'), text('id DESC')),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     organization_id = Column(UUID(as_uuid=True), ForeignKey(
@@ -32,7 +41,9 @@ class ChatHistory(Base):
     agent_id = Column(UUID(as_uuid=True), ForeignKey(
         "agents.id", ondelete="SET NULL"), nullable=True)
     session_id = Column(UUID(as_uuid=True), ForeignKey("session_to_agents.session_id"), nullable=True)
-    message = Column(String, nullable=False)
+    # Encrypted at rest — see app.core.encryption. Storage stays text, so rows
+    # written before the change read back as plaintext until the backfill lands.
+    message = Column(EncryptedText, nullable=False)
     # 'user', 'bot', or 'agent'
     message_type = Column(String, nullable=False)
     attributes = Column(JSON, default={})

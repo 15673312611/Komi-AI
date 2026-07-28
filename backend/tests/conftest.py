@@ -14,6 +14,14 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+import os
+
+# Set before any app import: app.core.encryption reads these when it first loads a
+# key, and a fixed key keeps encrypted fixtures reproducible across runs.
+os.environ.setdefault("ENVIRONMENT", "test")
+os.environ.setdefault(
+    "ENCRYPTION_KEY", "RFQ4SzhyRTVYdGtsLUxsc25SaDB0QlZpbTdQRmlVRlpsZUlCaFRlU2Vxbz0=")
+
 import pytest
 import uuid
 import asyncio
