@@ -61,14 +61,14 @@ def chat_agent(mock_agent_data, mock_db):
     # Mock environment variables
     mock_env = {}
     
-    # Mock PostgresAgentStorage
+    # Mock the encrypted agent storage
     mock_storage = Mock()
     mock_storage.get_session_state.return_value = {"status": "active"}
     
     with patch('app.agents.chat_agent.get_db') as mock_get_db, \
          patch('app.agents.chat_agent.JiraRepository') as mock_jira_repo, \
          patch('app.tools.knowledge_search_byagent.KnowledgeSearchByAgent', return_value=mock_knowledge_tool), \
-         patch('app.agents.chat_agent.PostgresAgentStorage', return_value=mock_storage), \
+         patch('app.agents.chat_agent.EncryptedPostgresAgentStorage', return_value=mock_storage), \
          patch('app.agents.chat_agent.settings.DATABASE_URL', "mock://test"), \
          patch.dict('os.environ', mock_env, clear=True):
         

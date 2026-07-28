@@ -21,7 +21,7 @@ from app.core.logger import get_logger
 from app.tools.knowledge_search_byagent import KnowledgeSearchByAgent
 from app.tools.mcp_manager import ChatAgentMCPMixin
 from app.database import get_db, SessionLocal, engine
-from agno.storage.agent.postgres import PostgresAgentStorage
+from app.agents.encrypted_storage import EncryptedPostgresAgentStorage
 from app.repositories.chat import ChatRepository
 from app.repositories.session_to_agent import SessionToAgentRepository
 from app.models.session_to_agent import SessionStatus
@@ -720,7 +720,7 @@ Keep your responses concise and focused. Provide clear, actionable information i
 
         # Use shared database engine to avoid connection leaks
         # Previously this created a new engine per ChatAgent instance, exhausting connections
-        storage = PostgresAgentStorage(table_name="agent_sessions", db_engine=engine)
+        storage = EncryptedPostgresAgentStorage(table_name="agent_sessions", db_engine=engine)
         
        
         # Combine all tools

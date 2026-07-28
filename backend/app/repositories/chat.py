@@ -240,7 +240,8 @@ class ChatRepository:
                 joinedload(ChatHistory.attachments)
             )
             .filter(ChatHistory.session_id == session_id)
-            .order_by(ChatHistory.created_at.asc())
+            # id breaks ties — see get_last_messages.
+            .order_by(ChatHistory.created_at.asc(), ChatHistory.id.asc())
             .all()
         )
         
@@ -259,6 +260,34 @@ class ChatRepository:
                                 
         
         return messages
+
+    def get_last_messages(self, session_ids: List[UUID]) -> Dict[UUID, str]:
+        """Map each session to its most recent message, decrypted.
+
+        One query for the whole page rather than one per session, and the single
+        definition of "most recent" — created_at is transaction time, so messages
+        written together share it exactly and id has to break the tie.
+        """
+        if not session_ids:
+            return {}
+
+        ranked = (
+            select(
+                ChatHistory.session_id,
+                ChatHistory.message,
+                func.row_number().over(
+                    partition_by=ChatHistory.session_id,
+                    order_by=(ChatHistory.created_at.desc(), ChatHistory.id.desc()),
+                ).label('rank')
+            )
+            .where(ChatHistory.session_id.in_(session_ids))
+            .subquery()
+        )
+
+        rows = self.db.execute(
+            select(ranked.c.session_id, ranked.c.message).where(ranked.c.rank == 1)
+        ).all()
+        return {session_id: message for session_id, message in rows}
 
     def get_user_history(self, user_id: str | UUID) -> List[ChatHistory]:
         """Get chat history for a user"""
@@ -306,7 +335,6 @@ class ChatRepository:
             SessionToAgent.status.label('status'),
             SessionToAgent.channel.label('channel'),
             SessionToAgent.group_id.label('group_id'),
-            func.max(ChatHistory.message).label('last_message'),
             func.max(ChatHistory.created_at).label('updated_at'),
             func.count(ChatHistory.id).label('message_count'),
             SessionToAgent.session_id.label('session_id')
@@ -397,6 +425,11 @@ class ChatRepository:
         ).offset(skip).limit(limit)
 
         results = query.all()
+        # Previews are fetched for the returned page only. Inlining them as a
+        # correlated subquery would evaluate once per session in the org, since the
+        # LIMIT applies after grouping.
+        last_messages = self.get_last_messages([r.session_id for r in results])
+
         return [{
             'customer': {
                 'id': r.customer_id,
@@ -408,7 +441,7 @@ class ChatRepository:
                 'name': r.agent_name,
                 'display_name': r.agent_display_name
             },
-            'last_message': r.last_message,
+            'last_message': last_messages.get(r.session_id),
             'updated_at': r.updated_at,
             'message_count': r.message_count,
             'status': r.status,

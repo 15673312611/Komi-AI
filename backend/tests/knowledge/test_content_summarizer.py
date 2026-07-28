@@ -271,7 +271,7 @@ class TestChatAgentURLInstructions:
              patch('app.agents.chat_agent.JiraRepository') as mock_jira_repo, \
              patch('app.agents.chat_agent.AgentShopifyConfigRepository') as mock_shopify_repo, \
              patch('app.repositories.lead_capture.LeadCaptureConfigRepository') as mock_lead_repo, \
-             patch('app.agents.chat_agent.PostgresAgentStorage') as mock_storage, \
+             patch('app.agents.chat_agent.EncryptedPostgresAgentStorage') as mock_storage, \
              patch('app.agents.chat_agent.create_model') as mock_create_model, \
              patch('app.agents.chat_agent.Agent') as mock_agent_class:
 

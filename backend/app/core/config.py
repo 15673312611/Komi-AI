@@ -62,7 +62,9 @@ class Settings(BaseSettings):
     VITE_WIDGET_URL: str = os.getenv("VITE_WIDGET_URL", "http://localhost:5173")
     APP_BASE_URL: str = os.getenv("APP_BASE_URL", "http://localhost:8000")
 
-    ENCRYPTION_KEY: str = os.getenv("ENCRYPTION_KEY", "RFQ4SzhyRTVYdGtsLUxsc25SaDB0QlZpbTdQRmlVRlpsZUlCaFRlU2Vxbz0=")
+    # ENCRYPTION_KEY is deliberately absent: app.core.encryption owns it, reads the
+    # env var directly and refuses to start without it outside development. A
+    # default here would silently hand production a demo key.
 
     # SMTP Settings
     SMTP_SERVER: str = os.getenv("SMTP_SERVER", "smtp.gmail.com")
