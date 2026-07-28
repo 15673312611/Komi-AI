@@ -26,6 +26,7 @@ from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
+from app.api.help_center_images import router as help_center_images_router
 from app.core.config import settings
 from app.database import get_db
 from app.models.faq import FAQ
@@ -75,6 +76,13 @@ public_app.mount(
     "/api/v1/uploads/help_center",
     StaticFiles(directory="uploads/help_center", check_dir=False),
     name="help_center_uploads",
+)
+# Article images uploaded from this release on are baked as
+# {API_V1_STR}/help-center/images/<file> instead, which resolves on either
+# storage backend. The mount above stays for URLs baked before that.
+public_app.include_router(
+    help_center_images_router,
+    prefix=f"{settings.API_V1_STR}/help-center",
 )
 templates = Jinja2Templates(directory="app/templates")
 

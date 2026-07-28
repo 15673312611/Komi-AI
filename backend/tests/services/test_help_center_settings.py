@@ -20,7 +20,11 @@ from types import SimpleNamespace
 import pytest
 
 from app.core.config import settings
-from app.services.help_center_images import store_article_image, strip_upload_host
+from app.services.help_center_images import (
+    rewrite_baked_s3_image_urls,
+    store_article_image,
+    strip_upload_host,
+)
 from app.services.help_center_settings import live_url
 
 
@@ -80,21 +84,36 @@ def test_strip_upload_host_strips_configured_backend_origin(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_store_article_image_returns_relative_for_local(monkeypatch):
+@pytest.mark.parametrize("stored", [
+    "/api/v1/uploads/help_center/x.png",                     # local storage
+    "https://bucket.s3.amazonaws.com/help_center/x.png",     # S3
+])
+async def test_store_article_image_bakes_the_same_stable_path(monkeypatch, stored):
+    """The baked URL is storage-agnostic and never expires.
+
+    It must not be a signed URL (they expire) nor a raw S3 URL (the bucket is
+    private, so those 403) — the delivery route resolves it per request.
+    """
     async def fake_store_upload(content, folder=None, file_name=None, content_type=None):
-        return f"/api/v1/uploads/{folder}/{file_name}"
+        return stored
 
     monkeypatch.setattr("app.services.help_center_images.store_upload", fake_store_upload)
     url = await store_article_image(b"x", "image/png")
-    assert url.startswith("/api/v1/uploads/help_center/")
-    assert not url.startswith("http")  # relative — no baked host
+
+    assert url.startswith("/api/v1/help-center/images/")
+    assert not url.startswith("http")  # relative — resolves on whichever origin serves the page
+    assert "amazonaws" not in url and "Signature=" not in url
 
 
-@pytest.mark.asyncio
-async def test_store_article_image_keeps_absolute_s3(monkeypatch):
-    async def fake_store_upload(content, folder=None, file_name=None, content_type=None):
-        return "https://bucket.s3.amazonaws.com/help_center/x.png"
-
-    monkeypatch.setattr("app.services.help_center_images.store_upload", fake_store_upload)
-    url = await store_article_image(b"x", "image/png")
-    assert url == "https://bucket.s3.amazonaws.com/help_center/x.png"
+@pytest.mark.parametrize("text,expected", [
+    # virtual-hosted
+    ("![](https://b.s3.us-east-1.amazonaws.com/help_center/{n})", "![](/api/v1/help-center/images/{n})"),
+    # path-style, dotted bucket
+    ("![](https://s3.us-east-1.amazonaws.com/my.bucket/help_center/{n})", "![](/api/v1/help-center/images/{n})"),
+    # local paths and unrelated URLs are left alone
+    ("![](/api/v1/uploads/help_center/{n})", "![](/api/v1/uploads/help_center/{n})"),
+    ("![](https://example.com/help_center/{n})", "![](https://example.com/help_center/{n})"),
+])
+def test_rewrite_baked_s3_image_urls(text, expected):
+    name = "7b6fe1aa-1234-4c5d-9e0f-0123456789ab.png"
+    assert rewrite_baked_s3_image_urls(text.format(n=name)) == expected.format(n=name)
