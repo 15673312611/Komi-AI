@@ -73,6 +73,20 @@ UPLOAD_DIR = "uploads/user"
 ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif"}
 MAX_FILE_SIZE = 5 * 1024 * 1024  # 5MB
 
+
+def _require_role_in_org(db, role_id, org_id) -> None:
+    """A user may only be given a role defined in their own organization.
+
+    Role ids are sequential integers, so without this an admin could bind a
+    user to another tenant's role — inheriting that role's permissions and
+    breaking the other org's "is this role in use" accounting.
+    """
+    if role_id is None:
+        return
+    role = db.query(Role).filter(Role.id == role_id).first()
+    if not role or role.organization_id != org_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Role not found")
+
 def get_file_extension(filename: str) -> str:
     return os.path.splitext(filename)[1].lower()
 
@@ -140,9 +154,12 @@ async def create_user(
                         detail=f"Maximum number of users ({subscription.quantity}) reached for your plan. Please upgrade your plan to add more users."
                     )
         
+        # The role must belong to the caller's own organization.
+        _require_role_in_org(db, user_data.role_id, current_user.organization_id)
+
         # Hash the password
         hashed_password = User.get_password_hash(user_data.password)
-        
+
         # Create user with organization from current user
         new_user = user_repo.create_user(
             email=user_data.email,
@@ -837,7 +854,10 @@ async def update_user(
     
     if not user or user.organization_id != current_user.organization_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
-    
+
+    # A supplied role must belong to the caller's org, not another tenant's.
+    _require_role_in_org(db, user_data.role_id, current_user.organization_id)
+
     # Check if updating email and if it's already taken
     if user_data.email and user_data.email != user.email:
         if HAS_EMAIL_VALIDATION:

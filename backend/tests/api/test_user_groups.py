@@ -222,3 +222,38 @@ def test_remove_user_from_nonexistent_group(client: TestClient, test_user: User)
     nonexistent_id = uuid4()
     response = client.delete(f"/api/v1/groups/{nonexistent_id}/users/{test_user.id}")
     assert response.status_code == 404 
+
+@pytest.fixture
+def foreign_user(db: Session) -> User:
+    """A user in a different organization from the caller."""
+    from app.models.organization import Organization
+    other_org = Organization(id=uuid4(), name="Other Org", domain="other.example.com")
+    db.add(other_org)
+    db.commit()
+
+    user = User(
+        id=uuid4(),
+        email="foreign@other.example.com",
+        hashed_password=get_password_hash("x"),
+        organization_id=other_org.id,
+        is_active=True,
+    )
+    db.add(user)
+    db.commit()
+    return user
+
+
+def test_cannot_add_user_from_another_org(client, test_group, foreign_user, db):
+    """A group can't gain a member from another tenant"""
+    response = client.post(f"/api/v1/groups/{test_group.id}/users/{foreign_user.id}")
+
+    assert response.status_code == 400
+    db.refresh(test_group)
+    assert foreign_user not in test_group.users
+
+
+def test_cannot_remove_user_from_another_org(client, test_group, foreign_user, db):
+    """A foreign user id can't be used to poke at group membership"""
+    response = client.delete(f"/api/v1/groups/{test_group.id}/users/{foreign_user.id}")
+
+    assert response.status_code == 400

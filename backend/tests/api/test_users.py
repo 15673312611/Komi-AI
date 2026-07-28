@@ -425,3 +425,45 @@ def test_clear_fcm_token(client: TestClient, test_user: User, db: Session):
     assert response.status_code == 200
     data = response.json()
     assert data["message"] == "FCM token cleared successfully" 
+
+@pytest.fixture
+def foreign_role(db) -> Role:
+    """A role defined in a different organization."""
+    from app.models.organization import Organization
+    other_org = Organization(id=uuid4(), name="Other Org", domain="other-role.example.com")
+    db.add(other_org)
+    db.commit()
+    role = Role(name="Foreign Admin", organization_id=other_org.id)
+    db.add(role)
+    db.commit()
+    db.refresh(role)
+    return role
+
+
+def test_create_user_rejects_foreign_role(admin_client, foreign_role, test_organization):
+    """A user can't be created with a role from another tenant"""
+    user_data = {
+        "email": "roletest@test.com",
+        "full_name": "Role Test",
+        "password": "testpassword123",
+        "is_active": True,
+        "role_id": foreign_role.id,
+        "organization_id": str(test_organization.id),
+    }
+    response = admin_client.post("/api/v1/users", json=user_data)
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Role not found"
+
+
+def test_update_user_rejects_foreign_role(admin_client, db, test_user, foreign_role):
+    """A user can't be moved onto a role from another tenant"""
+    response = admin_client.put(
+        f"/api/v1/users/{test_user.id}",
+        json={"role_id": foreign_role.id},
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Role not found"
+    db.refresh(test_user)
+    assert test_user.role_id != foreign_role.id

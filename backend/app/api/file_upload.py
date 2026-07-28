@@ -105,6 +105,52 @@ async def get_current_user_or_widget(
     )
 
 
+def authorized_attachment_key(file_path: str, org_id: Optional[str]) -> str:
+    """Resolve a download path to a storage key the caller is allowed to read.
+
+    Uploads only ever land at `chat_attachments/<org_id>/<uuid>.<ext>` (see
+    FileUploadService.upload_file), so anything else is not a servable
+    attachment. Matching that shape exactly is what both scopes the read to the
+    caller's organization and rules out traversal — no `..` segment can
+    survive a three-part match on a UUID directory.
+    """
+    if not org_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="File not found"
+        )
+
+    # Accept the stored form ("/uploads/chat_attachments/...") and the bare key.
+    clean_path = file_path.lstrip('/')
+    if clean_path.startswith('uploads/'):
+        clean_path = clean_path[len('uploads/'):]
+
+    parts = clean_path.split('/')
+    if len(parts) != 3 or parts[0] != 'chat_attachments' or not parts[2]:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="File not found"
+        )
+
+    try:
+        path_org_id = uuid.UUID(parts[1])
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="File not found"
+        )
+
+    # 404 rather than 403: whether another org's attachment exists is itself
+    # something the caller shouldn't learn.
+    if str(path_org_id) != str(org_id):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="File not found"
+        )
+
+    return '/'.join(('chat_attachments', str(path_org_id), parts[2]))
+
+
 @router.get("/download/{file_path:path}")
 async def download_file(
     file_path: str,
@@ -115,28 +161,26 @@ async def download_file(
 ):
     """
     Download/serve a file from AWS S3 or local storage
-    
+
     Usage: GET /api/v1/files/download/chat_attachments/org-id/filename.jpg
     """
     try:
         from fastapi.responses import StreamingResponse
         from app.core.s3 import get_s3_client
         import io
-        
-        # Try to authenticate
-        try:
-            auth_info = await get_current_user_or_widget(request, db, authorization, x_conversation_token)
-        except Exception:
-            auth_info = None
-        
+
+        # Authentication is required, and the result is what authorizes the
+        # read below. This used to swallow the failure and serve the file
+        # anyway, making every org's attachments world-readable by path.
+        auth_info = await get_current_user_or_widget(
+            request, db, authorization, x_conversation_token)
+        storage_key = authorized_attachment_key(file_path, auth_info.get("org_id"))
+
         if not settings.S3_FILE_STORAGE:
             # Serve local file
             import os
-            # file_path already includes the full path like /uploads/chat_attachments/org-id/filename.png
-            # Remove leading slash if present
-            clean_path = file_path.lstrip('/')
-            local_file_path = clean_path if clean_path.startswith('uploads/') else os.path.join("uploads", clean_path)
-            
+            local_file_path = os.path.join("uploads", storage_key)
+
             if os.path.exists(local_file_path):
                 with open(local_file_path, "rb") as f:
                     file_content = f.read()
@@ -148,12 +192,12 @@ async def download_file(
                 return StreamingResponse(
                     io.BytesIO(file_content),
                     media_type=content_type,
-                    headers={"Content-Disposition": f"inline; filename={os.path.basename(file_path)}"}
+                    headers={"Content-Disposition": f"inline; filename={os.path.basename(storage_key)}"}
                 )
             else:
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
-                    detail=f"File not found: {local_file_path}"
+                    detail="File not found"
                 )
         
         # For AWS S3 - stream file from S3
@@ -166,8 +210,8 @@ async def download_file(
                 detail="Failed to create S3 client"
             )
         
-        # For S3, remove /uploads/ prefix if present since S3 keys don't include it
-        s3_key = file_path.lstrip('/').replace('uploads/', '') if file_path.startswith('/uploads/') else file_path.lstrip('/')
+        # S3 keys don't include the /uploads/ prefix
+        s3_key = storage_key
         bucket = settings.S3_BUCKET
         
         # Check if the file exists
@@ -209,8 +253,8 @@ async def download_file(
         # Determine content type
         content_type = response.get('ContentType', 'application/octet-stream')
         
-        # Extract filename from path
-        filename = file_path.split('/')[-1]
+        # Extract filename from the validated key
+        filename = storage_key.split('/')[-1]
         
         logger.info(f"Streaming file from S3: {filename}, content-type: {content_type}")
         return StreamingResponse(

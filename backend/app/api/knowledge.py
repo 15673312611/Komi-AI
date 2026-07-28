@@ -324,16 +324,23 @@ async def get_explore_progress(
 ):
     """Get progress status for knowledge base processing"""
     try:
-        queue_repo = KnowledgeQueueRepository(db)
-        queue_item = queue_repo.get_by_id(queue_id)
-        
+        # Deliberately unauthenticated — it polls the job the equally public
+        # /explore/add-url just created. That makes scoping it to the shared
+        # explore org essential: queue ids are sequential, so an unscoped
+        # lookup let anyone walk every tenant's ingestion jobs and read their
+        # source URLs and crawled-page lists.
+        queue_item = db.query(KnowledgeQueue).filter(
+            KnowledgeQueue.id == queue_id,
+            KnowledgeQueue.organization_id == UUID(settings.EXPLORE_SOURCE_ORG_ID)
+        ).first()
+
         # Refresh the item to get the latest data from the database
         if queue_item:
             db.refresh(queue_item)
-        
+
         if not queue_item:
             raise HTTPException(status_code=404, detail="Queue item not found")
-        
+
         # Get processing stage information
         stage_info = {
             "not_started": {"label": "Initializing", "step": 1, "total": 4},
@@ -396,7 +403,10 @@ async def get_explore_progress(
             "is_complete": status_str.upper() in ["COMPLETED", "FAILED"],
             "error_message": getattr(queue_item, 'error_message', None)
         }
-        
+
+    except HTTPException:
+        # Otherwise the not-found above is reported as a 500 echoing its detail.
+        raise
     except Exception as e:
         logger.error(f"Error getting progress for queue {queue_id}: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -626,6 +636,12 @@ async def link_knowledge_to_agent(
         except ValueError:
             raise HTTPException(status_code=400, detail="Invalid agent ID format")
 
+        # The agent must belong to the caller's org, not just the knowledge.
+        # 404 (not 403) so we don't reveal another org's agent existence.
+        agent = AgentRepository(db).get_agent(agent_uuid)
+        if not agent or agent.organization_id != current_user.organization_id:
+            raise HTTPException(status_code=404, detail="Agent not found")
+
         # Check if link already exists
         existing_link = link_repo.get_by_ids(knowledge_id, agent_uuid)
         if existing_link:
@@ -732,6 +748,11 @@ async def unlink_knowledge_from_agent(
         knowledge = knowledge_repo.get_by_id(knowledge_id)
         if not knowledge or knowledge.organization_id != current_user.organization_id:
             raise HTTPException(status_code=404, detail="Knowledge source not found or unauthorized access")
+
+        # And the agent must be in the caller's org too.
+        agent = AgentRepository(db).get_agent(agent_uuid)
+        if not agent or agent.organization_id != current_user.organization_id:
+            raise HTTPException(status_code=404, detail="Agent not found")
 
         # Delete the link
         success = link_repo.delete_by_ids(knowledge_id, agent_uuid)

@@ -820,3 +820,89 @@ def test_add_text_endpoint_registered():
     assert any(
         hasattr(route, 'path') and route.path == '/add/text' for route in router.routes
     ), "add/text endpoint should be registered" 
+
+class TestExploreProgressIsScopedToTheExploreOrg:
+    """The explore progress poll is public, so it must only ever expose the
+    shared explore organization's jobs — queue ids are sequential."""
+
+    def test_another_orgs_queue_item_is_not_exposed(self, client, test_knowledge_queue):
+        """test_knowledge_queue belongs to a normal tenant, not the explore org"""
+        response = client.get(
+            f"/api/v1/knowledge/explore/progress/{test_knowledge_queue.id}")
+
+        assert response.status_code == 404
+        body = response.json()
+        # The tenant's crawl source must not leak in any form
+        assert "test.pdf" not in str(body)
+
+    def test_explore_org_queue_item_is_exposed(self, client, db, test_user):
+        """The public explore flow still gets its own job's progress"""
+        from app.models.organization import Organization
+
+        explore_org = Organization(
+            id=UUID(settings.EXPLORE_SOURCE_ORG_ID),
+            name="Explore Org",
+            domain="explore.example.com",
+            timezone="UTC"
+        )
+        db.add(explore_org)
+        db.commit()
+
+        queue = KnowledgeQueue(
+            organization_id=explore_org.id,
+            user_id=test_user.id,
+            source_type="website",
+            source="https://explore.example.com",
+            status=QueueStatus.PENDING,
+            created_at=datetime.now(timezone.utc)
+        )
+        db.add(queue)
+        db.commit()
+        db.refresh(queue)
+
+        response = client.get(f"/api/v1/knowledge/explore/progress/{queue.id}")
+
+        assert response.status_code == 200
+
+
+class TestKnowledgeLinkAgentIsOrgScoped:
+    """A knowledge source may only be linked to an agent in the same org."""
+
+    def _foreign_agent(self, db):
+        from app.models.organization import Organization
+        other_org = Organization(
+            id=uuid4(), name="Other Org", domain="other-kn.example.com", timezone="UTC")
+        db.add(other_org)
+        db.commit()
+        agent = Agent(
+            id=uuid4(),
+            name="Foreign Agent",
+            agent_type=AgentType.CUSTOMER_SUPPORT,
+            instructions=["x"],
+            organization_id=other_org.id,
+            is_active=True,
+        )
+        db.add(agent)
+        db.commit()
+        db.refresh(agent)
+        return agent
+
+    def test_link_rejects_agent_from_another_org(self, client, db, test_knowledge):
+        foreign_agent = self._foreign_agent(db)
+
+        response = client.post(
+            f"/api/v1/knowledge/link?knowledge_id={test_knowledge.id}"
+            f"&agent_id={foreign_agent.id}")
+
+        assert response.status_code == 404
+        assert response.json()["detail"] == "Agent not found"
+
+    def test_unlink_rejects_agent_from_another_org(self, client, db, test_knowledge):
+        foreign_agent = self._foreign_agent(db)
+
+        response = client.delete(
+            f"/api/v1/knowledge/unlink?knowledge_id={test_knowledge.id}"
+            f"&agent_id={foreign_agent.id}")
+
+        assert response.status_code == 404
+        assert response.json()["detail"] == "Agent not found"
