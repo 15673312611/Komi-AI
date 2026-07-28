@@ -452,32 +452,37 @@ async def end_chat_acknowledgment(
     """Acknowledge end_chat event from widget and close session on backend"""
     try:
         logger.info(f"End chat request received: widget_id={widget_id}, session_id={session_id}, reason={reason}, has_token={bool(authorization)}")
-        
-        from app.repositories.session_to_agent import SessionToAgentRepository
-        from app.core.security import verify_conversation_token
-        
-        # Validate token if provided
-        customer_id = None
-        if authorization and authorization.startswith('Bearer '):
-            token = authorization.split(' ')[1]
-            try:
-                token_data = verify_conversation_token(token)
-                if token_data:
-                    customer_id = token_data.get("sub")
-                    verified_widget_id = token_data.get("widget_id")
-                    if verified_widget_id != widget_id:
-                        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Widget mismatch")
-            except Exception:
-                raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
-        
-        # Close the session
+
+        # A conversation token is REQUIRED. This used to validate the token only
+        # when one was sent, so a request with no Authorization header fell
+        # straight through and closed any session by id, unauthenticated.
+        if not authorization or not authorization.startswith('Bearer '):
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
+
+        try:
+            token_data = verify_conversation_token(authorization.split(' ')[1])
+        except Exception:
+            token_data = None
+        if not token_data:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+
+        customer_id = token_data.get("sub")
+        if token_data.get("widget_id") != widget_id:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Widget mismatch")
+
+        # The token proves who the caller is, not that this session is theirs —
+        # without this any visitor could close another customer's conversation.
         session_repo = SessionToAgentRepository(db)
+        session = session_repo.get_session(session_id)
+        if not session or str(session.customer_id) != str(customer_id):
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found")
+
         success = session_repo.close_session(
             session_id=session_id,
             reason=reason,
             description=description
         )
-        
+
         if success:
             logger.info(f"End chat acknowledged: widget_id={widget_id}, session_id={session_id}, reason={reason}")
             return {

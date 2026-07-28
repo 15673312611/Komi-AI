@@ -23,6 +23,7 @@ import { marked } from 'marked'
 import { sanitizeHtml } from '../utils/sanitize'
 import { resolveOrbStyle } from '../utils/orb'
 import { isAbsoluteUrl } from '../utils/avatars'
+import { isEndChatMessage } from '../utils/endChat'
 import { widgetEnv } from './widget-env'
 import { useWidgetStyles } from '../composables/useWidgetStyles'
 import { useWidgetFiles } from '../composables/useWidgetFiles'
@@ -658,14 +659,18 @@ watch(() => messages.value.length, (newLength, oldLength) => {
     }
 })
 
-// Check for end chat in the last message - existing functionality
+// Close the session only when the last message is genuinely an end-chat.
+// This watch is deep, so it re-runs on every mutation — including each
+// character of a streamed reply — hence both the isEndChatMessage guard and
+// the already-handled check. Without the guard, ordinary messages that carry a
+// real session_id (the takeover notice, form prompts) ended the conversation.
+let endedMessage: unknown = null
 watch(() => messages.value, (newMessages) => {
-    if (newMessages.length > 0) {
+    const lastMessage = newMessages[newMessages.length - 1]
+    if (!isEndChatMessage(lastMessage) || lastMessage === endedMessage) return
 
-        const lastMessage = newMessages[newMessages.length - 1]
-
-        handleEndChat(lastMessage)
-    }
+    endedMessage = lastMessage
+    handleEndChat(lastMessage)
 }, { deep: true })
 
 // Add reconnect handler
@@ -736,6 +741,10 @@ const humanAgentPhotoUrl = computed(() => {
 
 // Add this after other methods
 const handleEndChat = async (message) => {
+    // Defence in depth: this closes the session server-side, so it must never
+    // run for a message that is not an end-chat, whoever calls it.
+    if (!isEndChatMessage(message)) return
+
     // Call backend API to acknowledge end_chat and close the session
     try {
         if (message.session_id && token.value && widgetId.value) {
