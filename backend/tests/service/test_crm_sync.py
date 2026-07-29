@@ -259,6 +259,37 @@ class TestManualSync:
         assert link and link[0].record_url == OK_RESULT.record_url
 
     @pytest.mark.asyncio
+    async def test_pushes_full_captured_attributes_not_just_columns(
+            self, db, connection, test_organization, test_agent, monkeypatch):
+        # Customer row is sparse (no company column, phone dropped for lacking a
+        # country code) — the captured field_values hold the real details.
+        cust = Customer(organization_id=test_organization.id,
+                        email="amit@gmail.com", full_name="Arun", phone=None)
+        db.add(cust)
+        db.commit()
+        db.refresh(cust)
+        db.add(LeadCaptureResponse(
+            organization_id=test_organization.id, agent_id=test_agent.id,
+            customer_id=cust.id, consent=True,
+            field_values={"email": "amit@gmail.com", "name": "Arun",
+                          "company": "ChatterMate", "phone": "6362262617"}))
+        db.commit()
+
+        captured = {}
+
+        async def fake_push(self, tokens, payload):
+            captured["payload"] = payload
+            return OK_RESULT
+        monkeypatch.setattr(HubSpotAdapter, "push_lead", fake_push)
+
+        await sync_customer_to_crm(db, cust)
+
+        payload = captured["payload"]
+        assert payload.name == "Arun"
+        assert payload.company == "ChatterMate"     # was silently dropped before
+        assert payload.phone == "6362262617"        # from field_values, not the empty column
+
+    @pytest.mark.asyncio
     async def test_includes_latest_conversation_summary(
             self, db, connection, synced_customer, test_organization, test_agent, monkeypatch):
         db.add(LeadCaptureResponse(

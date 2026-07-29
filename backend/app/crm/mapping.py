@@ -25,18 +25,21 @@ from app.models.lead_capture import LeadCaptureConfig, LeadCaptureResponse
 _STANDARD_KEYS = {"email", "name", "company", "phone"}
 
 
-def build_lead_payload(
-    response: LeadCaptureResponse,
-    config: Optional[LeadCaptureConfig],
+def _payload_from_values(
+    values: dict,
     customer: Optional[Customer],
+    config: Optional[LeadCaptureConfig],
+    summary: Optional[str],
+    ref_id,
 ) -> LeadPayload:
-    """Fold a captured lead into the provider-agnostic push payload.
+    """Fold captured field values into the provider-agnostic push payload.
 
-    field_values holds what the agent extracted conversationally; the Customer
-    row backfills anything blank (it may know the email/phone from an earlier
-    session). Custom answers are labeled from the agent's field config.
+    `values` holds what the agent extracted conversationally (email/name/
+    company/phone + custom_N); the Customer row backfills anything blank. Custom
+    answers are labeled from the agent's field config. Company has no Customer
+    column, so it comes from the captured values only.
     """
-    values = response.field_values or {}
+    values = values or {}
     email = (values.get("email") or (customer.email if customer else "") or "").strip().lower()
 
     labels = _custom_field_labels(config)
@@ -49,35 +52,43 @@ def build_lead_payload(
     lead_source = (customer.lead_source if customer else None) or {}
 
     return LeadPayload(
-        lead_response_id=response.id,
+        lead_response_id=ref_id,
         email=email,
         name=_first_truthy(values.get("name"), customer.full_name if customer else None),
         company=values.get("company") or None,
         phone=_first_truthy(values.get("phone"), customer.phone if customer else None),
-        summary=response.summary,
-        custom_fields=custom_fields,
-        source_url=lead_source.get("page_url"),
-    )
-
-
-def build_customer_payload(customer: Customer, summary: Optional[str] = None) -> LeadPayload:
-    """Build a push payload straight from a person (manual "Sync now"), for a
-    customer that may have no captured-lead row. meta_data holds integrator-set
-    attributes, surfaced as custom fields; summary is the AI conversation
-    summary (attached as a CRM note)."""
-    meta = customer.meta_data if isinstance(customer.meta_data, dict) else {}
-    custom_fields = {str(k): str(v) for k, v in meta.items() if v not in (None, "")}
-    lead_source = customer.lead_source if isinstance(customer.lead_source, dict) else {}
-    return LeadPayload(
-        lead_response_id=customer.id,   # metadata only; no lead row exists here
-        email=(customer.email or "").strip().lower(),
-        name=(customer.full_name or None),
-        company=None,
-        phone=(customer.phone or None),
         summary=summary,
         custom_fields=custom_fields,
         source_url=lead_source.get("page_url"),
     )
+
+
+def build_lead_payload(
+    response: LeadCaptureResponse,
+    config: Optional[LeadCaptureConfig],
+    customer: Optional[Customer],
+) -> LeadPayload:
+    """Auto path: fold one captured lead response into the push payload."""
+    return _payload_from_values(
+        response.field_values, customer, config, response.summary, response.id)
+
+
+def build_customer_payload(
+    customer: Customer,
+    attributes: Optional[dict] = None,
+    summary: Optional[str] = None,
+    config: Optional[LeadCaptureConfig] = None,
+) -> LeadPayload:
+    """Manual "Sync now": build from the person's captured attributes (the same
+    merged field_values the People drawer shows) so name/company/phone/custom
+    answers all sync — not just the sparse Customer columns. Integrator-supplied
+    meta_data is folded in as extra custom fields."""
+    payload = _payload_from_values(attributes, customer, config, summary, customer.id)
+    meta = customer.meta_data if isinstance(customer.meta_data, dict) else {}
+    for key, value in meta.items():
+        if value not in (None, "") and str(key) not in payload.custom_fields:
+            payload.custom_fields[str(key)] = str(value)
+    return payload
 
 
 def split_name(name: Optional[str]) -> Tuple[str, str]:

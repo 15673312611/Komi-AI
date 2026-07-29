@@ -160,7 +160,8 @@ async def sync_customer_to_crm(db: Session, customer: Customer) -> list:
     if not active:
         raise CrmManualSyncError("Connect a CRM in Settings → Integrations first.")
 
-    payload = build_customer_payload(customer, summary=_latest_summary(db, customer.id))
+    attributes, summary, config = _lead_capture_context(db, customer)
+    payload = build_customer_payload(customer, attributes=attributes, summary=summary, config=config)
     records, errors = [], []
     for connection in active:
         adapter = get_adapter(connection.provider)
@@ -206,17 +207,31 @@ def _record_customer_sync(db: Session, organization_id, customer_id, provider: s
     )
 
 
-def _latest_summary(db: Session, customer_id) -> Optional[str]:
-    """The most recent AI conversation summary for a person (the same one the
-    People drawer shows), so a manual push carries it as a CRM note."""
-    row = (
-        db.query(LeadCaptureResponse.summary)
-        .filter(LeadCaptureResponse.customer_id == customer_id,
-                LeadCaptureResponse.summary.isnot(None))
-        .order_by(LeadCaptureResponse.created_at.desc())
-        .first()
+def _lead_capture_context(db: Session, customer: Customer):
+    """Merge everything the person's lead captures produced — attributes
+    (latest value wins per key), the most recent AI summary, and the latest
+    response's agent config for custom-field labels — mirroring what the People
+    drawer shows, so a manual push sends the full picture, not just email.
+    Returns (attributes, summary, config)."""
+    responses = (
+        db.query(LeadCaptureResponse)
+        .filter(LeadCaptureResponse.customer_id == customer.id)
+        .order_by(LeadCaptureResponse.created_at)
+        .all()
     )
-    return row[0] if row else None
+    attributes: dict = {}
+    summary = None
+    latest_agent_id = None
+    for r in responses:
+        for key, value in (r.field_values or {}).items():
+            if value not in (None, ""):
+                attributes[key] = value
+        if r.summary:
+            summary = r.summary
+        if r.agent_id:
+            latest_agent_id = r.agent_id
+    config = _config_for_agent(db, latest_agent_id) if latest_agent_id else None
+    return attributes, summary, config
 
 
 def _config_for_agent(db: Session, agent_id) -> Optional[LeadCaptureConfig]:
