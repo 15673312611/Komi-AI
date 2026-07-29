@@ -15,7 +15,62 @@ from app.agents.chat_agent import (
     _lenient_json_load,
     ensure_nonempty_message,
     _EMPTY_TURN_FALLBACK,
+    _salvage_groq_answer_text,
+    recover_groq_no_capture,
 )
+
+
+class _FakeMsg:
+    def __init__(self, role, content):
+        self.role = role
+        self.content = content
+
+
+class _FakeResp:
+    def __init__(self, messages, content=""):
+        self.messages = messages
+        self.content = content
+
+
+class TestGroqNoCaptureRecovery:
+    """When Groq ends a turn without calling the `json` tool, its answer text
+    survives as the last assistant message even though response.content is
+    empty. Recover it rather than dropping the turn."""
+
+    def test_salvage_returns_last_assistant_text(self):
+        resp = _FakeResp([
+            _FakeMsg("user", "explain the product"),
+            _FakeMsg("assistant", ""),                 # the knowledge tool-call turn
+            _FakeMsg("tool", "search results..."),
+            _FakeMsg("assistant", "Charcoal, oat and black come in wide."),
+        ])
+        assert _salvage_groq_answer_text(resp) == "Charcoal, oat and black come in wide."
+
+    def test_salvage_skips_empty_and_non_assistant(self):
+        resp = _FakeResp([
+            _FakeMsg("user", "hi"),
+            _FakeMsg("assistant", "   "),
+        ])
+        assert _salvage_groq_answer_text(resp) is None
+
+    def test_recover_uses_salvaged_text(self):
+        resp = _FakeResp([_FakeMsg("assistant", "Here is the answer.")], content="")
+        rc = recover_groq_no_capture(resp)
+        assert rc.message == "Here is the answer."
+
+    def test_recover_parses_json_written_as_text(self):
+        # Model wrote the structured JSON as plain text instead of calling the tool.
+        resp = _FakeResp([_FakeMsg("assistant", '{"message": "Hello there", "end_chat": true}')])
+        rc = recover_groq_no_capture(resp)
+        assert rc.message == "Hello there"
+        assert rc.end_chat is True
+
+    def test_recover_no_text_yields_empty_for_fallback(self):
+        # Nothing to recover → empty message; ensure_nonempty_message adds the fallback.
+        resp = _FakeResp([_FakeMsg("assistant", "")], content="")
+        rc = recover_groq_no_capture(resp)
+        assert not (rc.message or "").strip()
+        assert ensure_nonempty_message(rc).message == _EMPTY_TURN_FALLBACK
 
 
 class TestEnsureNonemptyMessage:

@@ -169,6 +169,40 @@ def ensure_nonempty_message(response_content: ChatResponse) -> ChatResponse:
     return response_content
 
 
+def _salvage_groq_answer_text(response) -> str | None:
+    """The last assistant text produced during the run.
+
+    When Groq ends a turn without calling the `json` tool, its answer often
+    still exists as the final assistant message even though response.content is
+    empty (reasoning models leave `content` blank). Recover that text; skip the
+    tool-call turns (empty content) and never surface reasoning_content, which
+    is the model's internal chain-of-thought, not a visitor reply.
+    """
+    messages = getattr(response, 'messages', None) or []
+    for msg in reversed(messages):
+        if getattr(msg, 'role', None) != 'assistant':
+            continue
+        content = getattr(msg, 'content', None)
+        if isinstance(content, str) and content.strip():
+            return content.strip()
+    return None
+
+
+def recover_groq_no_capture(response) -> ChatResponse:
+    """Groq path only: the model finished without calling the `json` tool, so
+    the structured capture is empty. Recover the assistant's own answer text
+    (which parse_response_content misses because it reads only response.content).
+    Falls back to the normal parse — and then ensure_nonempty_message — when
+    there is genuinely nothing to recover. Never reached for providers using
+    agno's native structured output (OpenAI/Anthropic)."""
+    salvaged = _salvage_groq_answer_text(response)
+    if salvaged:
+        logger.warning("Groq ended without the `json` tool; recovered the assistant's answer text")
+        return parse_response_content(salvaged)
+    logger.warning("Groq ended without the `json` tool and produced no answer text")
+    return parse_response_content(response)
+
+
 # Add a function to remove URLs from message content
 def remove_urls_from_message(message: str) -> str:
     """Remove URLs from message text, but preserve markdown image URLs"""
@@ -878,6 +912,9 @@ Keep your responses concise and focused. Provide clear, actionable information i
                 # else parses agno's native structured output.
                 if self._use_groq_json_tool and self._groq_json_capture:
                     response_content = _build_chat_response_from_capture(self._groq_json_capture)
+                elif self._use_groq_json_tool:
+                    # Groq finished without the `json` tool — recover its answer text.
+                    response_content = recover_groq_no_capture(response)
                 else:
                     response_content = parse_response_content(response)
 
@@ -1207,6 +1244,9 @@ Keep your responses concise and focused. Provide clear, actionable information i
                     response_content = _salvaged_content
                 elif self._use_groq_json_tool and self._groq_json_capture:
                     response_content = _build_chat_response_from_capture(self._groq_json_capture)
+                elif self._use_groq_json_tool:
+                    # Groq finished without the `json` tool — recover its answer text.
+                    response_content = recover_groq_no_capture(response)
                 else:
                     response_content = parse_response_content(response)
 
