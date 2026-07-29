@@ -259,6 +259,25 @@ class TestManualSync:
         assert link and link[0].record_url == OK_RESULT.record_url
 
     @pytest.mark.asyncio
+    async def test_includes_latest_conversation_summary(
+            self, db, connection, synced_customer, test_organization, test_agent, monkeypatch):
+        db.add(LeadCaptureResponse(
+            organization_id=test_organization.id, agent_id=test_agent.id,
+            customer_id=synced_customer.id, field_values={"email": synced_customer.email},
+            summary="40-person fintech, wants a Pro demo", consent=True))
+        db.commit()
+
+        captured = {}
+
+        async def fake_push(self, tokens, payload):
+            captured["summary"] = payload.summary
+            return OK_RESULT
+        monkeypatch.setattr(HubSpotAdapter, "push_lead", fake_push)
+
+        await sync_customer_to_crm(db, synced_customer)
+        assert captured["summary"] == "40-person fintech, wants a Pro demo"
+
+    @pytest.mark.asyncio
     async def test_requires_email(self, db, connection, test_organization):
         # Anonymous visitors carry a @noemail.com placeholder, not a real address.
         anon = Customer(organization_id=test_organization.id,

@@ -92,6 +92,12 @@ class TestBuildCustomerPayload:
         assert payload.email == "x@y.com"
         assert payload.custom_fields == {}
         assert payload.source_url is None
+        assert payload.summary is None
+
+    def test_summary_passthrough(self):
+        customer = Customer(id=uuid.uuid4(), email="x@y.com")
+        payload = build_customer_payload(customer, summary="Wants a demo")
+        assert payload.summary == "Wants a demo"
 
 
 class TestSplitName:

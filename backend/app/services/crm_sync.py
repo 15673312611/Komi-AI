@@ -160,7 +160,7 @@ async def sync_customer_to_crm(db: Session, customer: Customer) -> list:
     if not active:
         raise CrmManualSyncError("Connect a CRM in Settings → Integrations first.")
 
-    payload = build_customer_payload(customer)
+    payload = build_customer_payload(customer, summary=_latest_summary(db, customer.id))
     records, errors = [], []
     for connection in active:
         adapter = get_adapter(connection.provider)
@@ -204,6 +204,19 @@ def _record_customer_sync(db: Session, organization_id, customer_id, provider: s
         secondary_id=result.secondary_id,
         record_url=result.record_url,
     )
+
+
+def _latest_summary(db: Session, customer_id) -> Optional[str]:
+    """The most recent AI conversation summary for a person (the same one the
+    People drawer shows), so a manual push carries it as a CRM note."""
+    row = (
+        db.query(LeadCaptureResponse.summary)
+        .filter(LeadCaptureResponse.customer_id == customer_id,
+                LeadCaptureResponse.summary.isnot(None))
+        .order_by(LeadCaptureResponse.created_at.desc())
+        .first()
+    )
+    return row[0] if row else None
 
 
 def _config_for_agent(db: Session, agent_id) -> Optional[LeadCaptureConfig]:

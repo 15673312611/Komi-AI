@@ -59,10 +59,11 @@ def build_lead_payload(
     )
 
 
-def build_customer_payload(customer: Customer) -> LeadPayload:
+def build_customer_payload(customer: Customer, summary: Optional[str] = None) -> LeadPayload:
     """Build a push payload straight from a person (manual "Sync now"), for a
     customer that may have no captured-lead row. meta_data holds integrator-set
-    attributes, surfaced as custom fields."""
+    attributes, surfaced as custom fields; summary is the AI conversation
+    summary (attached as a CRM note)."""
     meta = customer.meta_data if isinstance(customer.meta_data, dict) else {}
     custom_fields = {str(k): str(v) for k, v in meta.items() if v not in (None, "")}
     lead_source = customer.lead_source if isinstance(customer.lead_source, dict) else {}
@@ -72,7 +73,7 @@ def build_customer_payload(customer: Customer) -> LeadPayload:
         name=(customer.full_name or None),
         company=None,
         phone=(customer.phone or None),
-        summary=None,
+        summary=summary,
         custom_fields=custom_fields,
         source_url=lead_source.get("page_url"),
     )
