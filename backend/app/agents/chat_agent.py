@@ -135,6 +135,40 @@ def _build_chat_response_from_capture(capture: dict) -> ChatResponse:
         return ChatResponse(message=str(cleaned.get("message") or "").strip() or "No response generated")
 
 
+_EMPTY_TURN_FALLBACK = (
+    "I'm sorry, I didn't quite catch that. Could you rephrase or give me a bit more detail?"
+)
+
+
+def ensure_nonempty_message(response_content: ChatResponse) -> ChatResponse:
+    """Guarantee a user-facing message for a turn that produced none.
+
+    A model can end a turn with no message and no action — e.g. Groq stopping
+    after a tool call without emitting the final structured response. Downstream,
+    the widget only emits when message is non-empty (widget_chat), so an empty
+    turn is silently dropped and the typing indicator hangs forever. When there
+    is genuinely nothing to say and nothing to do, substitute a graceful reply
+    so the turn always completes. Turns that carry an action (transfer, end,
+    rating, ticket, contact/lead capture, shopify) are left untouched — their
+    own handlers own the message.
+    """
+    if (response_content.message or "").strip():
+        return response_content
+    has_action = any([
+        response_content.transfer_to_human,
+        response_content.end_chat,
+        response_content.request_rating,
+        response_content.create_ticket,
+        getattr(response_content, 'request_contact', False),
+        getattr(response_content, 'request_lead_capture', False),
+        getattr(response_content, 'shopify_output', None),
+    ])
+    if not has_action:
+        logger.warning("Empty model turn with no action — using fallback reply so the chat unblocks")
+        response_content.message = _EMPTY_TURN_FALLBACK
+    return response_content
+
+
 # Add a function to remove URLs from message content
 def remove_urls_from_message(message: str) -> str:
     """Remove URLs from message text, but preserve markdown image URLs"""
@@ -847,6 +881,7 @@ Keep your responses concise and focused. Provide clear, actionable information i
                 else:
                     response_content = parse_response_content(response)
 
+            response_content = ensure_nonempty_message(response_content)
             logger.debug(f"Response content: {response_content}")
 
             # Enrich Shopify response with full product data from Redis
@@ -1189,6 +1224,7 @@ Keep your responses concise and focused. Provide clear, actionable information i
                 # clear anything the LLM may have produced.
                 response_content.request_contact = False
 
+                response_content = ensure_nonempty_message(response_content)
                 logger.debug(f"Response content: {response_content}")
 
                 # Enrich Shopify response with full product data from Redis

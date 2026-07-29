@@ -13,7 +13,35 @@ from app.agents.chat_agent import (
     _salvage_groq_json_error,
     _build_chat_response_from_capture,
     _lenient_json_load,
+    ensure_nonempty_message,
+    _EMPTY_TURN_FALLBACK,
 )
+
+
+class TestEnsureNonemptyMessage:
+    """A model turn that yields no message and no action (e.g. Groq stopping
+    after a tool call) must not be dropped — widget_chat only emits when the
+    message is non-empty, so an empty turn would hang the typing indicator."""
+
+    def test_empty_no_action_gets_fallback(self):
+        assert ensure_nonempty_message(ChatResponse(message="")).message == _EMPTY_TURN_FALLBACK
+
+    def test_blank_whitespace_gets_fallback(self):
+        assert ensure_nonempty_message(ChatResponse(message="   ")).message == _EMPTY_TURN_FALLBACK
+
+    def test_real_message_untouched(self):
+        assert ensure_nonempty_message(ChatResponse(message="Here you go")).message == "Here you go"
+
+    def test_empty_with_action_left_alone(self):
+        # The action's own handler owns the message; don't clobber it.
+        for rc in (
+            ChatResponse(message="", transfer_to_human=True),
+            ChatResponse(message="", end_chat=True),
+            ChatResponse(message="", request_rating=True),
+            ChatResponse(message="", create_ticket=True),
+            ChatResponse(message="", request_lead_capture=True),
+        ):
+            assert ensure_nonempty_message(rc).message == ""
 
 
 def test_chat_response_tolerates_explicit_null_booleans():
