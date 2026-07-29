@@ -118,17 +118,26 @@ class TestSplitName:
 
 class TestBuildNoteBody:
 
-    def test_full_note(self):
+    def test_full_note_is_labelled_html(self):
         body = build_note_body(LeadPayload(
             lead_response_id=uuid.uuid4(), email="a@b.c",
             summary="40-person fintech, wants a demo",
             custom_fields={"Team size": "40"},
             source_url="https://acme.com/pricing",
         ))
-        assert "40-person fintech" in body
-        assert "Team size: 40" in body
-        assert "Captured on: https://acme.com/pricing" in body
+        # HTML with <br> so the summary is a distinct, labelled line (notes render as HTML).
+        assert "<br>" in body
+        assert "<b>AI summary:</b> 40-person fintech, wants a demo" in body
+        assert "<b>Team size:</b> 40" in body
+        assert 'Captured on: <a href="https://acme.com/pricing">' in body
 
     def test_minimal_note(self):
         body = build_note_body(LeadPayload(lead_response_id=uuid.uuid4(), email="a@b.c"))
-        assert body == "Lead captured by ChatterMate"
+        assert body == "<b>Lead captured by ChatterMate</b>"
+
+    def test_dynamic_values_are_escaped(self):
+        body = build_note_body(LeadPayload(
+            lead_response_id=uuid.uuid4(), email="a@b.c",
+            summary="wants <script>alert(1)</script> & more"))
+        assert "<script>" not in body
+        assert "&lt;script&gt;" in body and "&amp;" in body

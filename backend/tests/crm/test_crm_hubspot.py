@@ -135,7 +135,7 @@ class TestPushLead:
         assert props["lifecyclestage"] == "lead"
 
         note = json.loads(http["requests"][1].content)
-        assert "Team size: 40" in note["properties"]["hs_note_body"]
+        assert "<b>Team size:</b> 40" in note["properties"]["hs_note_body"]
         assert note["associations"][0]["to"]["id"] == "301"
         assert note["associations"][0]["types"][0]["associationTypeId"] == 202
 

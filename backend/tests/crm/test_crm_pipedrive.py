@@ -149,7 +149,7 @@ class TestPushLead:
         assert person["emails"][0]["value"] == "jane@acme.com"
         note = json.loads(http["requests"][4].content)
         assert note["lead_id"] == "lead-1"
-        assert "Team size: 40" in note["content"]
+        assert "<b>Team size:</b> 40" in note["content"]
 
     @pytest.mark.asyncio
     async def test_existing_person_gets_blanks_filled_only(self, adapter, http,

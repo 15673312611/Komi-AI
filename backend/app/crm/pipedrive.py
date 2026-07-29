@@ -198,7 +198,7 @@ class PipedriveAdapter(CrmAdapter):
                 f"{tokens.api_domain}/api/v1/notes",
                 headers=self._auth_header(tokens),
                 json={"lead_id": lead_id,
-                      "content": build_note_body(payload).replace("\n", "<br>")})
+                      "content": build_note_body(payload)})
             if response.status_code not in (200, 201):
                 logger.warning(f"Pipedrive note attach failed: HTTP {response.status_code}")
         except httpx.HTTPError as e:

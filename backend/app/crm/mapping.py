@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+import html
 from typing import Optional, Tuple
 
 from app.crm.base import LeadPayload
@@ -91,16 +92,21 @@ def split_name(name: Optional[str]) -> Tuple[str, str]:
 
 def build_note_body(payload: LeadPayload) -> str:
     """The context note attached to the CRM record: AI qualification summary,
-    custom answers, and where the lead came from. Shared across providers."""
-    lines = ["Lead captured by ChatterMate"]
+    custom answers, and where the lead came from. Shared across providers.
+
+    Returns HTML — both HubSpot (hs_note_body) and Pipedrive (note content)
+    render notes as HTML, so plain newlines would collapse and run the summary
+    into the header. Labelled lines keep the AI summary unmistakable; dynamic
+    values are escaped."""
+    lines = ["<b>Lead captured by ChatterMate</b>"]
     if payload.summary:
-        lines += ["", payload.summary]
-    if payload.custom_fields:
-        lines.append("")
-        lines += [f"{label}: {value}" for label, value in payload.custom_fields.items()]
+        lines.append(f"<b>AI summary:</b> {html.escape(payload.summary)}")
+    for label, value in (payload.custom_fields or {}).items():
+        lines.append(f"<b>{html.escape(str(label))}:</b> {html.escape(str(value))}")
     if payload.source_url:
-        lines += ["", f"Captured on: {payload.source_url}"]
-    return "\n".join(lines)
+        url = html.escape(payload.source_url)
+        lines.append(f'Captured on: <a href="{url}">{url}</a>')
+    return "<br>".join(lines)
 
 
 def _custom_field_labels(config: Optional[LeadCaptureConfig]) -> dict:
