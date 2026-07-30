@@ -42,8 +42,13 @@ class KnowledgeToAgentRepository:
             KnowledgeToAgent.organization_id == org_id
         ).all()
 
-    def create(self, knowledge_source: KnowledgeToAgent) -> KnowledgeToAgent:
-        """Create a new knowledge source"""
+    def create(self, knowledge_source: KnowledgeToAgent, commit: bool = True) -> KnowledgeToAgent:
+        """Create a new knowledge source.
+
+        Pass commit=False when the caller has more work that must land in the
+        same transaction — the vector-store filter update in particular, which
+        is what actually makes the link visible to retrieval.
+        """
         # Check if link already exists
         existing = self.get_by_ids(
             knowledge_source.knowledge_id,
@@ -54,8 +59,11 @@ class KnowledgeToAgentRepository:
             return existing
 
         self.db.add(knowledge_source)
-        self.db.commit()
-        self.db.refresh(knowledge_source)
+        if commit:
+            self.db.commit()
+            self.db.refresh(knowledge_source)
+        else:
+            self.db.flush()
         return knowledge_source
 
     def delete(self, source_id: int) -> bool:
@@ -69,12 +77,18 @@ class KnowledgeToAgentRepository:
             return True
         return False
 
-    def delete_by_ids(self, knowledge_id: int, agent_id: UUID) -> bool:
-        """Delete a link by knowledge and agent IDs"""
+    def delete_by_ids(self, knowledge_id: int, agent_id: UUID, commit: bool = True) -> bool:
+        """Delete a link by knowledge and agent IDs.
+
+        See create() for why a caller may want commit=False.
+        """
         result = self.db.query(KnowledgeToAgent)\
             .filter(
                 KnowledgeToAgent.knowledge_id == knowledge_id,
                 KnowledgeToAgent.agent_id == agent_id
         ).delete()
-        self.db.commit()
+        if commit:
+            self.db.commit()
+        else:
+            self.db.flush()
         return bool(result)

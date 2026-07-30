@@ -15,7 +15,7 @@ limitations under the License.
 */
 
 import { ref, type Ref } from 'vue'
-import { widgetEnv } from '../webclient/widget-env'
+import { widgetEnv, resolveWidgetUploadUrl } from '../webclient/widget-env'
 import { isAbsoluteUrl } from '../utils/avatars'
 
 // Allowed file types configuration (matching backend)
@@ -188,18 +188,9 @@ export function useWidgetFiles(token: Ref<string | null>, fileInputRef: Ref<HTML
   const getDownloadUrl = (fileUrl: string | undefined | null): string => {
     if (!fileUrl) return ''
     
-    // If it's a blob URL (temporary), return as-is
-    if (fileUrl.startsWith('blob:')) {
-      return fileUrl
-    }
-    
-    // If it's already a full URL, return as-is
-    if (fileUrl.startsWith('http://') || fileUrl.startsWith('https://')) {
-      return fileUrl
-    }
-
-    // For local storage paths, prepend the API URL
-    return `${widgetEnv.API_URL}${fileUrl}`
+    // Blob previews and absolute S3 URLs pass through; local paths already
+    // carry the /api/v1 prefix, so they resolve against the API origin.
+    return resolveWidgetUploadUrl(fileUrl)
   }
 
   // Generate preview URL for file display (similar to FileUpload.vue)
@@ -207,18 +198,7 @@ export function useWidgetFiles(token: Ref<string | null>, fileInputRef: Ref<HTML
     const urlToUse = file.file_url || file.url
     if (!urlToUse) return ''
     
-    // If it's a blob URL (temporary preview), return as-is
-    if (urlToUse.startsWith('blob:')) {
-      return urlToUse
-    }
-    
-    // If it's already a full URL (S3), return as-is
-    if (urlToUse.startsWith('http://') || urlToUse.startsWith('https://')) {
-      return urlToUse
-    }
-    
-    // For local storage, prepend API URL
-    return `${widgetEnv.API_URL}${urlToUse}`
+    return resolveWidgetUploadUrl(urlToUse)
   }
 
   // Handle file selection from input
@@ -472,7 +452,8 @@ export function useWidgetFiles(token: Ref<string | null>, fileInputRef: Ref<HTML
         headers['Authorization'] = `Bearer ${token.value}`
       }
       
-      const response = await fetch(`${widgetEnv.API_URL}/api/v1/files/upload/${filePath}`, {
+      // API_URL already ends in /api/v1 — do not repeat it here.
+      const response = await fetch(`${widgetEnv.API_URL}/files/upload/${filePath}`, {
         method: 'DELETE',
         headers: headers
       })

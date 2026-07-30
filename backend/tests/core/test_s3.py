@@ -28,7 +28,7 @@ from app.core.s3 import (
     strip_s3_signature,
     upload_file_to_s3,
 )
-from app.core.config import settings
+from app.core.config import Settings, settings
 from botocore.exceptions import ClientError
 
 
@@ -77,8 +77,6 @@ def test_get_s3_client_passes_none_when_credentials_unset():
 
 def test_aws_credentials_default_to_none_not_empty_string():
     """A blank/absent AWS_ACCESS_KEY_ID env var must land as None on settings."""
-    from app.core.config import Settings
-
     with patch.dict(os.environ, {'AWS_ACCESS_KEY_ID': '', 'AWS_SECRET_ACCESS_KEY': ''}):
         fresh = Settings()
         assert fresh.AWS_ACCESS_KEY_ID is None

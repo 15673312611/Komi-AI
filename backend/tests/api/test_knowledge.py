@@ -283,24 +283,133 @@ def test_link_knowledge_to_agent(client: TestClient, test_knowledge, test_agent)
     data = response.json()
     assert data["message"] == "Knowledge linked to agent successfully"
 
-def test_vector_store_updates_bind_json_values():
-    """The filters/meta_data JSON embeds the knowledge source title, which a user
-    controls. json.dumps does not escape single quotes, so interpolating it into a
-    '...'::jsonb literal is SQL injection (a title containing ' breaks out). These
-    values must be bound, never f-string-substituted.
+def _vector_backed(knowledge, db):
+    """Give a knowledge row the schema/table_name that triggers a vector sync."""
+    knowledge.schema = "ai"
+    knowledge.table_name = f"d_{uuid4()}"
+    db.commit()
 
-    Asserted on the source because the statements target the pgvector table, which
-    the SQLite test database does not have.
+
+def test_link_syncs_the_vector_store(client: TestClient, test_knowledge, test_agent, db):
+    """A link is only real once the agent id reaches the vector filters.
+
+    Retrieval matches on filters->'agent_id'; a link row alone is invisible to
+    the agent, so the sync is part of the contract, not a side effect.
+    """
+    _vector_backed(test_knowledge, db)
+
+    with patch("app.api.knowledge.knowledge_vector_links.add_agent") as add_agent:
+        response = client.post(
+            "/api/v1/knowledge/link",
+            params={"knowledge_id": test_knowledge.id, "agent_id": str(test_agent.id)},
+        )
+
+    assert response.status_code == 200
+    add_agent.assert_called_once()
+    assert add_agent.call_args.args[2] == test_agent.id
+
+
+def test_link_rolls_back_when_the_vector_sync_fails(
+    client: TestClient, test_knowledge, test_agent, db
+):
+    """Regression (prod, 2026-07-30): the link row was committed before the
+    vector update ran, so a failing update left the source shown as linked in
+    the dashboard while the agent could not retrieve any of it. The 500 the user
+    dismissed was the only hint. Both must land together or not at all.
+    """
+    _vector_backed(test_knowledge, db)
+
+    with patch(
+        "app.api.knowledge.knowledge_vector_links.add_agent",
+        side_effect=Exception("vector store unavailable"),
+    ):
+        response = client.post(
+            "/api/v1/knowledge/link",
+            params={"knowledge_id": test_knowledge.id, "agent_id": str(test_agent.id)},
+        )
+
+    assert response.status_code == 500
+    orphan = (
+        db.query(KnowledgeToAgent)
+        .filter(
+            KnowledgeToAgent.knowledge_id == test_knowledge.id,
+            KnowledgeToAgent.agent_id == test_agent.id,
+        )
+        .first()
+    )
+    assert orphan is None, "link row survived a failed vector sync"
+
+
+def test_unlink_syncs_the_vector_store(client: TestClient, test_knowledge, test_agent, db):
+    _vector_backed(test_knowledge, db)
+    db.add(KnowledgeToAgent(knowledge_id=test_knowledge.id, agent_id=test_agent.id))
+    db.commit()
+
+    with patch("app.api.knowledge.knowledge_vector_links.remove_agent") as remove_agent:
+        response = client.delete(
+            "/api/v1/knowledge/unlink",
+            params={"knowledge_id": test_knowledge.id, "agent_id": str(test_agent.id)},
+        )
+
+    assert response.status_code == 200
+    remove_agent.assert_called_once()
+    assert remove_agent.call_args.args[2] == test_agent.id
+
+
+def test_unlink_rolls_back_when_the_vector_sync_fails(
+    client: TestClient, test_knowledge, test_agent, db
+):
+    """The mirror risk: deleting the link row but leaving the agent id in the
+    vector filters keeps the source retrievable by an agent the dashboard shows
+    as unlinked — knowledge the user believes they revoked.
+    """
+    _vector_backed(test_knowledge, db)
+    db.add(KnowledgeToAgent(knowledge_id=test_knowledge.id, agent_id=test_agent.id))
+    db.commit()
+
+    with patch(
+        "app.api.knowledge.knowledge_vector_links.remove_agent",
+        side_effect=Exception("vector store unavailable"),
+    ):
+        response = client.delete(
+            "/api/v1/knowledge/unlink",
+            params={"knowledge_id": test_knowledge.id, "agent_id": str(test_agent.id)},
+        )
+
+    assert response.status_code == 500
+    db.expire_all()
+    still_linked = (
+        db.query(KnowledgeToAgent)
+        .filter(
+            KnowledgeToAgent.knowledge_id == test_knowledge.id,
+            KnowledgeToAgent.agent_id == test_agent.id,
+        )
+        .first()
+    )
+    assert still_linked is not None, "link row was deleted despite a failed vector sync"
+
+
+def test_vector_store_updates_are_delegated_not_hand_rolled():
+    """Neither handler may build vector-store SQL itself.
+
+    The previous version of this test grepped the handler source for the string
+    ':new_filters' — which was the *broken* construct: ':new_filters::jsonb' is
+    not parsed as a bind parameter at all, so the statement failed at the driver
+    with a syntax error while this test stayed green. Assert the structural
+    property instead; the binding and injection behaviour is covered for real in
+    tests/services/test_knowledge_vector_links.py.
     """
     import inspect
     from app.api.knowledge import link_knowledge_to_agent, unlink_knowledge_from_agent
 
     for handler in (link_knowledge_to_agent, unlink_knowledge_from_agent):
         source = inspect.getsource(handler)
-        assert "'{new_filters_json}'" not in source, f"{handler.__name__} interpolates filters JSON"
-        assert "'{agent_ids_json}'" not in source, f"{handler.__name__} interpolates agent_ids JSON"
-        assert ":new_filters" in source and ":agent_ids" in source, \
-            f"{handler.__name__} should bind the JSON values as parameters"
+        assert "text(" not in source, \
+            f"{handler.__name__} should delegate to knowledge_vector_links, not build SQL"
+        assert "db.execute(" not in source, \
+            f"{handler.__name__} should not run raw statements against the vector table"
+        assert "knowledge_vector_links." in source, \
+            f"{handler.__name__} should sync the vector store via knowledge_vector_links"
 
 
 def test_unlink_knowledge_from_agent(client: TestClient, test_knowledge, test_agent, db):
