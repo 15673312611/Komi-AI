@@ -19,7 +19,6 @@ from typing import List, Optional
 from app.models.user import User
 from app.core.auth import get_current_user, require_permissions
 from app.core.logger import get_logger
-import json
 import os
 import asyncio
 from pydantic import BaseModel, field_validator
@@ -36,6 +35,7 @@ from app.repositories.agent import AgentRepository
 from app.models.knowledge_queue import KnowledgeQueue, QueueStatus
 from app.repositories.knowledge_queue import KnowledgeQueueRepository
 from app.core.config import settings
+from app.services import knowledge_vector_links
 from sqlalchemy.orm import Session
 from app.core.s3 import upload_file_to_s3, get_s3_signed_url
 from app.core.file_validation import read_validated, safe_filename, PDF_MAGIC
@@ -647,81 +647,24 @@ async def link_knowledge_to_agent(
         if existing_link:
             raise HTTPException(status_code=400, detail="Knowledge is already linked to this agent")
 
-        # Create link
-        link = link_repo.create(KnowledgeToAgent(
-            knowledge_id=knowledge_id,
-            agent_id=agent_uuid
-        ))
-
-        # Update vector database filters and meta_data to include the new agent_id
-        if knowledge.table_name and knowledge.schema:
-            # Get existing records for this knowledge source
-            query = text(f"""
-                SELECT DISTINCT name, filters, meta_data 
-                FROM {knowledge.schema}."{knowledge.table_name}"
-                WHERE name = :source
-            """)
-
-            result = db.execute(query, {"source": knowledge.source}).first()
-
-            if result:
-                # Get current filters and update agent_ids
-                filters = result.filters if result.filters else {}
-                agent_ids = filters.get('agent_id', [])
-                if isinstance(agent_ids, list) and str(agent_uuid) not in agent_ids:
-                    agent_ids.append(str(agent_uuid))
-                else:
-                    agent_ids = [str(agent_uuid)]
-                
-                # Create new filters object with updated agent_ids
-                new_filters = {
-                    'name': knowledge.source,
-                    'org_id': str(knowledge.organization_id),
-                    'agent_id': agent_ids
-                }
-                
-                # Update meta_data for all records of this knowledge source
-                # We need to update each record individually since meta_data can vary per chunk
-                agent_ids_json = json.dumps(agent_ids)
-                new_filters_json = json.dumps(new_filters)
-                
-                # Bind every caller-influenced value as a query parameter. The JSON payloads
-                # embed knowledge.source (a user-supplied title); json.dumps does not escape
-                # single quotes, so interpolating them into a '...'::jsonb literal would allow
-                # SQL injection. Only the system-derived schema/table identifiers are inlined.
-                update_meta_query = text(f"""
-                    UPDATE {knowledge.schema}."{knowledge.table_name}"
-                    SET
-                        filters = :new_filters::jsonb,
-                        meta_data = CASE
-                            WHEN meta_data IS NULL THEN
-                                jsonb_build_object('agent_id', :agent_ids::jsonb)
-                            WHEN meta_data ? 'agent_id' THEN
-                                jsonb_set(
-                                    meta_data,
-                                    '{{agent_id}}',
-                                    :agent_ids::jsonb
-                                )
-                            ELSE
-                                meta_data || jsonb_build_object('agent_id', :agent_ids::jsonb)
-                        END
-                    WHERE name = :source
-                """)
-
-                db.execute(update_meta_query, {
-                    "source": knowledge.source,
-                    "new_filters": new_filters_json,
-                    "agent_ids": agent_ids_json
-                })
-                db.commit()
-                
-                logger.info(f"Updated vector database filters and meta_data for knowledge source: {knowledge.source}, added agent_id: {agent_uuid}")
+        # The link row and the vector-store filters must land together: retrieval
+        # matches on filters->'agent_id', so a committed link whose filter update
+        # failed shows as linked in the dashboard while the agent can retrieve
+        # nothing. commit=False defers to the single commit below.
+        link_repo.create(
+            KnowledgeToAgent(knowledge_id=knowledge_id, agent_id=agent_uuid),
+            commit=False,
+        )
+        knowledge_vector_links.add_agent(db, knowledge, agent_uuid)
+        db.commit()
 
         return {"message": "Knowledge linked to agent successfully"}
 
     except HTTPException:
+        db.rollback()
         raise
     except Exception as e:
+        db.rollback()
         logger.error(f"Error linking knowledge: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -754,75 +697,23 @@ async def unlink_knowledge_from_agent(
         if not agent or agent.organization_id != current_user.organization_id:
             raise HTTPException(status_code=404, detail="Agent not found")
 
-        # Delete the link
-        success = link_repo.delete_by_ids(knowledge_id, agent_uuid)
+        # Same transaction as the filter update below — an unlink that commits
+        # the row deletion but leaves the agent_id in the vector filters keeps
+        # the source retrievable by an agent the dashboard shows as unlinked.
+        success = link_repo.delete_by_ids(knowledge_id, agent_uuid, commit=False)
         if not success:
             raise HTTPException(status_code=404, detail="Link not found")
 
-        # Update vector database filters and meta_data to remove the agent_id
-        if knowledge.table_name and knowledge.schema:
-            # Get existing records for this knowledge source
-            query = text(f"""
-                SELECT DISTINCT name, filters 
-                FROM {knowledge.schema}."{knowledge.table_name}"
-                WHERE name = :source
-            """)
-
-            result = db.execute(query, {"source": knowledge.source}).first()
-
-            if result:
-                # Get current filters and remove agent_id
-                filters = result.filters if result.filters else {}
-                agent_ids = filters.get('agent_id', [])
-                if str(agent_uuid) in agent_ids:
-                    agent_ids.remove(str(agent_uuid))
-                
-                # Create new filters object with updated agent_ids
-                new_filters = {
-                    'name': knowledge.source,
-                    'org_id': str(knowledge.organization_id),
-                    'agent_id': agent_ids
-                }
-                
-                # Update both filters and meta_data in the vector database
-                agent_ids_json = json.dumps(agent_ids)
-                new_filters_json = json.dumps(new_filters)
-                
-                # Bind every caller-influenced value as a query parameter. The JSON payloads
-                # embed knowledge.source (a user-supplied title); json.dumps does not escape
-                # single quotes, so interpolating them into a '...'::jsonb literal would allow
-                # SQL injection. Only the system-derived schema/table identifiers are inlined.
-                update_query = text(f"""
-                    UPDATE {knowledge.schema}."{knowledge.table_name}"
-                    SET
-                        filters = :new_filters::jsonb,
-                        meta_data = CASE
-                            WHEN meta_data IS NULL THEN
-                                NULL
-                            WHEN meta_data ? 'agent_id' THEN
-                                jsonb_set(
-                                    meta_data,
-                                    '{{agent_id}}',
-                                    :agent_ids::jsonb
-                                )
-                            ELSE
-                                meta_data
-                        END
-                    WHERE name = :source
-                """)
-
-                db.execute(update_query, {
-                    "source": knowledge.source,
-                    "new_filters": new_filters_json,
-                    "agent_ids": agent_ids_json
-                })
-                db.commit()
+        knowledge_vector_links.remove_agent(db, knowledge, agent_uuid)
+        db.commit()
 
         return {"message": "Knowledge unlinked from agent successfully"}
 
     except HTTPException:
+        db.rollback()
         raise
     except Exception as e:
+        db.rollback()
         logger.error(f"Error unlinking knowledge: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 

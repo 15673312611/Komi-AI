@@ -75,14 +75,32 @@ registerRoute(
 
 // ---- Firebase Cloud Messaging (background push) ----
 
+// Pull in the same runtime config the page uses. Published images are built
+// once and configured per deployment at container start, so import.meta.env is
+// undefined there — without this, self-hosted installs get no background push.
+// config.js assigns to `self`, which exists in worker scope; importScripts is
+// synchronous and bypasses the SW's own fetch handling.
+try {
+  self.importScripts('/config.js')
+} catch {
+  // Absent in `vite dev` (config.js is served but not always present) and on
+  // any deployment that bakes its config at build time — the env fallbacks
+  // below cover both.
+}
+
+const runtimeConfig = (self as unknown as { APP_CONFIG?: Record<string, string> }).APP_CONFIG ?? {}
+
 const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-  appId: import.meta.env.VITE_FIREBASE_APP_ID,
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID,
+  apiKey: runtimeConfig.FIREBASE_API_KEY || import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: runtimeConfig.FIREBASE_AUTH_DOMAIN || import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: runtimeConfig.FIREBASE_PROJECT_ID || import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  messagingSenderId:
+    runtimeConfig.FIREBASE_MESSAGING_SENDER_ID || import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: runtimeConfig.FIREBASE_APP_ID || import.meta.env.VITE_FIREBASE_APP_ID,
+  storageBucket:
+    runtimeConfig.FIREBASE_STORAGE_BUCKET || import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  measurementId:
+    runtimeConfig.FIREBASE_MEASUREMENT_ID || import.meta.env.VITE_FIREBASE_MEASUREMENT_ID,
 }
 
 if (firebaseConfig.apiKey) {

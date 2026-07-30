@@ -34,6 +34,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { updateUserStatus } from '@/services/users'
 import { useEnterpriseFeatures } from '@/composables/useEnterpriseFeatures'
 import { isAbsoluteUrl } from '@/utils/avatars'
+import { resolveUploadUrl } from '@/config/api'
 import { useBreakpoint } from '@/composables/useBreakpoint'
 
 const props = defineProps<{
@@ -95,9 +96,10 @@ const userAvatarSrc = computed(() => {
     if (isAbsoluteUrl(currentUser.value.profile_pic)) {
       return currentUser.value.profile_pic
     }
-    // For local storage, prepend the API URL and add timestamp
+    // Local storage: resolve against the runtime API origin, cache-busted so a
+    // freshly uploaded picture replaces the one the browser already cached.
     const timestamp = new Date().getTime()
-    return `${import.meta.env.VITE_API_URL}${currentUser.value.profile_pic}?t=${timestamp}`
+    return `${resolveUploadUrl(currentUser.value.profile_pic)}?t=${timestamp}`
   }
   return userAvatar
 })

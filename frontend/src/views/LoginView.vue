@@ -22,6 +22,7 @@ import { permissionChecks } from '@/utils/permissions'
 import { useEnterpriseFeatures } from '@/composables/useEnterpriseFeatures'
 import { useForgotPassword } from '@/composables/useForgotPassword'
 import InstallPrompt from '@/components/pwa/InstallPrompt.vue'
+import { getApiUrl } from '@/config/api'
 import type { AxiosError } from 'axios'
 interface ErrorResponse {
     detail: string
@@ -192,7 +193,7 @@ const handleLogin = async () => {
                 }
                 
                 // Redirect to the backend Shopify auth endpoint
-                window.location.href = `${import.meta.env.VITE_API_URL}/shopify/auth?${queryParams.toString()}`
+                window.location.href = `${getApiUrl()}/shopify/auth?${queryParams.toString()}`
                 return // Don't do the normal navigation
             } catch (e) {
                 console.error('Failed to parse shopifyRedirect data:', e)
@@ -210,7 +211,7 @@ const handleLogin = async () => {
                 return
             }
             // Otherwise treat as API redirect (legacy behavior)
-            window.location.href = `${import.meta.env.VITE_API_URL}${redirectPath}`
+            window.location.href = `${getApiUrl()}${redirectPath}`
             return
         }
 

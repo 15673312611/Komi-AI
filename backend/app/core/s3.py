@@ -91,6 +91,10 @@ def get_s3_client():
     config and costs ~1.3ms, which dwarfs the ~0.05ms presign it is usually
     built for. boto3 clients are thread-safe for method calls. Call
     get_s3_client.cache_clear() if settings change at runtime (tests).
+
+    The credential settings are None (never "") when unset, which is what makes
+    boto3 fall through to its default chain and pick up an IAM instance or
+    container role. See the note on AWS_ACCESS_KEY_ID in core/config.py.
     """
     return boto3.client(
         's3',

@@ -16,7 +16,7 @@ limitations under the License.
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { widgetEnv } from '../../webclient/widget-env'
+import { resolveWidgetUploadUrl } from '../../webclient/widget-env'
 
 // Security: Allowed file types (matching backend)
 const ALLOWED_FILE_TYPES = new Set([
@@ -399,18 +399,10 @@ const getPreviewUrl = (file: {url: string, file_url: string}): string => {
     return file.file_url
   }
   
-  // If file_url is already a full URL (S3), return as-is
-  if (file.file_url.startsWith('http://') || file.file_url.startsWith('https://')) {
-    return file.file_url
-  }
-  
-  // If it's already an API path with /api/v1/files/download, return as-is
-  if (file.file_url.startsWith('/api/v1/files/download/')) {
-    return file.file_url
-  }
-  
-  // For local storage, prepend API URL
-  return `${widgetEnv.API_URL}${file.file_url}`
+  // Absolute S3 URLs pass through; local paths (including
+  // /api/v1/files/download/...) already carry the prefix, so they resolve
+  // against the API origin rather than being concatenated onto the API base.
+  return resolveWidgetUploadUrl(file.file_url)
 }
 
 defineExpose({

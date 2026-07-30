@@ -17,7 +17,7 @@ limitations under the License.
 import { ref, type Ref } from 'vue'
 import type { ChatDetail } from '@/types/chat'
 import FileUpload from '@/components/common/FileUpload.vue'
-import { isAbsoluteUrl } from '@/utils/avatars'
+import { getApiUrl, resolveUploadUrl } from '@/config/api'
 
 export function useConversationFiles(
   currentChat: Ref<ChatDetail>,
@@ -157,40 +157,24 @@ export function useConversationFiles(
       return fileUrl
     }
     
+    // Already a full download path (carries its own /api/v1) — resolve against
+    // the API origin so the prefix isn't emitted twice.
+    if (fileUrl.startsWith('/api/v1/files/download/')) {
+      return resolveUploadUrl(fileUrl)
+    }
+
     // For local storage, construct the download URL
     // fileUrl format: "/uploads/chat_attachments/org-id/filename.jpg"
-    const apiUrl = import.meta.env.VITE_API_URL || ''
-    
-    // If fileUrl already starts with /api/v1/files/download, use as-is
-    if (fileUrl.startsWith('/api/v1/files/download/')) {
-      return `${apiUrl}${fileUrl}`
-    }
-    
-    // Remove /uploads/ prefix if present and construct download URL
-    const cleanUrl = fileUrl.startsWith('/uploads/') 
-                     ? fileUrl.replace('/uploads/', '') 
+    const cleanUrl = fileUrl.startsWith('/uploads/')
+                     ? fileUrl.replace('/uploads/', '')
                      : fileUrl.replace('/', '')
-    return `${apiUrl}/files/download/${cleanUrl}`
+    return `${getApiUrl()}/files/download/${cleanUrl}`
   }
 
-  // Generate image URL for attachments
+  // Generate image URL for attachments. Blob previews and absolute S3 URLs pass
+  // through; local paths already carry /api/v1 and resolve against the origin.
   const getImageUrl = (fileUrl: string | undefined | null): string => {
-    if (!fileUrl) return ''
-    
-    // If it's a blob URL (temporary), return as-is
-    if (fileUrl.startsWith('blob:')) {
-      return fileUrl
-    }
-    
-    // If it's already a full URL (AWS S3), return as-is
-    if (isAbsoluteUrl(fileUrl)) {
-      return fileUrl
-    }
-    
-    // Remove /api/v1 prefix if present and construct full URL
-    const cleanUrl = fileUrl.replace('/api/v1', '')
-    const apiUrl = import.meta.env.VITE_API_URL || ''
-    return `${apiUrl}${cleanUrl}`
+    return resolveUploadUrl(fileUrl)
   }
 
   return {

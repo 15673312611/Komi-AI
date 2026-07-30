@@ -17,7 +17,7 @@ limitations under the License.
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch, nextTick } from 'vue'
 import type { AgentCustomization } from '@/types/agent'
-import { isAbsoluteUrl } from '@/utils/avatars'
+import { resolveUploadUrl } from '@/config/api'
 import { orbSvgDataUri, resolveOrbStyle } from '@/utils/orb'
 import { themeCssVars } from '@/webclient/widget-theme'
 import '@/webclient/widget-surface.css'
@@ -338,14 +338,10 @@ const photoUrl = computed(() => {
         )
     }
     
-    // Absolute S3/CDN URL — use it directly. The API signs photo_url itself, so
-    // there is no separate signed field to prefer.
-    if (isAbsoluteUrl(props.customization.photo_url)) {
-        return props.customization.photo_url
-    }
-    
-    // For local storage, prepend the API URL
-    return import.meta.env.VITE_API_URL + props.customization.photo_url
+    // Absolute S3/CDN URLs pass through — the API signs photo_url itself, so
+    // there is no separate signed field to prefer. Local paths are resolved
+    // against the runtime API origin.
+    return resolveUploadUrl(props.customization.photo_url)
 })
 
 // Function to format message content
