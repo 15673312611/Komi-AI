@@ -15,6 +15,7 @@ limitations under the License.
 """
 
 import re
+from dataclasses import dataclass
 from typing import Dict, List, Tuple, Optional
 from enum import Enum
 from app.core.logger import get_logger
@@ -124,111 +125,241 @@ class PIIDetector:
         )
 
 
+# --- Injection pattern sets -------------------------------------------------
+#
+# Two tiers. A strong (Tier A) pattern is high-precision evidence of a prompt
+# injection and scores 1.0 on its own; weak (Tier B) signals are phrasings that
+# only matter in combination and score 0.25 each. When the message contains
+# technical content (code, logs, shell commands) the weak subtotal is halved —
+# support chats are full of pasted snippets that echo these phrasings.
+#
+# Deliberately NOT detected — each is normal in a support conversation, and
+# removing them is a contract backed one-for-one by tests
+# (tests/utils/test_guardrails_jailbreak.py):
+#   "sudo"                         self-hosting / CLI help
+#   "debug mode", "developer mode" real product features (bare mention)
+#   "theoretically"                ordinary hedging
+#   bare "DAN"                     the first name Dan (the old pattern matched
+#                                  it because text was lowercased first)
+#   "ignore/disregard my previous message|ticket|email"
+#                                  an override needs an instruction NOUN
+#   bare "what are your instructions"
+#                                  "...for returning an item?" is a product
+#                                  question; disclosure is the prompt policy's job
+
+# Literal chat-template tokens. A human visitor never types these; they only
+# appear when someone is smuggling a fake system/assistant turn.
+_TEMPLATE_MARKER_PATTERNS = [
+    re.compile(r'<\|im_(?:start|end)\|>'),
+    re.compile(r'<\|eot_id\|>'),
+    re.compile(r'<\|(?:system|user|assistant|endoftext)\|>'),
+    re.compile(r'\[/?INST\]'),
+    re.compile(r'<<SYS>>'),
+    re.compile(r'\bBEGIN SYSTEM PROMPT\b', re.IGNORECASE),
+    re.compile(r'(?m)^\s*\[SYSTEM\]\s*:?\s*$', re.IGNORECASE),
+]
+
+# "ignore the previous..." only counts with an instruction noun in range:
+# "ignore my previous message" is normal traffic, "ignore your previous
+# instructions" is not.
+_OVERRIDE_PATTERNS = [
+    re.compile(
+        r'\b(?:ignore|disregard|forget|override|bypass)\b[^.\n]{0,40}?'
+        r'\b(?:previous|prior|above|earlier|initial|original|system|all)\b[^.\n]{0,20}?'
+        r'\b(?:instructions?|rules?|prompts?|directives?|guidelines?)\b',
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r'\byour\s+(?:new|real|actual|true|updated)\s+'
+        r'(?:instructions?|rules?|system\s+prompt)\s+(?:are|is)\b',
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r'\bthis\s+(?:overrides|supersedes|replaces|cancels)\s+'
+        r'(?:all|any|everything|your|the)\b',
+        re.IGNORECASE,
+    ),
+]
+
+_EXFIL_PATTERNS = [
+    re.compile(
+        r'\b(?:reveal|repeat|print|output|show|display|dump|recite|reproduce)\b'
+        r'[^.\n]{0,40}?'
+        r'\b(?:system\s+(?:prompt|message)|initial\s+(?:prompt|instructions)'
+        r'|original\s+instructions|instructions\s+verbatim|prompt\s+verbatim'
+        r'|everything\s+above)\b',
+        re.IGNORECASE,
+    ),
+]
+
+_PERSONA_PATTERNS = [
+    re.compile(
+        r'\byou\s+are\s+now\s+(?:an?\s+)?'
+        r'(?:dan\b|unrestricted|unfiltered|jailbroken|uncensored'
+        r'|different\s+(?:assistant|ai|bot|model|persona))',
+        re.IGNORECASE,
+    ),
+    re.compile(r'\bdo\s+anything\s+now\b', re.IGNORECASE),
+    # Case-sensitive on purpose: "DAN mode" is a jailbreak, "dan mode..." in
+    # lowercase prose is far more likely to be about a person called Dan.
+    re.compile(r'\bDAN\s+(?:mode|prompt|jailbreak)\b'),
+    re.compile(
+        r'\b(?:developer|dev|god|admin(?:istrator)?|unrestricted|jailbreak)\s+'
+        r'mode\s+(?:on|enabled|activated|engaged)\b',
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r'\bpretend\s+(?:you\s+are|to\s+be)\s+(?:an?\s+)?'
+        r'(?:unrestricted|uncensored|jailbroken|evil)',
+        re.IGNORECASE,
+    ),
+]
+
+# Strong patterns grouped under the stable rule ids used by guardrail events.
+_STRONG_PATTERNS = {
+    "injection.frame_tokens": _TEMPLATE_MARKER_PATTERNS,
+    "injection.override_instructions": _OVERRIDE_PATTERNS,
+    "injection.prompt_exfil": _EXFIL_PATTERNS,
+    "injection.role_hijack": _PERSONA_PATTERNS,
+}
+
+_WEAK_SIGNAL_PATTERNS = [
+    re.compile(r'\bact\s+(?:as|like)\s+an?\b', re.IGNORECASE),
+    re.compile(r'\bfrom\s+now\s+on\b', re.IGNORECASE),
+    re.compile(r'\brole[- ]?play\b', re.IGNORECASE),
+    re.compile(r'\bpretend\s+(?:you\s+are|to\s+be)\b', re.IGNORECASE),
+    re.compile(r'\bhypothetically\b', re.IGNORECASE),
+    re.compile(r'\bfor\s+educational\s+purposes\b', re.IGNORECASE),
+    re.compile(
+        r'\bin\s+an?\s+(?:fictional|hypothetical|alternate)\s+'
+        r'(?:scenario|world|universe)\b',
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r'\bno\s+(?:restrictions?|limitations?|rules|boundaries|filters?)\b',
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r'\bwithout\s+(?:any\s+)?(?:restrictions?|limits?|limitations?|filters?)\b',
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r'\byou\s+(?:must|should|have\s+to)\s+(?:obey|follow|comply)\b',
+        re.IGNORECASE,
+    ),
+    re.compile(r'\bunrestricted\s+mode\b', re.IGNORECASE),
+    re.compile(
+        r'\bwhat\s+(?:is|are)\s+your\s+(?:instructions|rules|system\s+prompt)\b',
+        re.IGNORECASE,
+    ),
+    re.compile(r'\btotally\s+different\s+persona\b', re.IGNORECASE),
+]
+
+# Markers of pasted technical content (code, logs, shell). Their presence
+# halves the weak-signal score — see the suppressor note above.
+_TECHNICAL_CONTEXT_PATTERNS = [
+    re.compile(r'```'),
+    re.compile(r'Traceback \(most recent call last\)'),
+    re.compile(r'File "[^"]+", line \d+'),
+    re.compile(r'(?m)^\s*(?:\$ |sudo |npm |pip |docker |curl |git )'),
+    re.compile(r'\{"'),
+    re.compile(r'\b(?:GET|POST|PUT|PATCH|DELETE)\s+/\S+'),
+    re.compile(r'\bat\s+\w+\('),
+    re.compile(r'\S+\.(?:log|ya?ml|env|conf)\b'),
+]
+
+_WEAK_SIGNAL_WEIGHT = 0.25
+_TECHNICAL_SUPPRESSION = 0.5
+
+
+@dataclass(frozen=True)
+class InjectionResult:
+    """Strong-signal (Tier A) injection evidence for the global guardrail layer."""
+
+    rule_ids: Tuple[str, ...]
+    matched: Tuple[str, ...]  # short matched tokens only — safe for plain-JSON storage
+
+    @property
+    def triggered(self) -> bool:
+        return bool(self.rule_ids)
+
+    @property
+    def has_template_marker(self) -> bool:
+        return "injection.frame_tokens" in self.rule_ids
+
+
+def detect_injection(text: str) -> InjectionResult:
+    """Scan text for strong injection signals only (no weak/contextual scoring).
+
+    This is the pre-LLM entry point used by the global chat guardrail: weak
+    signals are advisory and never block outside an explicitly configured
+    workflow guardrails node, so they are not reported here.
+    """
+    rule_ids: List[str] = []
+    matched: List[str] = []
+    for rule_id, patterns in _STRONG_PATTERNS.items():
+        for pattern in patterns:
+            match = pattern.search(text or "")
+            if match:
+                if rule_id not in rule_ids:
+                    rule_ids.append(rule_id)
+                matched.append(match.group()[:60])
+                break  # one hit per rule id is enough
+    return InjectionResult(rule_ids=tuple(rule_ids), matched=tuple(matched))
+
+
 class JailbreakDetector:
     """
-    Detector for jailbreak attempts
-    Identifies common jailbreak patterns and prompt injection attempts
+    Detector for jailbreak / prompt-injection attempts.
+
+    Scoring counts DISTINCT patterns (repeating one phrase scores once):
+    every strong hit scores 1.0, weak signals 0.25 each — halved when the
+    message contains technical content. `passed = score < sensitivity`, so at
+    the default 0.7 a single strong hit or three clean weak signals fail.
     """
-    
-    # Common jailbreak patterns
-    JAILBREAK_PATTERNS = [
-        # Ignore previous instructions
-        r'ignore (previous|all|the above|your) (instructions|rules|prompts?)',
-        r'disregard (previous|all|the above|your) (instructions|rules|prompts?)',
-        r'forget (previous|all|the above|your) (instructions|rules|prompts?)',
-        
-        # Role-playing attempts
-        r'pretend (you are|to be|you\'re)',
-        r'act (as|like) (a|an)',
-        r'you are now (a|an)',
-        r'from now on',
-        
-        # System prompts manipulation
-        r'repeat (your|the) (system )?prompt',
-        r'what (is|are) your (instructions|rules|system prompt)',
-        r'show me your (instructions|rules|system prompt)',
-        
-        # DAN (Do Anything Now) variants
-        r'\bDAN\b',
-        r'do anything now',
-        
-        # Instruction injections
-        r'\[SYSTEM\]',
-        r'\[INST\]',
-        r'<\|im_start\|>',
-        r'<\|im_end\|>',
-        
-        # Bypassing safety
-        r'without (any )?restrictions?',
-        r'(bypass|override|disable) (safety|ethics|rules|guidelines)',
-        r'no (restrictions?|limitations?|rules|boundaries)',
-        
-        # Direct manipulation
-        r'you (must|should|have to) (obey|follow|comply)',
-        r'this (overrides|supersedes) (all|any|your)',
-    ]
-    
-    # Suspicious phrases that might indicate jailbreak
-    SUSPICIOUS_PHRASES = [
-        "hypothetically",
-        "theoretically",
-        "for educational purposes",
-        "in a fictional scenario",
-        "in an alternate universe",
-        "sudo",
-        "administrator mode",
-        "developer mode",
-        "debug mode",
-        "unrestricted mode",
-    ]
-    
+
     @staticmethod
     def detect(text: str, sensitivity: float = 0.7) -> GuardrailResult:
         """
         Detect jailbreak attempts in text
-        
+
         Args:
             text: Text to scan for jailbreak attempts
             sensitivity: Detection sensitivity (0.0 to 1.0, default 0.7)
-            
+
         Returns:
             GuardrailResult with detection results
         """
         violations = []
-        text_lower = text.lower()
-        
-        # Check for explicit jailbreak patterns
-        pattern_matches = 0
-        for pattern in JailbreakDetector.JAILBREAK_PATTERNS:
-            matches = re.finditer(pattern, text_lower, re.IGNORECASE)
-            for match in matches:
-                pattern_matches += 1
-                violations.append(f"Jailbreak pattern: '{match.group()}'")
-        
-        # Check for suspicious phrases
-        suspicious_matches = 0
-        for phrase in JailbreakDetector.SUSPICIOUS_PHRASES:
-            if phrase.lower() in text_lower:
-                suspicious_matches += 1
-                if suspicious_matches > 2:  # Multiple suspicious phrases increase confidence
-                    violations.append(f"Suspicious phrase: '{phrase}'")
-        
-        # Calculate confidence score
-        # Pattern matches are weighted more heavily than suspicious phrases
-        pattern_score = min(pattern_matches * 0.4, 1.0)
-        suspicious_score = min(suspicious_matches * 0.15, 0.3)
-        confidence = min(pattern_score + suspicious_score, 1.0)
-        
-        # Determine if it passes based on sensitivity threshold
+
+        strong = detect_injection(text)
+        for rule_id, token in zip(strong.rule_ids, strong.matched):
+            violations.append(f"Jailbreak pattern [{rule_id}]: '{token}'")
+
+        weak_hits = 0
+        for pattern in _WEAK_SIGNAL_PATTERNS:
+            match = pattern.search(text or "")
+            if match:
+                weak_hits += 1
+                violations.append(f"Suspicious phrase: '{match.group()[:60]}'")
+
+        suppression = 1.0
+        if weak_hits and any(p.search(text or "") for p in _TECHNICAL_CONTEXT_PATTERNS):
+            suppression = _TECHNICAL_SUPPRESSION
+
+        confidence = min(
+            1.0,
+            len(strong.rule_ids) + weak_hits * _WEAK_SIGNAL_WEIGHT * suppression,
+        )
         passed = confidence < sensitivity
-        
+
         logger.info(
             f"Jailbreak Detection - Passed: {passed}, "
             f"Confidence: {confidence:.2f}, "
-            f"Pattern Matches: {pattern_matches}, "
-            f"Suspicious Phrases: {suspicious_matches}"
+            f"Strong Rules: {list(strong.rule_ids)}, "
+            f"Weak Signals: {weak_hits}"
         )
-        
+
         return GuardrailResult(
             passed=passed,
             guardrail_type=GuardrailType.JAILBREAK,

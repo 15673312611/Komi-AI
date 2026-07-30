@@ -65,6 +65,7 @@ from app.models.crm import (
     CrmProvider, CrmConnectionStatus, CrmSyncJobStatus,
 )
 from app.models.notification_settings import UserNotificationSettings
+from app.models.guardrail_event import GuardrailEvent
 
 
 
@@ -141,4 +142,5 @@ __all__ = [
     "CrmProvider",
     "CrmConnectionStatus",
     "CrmSyncJobStatus",
+    "GuardrailEvent",
 ]

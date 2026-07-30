@@ -24,8 +24,14 @@ from typing import List, Optional, Tuple
 
 from sqlalchemy.orm import Session
 
+from app.agents.guardrail_policy import (
+    GuardrailContext,
+    INJECTION_CLAUSE,
+    visitor_data_block,
+)
 from app.core.help_center_host import normalize_host, slug_for_host  # noqa: F401 — canonical host helpers re-exported for the public app
 from app.core.logger import get_logger
+from app.utils.guardrail_runtime import check_inbound
 from app.database import SessionLocal
 from app.models.faq import FAQ
 from app.models.help_center import HelpCenterSettings
@@ -55,7 +61,9 @@ Answer ONLY from what the tools return. When they surface a relevant answer, rep
 in 1-4 short sentences of plain text (no markdown), in a friendly second-person
 voice. If, after genuinely searching, you find nothing relevant, briefly say you
 couldn't find that in the help center and suggest starting a chat or contacting
-support. Never invent facts, prices, policies, or URLs."""
+support. Never invent facts, prices, policies, or URLs.
+
+""" + INJECTION_CLAUSE
 
 
 def resolve_help_center(
@@ -162,6 +170,15 @@ async def answer_question(organization_id, agent_id, question: str) -> Optional[
 
     question = question.strip()[:MAX_QUESTION_CHARS]
 
+    # Pre-LLM guardrail on the only unauthenticated LLM entry point: a
+    # blocked question never reaches the semaphore, the DB pool, or the model.
+    # None renders as the standard "couldn't find that" fallback.
+    guardrail_ctx = GuardrailContext(
+        org_id=str(organization_id), agent_id=str(agent_id) if agent_id else None
+    )
+    if check_inbound(question, ctx=guardrail_ctx, surface="help_center").block:
+        return None
+
     async with _ask_concurrency:
         with SessionLocal() as db:
             config = AIConfigRepository(db).get_active_config(organization_id)
@@ -191,7 +208,10 @@ async def answer_question(organization_id, agent_id, question: str) -> Optional[
                 instructions=_ASK_INSTRUCTIONS,
                 markdown=False,
             )
-            response = agent.run(message=f"Visitor's question: {question}", stream=False)
+            response = agent.run(
+                message=visitor_data_block("VISITOR QUESTION", question),
+                stream=False,
+            )
             content = getattr(response, "content", None)
             return content.strip() if isinstance(content, str) and content.strip() else None
 

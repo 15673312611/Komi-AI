@@ -122,6 +122,11 @@ class Agent(Base):
     # Per-agent switch for native AI ticketing (org plan must also allow it).
     # Defaults on so paid orgs get ticketing on every agent out of the box.
     ticketing_enabled = Column(Boolean, default=True, nullable=False, server_default="true")
+    # Optional one-line business remit for the platform guardrail's topic-scope
+    # line (see app.agents.guardrail_policy). Null -> derived from the agent
+    # description or the organization name/domain, so it works with zero config.
+    # Only the scope DESCRIPTION is tenant-editable; the enforcement text is code.
+    topic_scope = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     # Relationships

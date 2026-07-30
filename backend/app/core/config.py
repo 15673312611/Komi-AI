@@ -154,6 +154,26 @@ class Settings(BaseSettings):
     KNOWLEDGE_SUMMARY_API_KEY: str = os.getenv("KNOWLEDGE_SUMMARY_API_KEY", "")
     KNOWLEDGE_SUMMARY_MAX_TOKENS: int = int(os.getenv("KNOWLEDGE_SUMMARY_MAX_TOKENS", "4000"))
 
+    # Global chat guardrails (platform-owned; deliberately NOT tenant-configurable).
+    # GUARDRAIL_POLICY_ENABLED       -> prepend the code-owned policy block to every
+    #                                   chat agent system prompt.
+    # GUARDRAIL_INBOUND_ACTION       -> pre-LLM injection check on visitor messages:
+    #                                   "off" (never block), "template_only" (block
+    #                                   only literal chat-template tokens a human
+    #                                   never types), "strict" (block every strong
+    #                                   injection signal). Non-blocking hits are
+    #                                   always still counted.
+    # GUARDRAIL_OUTPUT_CHECK_ENABLED -> scan replies for leaked policy text and
+    #                                   count scope refusals.
+    # GUARDRAIL_EVENTS_ENABLED       -> persist trigger events to guardrail_events.
+    # GUARDRAIL_STORE_EXCERPT        -> store an encrypted 300-char excerpt of the
+    #                                   offending text on each event for review.
+    GUARDRAIL_POLICY_ENABLED: bool = os.getenv("GUARDRAIL_POLICY_ENABLED", "true").lower() == "true"
+    GUARDRAIL_INBOUND_ACTION: str = os.getenv("GUARDRAIL_INBOUND_ACTION", "template_only")
+    GUARDRAIL_OUTPUT_CHECK_ENABLED: bool = os.getenv("GUARDRAIL_OUTPUT_CHECK_ENABLED", "true").lower() == "true"
+    GUARDRAIL_EVENTS_ENABLED: bool = os.getenv("GUARDRAIL_EVENTS_ENABLED", "true").lower() == "true"
+    GUARDRAIL_STORE_EXCERPT: bool = os.getenv("GUARDRAIL_STORE_EXCERPT", "true").lower() == "true"
+
     # Help center (public FAQ site)
     # How the public help center URL is advertised (live_url):
     #   "path"      -> {BACKEND_URL}/help/{slug}, served same-origin as the API.
