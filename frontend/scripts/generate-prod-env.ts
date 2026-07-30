@@ -10,11 +10,13 @@ dotenv.config({ path: '.env.prod' })
 
 // Create config.js content for production using environment variables
 const configContent = `// Runtime configuration - this file gets replaced at container startup
-window.APP_CONFIG = {
+// Assigned to self, not window, so the service worker can importScripts()
+// it too; in a page self === window, so window.APP_CONFIG still works.
+self.APP_CONFIG = {
   // API URLs
   API_URL: "${process.env.VITE_API_URL || 'https://api.chattermate.chat/api/v1'}",
   WS_URL: "${process.env.VITE_WS_URL || 'wss://api.chattermate.chat'}",
-  WIDGET_URL: "${process.env.VITE_WIDGET_URL || 'https://app.chattermate.chat'}",
+  WIDGET_URL: "${process.env.VITE_WIDGET_URL || 'https://api.chattermate.chat'}",
   
   // Firebase Configuration
   FIREBASE_API_KEY: "${process.env.VITE_FIREBASE_API_KEY || ''}",
