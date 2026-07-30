@@ -90,7 +90,8 @@ class PipedriveAdapter(CrmAdapter):
 
     async def push_lead(self, tokens: OAuthTokens, payload: LeadPayload) -> CrmPushResult:
         try:
-            person_id, action, person_error = await self._upsert_person(tokens, payload)
+            org_id = await self._upsert_organization(tokens, payload.company)
+            person_id, action, person_error = await self._upsert_person(tokens, payload, org_id)
             if person_error is not None:
                 return person_error
             lead_id, lead_error = await self._ensure_open_lead(tokens, person_id, payload)
@@ -133,7 +134,34 @@ class PipedriveAdapter(CrmAdapter):
 
     # ---- push steps -------------------------------------------------------
 
-    async def _upsert_person(self, tokens: OAuthTokens, payload: LeadPayload):
+    async def _upsert_organization(self, tokens: OAuthTokens, company: str | None):
+        """Find-or-create the organization by name so the person is linked to a
+        company. Best-effort: a failure returns None and the person still syncs,
+        just unlinked. Uses the contacts scope (persons + orgs), so no extra
+        permission is needed."""
+        if not company or not company.strip():
+            return None
+        company = company.strip()
+        try:
+            search = await get_http_client().get(
+                f"{tokens.api_domain}/api/v2/organizations/search?" + urlencode({
+                    "term": company, "fields": "name", "exact_match": "true"}),
+                headers=self._auth_header(tokens))
+            if search.status_code == 200:
+                items = ((search.json().get("data") or {}).get("items")) or []
+                if items:
+                    return (items[0].get("item") or {}).get("id")
+            create = await get_http_client().post(
+                f"{tokens.api_domain}/api/v2/organizations",
+                headers=self._auth_header(tokens), json={"name": company})
+            if create.status_code in (200, 201):
+                return (create.json().get("data") or {}).get("id")
+            logger.warning(f"Pipedrive organization upsert failed: HTTP {create.status_code}")
+        except httpx.HTTPError as e:
+            logger.warning(f"Pipedrive organization upsert failed: {e}")
+        return None
+
+    async def _upsert_person(self, tokens: OAuthTokens, payload: LeadPayload, org_id=None):
         """Search by email; update blanks on a hit, create on a miss.
         Returns (person_id, action, error_result)."""
         response = await get_http_client().get(
@@ -147,7 +175,7 @@ class PipedriveAdapter(CrmAdapter):
         if items:
             item = items[0].get("item") or {}
             person_id = item.get("id")
-            update = self._blank_filling_update(item, payload)
+            update = self._blank_filling_update(item, payload, org_id)
             if update:
                 patch = await get_http_client().patch(
                     f"{tokens.api_domain}/api/v2/persons/{person_id}",
@@ -160,7 +188,7 @@ class PipedriveAdapter(CrmAdapter):
         create = await get_http_client().post(
             f"{tokens.api_domain}/api/v2/persons",
             headers=self._auth_header(tokens),
-            json=self._person_body(payload))
+            json=self._person_body(payload, org_id))
         if create.status_code not in (200, 201):
             return None, None, classify_error_response(create)
         person_id = (create.json().get("data") or {}).get("id")
@@ -232,20 +260,24 @@ class PipedriveAdapter(CrmAdapter):
             raw=body,
         )
 
-    def _person_body(self, payload: LeadPayload) -> dict:
+    def _person_body(self, payload: LeadPayload, org_id=None) -> dict:
         body = {"name": payload.name or payload.email,
                 "emails": [{"value": payload.email, "primary": True}]}
         if payload.phone:
             body["phones"] = [{"value": payload.phone, "primary": True}]
+        if org_id:
+            body["org_id"] = org_id
         return body
 
-    def _blank_filling_update(self, item: dict, payload: LeadPayload) -> dict:
+    def _blank_filling_update(self, item: dict, payload: LeadPayload, org_id=None) -> dict:
         """Only fill fields the existing person is missing — never clobber."""
         update = {}
         if payload.name and not item.get("name"):
             update["name"] = payload.name
         if payload.phone and not item.get("phones"):
             update["phones"] = [{"value": payload.phone, "primary": True}]
+        if org_id and not item.get("org_id"):
+            update["org_id"] = org_id
         return update
 
     def _auth_header(self, tokens: OAuthTokens) -> dict:

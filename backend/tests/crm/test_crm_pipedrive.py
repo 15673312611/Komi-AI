@@ -152,6 +152,38 @@ class TestPushLead:
         assert "<b>Team size:</b> 40" in note["content"]
 
     @pytest.mark.asyncio
+    async def test_company_links_organization(self, adapter, http, tokens):
+        payload = LeadPayload(lead_response_id=uuid.uuid4(), email="jane@acme.com",
+                              name="Jane Doe", company="Acme Inc")
+        http["respond"]["organizations/search"] = (200, {"data": {"items": []}})
+        http["respond"]["api/v2/organizations"] = (201, {"data": {"id": 77}})
+        http["respond"]["persons/search"] = (200, {"data": {"items": []}})
+        http["respond"]["api/v2/persons"] = (201, {"data": {"id": 42}})
+        http["respond"]["api/v1/leads?"] = (200, {"data": []})
+        http["respond"]["api/v1/leads"] = (201, {"data": {"id": "lead-1"}})
+
+        result = await adapter.push_lead(tokens, payload)
+
+        assert result.ok
+        # Org found-or-created, then the person body carries org_id.
+        org_create = next(r for r in http["requests"]
+                          if r.method == "POST" and r.url.path.endswith("/api/v2/organizations"))
+        assert json.loads(org_create.content)["name"] == "Acme Inc"
+        person_create = next(r for r in http["requests"]
+                             if r.method == "POST" and r.url.path.endswith("/api/v2/persons"))
+        assert json.loads(person_create.content)["org_id"] == 77
+
+    @pytest.mark.asyncio
+    async def test_no_company_skips_org_calls(self, adapter, http, tokens, payload):
+        # payload has no company → no organization API calls at all.
+        http["respond"]["persons/search"] = (200, {"data": {"items": []}})
+        http["respond"]["api/v2/persons"] = (201, {"data": {"id": 42}})
+        http["respond"]["api/v1/leads?"] = (200, {"data": []})
+        http["respond"]["api/v1/leads"] = (201, {"data": {"id": "lead-1"}})
+        await adapter.push_lead(tokens, payload)
+        assert not any("organizations" in str(r.url) for r in http["requests"])
+
+    @pytest.mark.asyncio
     async def test_existing_person_gets_blanks_filled_only(self, adapter, http,
                                                            tokens, payload):
         http["respond"]["persons/search"] = (200, {"data": {"items": [
