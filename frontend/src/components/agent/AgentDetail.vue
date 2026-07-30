@@ -17,8 +17,7 @@ limitations under the License.
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import type { AgentWithCustomization, AgentCustomization } from '@/types/agent'
-import { getApiUrl, getWidgetUrl } from '@/config/api'
-import { isAbsoluteUrl } from '@/utils/avatars'
+import { getApiUrl, getWidgetUrl, resolveUploadUrl } from '@/config/api'
 import { ORB_PALETTE_COUNT, getOrbStyleAt, resolveOrbStyle, orbSvgDataUri, terminalMarkSvgDataUri } from '@/utils/orb'
 
 import KnowledgeExplorer from '@/components/knowledge/KnowledgeExplorer.vue'
@@ -320,13 +319,9 @@ const photoUrl = computed(() => {
         return ''
     }
 
-    // Absolute S3/CDN URL — use it directly
-    if (isAbsoluteUrl(agentData.value.customization.photo_url)) {
-        return agentData.value.customization.photo_url
-    }
-    
-    // For local storage, prepend the API URL
-    return import.meta.env.VITE_API_URL + agentData.value.customization.photo_url
+    // Absolute S3/CDN URLs pass through; local paths are resolved against the
+    // runtime API origin.
+    return resolveUploadUrl(agentData.value.customization.photo_url)
 })
 
 const handleClose = () => {

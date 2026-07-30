@@ -2,8 +2,11 @@
 
 # Generate config.js with runtime environment variables
 cat <<EOF > /usr/share/nginx/html/config.js
-// Runtime configuration generated at container startup
-window.APP_CONFIG = {
+// Runtime configuration generated at container startup.
+// Assigned to \`self\`, not \`window\`: the page sees it as window.APP_CONFIG
+// (self === window there), and the service worker can importScripts() this
+// same file to read the Firebase config, which has no window object.
+self.APP_CONFIG = {
   // API URLs
   API_URL: "${VITE_API_URL:-http://localhost:8000/api/v1}",
   WS_URL: "${VITE_WS_URL:-ws://localhost:8000}",

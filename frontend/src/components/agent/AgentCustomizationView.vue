@@ -21,6 +21,7 @@ import { agentService } from '@/services/agent'
 import WebFont from 'webfontloader'
 import { useSubscriptionStorage } from '@/utils/storage'
 import { useEnterpriseFeatures } from '@/composables/useEnterpriseFeatures'
+import { getGoogleFontsApiKey } from '@/config/api'
 
 const props = defineProps<{
     agent: AgentWithCustomization
@@ -280,6 +281,13 @@ watch(() => props.agent.customization, (newCustomization) => {
     }
 }, { deep: true })
 
+// Shown when no Google Fonts API key is configured (self-hosted deployments
+// usually have none). Without it the font picker would just be empty.
+const FALLBACK_FONTS = [
+    'Inter', 'Roboto', 'Open Sans', 'Lato', 'Montserrat', 'Poppins',
+    'Source Sans 3', 'Nunito', 'Raleway', 'Work Sans', 'DM Sans', 'Merriweather'
+].map(family => ({ family, variants: ['regular'] }))
+
 // Add state for Google Fonts
 const googleFonts = ref<Array<{ family: string, variants: string[] }>>([])
 const isLoadingFonts = ref(true)
@@ -296,14 +304,22 @@ watch(() => customization.value.chat_style, (newStyle, oldStyle) => {
 
 // Load Google Fonts
 onMounted(async () => {
-    try {
-        const response = await fetch(`https://www.googleapis.com/webfonts/v1/webfonts?key=${import.meta.env.VITE_GOOGLE_FONTS_API_KEY}&sort=popularity`)
-        const data = await response.json()
-        googleFonts.value = data.items
-    } catch (error) {
-        console.error('Failed to load Google Fonts:', error)
-    } finally {
+    // No key configured (the common self-host case) — skip the request rather
+    // than firing one that can only 400, and offer the built-in list instead.
+    const fontsApiKey = getGoogleFontsApiKey()
+    if (!fontsApiKey) {
+        googleFonts.value = FALLBACK_FONTS
         isLoadingFonts.value = false
+    } else {
+        try {
+            const response = await fetch(`https://www.googleapis.com/webfonts/v1/webfonts?key=${fontsApiKey}&sort=popularity`)
+            const data = await response.json()
+            googleFonts.value = data.items
+        } catch (error) {
+            console.error('Failed to load Google Fonts:', error)
+        } finally {
+            isLoadingFonts.value = false
+        }
     }
     
     // Emit initial preview to ensure preview panel gets the customization data

@@ -17,7 +17,7 @@ limitations under the License.
 import os
 import json
 from pydantic_settings import BaseSettings
-from typing import List
+from typing import List, Optional
 from dotenv import load_dotenv
 from pathlib import Path
 from pydantic import field_validator
@@ -119,8 +119,13 @@ class Settings(BaseSettings):
     S3_FILE_STORAGE: bool = os.getenv("S3_FILE_STORAGE", "false").lower() == "true"
     S3_BUCKET: str = os.getenv("S3_BUCKET", "chattermate-uploads")
     S3_REGION: str = os.getenv("S3_REGION", "us-east-1")
-    AWS_ACCESS_KEY_ID: str = os.getenv("AWS_ACCESS_KEY_ID", "")
-    AWS_SECRET_ACCESS_KEY: str = os.getenv("AWS_SECRET_ACCESS_KEY", "")
+    # None, not "", when unset: boto3 only falls back to its default credential
+    # chain (env → shared config → IAM instance/container role) if these are
+    # None. An empty string is treated as an explicit credential, so requests
+    # get signed with a blank access key and fail with InvalidAccessKeyId —
+    # which is what blocks EC2/ECS/EKS deployments from using an attached role.
+    AWS_ACCESS_KEY_ID: Optional[str] = os.getenv("AWS_ACCESS_KEY_ID") or None
+    AWS_SECRET_ACCESS_KEY: Optional[str] = os.getenv("AWS_SECRET_ACCESS_KEY") or None
     # Presigned URLs are regenerated on every response, so this only needs to
     # outlive a single page render. Hard-capped at S3_MAX_PRESIGN_SECONDS.
     S3_PRESIGN_EXPIRY_SECONDS: int = int(os.getenv("S3_PRESIGN_EXPIRY_SECONDS", "3600"))
@@ -223,6 +228,18 @@ class Settings(BaseSettings):
     EXPLORE_AGENT_ID: str = os.getenv("EXPLORE_AGENT_ID", "b20188ee-2800-41d0-8bf1-8fc291ab0076")
     EXPLORE_USER_ID: str = os.getenv("EXPLORE_USER_ID", "154540a3-6177-4b1b-aab2-f23f0ef74ac7")
     EXPLORE_WIDGET_ID: str = os.getenv("EXPLORE_WIDGET_ID", "397046dc-0093-4499-ab45-a0afe3c3ee14")
+
+    @field_validator("AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", mode="after")
+    @classmethod
+    def _blank_credential_is_unset(cls, v: Optional[str]) -> Optional[str]:
+        """Coerce a blank credential to None so boto3 uses its default chain.
+
+        The field default already does this, but BaseSettings reads the
+        environment itself and overrides it — a var that is present but empty
+        (`AWS_ACCESS_KEY_ID=` in .env, or an env_file entry with no value)
+        lands as "" and would be signed with as an explicit blank credential.
+        """
+        return v or None
 
     model_config = {
         "case_sensitive": True,

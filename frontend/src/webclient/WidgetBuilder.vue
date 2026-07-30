@@ -22,9 +22,8 @@ import {
 import { marked } from 'marked'
 import { sanitizeHtml } from '../utils/sanitize'
 import { resolveOrbStyle } from '../utils/orb'
-import { isAbsoluteUrl } from '../utils/avatars'
 import { isEndChatMessage } from '../utils/endChat'
-import { widgetEnv } from './widget-env'
+import { widgetEnv, resolveWidgetUploadUrl } from './widget-env'
 import { useWidgetStyles } from '../composables/useWidgetStyles'
 import { useWidgetFiles } from '../composables/useWidgetFiles'
 import { useWidgetSocket } from '../composables/useWidgetSocket'
@@ -724,20 +723,12 @@ const shouldShowNewConversationOption = computed(() => {
     return ratingMessage?.isSubmitted === true
 })
 
-// Handle human agent profile picture URL
-const humanAgentPhotoUrl = computed(() => {
-    if (!humanAgent.value.human_agent_profile_pic) {
-        return ''
-    }
-
-    // Use signed URL if available (AWS S3)
-    if (isAbsoluteUrl(humanAgent.value.human_agent_profile_pic)) {
-        return humanAgent.value.human_agent_profile_pic
-    }
-
-    // For local storage, prepend the API URL
-    return `${widgetEnv.API_URL}${humanAgent.value.human_agent_profile_pic}`
-})
+// Handle human agent profile picture URL. Signed S3 URLs pass through; local
+// paths are resolved against the runtime API origin (the stored path already
+// carries the /api/v1 prefix).
+const humanAgentPhotoUrl = computed(() =>
+    resolveWidgetUploadUrl(humanAgent.value.human_agent_profile_pic)
+)
 
 // Add this after other methods
 const handleEndChat = async (message) => {

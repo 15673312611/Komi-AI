@@ -25,3 +25,23 @@ limitations under the License.
  */
 export const isAbsoluteUrl = (path?: string | null): boolean =>
   !!path && (/^https?:\/\//i.test(path) || path.startsWith('data:'))
+
+/**
+ * Build a browser-usable URL for a stored upload path.
+ *
+ * `store_upload` returns local-storage paths that already carry the API prefix
+ * (`/api/v1/uploads/...`, matching the static mount), so the API base must be
+ * reduced to its origin before concatenating — otherwise the prefix is emitted
+ * twice and the request 404s. Absolute URLs (signed S3/CDN links, data URIs,
+ * blob previews) are returned untouched.
+ *
+ * `apiBase` is passed in rather than resolved here because the dashboard and
+ * the embeddable widget read their API URL from different resolvers with
+ * different fallbacks; see getApiUrl() and widgetEnv.API_URL.
+ */
+export const buildUploadUrl = (stored: string | null | undefined, apiBase: string): string => {
+  if (!stored) return ''
+  if (isAbsoluteUrl(stored) || stored.startsWith('blob:')) return stored
+  const origin = apiBase.replace(/\/api\/v1\/?$/, '')
+  return `${origin}${stored.startsWith('/') ? '' : '/'}${stored}`
+}

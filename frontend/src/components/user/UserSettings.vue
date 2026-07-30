@@ -22,6 +22,7 @@ import { validatePassword, type PasswordStrength } from '@/utils/validators'
 import userAvatar from '@/assets/user.svg'
 import type { User } from '@/types/user'
 import { isAbsoluteUrl } from '@/utils/avatars'
+import { resolveUploadUrl } from '@/config/api'
 import { useNotificationSettings } from '@/composables/useNotificationSettings'
 import { useNotifications } from '@/composables/useNotifications'
 import type { NotificationSettings } from '@/services/notification'
@@ -123,9 +124,10 @@ const userAvatarSrc = computed(() => {
     if (isAbsoluteUrl(user.value.profile_pic)) {
       return user.value.profile_pic
     }
-    // For local storage, prepend the API URL and add timestamp
+    // Local storage: resolve against the runtime API origin, cache-busted so a
+    // freshly uploaded picture replaces the one the browser already cached.
     const timestamp = new Date().getTime()
-    return `${import.meta.env.VITE_API_URL}${user.value.profile_pic}?t=${timestamp}`
+    return `${resolveUploadUrl(user.value.profile_pic)}?t=${timestamp}`
   }
   return userAvatar
 })
