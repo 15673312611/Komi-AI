@@ -50,8 +50,15 @@ UPGRADE_MESSAGE = "CRM sync is not available in your current plan."
 # HubSpot signs webhooks with a timestamp; reject anything older than this.
 WEBHOOK_TIMESTAMP_MAX_AGE_SECONDS = 300
 
-# In-process fallback when Redis is disabled (single-worker dev setups)
+# In-process fallback when Redis is disabled (single-worker dev setups).
+# Maps state -> (value, expires_at) so abandoned installs don't leak forever.
 _state_fallback: dict = {}
+
+
+def _prune_state_fallback() -> None:
+    now = time.time()
+    for key in [k for k, (_, exp) in _state_fallback.items() if exp < now]:
+        _state_fallback.pop(key, None)
 
 
 def _provider_credentials(provider: str) -> tuple:
@@ -72,7 +79,8 @@ def _store_state(state: str, org_id: str, provider: str) -> None:
     if redis_client is not None:
         redis_client.set(f"crm_oauth_state:{state}", value, ex=STATE_TTL_SECONDS)
     else:
-        _state_fallback[state] = value
+        _prune_state_fallback()
+        _state_fallback[state] = (value, time.time() + STATE_TTL_SECONDS)
 
 
 def _pop_state(state: str) -> tuple:
@@ -83,7 +91,8 @@ def _pop_state(state: str) -> tuple:
         if value:
             redis_client.delete(key)
     else:
-        value = _state_fallback.pop(state, None)
+        entry = _state_fallback.pop(state, None)
+        value = entry[0] if entry and entry[1] >= time.time() else None
     if not value or ":" not in value:
         return None, None
     org_id, provider = value.split(":", 1)

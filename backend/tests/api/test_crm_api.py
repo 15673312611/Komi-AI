@@ -119,7 +119,7 @@ class TestCallback:
 
     def test_happy_path_creates_encrypted_connection(
             self, client, crm_settings, db, test_organization, monkeypatch):
-        crm_api._state_fallback["st-1"] = f"{test_organization.id}:hubspot"
+        crm_api._store_state("st-1", str(test_organization.id), "hubspot")
         monkeypatch.setattr(HubSpotAdapter, "exchange_code", AsyncMock(
             return_value=OAuthTokens(
                 access_token="new-at", refresh_token="new-rt",
@@ -144,7 +144,7 @@ class TestCallback:
 
     def test_state_provider_mismatch_rejected(self, client, crm_settings,
                                               test_organization):
-        crm_api._state_fallback["st-2"] = f"{test_organization.id}:pipedrive"
+        crm_api._store_state("st-2", str(test_organization.id), "pipedrive")
         r = client.get(f"{BASE}/hubspot/callback?code=c1&state=st-2",
                        follow_redirects=False)
         assert "invalid_state" in r.headers["location"]
@@ -156,7 +156,7 @@ class TestCallback:
             external_account_id="999", credentials={"access_token": "x"})
         assert other_org_connection is not None
 
-        crm_api._state_fallback["st-3"] = f"{test_organization.id}:hubspot"
+        crm_api._store_state("st-3", str(test_organization.id), "hubspot")
         monkeypatch.setattr(HubSpotAdapter, "exchange_code", AsyncMock(
             return_value=OAuthTokens(access_token="a", refresh_token="r",
                                      external_account_id="999")))

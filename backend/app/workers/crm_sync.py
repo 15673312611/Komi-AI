@@ -98,7 +98,11 @@ async def run_refresh_sweep() -> None:
             CrmProvider.PIPEDRIVE.value, cutoff)
         for connection in connections:
             try:
-                await get_valid_tokens(db, connection, force_refresh=True)
+                # No force_refresh: idle connections already have an expired
+                # access token, so get_valid_tokens refreshes them, and the
+                # per-connection lock + runway re-check inside it prevents a
+                # redundant second refresh if another worker just did it.
+                await get_valid_tokens(db, connection)
                 logger.info(f"Refreshed idle Pipedrive connection {connection.id}")
             except CrmAuthError:
                 pass  # marked expired inside get_valid_tokens; UI shows Reconnect

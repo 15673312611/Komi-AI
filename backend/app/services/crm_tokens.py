@@ -75,17 +75,36 @@ async def get_valid_tokens(db: Session, connection: CrmConnection,
     if not force_refresh and _has_runway(tokens.expires_at):
         return tokens
 
-    adapter = get_adapter(connection.provider)
+    # A refresh is needed. Serialize per connection: Pipedrive rotates the
+    # refresh token on every use, so two concurrent refreshers would send the
+    # same (now-consumed) token — the loser gets invalid_grant and would
+    # falsely mark the connection expired. Lock the row and re-read the current
+    # tokens under the lock (populate_existing bypasses the identity-map cache),
+    # so we refresh at most once and always with the latest token. FOR UPDATE is
+    # a no-op on SQLite (tests), which is fine.
+    locked = (
+        db.query(CrmConnection)
+        .filter(CrmConnection.id == connection.id)
+        .populate_existing()
+        .with_for_update()
+        .first()
+    ) or connection
+    tokens = tokens_from_connection(repo, locked)
+    if not force_refresh and _has_runway(tokens.expires_at):
+        db.commit()  # another worker refreshed while we waited — release the lock
+        return tokens
+
+    adapter = get_adapter(locked.provider)
     if adapter is None:
-        raise CrmAuthError(f"No adapter for provider '{connection.provider}'")
+        raise CrmAuthError(f"No adapter for provider '{locked.provider}'")
     try:
         refreshed = await adapter.refresh_tokens(tokens)
     except CrmAuthError as e:
-        logger.warning(f"CRM refresh rejected for {connection.provider} "
-                       f"connection {connection.id}: {e}")
-        repo.set_status(connection, CrmConnectionStatus.EXPIRED.value, last_error=str(e))
+        logger.warning(f"CRM refresh rejected for {locked.provider} "
+                       f"connection {locked.id}: {e}")
+        repo.set_status(locked, CrmConnectionStatus.EXPIRED.value, last_error=str(e))
         raise
-    persist_tokens(repo, connection, refreshed)
+    persist_tokens(repo, locked, refreshed)
     return refreshed
 
 

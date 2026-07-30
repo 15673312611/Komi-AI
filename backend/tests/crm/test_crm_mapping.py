@@ -135,6 +135,19 @@ class TestBuildNoteBody:
         body = build_note_body(LeadPayload(lead_response_id=uuid.uuid4(), email="a@b.c"))
         assert body == "<b>Lead captured by ChatterMate</b>"
 
+    def test_non_http_source_url_is_not_a_link(self):
+        body = build_note_body(LeadPayload(
+            lead_response_id=uuid.uuid4(), email="a@b.c",
+            source_url="javascript:alert(1)"))
+        assert "<a href" not in body           # no clickable javascript: link
+        assert "Captured on:" in body
+
+    def test_http_source_url_is_a_link(self):
+        body = build_note_body(LeadPayload(
+            lead_response_id=uuid.uuid4(), email="a@b.c",
+            source_url="https://acme.com/x"))
+        assert '<a href="https://acme.com/x">' in body
+
     def test_dynamic_values_are_escaped(self):
         body = build_note_body(LeadPayload(
             lead_response_id=uuid.uuid4(), email="a@b.c",

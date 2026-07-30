@@ -116,7 +116,12 @@ def build_note_body(payload: LeadPayload) -> str:
         lines.append(f"<b>{html.escape(str(label))}:</b> {html.escape(str(value))}")
     if payload.source_url:
         url = html.escape(payload.source_url)
-        lines.append(f'Captured on: <a href="{url}">{url}</a>')
+        # Only render an anchor for http(s); a javascript:/data: page_url would
+        # otherwise become a clickable link in the CRM note.
+        if payload.source_url.lower().startswith(("http://", "https://")):
+            lines.append(f'Captured on: <a href="{url}">{url}</a>')
+        else:
+            lines.append(f"Captured on: {url}")
     return "<br>".join(lines)
 
 
