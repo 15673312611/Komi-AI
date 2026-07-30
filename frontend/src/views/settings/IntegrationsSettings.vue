@@ -22,6 +22,7 @@ import DashboardLayout from '@/layouts/DashboardLayout.vue'
 import { checkJiraConnection, getJiraAuthUrl, disconnectJira } from '@/services/jira'
 import { checkShopifyConnection, getShopifyShops } from '@/services/shopify'
 import channelsService, { type ChannelAccount } from '@/services/channels'
+import crmService, { type CrmConnection, type CrmProvider } from '@/services/crm'
 import TelegramConnectModal from '@/components/integrations/TelegramConnectModal.vue'
 import MetaChannelConnect from '@/components/integrations/MetaChannelConnect.vue'
 import WhatsAppTemplateManager from '@/components/integrations/WhatsAppTemplateManager.vue'
@@ -40,6 +41,8 @@ import instagramLogo from '@/assets/instagram-logo.svg'
 import emailLogo from '@/assets/email-logo.svg'
 import smsLogo from '@/assets/sms-logo.svg'
 import lineLogo from '@/assets/line-logo.svg'
+import hubspotLogo from '@/assets/hubspot-logo.svg'
+import pipedriveLogo from '@/assets/pipedrive-logo.svg'
 
 // Define interface for Shopify shop
 interface ShopifyShop {
@@ -70,6 +73,79 @@ const metaModalAccount = ref<ChannelAccount | null>(null)
 
 const CREDENTIAL_CHANNELS = ['email', 'sms', 'line']
 const META_CHANNELS = ['whatsapp', 'messenger', 'instagram']
+const CRM_PROVIDERS: CrmProvider[] = ['hubspot', 'pipedrive']
+
+// CRM lead-push connections
+const crmConnections = ref<CrmConnection[]>([])
+const crmLoading = ref(true)
+// 403 from the connections endpoint = plan doesn't include crm_sync
+const crmUpgradeMessage = ref<string | null>(null)
+
+const crmFor = (provider: CrmProvider) =>
+  crmConnections.value.find(c => c.provider === provider) ?? null
+
+const fetchCrmConnections = async () => {
+  try {
+    crmLoading.value = true
+    crmConnections.value = await crmService.listConnections()
+    crmUpgradeMessage.value = null
+  } catch (error: any) {
+    if (error?.response?.status === 403) {
+      crmUpgradeMessage.value = error.response?.data?.detail || 'CRM sync is not available in your current plan.'
+    } else {
+      console.error('Error loading CRM connections:', error)
+    }
+  } finally {
+    crmLoading.value = false
+  }
+}
+
+const connectCrm = (provider: CrmProvider) => {
+  if (crmUpgradeMessage.value) {
+    toast.error(crmUpgradeMessage.value)
+    return
+  }
+  window.location.href = crmService.getInstallUrl(provider)
+}
+
+const testCrm = async (provider: CrmProvider) => {
+  try {
+    const result = await crmService.testConnection(provider)
+    if (result.ok) {
+      toast.success(`Connected to ${result.account_name || provider}`)
+    } else {
+      toast.error(result.error || `${provider} connection check failed`)
+    }
+  } catch (error: any) {
+    toast.error(error?.response?.data?.detail || `${provider} connection check failed`)
+  }
+}
+
+const handleDisconnectCrm = async (provider: CrmProvider) => {
+  try {
+    crmLoading.value = true
+    await crmService.disconnect(provider)
+    crmConnections.value = crmConnections.value.filter(c => c.provider !== provider)
+    toast.success(`${provider === 'hubspot' ? 'HubSpot' : 'Pipedrive'} disconnected successfully`)
+  } catch (error: any) {
+    toast.error(error?.response?.data?.detail || `Error disconnecting ${provider}`)
+  } finally {
+    crmLoading.value = false
+    showDisconnectConfirm.value = false
+    disconnectingIntegration.value = null
+  }
+}
+
+const crmCardWarning = (connection: CrmConnection | null): string | undefined => {
+  if (!connection) return undefined
+  if (connection.status !== 'active') {
+    return 'Connection expired — reconnect to resume lead sync.'
+  }
+  if (connection.recent_failures > 0) {
+    return `${connection.recent_failures} lead${connection.recent_failures === 1 ? '' : 's'} failed to sync in the last 7 days.`
+  }
+  return undefined
+}
 
 // "Manage" on a connected card: open the right modal for the connected account
 const manageIntegration = (integration: IntegrationCard) => {
@@ -88,6 +164,9 @@ const manageIntegration = (integration: IntegrationCard) => {
     // Slack connects via OAuth; Manage just picks the answering agent
     credentialModalAccount.value = acc
     credentialModalChannel.value = 'slack'
+  } else if (CRM_PROVIDERS.includes(id as CrmProvider)) {
+    // CRM Manage = read-only connectivity check, surfaced as a toast
+    testCrm(id as CrmProvider)
   } else {
     // Jira/Shopify: re-run their connect/OAuth flow
     if (id === 'shopify') openShopifyInstallation()
@@ -306,6 +385,8 @@ interface IntegrationCard {
   comingSoon?: boolean;
   category?: string;
   color?: string;
+  /** Inline warning under the description (expired connection, sync failures). */
+  warning?: string;
   connectAction?: () => void;
   disconnectAction?: () => void;
   /** An extra action on the connected card, alongside Manage/Disconnect. */
@@ -424,6 +505,29 @@ const availableIntegrations = computed<IntegrationCard[]>(() => [
       disconnectAction: meta.disconnect
     }
   }),
+  ...CRM_PROVIDERS.map(provider => {
+    const meta = {
+      hubspot: { name: 'HubSpot', logo: hubspotLogo, color: 'coral',
+        description: 'Push captured leads into HubSpot as contacts, deduped by email, with the AI summary attached.' },
+      pipedrive: { name: 'Pipedrive', logo: pipedriveLogo, color: 'teal',
+        description: 'Push captured leads into Pipedrive as persons and leads, deduped by email, with the AI summary attached.' },
+    }[provider]
+    const connection = crmFor(provider)
+    return {
+      id: provider,
+      name: meta.name,
+      description: meta.description,
+      logo: meta.logo,
+      category: 'CRM',
+      color: meta.color,
+      connected: connection?.status === 'active',
+      teamName: connection?.display_name || undefined,
+      warning: crmCardWarning(connection),
+      isLoading: crmLoading.value,
+      connectAction: () => connectCrm(provider),
+      disconnectAction: () => handleDisconnectCrm(provider)
+    }
+  }),
   // Native AI ticketing (built-in) — the card links to its settings page.
   {
     id: 'ai-ticketing',
@@ -482,7 +586,8 @@ onMounted(async () => {
   await Promise.all([
     fetchJiraStatus(),
     fetchShopifyStatus(),
-    fetchChannelAccounts()
+    fetchChannelAccounts(),
+    fetchCrmConnections()
   ])
   
   // Check if we're returning from an OAuth flow
@@ -632,6 +737,9 @@ onMounted(async () => {
           <div v-else-if="!integration.connected && connectionError && connectionError.integration === integration.id" class="integration-meta">
             <span class="meta-error">⚠️ {{ connectionError.message }}</span>
           </div>
+          <div v-if="integration.warning" class="integration-meta">
+            <span class="meta-error">⚠️ {{ integration.warning }}</span>
+          </div>
 
           <!-- Loading state -->
           <button
@@ -748,6 +856,15 @@ onMounted(async () => {
             <li>Require re-entering credentials to use it again</li>
           </ul>
         </div>
+
+        <div v-if="disconnectingIntegration === 'hubspot' || disconnectingIntegration === 'pipedrive'" class="integration-specific-warning">
+          <p>Disconnecting this CRM will:</p>
+          <ul>
+            <li>Stop pushing captured leads to it (queued pushes are cancelled)</li>
+            <li>Revoke ChatterMate's access tokens</li>
+            <li>Leave agents' "Sync to CRM" setting in place — it stays inactive until you reconnect</li>
+          </ul>
+        </div>
       </div>
       <div class="disconnect-modal-actions">
         <button class="btn-cancel" @click="cancelDisconnect">Cancel</button>
@@ -803,6 +920,15 @@ onMounted(async () => {
         >
           <span v-if="channelsLoading" class="loading-spinner"></span>
           <span v-else>Disconnect {{ disconnectingIntegration === 'whatsapp' ? 'WhatsApp' : disconnectingIntegration === 'messenger' ? 'Messenger' : 'Instagram' }}</span>
+        </button>
+        <button
+          v-if="disconnectingIntegration === 'hubspot' || disconnectingIntegration === 'pipedrive'"
+          class="btn-disconnect"
+          @click="handleDisconnectCrm(disconnectingIntegration as CrmProvider)"
+          :disabled="crmLoading"
+        >
+          <span v-if="crmLoading" class="loading-spinner"></span>
+          <span v-else>Disconnect {{ disconnectingIntegration === 'hubspot' ? 'HubSpot' : 'Pipedrive' }}</span>
         </button>
       </div>
     </div>

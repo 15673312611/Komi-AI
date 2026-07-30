@@ -15,7 +15,7 @@ limitations under the License.
 */
 
 export type LeadAssignmentMode = 'none' | 'sales_team' | 'specific_person' | 'round_robin'
-export type CrmSyncTarget = 'none' | 'hubspot' | 'salesforce'
+export type CrmSyncTarget = 'none' | 'hubspot' | 'pipedrive' | 'salesforce'
 
 export interface LeadField {
   key: string

@@ -34,10 +34,20 @@ class LeadAssignmentMode(str, enum.Enum):
 
 
 class CrmSyncTarget(str, enum.Enum):
-    """Which CRM a qualified lead syncs to. Phase 1: stored only, no outbound sync."""
+    """Which CRM a qualified lead syncs to.
+
+    Stored as a plain string column (not a DB enum) so adding a CRM never
+    requires a schema migration — mirrors ChannelType. str() is the value so
+    in-memory enum instances and refreshed-from-DB strings render identically.
+    """
+
     NONE = "none"
     HUBSPOT = "hubspot"
+    PIPEDRIVE = "pipedrive"
     SALESFORCE = "salesforce"
+
+    def __str__(self) -> str:  # pragma: no cover - trivial
+        return self.value
 
 
 class LeadCaptureConfig(Base):
@@ -73,7 +83,7 @@ class LeadCaptureConfig(Base):
     # but never acted on in phase 1 (no CRM/Slack/assignment side effects).
     assignment_mode = Column(SQLEnum(LeadAssignmentMode), default=LeadAssignmentMode.NONE, server_default="NONE", nullable=False)
     assignment_target_user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
-    crm_sync_target = Column(SQLEnum(CrmSyncTarget), default=CrmSyncTarget.NONE, server_default="NONE", nullable=False)
+    crm_sync_target = Column(String(32), default=CrmSyncTarget.NONE.value, server_default="none", nullable=False)
     slack_notify_enabled = Column(Boolean, default=False, server_default=false(), nullable=False)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())

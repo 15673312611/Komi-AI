@@ -135,6 +135,74 @@ def _build_chat_response_from_capture(capture: dict) -> ChatResponse:
         return ChatResponse(message=str(cleaned.get("message") or "").strip() or "No response generated")
 
 
+_EMPTY_TURN_FALLBACK = (
+    "I'm sorry, I didn't quite catch that. Could you rephrase or give me a bit more detail?"
+)
+
+
+def ensure_nonempty_message(response_content: ChatResponse) -> ChatResponse:
+    """Guarantee a user-facing message for a turn that produced none.
+
+    A model can end a turn with no message and no action — e.g. Groq stopping
+    after a tool call without emitting the final structured response. Downstream,
+    the widget only emits when message is non-empty (widget_chat), so an empty
+    turn is silently dropped and the typing indicator hangs forever. When there
+    is genuinely nothing to say and nothing to do, substitute a graceful reply
+    so the turn always completes. Turns that carry an action (transfer, end,
+    rating, ticket, contact/lead capture, shopify) are left untouched — their
+    own handlers own the message.
+    """
+    if (response_content.message or "").strip():
+        return response_content
+    has_action = any([
+        response_content.transfer_to_human,
+        response_content.end_chat,
+        response_content.request_rating,
+        response_content.create_ticket,
+        getattr(response_content, 'request_contact', False),
+        getattr(response_content, 'request_lead_capture', False),
+        getattr(response_content, 'shopify_output', None),
+    ])
+    if not has_action:
+        logger.warning("Empty model turn with no action — using fallback reply so the chat unblocks")
+        response_content.message = _EMPTY_TURN_FALLBACK
+    return response_content
+
+
+def _salvage_groq_answer_text(response) -> str | None:
+    """The last assistant text produced during the run.
+
+    When Groq ends a turn without calling the `json` tool, its answer often
+    still exists as the final assistant message even though response.content is
+    empty (reasoning models leave `content` blank). Recover that text; skip the
+    tool-call turns (empty content) and never surface reasoning_content, which
+    is the model's internal chain-of-thought, not a visitor reply.
+    """
+    messages = getattr(response, 'messages', None) or []
+    for msg in reversed(messages):
+        if getattr(msg, 'role', None) != 'assistant':
+            continue
+        content = getattr(msg, 'content', None)
+        if isinstance(content, str) and content.strip():
+            return content.strip()
+    return None
+
+
+def recover_groq_no_capture(response) -> ChatResponse:
+    """Groq path only: the model finished without calling the `json` tool, so
+    the structured capture is empty. Recover the assistant's own answer text
+    (which parse_response_content misses because it reads only response.content).
+    Falls back to the normal parse — and then ensure_nonempty_message — when
+    there is genuinely nothing to recover. Never reached for providers using
+    agno's native structured output (OpenAI/Anthropic)."""
+    salvaged = _salvage_groq_answer_text(response)
+    if salvaged:
+        logger.warning("Groq ended without the `json` tool; recovered the assistant's answer text")
+        return parse_response_content(salvaged)
+    logger.warning("Groq ended without the `json` tool and produced no answer text")
+    return parse_response_content(response)
+
+
 # Add a function to remove URLs from message content
 def remove_urls_from_message(message: str) -> str:
     """Remove URLs from message text, but preserve markdown image URLs"""
@@ -844,9 +912,13 @@ Keep your responses concise and focused. Provide clear, actionable information i
                 # else parses agno's native structured output.
                 if self._use_groq_json_tool and self._groq_json_capture:
                     response_content = _build_chat_response_from_capture(self._groq_json_capture)
+                elif self._use_groq_json_tool:
+                    # Groq finished without the `json` tool — recover its answer text.
+                    response_content = recover_groq_no_capture(response)
                 else:
                     response_content = parse_response_content(response)
 
+            response_content = ensure_nonempty_message(response_content)
             logger.debug(f"Response content: {response_content}")
 
             # Enrich Shopify response with full product data from Redis
@@ -1172,6 +1244,9 @@ Keep your responses concise and focused. Provide clear, actionable information i
                     response_content = _salvaged_content
                 elif self._use_groq_json_tool and self._groq_json_capture:
                     response_content = _build_chat_response_from_capture(self._groq_json_capture)
+                elif self._use_groq_json_tool:
+                    # Groq finished without the `json` tool — recover its answer text.
+                    response_content = recover_groq_no_capture(response)
                 else:
                     response_content = parse_response_content(response)
 
@@ -1189,6 +1264,7 @@ Keep your responses concise and focused. Provide clear, actionable information i
                 # clear anything the LLM may have produced.
                 response_content.request_contact = False
 
+                response_content = ensure_nonempty_message(response_content)
                 logger.debug(f"Response content: {response_content}")
 
                 # Enrich Shopify response with full product data from Redis

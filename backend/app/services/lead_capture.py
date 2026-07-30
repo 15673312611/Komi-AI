@@ -67,7 +67,9 @@ def record_lead_capture(
     reassigned, visitor row marked merged) so People shows one entry. The returned
     response's customer_id is the final (possibly merged-into) customer.
 
-    No CRM/Slack/assignment side effects in phase 1 — routing config is stored only.
+    A recorded lead is queued for CRM push (post-commit, best-effort) when the
+    agent has a crm_sync_target configured. Slack/assignment routing remains
+    stored-only.
     """
     from app.models.customer import Customer
 
@@ -151,6 +153,15 @@ def record_lead_capture(
         db.rollback()
         raise
     db.refresh(response)
+
+    # Post-commit so a job can never reference a rolled-back lead; wrapped so
+    # CRM problems can never break the conversation flow.
+    try:
+        from app.services.crm_sync import enqueue_crm_sync
+        enqueue_crm_sync(db, config, response)
+    except Exception as e:
+        logger.error(f"CRM sync enqueue failed (lead still recorded): {e}")
+
     return response
 
 
