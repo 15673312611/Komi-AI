@@ -18,7 +18,7 @@ from unittest.mock import patch
 
 import pytest
 
-from app.agents.guardrail_policy import CANARY_STRINGS, REFUSAL_MARKER
+from app.agents.guardrail_policy import CANARY_STRINGS, looks_like_scope_refusal
 from app.utils.guardrail_runtime import (
     BLOCK_REPLY,
     LEAK_REPLY,
@@ -126,7 +126,7 @@ class TestCheckOutput:
         assert no_db_writes.call_args.kwargs["rule"] == "injection.prompt_leak"
 
     def test_refusal_counted_not_modified(self, no_db_writes):
-        reply = f"Sorry, I {REFUSAL_MARKER} questions about Acme. What do you need?"
+        reply = "Sorry, I can only assist with questions about Acme. What do you need?"
         message, rules = check_output(reply)
         assert message == reply
         assert rules == ["offtopic.model_refused"]

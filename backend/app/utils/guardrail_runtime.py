@@ -31,7 +31,7 @@ Every entry point here FAILS OPEN: a guardrail bug must degrade to
 from dataclasses import dataclass, field
 from typing import List, Optional, Tuple
 
-from app.agents.guardrail_policy import CANARY_STRINGS, REFUSAL_MARKER
+from app.agents.guardrail_policy import CANARY_STRINGS, looks_like_scope_refusal
 from app.core.config import settings
 from app.core.logger import get_logger
 from app.repositories.guardrail_event import record_guardrail_event
@@ -185,7 +185,7 @@ def check_output(
                 text=message,
             )
             return LEAK_REPLY, ["injection.prompt_leak"]
-        if REFUSAL_MARKER in message:
+        if looks_like_scope_refusal(message):
             _record(
                 surface=surface,
                 layer="output",
