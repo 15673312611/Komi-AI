@@ -1,5 +1,7 @@
 // Runtime configuration - this file gets replaced at container startup
-window.APP_CONFIG = {
+// Assigned to `self` so the service worker can importScripts() it too;
+// in a page self === window, so window.APP_CONFIG still works.
+self.APP_CONFIG = {
     // API URLs
     API_URL: "https://devapi.chattermate.chat/api/v1",
     WS_URL: "wss://devapi.chattermate.chat",

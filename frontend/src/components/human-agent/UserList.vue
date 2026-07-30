@@ -27,7 +27,7 @@ import { useRouter } from 'vue-router'
 import { useSubscriptionStorage } from '@/utils/storage'
 import { useEnterpriseFeatures } from '@/composables/useEnterpriseFeatures'
 import { getTeamOverview } from '@/services/users'
-import { isAbsoluteUrl } from '@/utils/avatars'
+import { resolveUploadUrl } from '@/config/api'
 import type { TeamKpis, TeamAgentStats } from '@/services/users'
 
 const props = defineProps<{
@@ -133,11 +133,7 @@ const kpis = ref<TeamKpis | null>(null)
 const overviewRows = ref<AgentRow[]>([])
 const usingOverview = ref(false)
 
-const resolveAvatar = (pic?: string | null) => {
-  if (!pic) return null
-  if (isAbsoluteUrl(pic)) return pic
-  return `${import.meta.env.VITE_API_URL}${pic}`
-}
+const resolveAvatar = (pic?: string | null) => resolveUploadUrl(pic) || null
 
 // Build rows from the fallback users list when team-overview isn't deployed.
 const mapUsersToRows = (list: User[]): AgentRow[] =>

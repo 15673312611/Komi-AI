@@ -10,7 +10,9 @@ dotenv.config({ path: '.env.dev' })
 
 // Create config.js content for development using environment variables
 const configContent = `// Runtime configuration - this file gets replaced at container startup
-window.APP_CONFIG = {
+// Assigned to self, not window, so the service worker can importScripts()
+// it too; in a page self === window, so window.APP_CONFIG still works.
+self.APP_CONFIG = {
   // API URLs
   API_URL: "${process.env.VITE_API_URL || 'http://localhost:8000/api/v1'}",
   WS_URL: "${process.env.VITE_WS_URL || 'ws://localhost:8000'}",

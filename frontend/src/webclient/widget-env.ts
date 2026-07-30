@@ -15,6 +15,8 @@ limitations under the License.
 */
 
 // @ts-nocheck
+import { buildUploadUrl } from '../utils/avatars';
+
 export interface InitialData {
     widgetId: string;
     agentName: string;
@@ -51,4 +53,12 @@ export const widgetEnv = {
         const config = getRuntimeConfig();
         return config.WS_URL || import.meta.env.VITE_WS_URL || 'wss://api.chattermate.chat';
     }
+}
+
+/**
+ * Widget-side counterpart of resolveUploadUrl (src/config/api.ts). Same rules,
+ * but resolved against widgetEnv.API_URL so the widget keeps its own fallback.
+ */
+export function resolveWidgetUploadUrl(stored?: string | null): string {
+    return buildUploadUrl(stored, widgetEnv.API_URL);
 }

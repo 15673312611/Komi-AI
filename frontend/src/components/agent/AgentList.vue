@@ -18,7 +18,7 @@ limitations under the License.
 
 import type { Agent } from '@/types/agent';
 import type { Widget } from '@/types/widget';
-import { isAbsoluteUrl } from '@/utils/avatars'
+import { resolveUploadUrl } from '@/config/api'
 import { resolveOrbStyle } from '@/utils/orb'
 import { useAgentStorage, useSubscriptionStorage } from '@/utils/storage'
 import { onMounted, onUnmounted, ref, computed } from 'vue';
@@ -254,11 +254,7 @@ const handleAgentClick = (agent: Agent) => {
 }
 
 // Only called when a photo exists — the orb covers the no-photo case.
-const getAgentPhotoUrl = (agent: Agent) => {
-    if (!agent.customization?.photo_url) return ''
-    if (isAbsoluteUrl(agent.customization.photo_url)) return agent.customization.photo_url
-    return import.meta.env.VITE_API_URL + agent.customization.photo_url
-}
+const getAgentPhotoUrl = (agent: Agent) => resolveUploadUrl(agent.customization?.photo_url)
 
 const handleFullscreenToggle = (isFullscreen: boolean) => {
     emit('toggle-fullscreen', isFullscreen)

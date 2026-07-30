@@ -17,8 +17,7 @@ limitations under the License.
 import { computed } from 'vue'
 import type { AgentCustomization } from '../types/widget'
 import { isColorDark } from '../types/widget'
-import { widgetEnv } from '../webclient/widget-env'
-import { isAbsoluteUrl } from '../utils/avatars'
+import { resolveWidgetUploadUrl } from '../webclient/widget-env'
 
 // Themed colours now come from the shared design tokens (widget-theme.ts →
 // `--cm-*` vars set on `.chat-container`). These computeds return `var(--cm-*)`
@@ -54,19 +53,9 @@ export function useWidgetStyles(customization: { value: AgentCustomization }) {
         borderBottom: '1px solid var(--cm-hairline)'
     }))
 
-    const photoUrl = computed(() => {
-
-        if (!customization.value.photo_url) {
-            return ''
-        }
-        // Use signed URL if available
-        if (isAbsoluteUrl(customization.value.photo_url)) {
-            return customization.value.photo_url
-        }
-        
-        // For local storage, prepend the API URL
-        return `${widgetEnv.API_URL}${customization.value.photo_url}`
-    })
+    // Signed S3/CDN URLs pass through; local paths are resolved against the
+    // runtime API origin (photo_url already carries the /api/v1 prefix).
+    const photoUrl = computed(() => resolveWidgetUploadUrl(customization.value.photo_url))
 
     const shadowStyle = computed(() => {
         const bgColor = customization.value.chat_background_color || '#ffffff'

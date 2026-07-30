@@ -19,6 +19,8 @@ limitations under the License.
  * Functions are used instead of constants to ensure runtime config is read at call time
  */
 
+import { buildUploadUrl } from '@/utils/avatars'
+
 // API URLs - Dynamic functions..
 export function getApiUrl(): string {
   return (
@@ -28,6 +30,15 @@ export function getApiUrl(): string {
 
 export function getWsUrl(): string {
   return window.APP_CONFIG?.WS_URL || import.meta.env.VITE_WS_URL || 'ws://localhost:8000'
+}
+
+/**
+ * URL for a stored upload path (avatar, attachment). Always use this instead of
+ * concatenating getApiUrl() by hand — stored local paths already include the
+ * /api/v1 prefix. See buildUploadUrl.
+ */
+export function resolveUploadUrl(stored?: string | null): string {
+  return buildUploadUrl(stored, getApiUrl())
 }
 
 export function getWidgetUrl(): string {

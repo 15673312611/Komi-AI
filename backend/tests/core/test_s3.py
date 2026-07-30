@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+import os
+
 import pytest
 from unittest.mock import patch, MagicMock, AsyncMock
 from fastapi import UploadFile, HTTPException
@@ -26,7 +28,7 @@ from app.core.s3 import (
     strip_s3_signature,
     upload_file_to_s3,
 )
-from app.core.config import settings
+from app.core.config import Settings, settings
 from botocore.exceptions import ClientError
 
 
@@ -50,6 +52,35 @@ def test_get_s3_client():
         )
         
         assert client == mock_client
+
+
+def test_get_s3_client_passes_none_when_credentials_unset():
+    """Unset credentials must reach boto3 as None, not ''.
+
+    boto3 only falls back to its default chain — and therefore to an EC2/ECS
+    instance role — when both credential kwargs are None. An empty string is
+    taken as an explicit (blank) credential, which signs requests that AWS
+    rejects with InvalidAccessKeyId.
+    """
+    with patch('boto3.client') as mock_boto3_client, \
+         patch.object(settings, 'AWS_ACCESS_KEY_ID', None), \
+         patch.object(settings, 'AWS_SECRET_ACCESS_KEY', None):
+        get_s3_client.cache_clear()
+        get_s3_client()
+
+        kwargs = mock_boto3_client.call_args.kwargs
+        assert kwargs['aws_access_key_id'] is None
+        assert kwargs['aws_secret_access_key'] is None
+
+    get_s3_client.cache_clear()
+
+
+def test_aws_credentials_default_to_none_not_empty_string():
+    """A blank/absent AWS_ACCESS_KEY_ID env var must land as None on settings."""
+    with patch.dict(os.environ, {'AWS_ACCESS_KEY_ID': '', 'AWS_SECRET_ACCESS_KEY': ''}):
+        fresh = Settings()
+        assert fresh.AWS_ACCESS_KEY_ID is None
+        assert fresh.AWS_SECRET_ACCESS_KEY is None
 
 
 @pytest.mark.asyncio
