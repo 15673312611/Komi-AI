@@ -14,10 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-import base64
 from datetime import datetime, timedelta, timezone
 from typing import Optional
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlparse
 
 import httpx
 
@@ -25,7 +24,8 @@ from app.core.config import settings
 from app.core.logger import get_logger
 from app.crm.base import (
     CrmAdapter, CrmAuthError, CrmPushResult, CrmTransientError,
-    LeadPayload, OAuthTokens, classify_error_response, get_http_client,
+    LeadPayload, OAuthTokens, basic_auth_header, classify_error_response,
+    get_http_client, summarize_provider_error,
 )
 from app.crm.mapping import build_note_body
 from app.crm.registry import register_adapter
@@ -39,6 +39,23 @@ REVOKE_URL = "https://oauth.pipedrive.com/oauth/revoke"
 # Refresh tokens die 60 days after their LAST use (sliding window) — every
 # refresh restamps this; the worker's proactive sweep keeps idle tenants alive.
 REFRESH_TOKEN_LIFETIME_DAYS = 60
+
+
+def _validated_api_domain(api_domain) -> Optional[str]:
+    """The per-tenant API host comes from Pipedrive's token response (over TLS),
+    but every subsequent call uses it as the base URL — so defensively require
+    an https pipedrive.com host and reject anything else, rather than letting a
+    malformed value point our requests at an arbitrary host."""
+    if not api_domain:
+        return None
+    try:
+        host = urlparse(api_domain).hostname or ""
+    except Exception:
+        return None
+    if api_domain.startswith("https://") and (host == "pipedrive.com" or host.endswith(".pipedrive.com")):
+        return api_domain
+    logger.warning(f"Pipedrive returned an unexpected api_domain, ignoring: {api_domain!r}")
+    return None
 
 
 class PipedriveAdapter(CrmAdapter):
@@ -66,6 +83,9 @@ class PipedriveAdapter(CrmAdapter):
             "redirect_uri": redirect_uri,
         })
         # Company identity comes from users/me on the tenant's api_domain.
+        # Skip when the domain was missing/rejected — there's no valid base to call.
+        if not tokens.api_domain:
+            return tokens
         try:
             response = await get_http_client().get(
                 f"{tokens.api_domain}/api/v1/users/me",
@@ -252,14 +272,15 @@ class PipedriveAdapter(CrmAdapter):
         if response.status_code >= 500:
             raise CrmTransientError(f"Pipedrive token endpoint HTTP {response.status_code}")
         if response.status_code != 200:
-            raise CrmAuthError(f"Pipedrive token request rejected: {response.text[:300]}")
+            logger.warning(f"Pipedrive token request rejected: {response.text[:500]}")
+            raise CrmAuthError(f"Pipedrive rejected the token request: {summarize_provider_error(response.text)}")
         body = response.json()
         now = datetime.now(timezone.utc)
         return OAuthTokens(
             access_token=body["access_token"],
             refresh_token=body.get("refresh_token") or fallback_refresh_token,
             expires_at=now + timedelta(seconds=body.get("expires_in", 3600)),
-            api_domain=body.get("api_domain"),
+            api_domain=_validated_api_domain(body.get("api_domain")),
             # Sliding window restarts on every successful token use.
             refresh_token_expires_at=now + timedelta(days=REFRESH_TOKEN_LIFETIME_DAYS),
             raw=body,
@@ -290,8 +311,7 @@ class PipedriveAdapter(CrmAdapter):
 
     @staticmethod
     def _basic_secret() -> str:
-        raw = f"{settings.PIPEDRIVE_CLIENT_ID}:{settings.PIPEDRIVE_CLIENT_SECRET}"
-        return base64.b64encode(raw.encode()).decode()
+        return basic_auth_header(settings.PIPEDRIVE_CLIENT_ID, settings.PIPEDRIVE_CLIENT_SECRET)
 
 
 register_adapter(PipedriveAdapter())

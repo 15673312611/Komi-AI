@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+import base64
+import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -22,7 +24,24 @@ from uuid import UUID
 
 import httpx
 
+from app.core.logger import get_logger
+
+logger = get_logger(__name__)
+
 REQUEST_TIMEOUT_SECONDS = 20
+
+
+def basic_auth_header(client_id: str, client_secret: str) -> str:
+    """base64(client_id:client_secret) for HTTP Basic — Pipedrive OAuth + webhook."""
+    return base64.b64encode(f"{client_id}:{client_secret}".encode()).decode()
+
+
+def summarize_provider_error(text: Optional[str]) -> str:
+    """A short, single-line, tag-stripped snippet of a provider error body for a
+    user-facing message. The full body is logged separately — never echo an
+    untrusted third-party string verbatim into an admin surface."""
+    stripped = re.sub(r"<[^>]+>", " ", text or "")
+    return " ".join(stripped.split())[:200]
 
 _http_client: Optional[httpx.AsyncClient] = None
 
@@ -95,8 +114,8 @@ def classify_error_response(response: httpx.Response) -> CrmPushResult:
     honoring Retry-After; 5xx → transient; other 4xx → permanent (payload/
     scope problems a retry can't fix).
     """
-    body = response.text[:500]
-    error = f"HTTP {response.status_code}: {body}"
+    logger.warning(f"CRM provider HTTP {response.status_code}: {response.text[:1000]}")
+    error = f"HTTP {response.status_code}: {summarize_provider_error(response.text)}"
     if response.status_code == 401:
         return CrmPushResult(ok=False, error=error, auth_failed=True)
     if response.status_code == 429:

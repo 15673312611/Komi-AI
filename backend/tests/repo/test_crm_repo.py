@@ -206,3 +206,14 @@ class TestCrmSyncJobRepository:
         job_repo.fail(job, "boom")
         assert job_repo.count_recent_failures(test_organization.id, "hubspot") == 1
         assert job_repo.count_recent_failures(test_organization.id, "pipedrive") == 0
+
+    def test_reopen_failed_requeues(self, job_repo, test_organization, test_lead_response):
+        job = job_repo.enqueue(test_organization.id, test_lead_response.id, "hubspot")
+        job.attempts = 7
+        job_repo.fail(job, "no_connection")
+        assert job_repo.reopen_failed(test_organization.id, "hubspot") == 1
+        job_repo.db.refresh(job)
+        assert job.status == CrmSyncJobStatus.PENDING.value
+        assert job.attempts == 0
+        # Other providers untouched.
+        assert job_repo.reopen_failed(test_organization.id, "pipedrive") == 0

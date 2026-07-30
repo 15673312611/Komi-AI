@@ -20,6 +20,7 @@ from typing import Optional
 from uuid import UUID
 
 from app.core.logger import get_logger
+from app.core.redis import get_redis
 from app.database import get_db
 from app.core.auth import (
     PEOPLE_READ_PERMISSIONS,
@@ -48,6 +49,9 @@ except ImportError:
 
 router = APIRouter()
 logger = get_logger(__name__)
+
+# Ignore a repeat manual "Sync now" for the same person within this window.
+MANUAL_SYNC_DEBOUNCE_SECONDS = 10
 
 def _require_people_access(
     current_user: User,
@@ -210,6 +214,12 @@ async def sync_person_crm(
     customer = repo.get_customer(current_user.organization_id, customer_id)
     if not customer:
         raise HTTPException(status_code=404, detail="Person not found")
+    # Debounce: a double-click shouldn't fire a second fan-out of CRM writes
+    # while the first is still in flight. Best-effort (Redis only).
+    redis_client = get_redis()
+    if redis_client is not None and not redis_client.set(
+            f"crm_manual_sync:{customer_id}", "1", nx=True, ex=MANUAL_SYNC_DEBOUNCE_SECONDS):
+        return _person_crm_status(db, current_user.organization_id, customer_id)
     try:
         await sync_customer_to_crm(db, customer)
     except CrmManualSyncError as e:

@@ -16,7 +16,7 @@ limitations under the License.
 
 import uuid
 
-from app.crm.base import LeadPayload
+from app.crm.base import LeadPayload, summarize_provider_error
 from app.crm.mapping import (
     build_customer_payload, build_lead_payload, build_note_body, split_name,
 )
@@ -98,6 +98,18 @@ class TestBuildCustomerPayload:
         customer = Customer(id=uuid.uuid4(), email="x@y.com")
         payload = build_customer_payload(customer, summary="Wants a demo")
         assert payload.summary == "Wants a demo"
+
+
+class TestSummarizeProviderError:
+
+    def test_strips_html_collapses_and_bounds(self):
+        s = summarize_provider_error("<b>Bad</b>\n  request  " + "x" * 500)
+        assert "<b>" not in s
+        assert "\n" not in s and "  " not in s
+        assert len(s) <= 200
+
+    def test_handles_none(self):
+        assert summarize_provider_error(None) == ""
 
 
 class TestSplitName:

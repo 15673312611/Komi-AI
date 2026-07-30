@@ -328,6 +328,33 @@ class CrmSyncJobRepository:
             self.db.rollback()
             return 0
 
+    def reopen_failed(self, organization_id: UUID, provider: str) -> int:
+        """Requeue terminally-failed jobs after a reconnect. The unique
+        (lead_response_id, provider) constraint blocks re-enqueue, so without
+        this a lead that failed while the connection was expired would never
+        reach the CRM even after the admin reconnects."""
+        try:
+            count = self.db.query(CrmSyncJob).filter(
+                CrmSyncJob.organization_id == organization_id,
+                CrmSyncJob.provider == provider,
+                CrmSyncJob.status == CrmSyncJobStatus.FAILED.value,
+            ).update(
+                {CrmSyncJob.status: CrmSyncJobStatus.PENDING.value,
+                 CrmSyncJob.attempts: 0,
+                 CrmSyncJob.started_at: None,
+                 CrmSyncJob.next_attempt_at: _utcnow()},
+                synchronize_session=False,
+            )
+            self.db.commit()
+            if count:
+                logger.info(f"Reopened {count} failed {provider} sync job(s) for "
+                            f"org {organization_id} after reconnect")
+            return count
+        except Exception as e:
+            logger.error(f"Error reopening failed CRM sync jobs: {str(e)}")
+            self.db.rollback()
+            return 0
+
     def count_recent_failures(self, organization_id: UUID, provider: str,
                               days: int = 7) -> int:
         cutoff = _utcnow() - timedelta(days=days)

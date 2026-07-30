@@ -101,6 +101,18 @@ class TestTokenFlows:
         assert token_request.headers["Authorization"].startswith("Basic ")
 
     @pytest.mark.asyncio
+    async def test_rejects_non_pipedrive_api_domain(self, adapter, http, monkeypatch):
+        monkeypatch.setattr(settings, "PIPEDRIVE_CLIENT_ID", "cid")
+        monkeypatch.setattr(settings, "PIPEDRIVE_CLIENT_SECRET", "sek")
+        # A non-pipedrive api_domain must not become our request base (SSRF guard).
+        http["respond"]["oauth.pipedrive.com/oauth/token"] = (200, {
+            "access_token": "a", "refresh_token": "r", "expires_in": 3600,
+            "api_domain": "https://evil.example.com"})
+        http["respond"]["users/me"] = (200, {"data": {}})
+        tokens = await adapter.exchange_code("code-1", "https://app/cb")
+        assert tokens.api_domain is None
+
+    @pytest.mark.asyncio
     async def test_refresh_slides_window_and_keeps_identity(self, adapter, http, tokens):
         http["respond"]["oauth/token"] = (200, {
             "access_token": "at2", "expires_in": 3600})

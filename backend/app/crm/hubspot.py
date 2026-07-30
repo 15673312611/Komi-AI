@@ -24,6 +24,7 @@ from app.core.logger import get_logger
 from app.crm.base import (
     CrmAdapter, CrmAuthError, CrmPushResult, CrmTransientError,
     LeadPayload, OAuthTokens, classify_error_response, get_http_client,
+    summarize_provider_error,
 )
 from app.crm.mapping import build_note_body, split_name
 from app.crm.registry import register_adapter
@@ -147,7 +148,8 @@ class HubSpotAdapter(CrmAdapter):
             raise CrmTransientError(f"HubSpot token endpoint HTTP {response.status_code}")
         if response.status_code != 200:
             # 400 invalid_grant / bad client config — retrying cannot help.
-            raise CrmAuthError(f"HubSpot token request rejected: {response.text[:300]}")
+            logger.warning(f"HubSpot token request rejected: {response.text[:500]}")
+            raise CrmAuthError(f"HubSpot rejected the token request: {summarize_provider_error(response.text)}")
         body = response.json()
         return OAuthTokens(
             access_token=body["access_token"],

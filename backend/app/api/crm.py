@@ -31,7 +31,7 @@ from app.core.auth import get_current_organization, require_permissions
 from app.core.config import settings
 from app.core.logger import get_logger
 from app.core.redis import get_redis
-from app.crm.base import CrmAuthError, CrmTransientError
+from app.crm.base import CrmAuthError, CrmTransientError, basic_auth_header
 from app.crm.registry import get_adapter
 from app.database import get_db
 from app.models.crm import CrmConnectionStatus, CrmProvider
@@ -200,6 +200,9 @@ async def crm_oauth_callback(
         access_token_expires_at=tokens.expires_at,
         refresh_token_expires_at=tokens.refresh_token_expires_at,
     )
+    # A reconnect is the fix for a dead connection — requeue anything that
+    # terminally failed while it was down so those leads reach the CRM.
+    CrmSyncJobRepository(db).reopen_failed(UUID(org_id), provider)
     logger.info(f"Connected {provider} ({tokens.display_name}) for org {org_id}")
     return _settings_redirect(provider, "success")
 
@@ -328,5 +331,4 @@ def _valid_pipedrive_basic_auth(header: str) -> bool:
     client_id, client_secret = _provider_credentials(CrmProvider.PIPEDRIVE.value)
     if not client_id or not client_secret or not header.startswith("Basic "):
         return False
-    expected = base64.b64encode(f"{client_id}:{client_secret}".encode()).decode()
-    return hmac.compare_digest(header[6:], expected)
+    return hmac.compare_digest(header[6:], basic_auth_header(client_id, client_secret))
