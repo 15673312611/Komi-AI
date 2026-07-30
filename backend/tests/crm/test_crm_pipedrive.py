@@ -172,6 +172,10 @@ class TestPushLead:
         person_create = next(r for r in http["requests"]
                              if r.method == "POST" and r.url.path.endswith("/api/v2/persons"))
         assert json.loads(person_create.content)["org_id"] == 77
+        # The Lead carries its own organization_id (separate from the person's).
+        lead_create = next(r for r in http["requests"]
+                           if r.method == "POST" and r.url.path.endswith("/api/v1/leads"))
+        assert json.loads(lead_create.content)["organization_id"] == 77
 
     @pytest.mark.asyncio
     async def test_no_company_skips_org_calls(self, adapter, http, tokens, payload):

@@ -94,7 +94,7 @@ class PipedriveAdapter(CrmAdapter):
             person_id, action, person_error = await self._upsert_person(tokens, payload, org_id)
             if person_error is not None:
                 return person_error
-            lead_id, lead_error = await self._ensure_open_lead(tokens, person_id, payload)
+            lead_id, lead_error = await self._ensure_open_lead(tokens, person_id, payload, org_id)
             if lead_error is not None:
                 return lead_error
             if lead_id:
@@ -195,9 +195,12 @@ class PipedriveAdapter(CrmAdapter):
         return person_id, "created", None
 
     async def _ensure_open_lead(self, tokens: OAuthTokens, person_id,
-                                payload: LeadPayload):
+                                payload: LeadPayload, org_id=None):
         """Create a Lead unless the person already has an open one — repeat
-        captures must not spam the leads inbox. Returns (lead_id, error_result)."""
+        captures must not spam the leads inbox. Returns (lead_id, error_result).
+
+        A Lead carries its own organization_id (separate from the person's
+        org), so set it too or the lead shows no company."""
         listing = await get_http_client().get(
             f"{tokens.api_domain}/api/v1/leads?" + urlencode({
                 "person_id": person_id, "archived_status": "not_archived"}),
@@ -209,11 +212,13 @@ class PipedriveAdapter(CrmAdapter):
         if listing.json().get("data") or []:
             return None, None  # open lead exists — nothing to create
 
-        title = f"{payload.name or payload.email} — ChatterMate lead"
+        body = {"title": f"{payload.name or payload.email} — ChatterMate lead",
+                "person_id": person_id}
+        if org_id:
+            body["organization_id"] = org_id
         create = await get_http_client().post(
             f"{tokens.api_domain}/api/v1/leads",
-            headers=self._auth_header(tokens),
-            json={"title": title, "person_id": person_id})
+            headers=self._auth_header(tokens), json=body)
         if create.status_code not in (200, 201):
             return None, classify_error_response(create)
         return (create.json().get("data") or {}).get("id"), None
