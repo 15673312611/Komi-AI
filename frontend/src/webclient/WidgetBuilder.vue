@@ -2990,6 +2990,9 @@ const shouldShowWelcomeMessage = computed(() => {
     max-width: 85%;
     transition: all 0.2s ease;
     position: relative;
+    /* Long unbroken tokens (URLs, identifiers) wrap instead of painting past
+       the bubble edge. */
+    overflow-wrap: anywhere;
 }
 
 .message-bubble:hover {
@@ -3022,6 +3025,51 @@ const shouldShowWelcomeMessage = computed(() => {
 .message-bubble p + p { margin-top: 0.5em; }
 .message-bubble ul,
 .message-bubble ol { margin: 0.4em 0; padding-left: 1.2em; }
+
+/* ===== Markdown code & wide content: scroll inside the bubble instead of
+   painting past it and forcing the whole chat to scroll sideways. The
+   backgrounds derive from currentColor so they read on light and dark
+   bubbles alike. ===== */
+.message-bubble pre {
+    max-width: 100%;
+    overflow-x: auto;
+    margin: 0.5em 0;
+    padding: var(--space-sm);
+    border-radius: 8px;
+    background: color-mix(in srgb, currentColor 8%, transparent);
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+}
+
+.message-bubble pre code {
+    /* Code keeps its formatting; the <pre> scrollbar handles long lines. */
+    white-space: pre;
+    overflow-wrap: normal;
+    background: none;
+    padding: 0;
+}
+
+.message-bubble code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.9em;
+    background: color-mix(in srgb, currentColor 8%, transparent);
+    padding: 1px 5px;
+    border-radius: 6px;
+}
+
+.message-bubble table {
+    display: block;
+    max-width: 100%;
+    overflow-x: auto;
+    border-collapse: collapse;
+    margin: 0.5em 0;
+}
+
+.message-bubble th,
+.message-bubble td {
+    border: 1px solid color-mix(in srgb, currentColor 20%, transparent);
+    padding: 4px 8px;
+}
 
 .chat-input {
     padding: var(--space-md);
