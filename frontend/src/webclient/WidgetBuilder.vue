@@ -4776,7 +4776,7 @@ const shouldShowWelcomeMessage = computed(() => {
 /* 28px is proportioned for the full-screen form; inside the ~370px inline
    card it wraps into an oversized two-line heading (#270). */
 .form-message .form-title {
-    font-size: 20px;
+    font-size: var(--text-lg);
 }
 
 .form-description {
