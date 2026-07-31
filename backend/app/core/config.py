@@ -17,7 +17,7 @@ limitations under the License.
 import os
 import json
 from pydantic_settings import BaseSettings
-from typing import List, Optional
+from typing import List, NamedTuple, Optional
 from dotenv import load_dotenv
 from pathlib import Path
 from pydantic import field_validator
@@ -264,14 +264,47 @@ settings = Settings()
 logger = get_logger(__name__)
 
 
-# Values that were once shipped in the repo (config defaults / .env.example) and so
-# are public: a deployment still using them can have its tokens forged and its
-# stored credentials decrypted by anyone. They no longer appear as defaults above,
-# but they stay listed here to catch deployments that copied them before that.
-_INSECURE_DEFAULTS = {
-    "SECRET_KEY": "your-secret-key",
-    "CONVERSATION_SECRET_KEY": "your-conversation-secret-key",
-    "ENCRYPTION_KEY": "RFQ4SzhyRTVYdGtsLUxsc25SaDB0QlZpbTdQRmlVRlpsZUlCaFRlU2Vxbz0=",
+# Environments where the public defaults are acceptable, because nothing durable or
+# reachable is protected by them. Anything else is treated as a real deployment.
+_THROWAWAY_ENVIRONMENTS = frozenset({"development", "test", "testing"})
+
+# Shell one-liners producing a real value for each kind of secret, quoted back in
+# the startup error so the fix does not require going and finding the docs.
+# ENCRYPTION_KEY_HINT is public because app.core.encryption reports the same fix
+# when the key is missing at load time, and the two must not drift apart.
+ENCRYPTION_KEY_HINT = (
+    'python -c "import base64;from cryptography.fernet import Fernet;'
+    'print(base64.b64encode(Fernet.generate_key()).decode())"'
+)
+_HEX_SECRET_HINT = "openssl rand -hex 32"
+
+
+class _ManagedSecret(NamedTuple):
+    """A secret the app refuses to serve traffic without.
+
+    One record per secret rather than parallel dicts keyed by setting name: adding
+    a secret should be one line, and a half-filled entry should not surface as a
+    KeyError while building the very error meant to explain the problem.
+    """
+
+    # What the operator sets, which is not always the setting name.
+    env_var: str
+    # Value once shipped in this repo (config default / .env.example). Public, so
+    # it stays listed after being removed as a default — deployments copied it.
+    public_default: str
+    # Shell one-liner producing a real replacement.
+    generate: str
+
+
+_MANAGED_SECRETS = {
+    "SECRET_KEY": _ManagedSecret(
+        "JWT_SECRET_KEY", "your-secret-key", _HEX_SECRET_HINT),
+    "CONVERSATION_SECRET_KEY": _ManagedSecret(
+        "CONVERSATION_SECRET_KEY", "your-conversation-secret-key", _HEX_SECRET_HINT),
+    "ENCRYPTION_KEY": _ManagedSecret(
+        "ENCRYPTION_KEY",
+        "RFQ4SzhyRTVYdGtsLUxsc25SaDB0QlZpbTdQRmlVRlpsZUlCaFRlU2Vxbz0=",
+        ENCRYPTION_KEY_HINT),
 }
 
 # .env.example placeholders - not secret either, and they mean "never configured"
@@ -281,29 +314,13 @@ _PLACEHOLDER_VALUES = {
     "your_fernet_encryption_key_here",
 }
 
-# Canonical hint for producing an ENCRYPTION_KEY. Lives here rather than in
-# app.core.encryption because that module imports this one, and the two error
-# paths (missing key at load, public key at startup) must not drift apart.
-ENCRYPTION_KEY_HINT = (
-    'python -c "import base64;from cryptography.fernet import Fernet;'
-    'print(base64.b64encode(Fernet.generate_key()).decode())"'
-)
 
-# Shell one-liner producing a real value for each secret, quoted in the startup
-# error so the fix does not require going and finding the docs.
-_GENERATION_HINTS = {
-    "SECRET_KEY": "openssl rand -hex 32",
-    "CONVERSATION_SECRET_KEY": "openssl rand -hex 32",
-    "ENCRYPTION_KEY": ENCRYPTION_KEY_HINT,
-}
-
-# The env var name behind each setting, since they differ for the JWT secrets and
-# the error is only actionable if it names what the operator actually sets.
-_ENV_VAR_NAMES = {
-    "SECRET_KEY": "JWT_SECRET_KEY",
-    "CONVERSATION_SECRET_KEY": "CONVERSATION_SECRET_KEY",
-    "ENCRYPTION_KEY": "ENCRYPTION_KEY",
-}
+def is_throwaway_environment(config: Settings = settings) -> bool:
+    """True for local development and test runs, where the public defaults are
+    harmless. Defined here so every check of "is this a real deployment" agrees;
+    app.core.encryption asks the same question before generating a throwaway key.
+    """
+    return config.ENVIRONMENT.lower() in _THROWAWAY_ENVIRONMENTS
 
 
 def check_secret_configuration(config: Settings = settings) -> list[str]:
@@ -312,13 +329,13 @@ def check_secret_configuration(config: Settings = settings) -> list[str]:
 
     Pure audit: verify_secret_configuration decides what to do about the result.
     """
-    if config.ENVIRONMENT == "development":
+    if is_throwaway_environment(config):
         return []
 
     return [
-        name for name, default in _INSECURE_DEFAULTS.items()
+        name for name, secret in _MANAGED_SECRETS.items()
         if not getattr(config, name, None)
-        or getattr(config, name) == default
+        or getattr(config, name) == secret.public_default
         or getattr(config, name) in _PLACEHOLDER_VALUES
     ]
 
@@ -326,7 +343,7 @@ def check_secret_configuration(config: Settings = settings) -> list[str]:
 def verify_secret_configuration(config: Settings = settings) -> None:
     """Refuse to start on secrets anyone can look up in this repo.
 
-    Every value in _INSECURE_DEFAULTS and _PLACEHOLDER_VALUES is public, so a
+    Every value in _MANAGED_SECRETS and _PLACEHOLDER_VALUES is public, so a
     deployment using one has no auth boundary at all — tokens can be forged and
     stored credentials decrypted by anyone. A warning was not enough: it scrolls
     past in the boot log and the deployment stays exposed indefinitely.
@@ -351,13 +368,14 @@ def verify_secret_configuration(config: Settings = settings) -> None:
     if not insecure:
         return
 
+    names = ", ".join(insecure)
+    verb = "is" if len(insecure) == 1 else "are"
     fixes = "\n".join(
-        f"  {_ENV_VAR_NAMES[name]}=$({_GENERATION_HINTS[name]})" for name in insecure
+        f"  {_MANAGED_SECRETS[name].env_var}=$({_MANAGED_SECRETS[name].generate})"
+        for name in insecure
     )
     raise RuntimeError(
-        f"Refusing to start: {', '.join(insecure)} " +
-        ("is" if len(insecure) == 1 else "are") +
-        " unset or still set to a value published in this repository, so anyone "
-        "can forge tokens or decrypt stored data. Set real values and restart:\n"
-        f"{fixes}"
+        f"Refusing to start: {names} {verb} unset or still set to a value published "
+        "in this repository, so anyone can forge tokens or decrypt stored data. "
+        f"Set real values and restart:\n{fixes}"
     )

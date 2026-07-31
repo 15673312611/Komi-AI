@@ -71,6 +71,15 @@ def test_development_is_exempt():
     assert check_secret_configuration(config) == []
 
 
+@pytest.mark.parametrize("environment", ["test", "testing", "Development"])
+def test_throwaway_environments_are_exempt(environment):
+    """The audit and app.core.encryption must agree on what a real deployment is;
+    they used to disagree on casing and on whether test runs counted."""
+    config = Settings(ENVIRONMENT=environment, SECRET_KEY="your-secret-key",
+                      ENCRYPTION_KEY="")
+    assert check_secret_configuration(config) == []
+
+
 def test_startup_passes_with_real_secrets():
     verify_secret_configuration(_config())
 
