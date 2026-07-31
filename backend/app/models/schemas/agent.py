@@ -20,6 +20,7 @@ from typing import List, Optional, Dict
 from enum import Enum
 from uuid import UUID
 from app.models.agent import AgentType
+from app.agents.guardrail_policy import GUARDRAIL_PROMPT_MAX
 from app.models.schemas.agent_customization import CustomizationResponse
 from app.models.schemas.user_group import UserGroupResponse
 
@@ -59,7 +60,7 @@ class AgentBase(BaseModel):
         description="Optional one-line business remit used by the platform guardrail's topic-scope line."
     )
     guardrail_prompt: Optional[str] = Field(
-        default=None, max_length=4000,
+        default=None, max_length=GUARDRAIL_PROMPT_MAX,
         description="Scope rule for this agent. Null uses the platform default; edit it to fit your business."
     )
     guardrail_enabled: bool = Field(
@@ -93,7 +94,7 @@ class AgentUpdate(BaseModel):
     require_token_auth: Optional[bool] = None
     ticketing_enabled: Optional[bool] = None
     topic_scope: Optional[str] = Field(default=None, max_length=500)
-    guardrail_prompt: Optional[str] = Field(default=None, max_length=4000)
+    guardrail_prompt: Optional[str] = Field(default=None, max_length=GUARDRAIL_PROMPT_MAX)
     guardrail_enabled: Optional[bool] = None
 
 

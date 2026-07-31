@@ -236,7 +236,7 @@ trivia; software unrelated to {org}. Give NO part of the answer — no design, a
 analysis or first step. Reply with one short friendly sentence saying you can only help with
 {org}, then ask what they need. If a request is ambiguous, assume it is in scope and ask."""
 
-_GUARDRAIL_PROMPT_MAX = 4000
+GUARDRAIL_PROMPT_MAX = 4000
 
 
 def guardrail_scope_prompt(ctx) -> str:
@@ -257,7 +257,7 @@ def guardrail_scope_prompt(ctx) -> str:
         org = _org_label(ctx)
         custom = getattr(ctx, "guardrail_prompt", None)
         if isinstance(custom, str) and custom.strip():
-            body = scrub_delimiters(custom).strip()[:_GUARDRAIL_PROMPT_MAX]
+            body = scrub_delimiters(custom).strip()[:GUARDRAIL_PROMPT_MAX]
         else:
             body = DEFAULT_GUARDRAIL_PROMPT
         return "\n\n" + body.replace("{org}", org)

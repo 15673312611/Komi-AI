@@ -211,6 +211,9 @@ async def create_agent(
             allowed_attachment_types=agent.allowed_attachment_types,
             require_token_auth=agent.require_token_auth or False,
             ticketing_enabled=agent.ticketing_enabled if agent.ticketing_enabled is not None else True,
+            topic_scope=agent.topic_scope,
+            guardrail_prompt=agent.guardrail_prompt,
+            guardrail_enabled=agent.guardrail_enabled if agent.guardrail_enabled is not None else True,
             knowledge=[],
             groups=[]
         )
@@ -308,6 +311,9 @@ async def update_agent(
             allowed_attachment_types=agent.allowed_attachment_types,
             require_token_auth=agent.require_token_auth,
             ticketing_enabled=agent.ticketing_enabled if agent.ticketing_enabled is not None else True,
+            topic_scope=agent.topic_scope,
+            guardrail_prompt=agent.guardrail_prompt,
+            guardrail_enabled=agent.guardrail_enabled if agent.guardrail_enabled is not None else True,
             knowledge=[{
                 "id": k.id,
                 "name": k.source,
@@ -370,6 +376,9 @@ async def get_organization_agents(
                 allowed_attachment_types=agent.allowed_attachment_types,
                 require_token_auth=agent.require_token_auth or False,
                 ticketing_enabled=agent.ticketing_enabled if agent.ticketing_enabled is not None else True,
+                topic_scope=agent.topic_scope,
+                guardrail_prompt=agent.guardrail_prompt,
+                guardrail_enabled=agent.guardrail_enabled if agent.guardrail_enabled is not None else True,
                 knowledge=[{
                     "id": k.id,
                     "name": k.source,
@@ -559,6 +568,9 @@ async def update_agent_groups(
             allowed_attachment_types=agent.allowed_attachment_types,
             require_token_auth=agent.require_token_auth,
             ticketing_enabled=agent.ticketing_enabled if agent.ticketing_enabled is not None else True,
+            topic_scope=agent.topic_scope,
+            guardrail_prompt=agent.guardrail_prompt,
+            guardrail_enabled=agent.guardrail_enabled if agent.guardrail_enabled is not None else True,
             groups=agent.groups,
             knowledge=[{
                 "id": k.id,
