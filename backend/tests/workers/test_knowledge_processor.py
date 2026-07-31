@@ -174,3 +174,136 @@ async def test_run_processor_error(mock_dependencies):
     from app.api.knowledge import PROCESSOR_STATUS
     assert not PROCESSOR_STATUS["is_running"]
     assert PROCESSOR_STATUS["error"] == error_message
+
+# ---------------------------------------------------------------------------
+# Vector agent-filter re-assert
+#
+# Ingestion writes filters.agent_id from the queue row's single optional
+# agent_id. A run queued without one leaves every chunk with an empty list, and
+# retrieval matches on that filter — so the source is invisible to the agent
+# while the dashboard shows it as linked. Two production sources were left
+# unreadable this way. The relational links are the authority, so the worker
+# re-derives the filter from them after every successful run.
+# ---------------------------------------------------------------------------
+
+def _linked_knowledge(*agent_ids):
+    """A knowledge row whose agent_links resolve to the given agent ids."""
+    knowledge = MagicMock()
+    knowledge.agent_links = [MagicMock(agent_id=a) for a in agent_ids]
+    return knowledge
+
+
+@pytest.mark.asyncio
+async def test_process_queue_item_reasserts_agent_links(mock_dependencies, mock_queue_item):
+    """After a successful run the chunks point at every linked agent."""
+    agent_a, agent_b = str(uuid4()), str(uuid4())
+    knowledge = _linked_knowledge(agent_a, agent_b)
+    repo = MagicMock()
+    repo.get_by_sources.return_value = [knowledge]
+
+    with patch('app.workers.knowledge_processor.KnowledgeRepository', return_value=repo), \
+         patch('app.workers.knowledge_processor.knowledge_vector_links.sync_agent_ids') as sync:
+        await process_queue_item(mock_queue_item.id)
+
+    sync.assert_called_once()
+    _db, synced_knowledge, agent_ids = sync.call_args[0]
+    assert synced_knowledge is knowledge
+    # Both linked agents, not just the one the queue row happened to carry.
+    assert sorted(agent_ids) == sorted([agent_a, agent_b])
+    assert mock_queue_item.status == QueueStatus.COMPLETED
+
+
+@pytest.mark.asyncio
+async def test_reasserts_agent_links_when_queue_row_has_no_agent(mock_dependencies, mock_queue_item):
+    """The production incident: a crawl queued with agent_id=None.
+
+    Ingestion writes an empty filter, so without this the source stays
+    unreadable until someone unlinks and relinks it by hand.
+    """
+    mock_queue_item.agent_id = None
+    linked_agent = str(uuid4())
+    knowledge = _linked_knowledge(linked_agent)
+    repo = MagicMock()
+    repo.get_by_sources.return_value = [knowledge]
+
+    with patch('app.workers.knowledge_processor.KnowledgeRepository', return_value=repo), \
+         patch('app.workers.knowledge_processor.knowledge_vector_links.sync_agent_ids') as sync:
+        await process_queue_item(mock_queue_item.id)
+
+    assert sync.call_args[0][2] == [linked_agent]
+
+
+@pytest.mark.asyncio
+async def test_agent_link_sync_failure_does_not_fail_the_run(mock_dependencies, mock_queue_item):
+    """The content is already ingested — a filter refresh must not lose the run."""
+    repo = MagicMock()
+    repo.get_by_sources.return_value = [_linked_knowledge(str(uuid4()))]
+
+    with patch('app.workers.knowledge_processor.KnowledgeRepository', return_value=repo), \
+         patch('app.workers.knowledge_processor.knowledge_vector_links.sync_agent_ids',
+               side_effect=Exception("vector store unavailable")):
+        await process_queue_item(mock_queue_item.id)
+
+    assert mock_queue_item.status == QueueStatus.COMPLETED
+    mock_dependencies['fcm'].assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_unknown_source_skips_sync_without_error(mock_dependencies, mock_queue_item):
+    """No knowledge row yet (e.g. the run failed before creating one)."""
+    repo = MagicMock()
+    repo.get_by_sources.return_value = []
+
+    with patch('app.workers.knowledge_processor.KnowledgeRepository', return_value=repo), \
+         patch('app.workers.knowledge_processor.knowledge_vector_links.sync_agent_ids') as sync:
+        await process_queue_item(mock_queue_item.id)
+
+    sync.assert_not_called()
+    assert mock_queue_item.status == QueueStatus.COMPLETED
+
+
+@pytest.mark.asyncio
+async def test_empty_crawl_fails_the_queue_item(mock_dependencies, mock_queue_item):
+    """Regression: a crawl that stored nothing used to be marked COMPLETED.
+
+    Production logged "Crawling completed - 0 URLs, 0 documents, 0.00s" followed
+    by "Marked queue item as completed", so a broken source was indistinguishable
+    from a healthy one in the dashboard.
+    """
+    from app.knowledge.enhanced_website_reader import EmptyCrawlError
+
+    mock_dependencies['knowledge_manager'].process_knowledge.side_effect = EmptyCrawlError(
+        "No content could be read from https://example.com."
+    )
+
+    with pytest.raises(EmptyCrawlError):
+        await process_queue_item(mock_queue_item.id)
+
+    assert mock_queue_item.status == QueueStatus.FAILED
+    notification = mock_dependencies['db'].add.call_args[0][0]
+    assert notification.type == NotificationType.KNOWLEDGE_FAILED
+    assert "No content could be read" in notification.message
+
+
+@pytest.mark.asyncio
+async def test_duplicate_knowledge_rows_sync_the_union_of_their_agents(
+    mock_dependencies, mock_queue_item
+):
+    """Two knowledge rows can share one URL — and one set of vector chunks.
+
+    Syncing them one after another would let the last write drop the other
+    row's agents, so the union is applied once.
+    """
+    agent_a, agent_b = str(uuid4()), str(uuid4())
+    repo = MagicMock()
+    repo.get_by_sources.return_value = [
+        _linked_knowledge(agent_a),
+        _linked_knowledge(agent_b),
+    ]
+
+    with patch('app.workers.knowledge_processor.KnowledgeRepository', return_value=repo), \
+         patch('app.workers.knowledge_processor.knowledge_vector_links.sync_agent_ids') as sync:
+        await process_queue_item(mock_queue_item.id)
+
+    sync.assert_called_once()
+    assert sync.call_args[0][2] == sorted([agent_a, agent_b])

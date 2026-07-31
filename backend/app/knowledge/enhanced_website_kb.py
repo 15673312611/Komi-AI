@@ -30,7 +30,11 @@ from app.core.config import settings
 from app.models.knowledge_queue import ProcessingStage, QueueStatus
 from pydantic import model_validator
 
-from app.knowledge.enhanced_website_reader import EnhancedWebsiteReader, BotProtectionError
+from app.knowledge.enhanced_website_reader import (
+    EnhancedWebsiteReader,
+    BotProtectionError,
+    EmptyCrawlError,
+)
 
 # Initialize logger for this module
 logger = get_logger(__name__)
@@ -296,16 +300,31 @@ class EnhancedWebsiteKnowledgeBase(AgentKnowledge):
             total_duration = total_end_time - total_start_time
             logger.info(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Completed processing all {len(self.urls)} URLs with immediate embedding (Total time: {total_duration:.2f}s)")
 
-    def _raise_if_bot_blocked(self, total_documents: int) -> None:
-        """Raise BotProtectionError if the crawl yielded nothing because a
-        bot-check blocked every page (so the queue item fails with a clear
-        reason instead of silently completing with zero pages)."""
-        if total_documents == 0 and getattr(self.reader, '_challenge_blocked', 0) > 0:
+    def _raise_if_nothing_stored(self, total_documents: int) -> None:
+        """Fail the run when it indexed nothing.
+
+        A zero-page run used to be marked COMPLETED, which made a broken crawl
+        indistinguishable from a healthy source that happens to have no sub-pages —
+        the dashboard showed success while the agent had nothing to answer from.
+        Raising here is enough: process_queue_item already turns any exception into
+        a FAILED queue item with the message shown to the user.
+        """
+        if total_documents > 0:
+            return
+
+        # Bot protection first: it is the specific, actionable cause.
+        if getattr(self.reader, '_challenge_blocked', 0) > 0:
             raise BotProtectionError(
                 "This site blocked automated crawling (its bot protection served a "
                 "“Checking your browser” page). Add the content manually with "
                 "Upload PDF or Text."
             )
+
+        raise EmptyCrawlError(
+            f"No content could be read from {self.urls[0] if self.urls else 'this source'}. "
+            "The page may be empty, require JavaScript, or be unreachable — check the "
+            "URL is correct and publicly accessible."
+        )
 
     def load(
         self,
@@ -508,10 +527,9 @@ class EnhancedWebsiteKnowledgeBase(AgentKnowledge):
         final_embedded_count = sum(1 for doc in all_documents if doc.embedding is not None)
         embedding_rate = (final_embedded_count / len(all_documents) * 100) if all_documents else 0
 
-        # If nothing was crawled solely because a bot-check blocked every page,
-        # fail loudly so the user is told to add the content manually — rather
-        # than silently "completing" with zero pages.
-        self._raise_if_bot_blocked(total_documents)
+        # A run that stored nothing is a failure. Raised before the COMPLETED
+        # write below so the queue item cannot report success for an empty crawl.
+        self._raise_if_nothing_stored(total_documents)
 
         # Mark as completed after all processing is done
         if self.queue_item and self.queue_repo:

@@ -46,7 +46,7 @@ class SitemapReader(EnhancedWebsiteReader):
         url = self._normalize_url(url)
 
         # Reset per-crawl state exactly as the base crawl does — the counters are
-        # read by the progress logs and by _raise_if_bot_blocked (a fully
+        # read by the progress logs and by _raise_if_nothing_stored (a fully
         # bot-blocked sitemap must still fail with the "add manually" message).
         self._visited = set()
         self._urls_to_crawl = []

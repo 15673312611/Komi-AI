@@ -17,7 +17,10 @@ limitations under the License.
 import asyncio
 from app.database import SessionLocal
 from app.repositories.knowledge_queue import KnowledgeQueueRepository
+from app.repositories.knowledge import KnowledgeRepository
 from app.knowledge.knowledge_base import KnowledgeManager
+from app.knowledge import page_editor
+from app.services import knowledge_vector_links
 from app.models.knowledge_queue import QueueStatus, ProcessingStage
 from app.core.logger import get_logger
 import os
@@ -66,6 +69,46 @@ def get_user_friendly_filename(source: str, source_type: str) -> str:
         return source
 
 
+def _sync_vector_agent_links(db, queue_item) -> None:
+    """Point the ingested chunks at every agent the source is linked to.
+
+    Ingestion writes ``filters.agent_id`` from the queue row's single optional
+    ``agent_id``, so a run queued without one leaves every chunk with an empty
+    list. Retrieval matches on that filter, so the source is invisible to the
+    agent while the dashboard still shows it as linked — the failure that left
+    two production sources unreadable until the links were rebuilt by hand.
+
+    The relational links are the authority, so re-derive from them. Idempotent,
+    and non-fatal: the content is already ingested, and losing the run over a
+    filter refresh would be worse than the stale filter.
+    """
+    try:
+        knowledge_repo = KnowledgeRepository(db)
+        sources = knowledge_repo.get_by_sources(
+            queue_item.organization_id, [queue_item.source]
+        )
+        if not sources:
+            return
+
+        # An org can hold more than one knowledge row for the same URL, and they
+        # share one set of vector chunks (keyed on the source name). Sync the
+        # union of their links once, rather than per row where the last write
+        # would drop the other rows' agents.
+        agent_ids = sorted({
+            agent_id
+            for knowledge in sources
+            for agent_id in page_editor.agent_ids_for(knowledge)
+        })
+        knowledge_vector_links.sync_agent_ids(db, sources[0], agent_ids)
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        logger.error(
+            f"Could not refresh vector agent filters for {queue_item.source} "
+            f"(non-fatal, content was ingested): {e}"
+        )
+
+
 async def process_queue_item(queue_item_id: int):
     """Process a single queue item"""
     with SessionLocal() as db:
@@ -92,6 +135,8 @@ async def process_queue_item(queue_item_id: int):
                 db.commit()
 
                 await knowledge.process_knowledge(queue_item)
+
+                _sync_vector_agent_links(db, queue_item)
 
                 # Create notification for successful processing
                 user_friendly_name = get_user_friendly_filename(queue_item.source, queue_item.source_type)
