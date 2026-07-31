@@ -15,12 +15,46 @@ limitations under the License.
 """
 
 import os
+import sys as _sys
 
 # Set before any app import: app.core.encryption reads these when it first loads a
 # key, and a fixed key keeps encrypted fixtures reproducible across runs.
 os.environ.setdefault("ENVIRONMENT", "test")
 os.environ.setdefault(
     "ENCRYPTION_KEY", "RFQ4SzhyRTVYdGtsLUxsc25SaDB0QlZpbTdQRmlVRlpsZUlCaFRlU2Vxbz0=")
+
+
+# NO_ENTERPRISE=1 — run the suite the way CI does.
+#
+# CI checks out with actions/checkout@v3 and no `submodules: recursive`, so
+# app/enterprise is empty there and every `try: import app.enterprise` falls
+# back to community mode. Locally the submodule IS populated, so plan and
+# subscription gating switches on and ~30 API tests return a 403 they never
+# see in CI. Setting this makes the import fail the same way, so a local run
+# is comparable to the CI result:
+#
+#     NO_ENTERPRISE=1 python -m pytest tests/
+#
+# An env var rather than a CLI flag because the blocker has to be installed
+# before this module's own `from app...` imports below, which happens before
+# pytest would hand us a parsed option.
+if os.getenv("NO_ENTERPRISE") == "1":
+
+    class _BlockEnterprise:
+        """Meta-path finder that makes app.enterprise look un-checked-out."""
+
+        def find_spec(self, fullname, path=None, target=None):
+            if fullname == "app.enterprise" or fullname.startswith("app.enterprise."):
+                # ModuleNotFoundError, not bare ImportError: that is what an
+                # un-checked-out submodule actually raises, and it is what
+                # pytest.importorskip and the app's own guards look for.
+                raise ModuleNotFoundError(
+                    f"No module named {fullname!r} (disabled by NO_ENTERPRISE=1)",
+                    name=fullname,
+                )
+            return None
+
+    _sys.meta_path.insert(0, _BlockEnterprise())
 
 import pytest
 import uuid
