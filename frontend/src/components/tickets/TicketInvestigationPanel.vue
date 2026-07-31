@@ -57,6 +57,14 @@ const tokenLabel = computed(() => {
   if (!total) return ''
   return total >= 1000 ? `${(total / 1000).toFixed(1)}k tokens` : `${total} tokens`
 })
+
+// A run that finished with fewer MCP connectors than configured produced its
+// answer without the evidence those tools were meant to gather — warn.
+const connectorWarning = computed(() => {
+  const status = run.value?.connector_status
+  if (!status || status.loaded >= status.configured) return null
+  return status
+})
 </script>
 
 <template>
@@ -86,6 +94,18 @@ const tokenLabel = computed(() => {
 
     <div v-if="run.status === 'failed' && run.error" class="run-error">
       {{ run.error }}
+    </div>
+
+    <div v-if="connectorWarning" class="connector-warning">
+      <div>
+        Ran with {{ connectorWarning.loaded }} of {{ connectorWarning.configured }} configured
+        connector{{ connectorWarning.configured === 1 ? '' : 's' }} — findings may be missing evidence.
+      </div>
+      <ul v-if="connectorWarning.failed.length" class="connector-warning__list">
+        <li v-for="f in connectorWarning.failed" :key="f.name">
+          <strong>{{ f.name }}</strong>: {{ f.error }}
+        </li>
+      </ul>
     </div>
 
     <div v-if="investigation.hypotheses.length" class="hypothesis-list">
@@ -183,6 +203,22 @@ const tokenLabel = computed(() => {
   border-radius: 10px;
   font-size: 12px;
   color: var(--c-danger);
+}
+.connector-warning {
+  margin-top: 12px;
+  padding: 9px 12px;
+  background: color-mix(in srgb, var(--c-warn) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--c-warn) 35%, transparent);
+  border-radius: 10px;
+  font-size: 12px;
+  color: var(--c-warn);
+}
+.connector-warning__list {
+  margin: 6px 0 0;
+  padding-left: 18px;
+}
+.connector-warning__list li {
+  word-break: break-word;
 }
 .hypothesis-list {
   margin-top: 13px;

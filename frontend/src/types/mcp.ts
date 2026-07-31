@@ -89,4 +89,10 @@ export interface AgentMCPTools {
   id: string
   name: string
   mcp_tools: MCPTool[]
-} 
+}
+
+export interface MCPToolTestResult {
+  success: boolean
+  functions: string[]
+  error: string | null
+}

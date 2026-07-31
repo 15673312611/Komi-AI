@@ -41,6 +41,9 @@ const {
   linkMCPTool,
   unlinkMCPTool,
   deleteMCPTool,
+  testMCPTool,
+  testResults,
+  testingToolId,
   applyPreset,
   resetCreateForm,
   confirmDelete,
@@ -171,28 +174,51 @@ onMounted(() => {
       <!-- Tools List -->
       <div v-else class="tools-list">
         <div v-for="tool in agentMCPTools" :key="tool.id" class="tool-card">
-          <div class="tool-card-main">
-            <div class="tool-badge">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
-                <circle cx="12" cy="12" r="3"/>
-              </svg>
-            </div>
-            <div class="tool-meta">
-              <div class="tool-name">
-                <span class="tool-name-text">{{ tool.name }}</span>
-                <span class="transport-chip">{{ getTransportTypeInfo(tool.transport_type).label }}</span>
+          <div class="tool-card-row">
+            <div class="tool-card-main">
+              <div class="tool-badge">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
+                  <circle cx="12" cy="12" r="3"/>
+                </svg>
               </div>
-              <div class="tool-desc">{{ tool.description || 'Custom MCP tool' }}</div>
+              <div class="tool-meta">
+                <div class="tool-name">
+                  <span class="tool-name-text">{{ tool.name }}</span>
+                  <span class="transport-chip">{{ getTransportTypeInfo(tool.transport_type).label }}</span>
+                </div>
+                <div class="tool-desc">{{ tool.description || 'Custom MCP tool' }}</div>
+              </div>
+            </div>
+            <div class="tool-card-actions">
+              <span class="tool-status">
+                <span class="status-dot"></span>{{ tool.enabled ? 'connected' : 'disabled' }}
+              </span>
+              <button
+                class="test-button"
+                :disabled="testingToolId !== null"
+                @click="testMCPTool(tool.id)"
+                title="Connect to the server and list its tools"
+              >
+                {{ testingToolId === tool.id ? 'Testing…' : 'Test' }}
+              </button>
+              <button class="remove-button" @click="confirmDelete(tool.id)" title="Remove tool">
+                Remove
+              </button>
             </div>
           </div>
-          <div class="tool-card-actions">
-            <span class="tool-status">
-              <span class="status-dot"></span>{{ tool.enabled ? 'connected' : 'disabled' }}
-            </span>
-            <button class="remove-button" @click="confirmDelete(tool.id)" title="Remove tool">
-              Remove
-            </button>
+          <div
+            v-if="testResults[tool.id]"
+            class="test-result"
+            :class="testResults[tool.id].success ? 'test-result--ok' : 'test-result--fail'"
+          >
+            <template v-if="testResults[tool.id].success">
+              ✓ Connected — {{ testResults[tool.id].functions.length }} tool{{ testResults[tool.id].functions.length === 1 ? '' : 's' }} available:
+              {{ testResults[tool.id].functions.join(', ') }}
+            </template>
+            <template v-else>
+              ✕ {{ testResults[tool.id].error }}
+            </template>
           </div>
         </div>
       </div>
@@ -694,15 +720,18 @@ onMounted(() => {
   border: 1px solid var(--o08);
   border-radius: var(--radius-lg);
   padding: 18px 22px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 18px;
   transition: border-color 0.2s ease;
 }
 
 .tool-card:hover {
   border-color: var(--o14);
+}
+
+.tool-card-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
 }
 
 .tool-card-main {
@@ -802,6 +831,49 @@ onMounted(() => {
 
 .remove-button:hover {
   background: var(--coral-bg);
+}
+
+.test-button {
+  padding: 7px 13px;
+  background: transparent;
+  border: 1px solid var(--o12);
+  border-radius: 8px;
+  color: var(--text2);
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.test-button:hover:not(:disabled) {
+  background: var(--o05);
+}
+
+.test-button:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.test-result {
+  margin-top: 12px;
+  padding: 9px 12px;
+  border-radius: 9px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.test-result--ok {
+  background: var(--teal-bg);
+  border: 1px solid var(--teal-border);
+  color: var(--c-teal);
+}
+
+.test-result--fail {
+  background: var(--coral-bg);
+  border: 1px solid var(--coral-border);
+  color: var(--c-coral);
 }
 
 /* ---------- Modal Shell ---------- */
@@ -1371,7 +1443,7 @@ onMounted(() => {
     flex-wrap: wrap;
   }
 
-  .tool-card {
+  .tool-card-row {
     flex-direction: column;
     align-items: flex-start;
   }

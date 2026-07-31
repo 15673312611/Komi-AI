@@ -130,4 +130,11 @@ class AgentMCPToolsResponse(BaseModel):
     mcp_tools: List[MCPToolResponse] = []
 
     class Config:
-        from_attributes = True 
+        from_attributes = True
+
+
+class MCPToolTestResponse(BaseModel):
+    """Result of a one-off connection test against a configured tool."""
+    success: bool
+    functions: List[str] = []
+    error: Optional[str] = None

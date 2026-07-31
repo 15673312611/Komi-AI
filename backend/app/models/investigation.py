@@ -114,6 +114,11 @@ class InvestigationRun(Base):
     # message-limit check.
     metered = Column(Boolean, nullable=False, default=False, server_default="false")
 
+    # MCP connector outcome for the run: {"configured": N, "loaded": M,
+    # "failed": [{"name", "error"}]}. Lets the dashboard show "ran with 0 of N
+    # configured tools" instead of a silently evidence-free investigation.
+    connector_status = Column(JSON, nullable=True)
+
     error = Column(Text, nullable=True)
     started_at = Column(DateTime(timezone=True), nullable=True)
     finished_at = Column(DateTime(timezone=True), nullable=True)
