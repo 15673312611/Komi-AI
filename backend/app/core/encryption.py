@@ -25,7 +25,7 @@ CURRENT_KEY_ID moves to it, and ``v1`` stays in the registry so old rows keep
 reading while a backfill re-encrypts them.
 
 This module deliberately depends on nothing but the standard library, cryptography,
-SQLAlchemy and app.core.logger (stdlib-only itself), so the backfill script can load
+SQLAlchemy and app.core.{logger,config} (both light), so the backfill script can load
 it by file path on the host without importing the `app` package — whose __init__
 pulls in the FastAPI app and the whole ML stack.
 """
@@ -40,7 +40,7 @@ from cryptography.fernet import Fernet
 from sqlalchemy import Text
 from sqlalchemy.types import TypeDecorator
 
-from app.core.config import settings
+from app.core.config import ENCRYPTION_KEY_HINT, is_throwaway_environment
 from app.core.logger import get_logger
 
 logger = get_logger(__name__)
@@ -56,16 +56,9 @@ JSON_MARKER = "__enc__"
 ENCRYPTION_KEY_ENV = "ENCRYPTION_KEY"
 
 
-GENERATE_KEY_HINT = (
-    '  python -c "import base64;from cryptography.fernet import Fernet;'
-    'print(base64.b64encode(Fernet.generate_key()).decode())"'
-)
-
-
-def _is_throwaway_environment() -> bool:
-    """True only for local development and test runs, where a generated key is
-    harmless. Anywhere else a fresh key would orphan every encrypted row."""
-    return settings.ENVIRONMENT.lower() in {"development", "test", "testing"}
+# Indented for the multi-line error messages below; the command itself is defined
+# once in app.core.config so this and the startup audit cannot drift apart.
+GENERATE_KEY_HINT = f"  {ENCRYPTION_KEY_HINT}"
 
 
 def load_key() -> bytes:
@@ -77,20 +70,29 @@ def load_key() -> bytes:
 
     Outside development and tests a missing or malformed key is fatal: chat
     messages, session summaries and agent memory are all encrypted with it.
+
+    Usability of the key is checked here rather than left to ``Fernet()`` in
+    get_keys(), so that the .env.example placeholder and the common near-miss of
+    pasting a raw ``Fernet.generate_key()`` (base64-encoded once, not twice) both
+    surface the message below instead of a bare "must be 32 url-safe base64-encoded
+    bytes" from deep inside the library.
     """
     env_key = os.getenv(ENCRYPTION_KEY_ENV)
     if env_key:
         try:
-            return base64.b64decode(env_key)
+            key = base64.b64decode(env_key)
+            Fernet(key)
+            return key
         except Exception as e:
             logger.error(f"Invalid encryption key format: {str(e)}")
-            if not _is_throwaway_environment():
+            if not is_throwaway_environment():
                 raise RuntimeError(
-                    f"{ENCRYPTION_KEY_ENV} is set but is not valid base64. Encrypted "
-                    "data cannot be read; refusing to start with a different key."
+                    f"{ENCRYPTION_KEY_ENV} is set but is not a usable Fernet key. "
+                    "Encrypted data cannot be read; refusing to start with a "
+                    f"different key. Generate one with:\n{GENERATE_KEY_HINT}"
                 ) from e
 
-    if not _is_throwaway_environment():
+    if not is_throwaway_environment():
         raise RuntimeError(
             f"{ENCRYPTION_KEY_ENV} is not set. It encrypts chat messages, session "
             "summaries and agent memory at rest, so starting without it would make "

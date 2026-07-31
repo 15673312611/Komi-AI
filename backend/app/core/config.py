@@ -17,7 +17,7 @@ limitations under the License.
 import os
 import json
 from pydantic_settings import BaseSettings
-from typing import List, Optional
+from typing import List, NamedTuple, Optional
 from dotenv import load_dotenv
 from pathlib import Path
 from pydantic import field_validator
@@ -64,9 +64,14 @@ class Settings(BaseSettings):
 
     # app.core.encryption owns the actual key loading (reads the env var directly and
     # refuses to start without it outside development). This mirror exists only so
-    # check_secret_configuration can audit it; the demo default is what that audit
-    # flags in production.
-    ENCRYPTION_KEY: str = os.getenv("ENCRYPTION_KEY", "RFQ4SzhyRTVYdGtsLUxsc25SaDB0QlZpbTdQRmlVRlpsZUlCaFRlU2Vxbz0=")
+    # check_secret_configuration can audit it, hence no default: unset is itself
+    # one of the states that audit flags.
+    ENCRYPTION_KEY: str = os.getenv("ENCRYPTION_KEY", "")
+    # Downgrades the public-default ENCRYPTION_KEY startup error to a warning, for
+    # deployments whose existing data is encrypted under that key. See
+    # verify_secret_configuration.
+    ALLOW_INSECURE_ENCRYPTION_KEY: bool = os.getenv(
+        "ALLOW_INSECURE_ENCRYPTION_KEY", "false").lower() == "true"
 
     # SMTP Settings
     SMTP_SERVER: str = os.getenv("SMTP_SERVER", "smtp.gmail.com")
@@ -259,13 +264,47 @@ settings = Settings()
 logger = get_logger(__name__)
 
 
-# Values that ship in the repo (config defaults / .env.example). They are public,
-# so a deployment still using them can have its tokens forged and its stored
-# credentials decrypted by anyone.
-_INSECURE_DEFAULTS = {
-    "SECRET_KEY": "your-secret-key",
-    "CONVERSATION_SECRET_KEY": "your-conversation-secret-key",
-    "ENCRYPTION_KEY": "RFQ4SzhyRTVYdGtsLUxsc25SaDB0QlZpbTdQRmlVRlpsZUlCaFRlU2Vxbz0=",
+# Environments where the public defaults are acceptable, because nothing durable or
+# reachable is protected by them. Anything else is treated as a real deployment.
+_THROWAWAY_ENVIRONMENTS = frozenset({"development", "test", "testing"})
+
+# Shell one-liners producing a real value for each kind of secret, quoted back in
+# the startup error so the fix does not require going and finding the docs.
+# ENCRYPTION_KEY_HINT is public because app.core.encryption reports the same fix
+# when the key is missing at load time, and the two must not drift apart.
+ENCRYPTION_KEY_HINT = (
+    'python -c "import base64;from cryptography.fernet import Fernet;'
+    'print(base64.b64encode(Fernet.generate_key()).decode())"'
+)
+_HEX_SECRET_HINT = "openssl rand -hex 32"
+
+
+class _ManagedSecret(NamedTuple):
+    """A secret the app refuses to serve traffic without.
+
+    One record per secret rather than parallel dicts keyed by setting name: adding
+    a secret should be one line, and a half-filled entry should not surface as a
+    KeyError while building the very error meant to explain the problem.
+    """
+
+    # What the operator sets, which is not always the setting name.
+    env_var: str
+    # Value once shipped in this repo (config default / .env.example). Public, so
+    # it stays listed after being removed as a default — deployments copied it.
+    public_default: str
+    # Shell one-liner producing a real replacement.
+    generate: str
+
+
+_MANAGED_SECRETS = {
+    "SECRET_KEY": _ManagedSecret(
+        "JWT_SECRET_KEY", "your-secret-key", _HEX_SECRET_HINT),
+    "CONVERSATION_SECRET_KEY": _ManagedSecret(
+        "CONVERSATION_SECRET_KEY", "your-conversation-secret-key", _HEX_SECRET_HINT),
+    "ENCRYPTION_KEY": _ManagedSecret(
+        "ENCRYPTION_KEY",
+        "RFQ4SzhyRTVYdGtsLUxsc25SaDB0QlZpbTdQRmlVRlpsZUlCaFRlU2Vxbz0=",
+        ENCRYPTION_KEY_HINT),
 }
 
 # .env.example placeholders - not secret either, and they mean "never configured"
@@ -276,32 +315,67 @@ _PLACEHOLDER_VALUES = {
 }
 
 
-def check_secret_configuration(config: Settings = settings) -> list[str]:
-    """Warn when auth/encryption secrets are missing or still at their public
-    defaults outside development. Returns the names of the offending settings.
-
-    This warns rather than refusing to boot: existing self-hosted deployments may
-    still be running on the default ENCRYPTION_KEY, and their stored credentials
-    are encrypted under it, so failing hard would lock them out of their own data.
+def is_throwaway_environment(config: Settings = settings) -> bool:
+    """True for local development and test runs, where the public defaults are
+    harmless. Defined here so every check of "is this a real deployment" agrees;
+    app.core.encryption asks the same question before generating a throwaway key.
     """
-    if config.ENVIRONMENT == "development":
+    return config.ENVIRONMENT.lower() in _THROWAWAY_ENVIRONMENTS
+
+
+def check_secret_configuration(config: Settings = settings) -> list[str]:
+    """Names of the auth/encryption secrets that are missing or still at a public
+    default/placeholder. Empty in development, which runs on the defaults on purpose.
+
+    Pure audit: verify_secret_configuration decides what to do about the result.
+    """
+    if is_throwaway_environment(config):
         return []
 
-    insecure = [
-        name for name, default in _INSECURE_DEFAULTS.items()
+    return [
+        name for name, secret in _MANAGED_SECRETS.items()
         if not getattr(config, name, None)
-        or getattr(config, name) == default
+        or getattr(config, name) == secret.public_default
         or getattr(config, name) in _PLACEHOLDER_VALUES
     ]
 
-    if insecure:
-        logger.warning(
-            "INSECURE CONFIGURATION: %s still set to the public default/placeholder "
-            "value. Anyone can forge tokens or decrypt stored credentials. Generate "
-            "real values (openssl rand -hex 32 for the secret keys, "
-            "Fernet.generate_key() for ENCRYPTION_KEY) and restart. Note that changing "
-            "ENCRYPTION_KEY makes already-encrypted credentials unreadable.",
-            ", ".join(insecure),
-        )
 
-    return insecure
+def verify_secret_configuration(config: Settings = settings) -> None:
+    """Refuse to start on secrets anyone can look up in this repo.
+
+    Every value in _MANAGED_SECRETS and _PLACEHOLDER_VALUES is public, so a
+    deployment using one has no auth boundary at all — tokens can be forged and
+    stored credentials decrypted by anyone. A warning was not enough: it scrolls
+    past in the boot log and the deployment stays exposed indefinitely.
+
+    ENCRYPTION_KEY alone gets an escape hatch. An instance predating the required
+    key has real data encrypted under the public one, and refusing to boot would
+    lock it out of that data — worse than the exposure it already lives with.
+    Rotating a JWT secret only ends sessions, so those get no exemption.
+    """
+    insecure = check_secret_configuration(config)
+
+    if "ENCRYPTION_KEY" in insecure and config.ALLOW_INSECURE_ENCRYPTION_KEY:
+        logger.warning(
+            "ENCRYPTION_KEY is the public default and ALLOW_INSECURE_ENCRYPTION_KEY "
+            "is set, so startup continues. Conversations and stored credentials in "
+            "this database can be decrypted by anyone who has a copy of it. Generate "
+            "a real key (%s), re-encrypt what the old key wrote, then unset this.",
+            ENCRYPTION_KEY_HINT,
+        )
+        insecure = [name for name in insecure if name != "ENCRYPTION_KEY"]
+
+    if not insecure:
+        return
+
+    names = ", ".join(insecure)
+    verb = "is" if len(insecure) == 1 else "are"
+    fixes = "\n".join(
+        f"  {_MANAGED_SECRETS[name].env_var}=$({_MANAGED_SECRETS[name].generate})"
+        for name in insecure
+    )
+    raise RuntimeError(
+        f"Refusing to start: {names} {verb} unset or still set to a value published "
+        "in this repository, so anyone can forge tokens or decrypt stored data. "
+        f"Set real values and restart:\n{fixes}"
+    )

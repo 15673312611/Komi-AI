@@ -30,7 +30,7 @@ from app.api import webhooks as channel_webhooks
 from app.api import widget_chat  # noqa: F401 - imported for side effects (socket.io handlers registration)
 from fastapi import FastAPI, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
-from app.core.config import settings, check_secret_configuration
+from app.core.config import settings, verify_secret_configuration
 from app.core.encryption import verify_encryption_key
 from app.services.firebase import initialize_firebase
 from app.database import engine, Base
@@ -58,7 +58,7 @@ async def lifespan(app: FastAPI):
     # First: a bad ENCRYPTION_KEY must stop the boot, not surface as an unreadable
     # conversation once the app is already serving traffic.
     verify_encryption_key()
-    check_secret_configuration()
+    verify_secret_configuration()
     initialize_firebase()
     await startup_event()
     yield
