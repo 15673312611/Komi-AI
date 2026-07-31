@@ -14,7 +14,13 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-from app.core.config import Settings, check_secret_configuration
+import pytest
+
+from app.core.config import (
+    Settings,
+    check_secret_configuration,
+    verify_secret_configuration,
+)
 
 # The key that used to ship as the ENCRYPTION_KEY default and in .env.example. It
 # is public, so a deployment still using it must be flagged.
@@ -63,3 +69,55 @@ def test_development_is_exempt():
     config = Settings(ENVIRONMENT="development", SECRET_KEY="your-secret-key",
                       ENCRYPTION_KEY="")
     assert check_secret_configuration(config) == []
+
+
+def test_startup_passes_with_real_secrets():
+    verify_secret_configuration(_config())
+
+
+def test_startup_fails_on_default_jwt_secret():
+    with pytest.raises(RuntimeError, match="Refusing to start") as exc:
+        verify_secret_configuration(_config(SECRET_KEY="your-secret-key"))
+    # The env var, not the setting name, plus a command that produces a value.
+    assert "JWT_SECRET_KEY=$(openssl rand -hex 32)" in str(exc.value)
+
+
+def test_startup_fails_on_public_encryption_key():
+    with pytest.raises(RuntimeError, match="Refusing to start") as exc:
+        verify_secret_configuration(_config(ENCRYPTION_KEY=LEGACY_PUBLIC_KEY))
+    assert "Fernet.generate_key()" in str(exc.value)
+
+
+def test_startup_error_names_every_offender():
+    with pytest.raises(RuntimeError) as exc:
+        verify_secret_configuration(
+            Settings(ENVIRONMENT="production", SECRET_KEY="",
+                     CONVERSATION_SECRET_KEY="", ENCRYPTION_KEY="")
+        )
+    message = str(exc.value)
+    for name in ("SECRET_KEY", "CONVERSATION_SECRET_KEY", "ENCRYPTION_KEY"):
+        assert name in message
+
+
+def test_development_still_starts_on_defaults():
+    """The escape hatch is for production; development must stay zero-config."""
+    verify_secret_configuration(
+        Settings(ENVIRONMENT="development", SECRET_KEY="your-secret-key",
+                 ENCRYPTION_KEY="")
+    )
+
+
+def test_escape_hatch_allows_only_the_encryption_key():
+    """An instance whose data is encrypted under the public key can still boot."""
+    verify_secret_configuration(
+        _config(ENCRYPTION_KEY=LEGACY_PUBLIC_KEY, ALLOW_INSECURE_ENCRYPTION_KEY=True)
+    )
+
+
+def test_escape_hatch_does_not_excuse_the_jwt_secrets():
+    """Rotating a JWT secret only ends sessions, so it has no reason to be exempt."""
+    with pytest.raises(RuntimeError, match="SECRET_KEY"):
+        verify_secret_configuration(
+            _config(SECRET_KEY="your-secret-key", ENCRYPTION_KEY=LEGACY_PUBLIC_KEY,
+                    ALLOW_INSECURE_ENCRYPTION_KEY=True)
+        )

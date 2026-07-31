@@ -40,7 +40,7 @@ from cryptography.fernet import Fernet
 from sqlalchemy import Text
 from sqlalchemy.types import TypeDecorator
 
-from app.core.config import settings
+from app.core.config import ENCRYPTION_KEY_HINT, settings
 from app.core.logger import get_logger
 
 logger = get_logger(__name__)
@@ -56,10 +56,9 @@ JSON_MARKER = "__enc__"
 ENCRYPTION_KEY_ENV = "ENCRYPTION_KEY"
 
 
-GENERATE_KEY_HINT = (
-    '  python -c "import base64;from cryptography.fernet import Fernet;'
-    'print(base64.b64encode(Fernet.generate_key()).decode())"'
-)
+# Indented for the multi-line error messages below; the command itself is defined
+# once in app.core.config so this and the startup audit cannot drift apart.
+GENERATE_KEY_HINT = f"  {ENCRYPTION_KEY_HINT}"
 
 
 def _is_throwaway_environment() -> bool:

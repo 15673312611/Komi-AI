@@ -67,6 +67,11 @@ class Settings(BaseSettings):
     # check_secret_configuration can audit it, hence no default: unset is itself
     # one of the states that audit flags.
     ENCRYPTION_KEY: str = os.getenv("ENCRYPTION_KEY", "")
+    # Downgrades the public-default ENCRYPTION_KEY startup error to a warning, for
+    # deployments whose existing data is encrypted under that key. See
+    # verify_secret_configuration.
+    ALLOW_INSECURE_ENCRYPTION_KEY: bool = os.getenv(
+        "ALLOW_INSECURE_ENCRYPTION_KEY", "false").lower() == "true"
 
     # SMTP Settings
     SMTP_SERVER: str = os.getenv("SMTP_SERVER", "smtp.gmail.com")
@@ -276,33 +281,83 @@ _PLACEHOLDER_VALUES = {
     "your_fernet_encryption_key_here",
 }
 
+# Canonical hint for producing an ENCRYPTION_KEY. Lives here rather than in
+# app.core.encryption because that module imports this one, and the two error
+# paths (missing key at load, public key at startup) must not drift apart.
+ENCRYPTION_KEY_HINT = (
+    'python -c "import base64;from cryptography.fernet import Fernet;'
+    'print(base64.b64encode(Fernet.generate_key()).decode())"'
+)
+
+# Shell one-liner producing a real value for each secret, quoted in the startup
+# error so the fix does not require going and finding the docs.
+_GENERATION_HINTS = {
+    "SECRET_KEY": "openssl rand -hex 32",
+    "CONVERSATION_SECRET_KEY": "openssl rand -hex 32",
+    "ENCRYPTION_KEY": ENCRYPTION_KEY_HINT,
+}
+
+# The env var name behind each setting, since they differ for the JWT secrets and
+# the error is only actionable if it names what the operator actually sets.
+_ENV_VAR_NAMES = {
+    "SECRET_KEY": "JWT_SECRET_KEY",
+    "CONVERSATION_SECRET_KEY": "CONVERSATION_SECRET_KEY",
+    "ENCRYPTION_KEY": "ENCRYPTION_KEY",
+}
+
 
 def check_secret_configuration(config: Settings = settings) -> list[str]:
-    """Warn when auth/encryption secrets are missing or still at their public
-    defaults outside development. Returns the names of the offending settings.
+    """Names of the auth/encryption secrets that are missing or still at a public
+    default/placeholder. Empty in development, which runs on the defaults on purpose.
 
-    This warns rather than refusing to boot: existing self-hosted deployments may
-    still be running on the default ENCRYPTION_KEY, and their stored credentials
-    are encrypted under it, so failing hard would lock them out of their own data.
+    Pure audit: verify_secret_configuration decides what to do about the result.
     """
     if config.ENVIRONMENT == "development":
         return []
 
-    insecure = [
+    return [
         name for name, default in _INSECURE_DEFAULTS.items()
         if not getattr(config, name, None)
         or getattr(config, name) == default
         or getattr(config, name) in _PLACEHOLDER_VALUES
     ]
 
-    if insecure:
-        logger.warning(
-            "INSECURE CONFIGURATION: %s still set to the public default/placeholder "
-            "value. Anyone can forge tokens or decrypt stored credentials. Generate "
-            "real values (openssl rand -hex 32 for the secret keys, "
-            "Fernet.generate_key() for ENCRYPTION_KEY) and restart. Note that changing "
-            "ENCRYPTION_KEY makes already-encrypted credentials unreadable.",
-            ", ".join(insecure),
-        )
 
-    return insecure
+def verify_secret_configuration(config: Settings = settings) -> None:
+    """Refuse to start on secrets anyone can look up in this repo.
+
+    Every value in _INSECURE_DEFAULTS and _PLACEHOLDER_VALUES is public, so a
+    deployment using one has no auth boundary at all — tokens can be forged and
+    stored credentials decrypted by anyone. A warning was not enough: it scrolls
+    past in the boot log and the deployment stays exposed indefinitely.
+
+    ENCRYPTION_KEY alone gets an escape hatch. An instance predating the required
+    key has real data encrypted under the public one, and refusing to boot would
+    lock it out of that data — worse than the exposure it already lives with.
+    Rotating a JWT secret only ends sessions, so those get no exemption.
+    """
+    insecure = check_secret_configuration(config)
+
+    if "ENCRYPTION_KEY" in insecure and config.ALLOW_INSECURE_ENCRYPTION_KEY:
+        logger.warning(
+            "ENCRYPTION_KEY is the public default and ALLOW_INSECURE_ENCRYPTION_KEY "
+            "is set, so startup continues. Conversations and stored credentials in "
+            "this database can be decrypted by anyone who has a copy of it. Generate "
+            "a real key (%s), re-encrypt what the old key wrote, then unset this.",
+            ENCRYPTION_KEY_HINT,
+        )
+        insecure = [name for name in insecure if name != "ENCRYPTION_KEY"]
+
+    if not insecure:
+        return
+
+    fixes = "\n".join(
+        f"  {_ENV_VAR_NAMES[name]}=$({_GENERATION_HINTS[name]})" for name in insecure
+    )
+    raise RuntimeError(
+        f"Refusing to start: {', '.join(insecure)} " +
+        ("is" if len(insecure) == 1 else "are") +
+        " unset or still set to a value published in this repository, so anyone "
+        "can forge tokens or decrypt stored data. Set real values and restart:\n"
+        f"{fixes}"
+    )
