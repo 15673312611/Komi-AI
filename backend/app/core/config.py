@@ -154,7 +154,7 @@ class Settings(BaseSettings):
 
     # Hard ceiling on a single agent run (model + tool calls). A stuck run is
     # cancelled instead of hanging the chat handler forever (issue #269).
-    AGENT_RUN_TIMEOUT: int = int(os.getenv("AGENT_RUN_TIMEOUT", "60"))
+    AGENT_RUN_TIMEOUT: int = int(os.getenv("AGENT_RUN_TIMEOUT", "90"))
 
     # Knowledge base content summarization settings
     KNOWLEDGE_SUMMARY_ENABLED: bool = os.getenv("KNOWLEDGE_SUMMARY_ENABLED", "false").lower() == "true"
