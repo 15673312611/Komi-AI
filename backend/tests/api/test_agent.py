@@ -245,6 +245,94 @@ def test_update_agent(
     assert updated_agent["display_name"] == update_data["display_name"]
     assert updated_agent["instructions"] == update_data["instructions"]
 
+def test_update_agent_guardrail_round_trips(
+    client,
+    db,
+    test_user,
+    test_agent
+):
+    """Switching the guardrail off must come back off in the same response.
+
+    Regression: the update endpoint builds AgentWithCustomizationResponse from
+    an explicit field list, so a new column is silently dropped and the schema
+    default is returned instead. That made the dashboard toggle spring back to
+    "on" after saving until the page was reloaded — the row was correct, the
+    response was not. topic_scope had the same problem.
+    """
+    response = client.put(
+        f"/api/agents/{test_agent.id}",
+        json={
+            "guardrail_enabled": False,
+            "guardrail_prompt": "Only answer maths tutoring questions.",
+            "topic_scope": "maths tutoring",
+        },
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["guardrail_enabled"] is False, "toggle did not survive the response"
+    assert body["guardrail_prompt"] == "Only answer maths tutoring questions."
+    assert body["topic_scope"] == "maths tutoring"
+
+    # And it really persisted, not just echoed back.
+    db.refresh(test_agent)
+    assert test_agent.guardrail_enabled is False
+    assert test_agent.guardrail_prompt == "Only answer maths tutoring questions."
+
+
+def test_update_response_carries_every_agent_column(
+    client,
+    db,
+    test_user,
+    test_agent
+):
+    """No column may be silently dropped from the update response.
+
+    The endpoint builds AgentWithCustomizationResponse from an explicit field
+    list in four places, so adding a column to the model without touching all
+    four returns the schema default instead of the stored value. That has
+    happened twice — topic_scope, then guardrail_enabled — and the second time
+    it reached the dashboard as a toggle that sprang back to "on" after saving.
+    This asserts it generically so the third time fails here instead.
+    """
+    from app.models.agent import Agent
+    from app.models.schemas.agent import AgentResponse
+
+    # Give every scalar column a value distinguishable from its schema default.
+    columns = {c.name: c for c in Agent.__table__.columns}
+    probes = {}
+    for name in AgentResponse.model_fields:
+        column = columns.get(name)
+        if column is None or name in {"id", "organization_id", "agent_type",
+                                      "instructions", "created_at", "updated_at"}:
+            continue
+        python_type = getattr(column.type, "python_type", None)
+        try:
+            kind = python_type
+        except Exception:
+            continue
+        if kind is bool:
+            probes[name] = not bool(getattr(test_agent, name))
+        elif kind is str:
+            probes[name] = f"probe-{name}"
+    for name, value in probes.items():
+        setattr(test_agent, name, value)
+    db.commit()
+
+    response = client.put(f"/api/agents/{test_agent.id}", json={"is_active": True})
+    assert response.status_code == 200
+    body = response.json()
+
+    dropped = {
+        name: (value, body.get(name))
+        for name, value in probes.items()
+        if name != "is_active" and body.get(name) != value
+    }
+    assert not dropped, (
+        "these columns are missing from the response builder in "
+        f"app/api/agent.py (stored -> returned): {dropped}"
+    )
+
+
 def test_update_agent_groups(
     client,
     db,

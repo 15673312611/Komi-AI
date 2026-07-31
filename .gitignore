@@ -55,3 +55,17 @@ frontend/src/modules/
 
 # Hallmark design skill local logs
 .hallmark/
+
+# Local tooling and scratch files that have been accidentally staged before
+backend/.claude/
+backend/*.log
+backend/AWSCLIV2.pkg
+backend/scripts/repro_*.py
+build-and-push.sh
+config/
+
+# Env backups — these hold real credentials, never commit them
+*.env.bak*
+.env.*.bak*
+.env.prod.bak*
+frontend/.env.*.bak*

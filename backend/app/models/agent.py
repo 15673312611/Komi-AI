@@ -127,6 +127,15 @@ class Agent(Base):
     # description or the organization name/domain, so it works with zero config.
     # Only the scope DESCRIPTION is tenant-editable; the enforcement text is code.
     topic_scope = Column(Text, nullable=True)
+    # Tenant-editable scope rule shown under Instructions in the dashboard.
+    # NULL means "use the shipped default" (guardrail_policy.DEFAULT_GUARDRAIL_PROMPT),
+    # so the wording can be improved centrally without rewriting every row.
+    # Editable because a code-owned topic list is a guess about what a business
+    # is NOT — it refused maths for a maths tutor, algorithms for a bootcamp.
+    guardrail_prompt = Column(Text, nullable=True)
+    # Off means no scope rule at all. Injection and disclosure rules are not
+    # covered by this toggle; they stay code-owned.
+    guardrail_enabled = Column(Boolean, default=True, nullable=False, server_default="true")
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     # Relationships

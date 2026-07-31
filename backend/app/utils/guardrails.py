@@ -16,7 +16,7 @@ limitations under the License.
 
 import re
 from dataclasses import dataclass
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, List, Optional, Sequence, Tuple
 from enum import Enum
 from app.core.logger import get_logger
 
@@ -276,6 +276,70 @@ _TECHNICAL_CONTEXT_PATTERNS = [
 
 _WEAK_SIGNAL_WEIGHT = 0.25
 _TECHNICAL_SUPPRESSION = 0.5
+
+
+# --- Off-topic exercise briefs ----------------------------------------------
+#
+# Prompt text alone does not hold here. A long, well-structured algorithms or
+# system-design brief was answered in full in production despite the policy
+# forbidding it, three wordings running — the model reads the length and polish
+# as "technical depth" and helps. This detector catches only that narrow shape,
+# deterministically, before inference.
+#
+# Precision comes from the THIRD condition: a real customer question about the
+# product almost always names something about the business or its failure mode.
+# An exercise brief names none of it. All three must hold, so a pasted traceback
+# ("error", "exception"), a long integration question ("webhook", "api key") or
+# anything naming the org is never caught.
+RULE_OFFTOPIC_EXERCISE = "offtopic.exercise_brief"
+
+_EXERCISE_MIN_CHARS = 500
+_EXERCISE_MIN_MARKERS = 4
+
+_EXERCISE_MARKERS = [
+    re.compile(r'\bO\(\s*(?:1|n|log\s*n|n\s*log\s*n|n\^?2)\s*\)', re.IGNORECASE),
+    re.compile(r'\b(?:time|space)\s+complexity\b', re.IGNORECASE),
+    re.compile(r'\bdata\s+structure\b', re.IGNORECASE),
+    re.compile(r'\balgorithm\b', re.IGNORECASE),
+    re.compile(r'(?m)^\s*constraints\s*:', re.IGNORECASE),
+    re.compile(r'\byour\s+task\s*:', re.IGNORECASE),
+    re.compile(r'\bdesign\s+(?:a|an)\b[^.\n]{0,60}\bthat\s+supports\b', re.IGNORECASE),
+    re.compile(r'\bimplement\s+the\b', re.IGNORECASE),
+    re.compile(r'(?m)^\s*bonus\s*:', re.IGNORECASE),
+    re.compile(r'\bedge\s+cases?\b', re.IGNORECASE),
+    re.compile(r'\bgiven\s+(?:an?\s+)?(?:array|string|list|integer|tree|graph)\b', re.IGNORECASE),
+    re.compile(r'\bduplicates?\s+(?:are\s+)?allowed\b', re.IGNORECASE),
+    re.compile(r'\bworst[- ]case\b', re.IGNORECASE),
+]
+
+# Any one of these means the message is anchored to a real business context.
+_BUSINESS_ANCHORS = [
+    re.compile(r'\b(?:pricing|price|plan|billing|invoice|subscription|refund|trial|upgrade|quote)\b', re.IGNORECASE),
+    re.compile(r'\b(?:account|login|log in|sign ?in|sign ?up|password|onboard)\b', re.IGNORECASE),
+    re.compile(r'\b(?:install|setup|set up|deploy|self[- ]host|docker|compose|container)\b', re.IGNORECASE),
+    re.compile(r'\b(?:widget|dashboard|webhook|api[- ]key|integrat|plugin|embed|sdk)\w*', re.IGNORECASE),
+    re.compile(r'\b(?:error|exception|traceback|stack trace|bug|crash|fail|broken|not working)\w*', re.IGNORECASE),
+    re.compile(r'\b(?:support|ticket|agent|chatbot|knowledge base|faq|inbox|conversation)\b', re.IGNORECASE),
+    re.compile(r'\b(?:your (?:product|service|platform|tool|app)|you offer|do you support)\b', re.IGNORECASE),
+]
+
+
+def detect_offtopic_exercise(text: str, business_terms: Sequence[str] = ()) -> bool:
+    """True for a long, self-contained exercise brief with no business context.
+
+    Deliberately narrow: it exists to catch the generic-LLM-task abuse that the
+    prompt policy cannot hold, not to classify topics in general.
+    """
+    body = text or ""
+    if len(body) < _EXERCISE_MIN_CHARS:
+        return False
+    markers = sum(1 for p in _EXERCISE_MARKERS if p.search(body))
+    if markers < _EXERCISE_MIN_MARKERS:
+        return False
+    if any(p.search(body) for p in _BUSINESS_ANCHORS):
+        return False
+    lowered = body.lower()
+    return not any(term and term.lower() in lowered for term in business_terms)
 
 
 @dataclass(frozen=True)

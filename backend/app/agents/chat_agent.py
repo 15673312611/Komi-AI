@@ -37,6 +37,7 @@ from app.agents.transfer_agent import get_agent_availability_response
 from app.agents.guardrail_policy import (
     GuardrailContext,
     apply_guardrail_policy,
+    guardrail_scope_prompt,
     wrap_operator_block,
 )
 from app.utils.guardrail_runtime import BLOCK_REPLY, Surface, check_inbound, check_output
@@ -452,6 +453,8 @@ class ChatAgent(ChatAgentMCPMixin):
                 agent_type=agent_type.value if hasattr(agent_type, "value") else agent_type,
                 description=getattr(self.agent_data, "description", None) if self.agent_data else None,
                 topic_scope=getattr(self.agent_data, "topic_scope", None) if self.agent_data else None,
+                guardrail_prompt=getattr(self.agent_data, "guardrail_prompt", None) if self.agent_data else None,
+                guardrail_enabled=getattr(self.agent_data, "guardrail_enabled", True) if self.agent_data else True,
                 org_id=str(org_id) if org_id else None,
                 agent_id=str(agent_id) if agent_id else None,
             )
@@ -557,6 +560,14 @@ class ChatAgent(ChatAgentMCPMixin):
                 system_message = wrap_operator_block(custom_system_prompt)
             elif self.agent_data.instructions:
                 system_message = wrap_operator_block("\n".join(self.agent_data.instructions)) + knowledge_tool_prompt
+                # Grounding rule: scopes the agent by what its knowledge base
+                # can support rather than by a topic list. Sits beside
+                # knowledge_tool_prompt, outside the operator fence, so a
+                # tenant can neither edit nor delete it.
+                # NOT applied to the custom_system_prompt (workflow) branch:
+                # a workflow is explicitly composed, so its scope belongs in an
+                # explicit guardrails node the builder adds, not injected here.
+                system_message += guardrail_scope_prompt(self._guardrail_ctx)
             
             # Add concise response instruction for better performance
             system_message += """
@@ -1284,7 +1295,7 @@ Keep your responses concise and focused. Provide clear, actionable information i
                     # Blocked pre-inference: reply with the canned line, store
                     # it like any bot turn, and never call the model.
                     blocked_response = ChatResponse(
-                        message=BLOCK_REPLY,
+                        message=guardrail_verdict.reply,
                         transfer_to_human=False,
                         transfer_reason=None,
                         transfer_description=None,
@@ -1296,7 +1307,7 @@ Keep your responses concise and focused. Provide clear, actionable information i
                         shopify_output=None
                     )
                     chat_repo.create_message({
-                        "message": BLOCK_REPLY,
+                        "message": guardrail_verdict.reply,
                         "message_type": "bot",
                         "session_id": session_id,
                         "organization_id": org_id,

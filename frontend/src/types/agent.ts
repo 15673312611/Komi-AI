@@ -39,6 +39,9 @@ export interface Agent {
   allowed_attachment_types: string[] | null
   require_token_auth: boolean
   ticketing_enabled: boolean
+  /** Tenant-editable scope rule; null uses the platform default. */
+  guardrail_prompt?: string | null
+  guardrail_enabled?: boolean
   knowledge: Array<{
     id: number
     name: string
@@ -68,6 +71,8 @@ export interface AgentUpdate {
   allowed_attachment_types?: string[] | null
   require_token_auth?: boolean
   ticketing_enabled?: boolean
+  guardrail_prompt?: string | null
+  guardrail_enabled?: boolean
   customization?: AgentCustomization
 }
 
