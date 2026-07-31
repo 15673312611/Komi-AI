@@ -374,6 +374,27 @@ def test_create_agent_customization(
     customization = response.json()
     assert customization["chat_background_color"] == customization_data["chat_background_color"]
     assert customization["chat_bubble_color"] == customization_data["chat_bubble_color"]
+    # Disclosure is on unless the operator turns it off
+    assert customization["show_ai_disclaimer"] is True
+
+
+def test_ai_disclaimer_toggle_round_trips(client, db, test_agent):
+    """Turning the footer disclaimer off must survive the round trip.
+
+    The widget reads this from the customization payload, so a value that is
+    accepted but not returned would leave the dashboard toggle springing back on.
+    """
+    payload = CustomizationCreate(show_ai_disclaimer=False).model_dump()
+
+    response = client.post(f"/api/agents/{test_agent.id}/customization", json=payload)
+    assert response.status_code == 200
+    assert response.json()["show_ai_disclaimer"] is False
+
+    db.expire_all()
+    stored = db.query(AgentCustomization).filter(
+        AgentCustomization.agent_id == test_agent.id
+    ).first()
+    assert stored.show_ai_disclaimer is False
 
 # Tests for create_agent endpoint
 def test_create_agent_success(

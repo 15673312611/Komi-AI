@@ -48,6 +48,7 @@ class AgentCustomizationResponse(BaseModel):
     quick_actions: Optional[List[str]] = None
     show_citations: Optional[bool] = None
     collect_email: Optional[bool] = None
+    show_ai_disclaimer: Optional[bool] = None
 
     @field_serializer('photo_url')
     def _sign_photo_url(self, v: Optional[str]) -> Optional[str]:

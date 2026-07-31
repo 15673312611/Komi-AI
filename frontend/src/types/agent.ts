@@ -117,6 +117,7 @@ export interface AgentCustomization {
   quick_actions?: string[]
   show_citations?: boolean
   collect_email?: boolean
+  show_ai_disclaimer?: boolean
 }
 
 export interface AgentWithCustomization extends AgentResponse {
