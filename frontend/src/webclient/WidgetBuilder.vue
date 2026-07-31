@@ -2330,8 +2330,9 @@ const shouldShowWelcomeMessage = computed(() => {
                                 </div>
                             </template>
                             <template v-else>
-                                <!-- Live replies reveal char-by-char as plain text (XSS-safe) with a
-                                     caret; once finished they render as full markdown. -->
+                                <!-- Live replies reveal char-by-char, rendering the partial slice
+                                     through the same sanitized markdown pipeline as the final text
+                                     so formatting appears mid-stream (caret rides the last block). -->
                                 <div v-if="isStreaming(index)" class="message-streaming" v-html="renderMarkdown(displayText(index, message.message))"></div>
                                 <div v-else v-html="renderMarkdown(message.message)"></div>
 
