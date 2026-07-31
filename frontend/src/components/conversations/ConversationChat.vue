@@ -1178,11 +1178,22 @@ watch(() => currentChat.value?.session_id, () => refreshLinkedTicket())
 
 .message-bubble :deep(a) {
   color: var(--primary-color);
-  text-decoration: none;
+  /* Always underlined: colour alone is not a reliable link affordance, and it
+     keeps links findable on the accent-filled bubbles below. */
+  text-decoration: underline;
 }
 
-.message-bubble :deep(a:hover) {
+/* The human-agent bubble is filled with --accent-ink, and --primary-color IS
+   --accent-ink in both themes — so a link inherited the bubble's own
+   background colour and rendered invisible. Links there take the bubble's
+   foreground instead. */
+.message.agent .message-bubble :deep(a) {
+  color: var(--bubble-agent-fg);
   text-decoration: underline;
+}
+
+.message.agent .message-bubble :deep(a:hover) {
+  opacity: 0.8;
 }
 
 /* Attachment styles */
