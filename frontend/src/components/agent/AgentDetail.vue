@@ -748,6 +748,8 @@ const handleSaveAgentFromTab = async (data: any) => {
 
         const updatedAgent = await agentService.updateAgent(agentData.value.id, {
             instructions: instructions,
+            guardrail_prompt: data.guardrailPrompt,
+            guardrail_enabled: data.guardrailEnabled,
             transfer_to_human: data.transferToHuman,
             ask_for_rating: data.askForRating,
             handoff_collect_email: data.handoffCollectEmail,
@@ -1072,6 +1074,8 @@ onMounted(async () => {
                         <div v-if="activeTab === 'agent'" class="tab-content">
                             <AgentInstructionsTab
                                 :instructions="instructionsText"
+                                :guardrail-prompt="agentData.guardrail_prompt"
+                                :guardrail-enabled="agentData.guardrail_enabled ?? true"
                                 :transfer-to-human="agentData.transfer_to_human"
                                 :ask-for-rating="agentData.ask_for_rating"
                                 :handoff-collect-email="agentData.handoff_collect_email"

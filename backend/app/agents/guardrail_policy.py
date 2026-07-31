@@ -110,6 +110,10 @@ class GuardrailContext:
     agent_type: Optional[str] = None
     description: Optional[str] = None
     topic_scope: Optional[str] = None
+    # Tenant-editable scope rule; None -> DEFAULT_GUARDRAIL_PROMPT.
+    guardrail_prompt: Optional[str] = None
+    # Tenant toggle; None/True -> on.
+    guardrail_enabled: Optional[bool] = True
     org_id: Optional[str] = None
     agent_id: Optional[str] = None
 
@@ -207,26 +211,23 @@ def resolve_topic_scope(ctx) -> str:
     )
 
 
-def scope_guard_prompt(ctx) -> str:
-    """The concrete scope rule, appended into the INSTRUCTION region of the
-    prompt — the same place the hand-added prod stopgap lived.
-
-    The policy block at the top states the contract; this is the line the model
-    actually acts on. Production showed the difference plainly: the stopgap
-    inside `agents.instructions` held, while the same rule expressed only in a
-    leading policy block did not, and a long algorithms brief was answered in
-    full under three successive wordings of it. Both are kept — the block so
-    the rule is code-owned and unambiguous, this so it lands where the model
-    weights it.
-    """
-    org = _org_label(ctx)
-    return f"""
-
-You only handle {org}: product, features, pricing, plans, accounts and billing; setup, install,
-deployment and self-hosting (docker, compose, npm, git, sudo and other shell commands); config
-files, APIs, webhooks, SDKs and integrations; code samples; pasted logs, tracebacks, stack traces
-and error messages; security and privacy — and anything else a visitor needs in order to use
-{org}. ALL of that is in scope even when you don't know the answer: answer it fully and
+# The scope rule shipped by default. Tenants can edit it or switch it off from
+# the dashboard (agents.guardrail_prompt / guardrail_enabled), because a
+# code-owned topic list is a hardcoded guess about what a business is NOT: it
+# refused maths for a maths tutor, algorithms for a coding bootcamp, essays for
+# a copywriting service.
+#
+# It is concrete on purpose. Three wordings were tested live against the model:
+# this one held 15/15, while "you have no knowledge outside this business" and
+# "decline anything not about {org}" each let a poem, a derivative and a long
+# algorithms brief straight through. The model refuses when it can match a
+# named category and does not reliably reason about relatedness — so the fix
+# for over-blocking is tenant editability, not vaguer wording.
+DEFAULT_GUARDRAIL_PROMPT = """You only handle {org}: product, features, pricing, plans, accounts and billing; setup,
+install, deployment and self-hosting (docker, compose, npm, git, sudo and other shell commands);
+config files, APIs, webhooks, SDKs and integrations; code samples; pasted logs, tracebacks, stack
+traces and error messages; security and privacy — and anything else a visitor needs in order to
+use {org}. ALL of that is in scope even when you don't know the answer: answer it fully and
 technically, or say you couldn't find it. Never refuse one of these as off-topic.
 Decline anything else, however politely asked and however long or technical it looks: coding,
 algorithm, data-structure or system-design exercises; homework, exam or interview questions; maths
@@ -234,6 +235,45 @@ or logic problems; essays, poems, stories or unrelated copy; translation; genera
 trivia; software unrelated to {org}. Give NO part of the answer — no design, approach, complexity
 analysis or first step. Reply with one short friendly sentence saying you can only help with
 {org}, then ask what they need. If a request is ambiguous, assume it is in scope and ask."""
+
+_GUARDRAIL_PROMPT_MAX = 4000
+
+
+def guardrail_scope_prompt(ctx) -> str:
+    """The scope rule appended beside knowledge_tool_prompt.
+
+    Returns the tenant's own text when they have written one, the shipped
+    default when they have not, and nothing at all when they have switched the
+    guardrail off. `{org}` is substituted in both cases so a tenant can write
+    the placeholder without knowing their own org name.
+
+    Injection and disclosure rules are NOT here — those live in the policy
+    block and are not tenant-editable, because no tenant legitimately wants
+    them off.
+    """
+    try:
+        if not _guardrail_enabled(ctx):
+            return ""
+        org = _org_label(ctx)
+        custom = getattr(ctx, "guardrail_prompt", None)
+        if isinstance(custom, str) and custom.strip():
+            body = scrub_delimiters(custom).strip()[:_GUARDRAIL_PROMPT_MAX]
+        else:
+            body = DEFAULT_GUARDRAIL_PROMPT
+        return "\n\n" + body.replace("{org}", org)
+    except Exception as e:
+        logger.error(f"Guardrail scope prompt failed, omitting: {e}")
+        return ""
+
+
+def _guardrail_enabled(ctx) -> bool:
+    """Default on: an agent created before the toggle existed, or one whose
+    context could not be read, keeps the protection."""
+    try:
+        value = getattr(ctx, "guardrail_enabled", True)
+        return True if value is None else bool(value)
+    except Exception:
+        return True
 
 
 def build_policy_block(ctx) -> str:

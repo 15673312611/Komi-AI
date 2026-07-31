@@ -58,6 +58,14 @@ class AgentBase(BaseModel):
         default=None, max_length=500,
         description="Optional one-line business remit used by the platform guardrail's topic-scope line."
     )
+    guardrail_prompt: Optional[str] = Field(
+        default=None, max_length=4000,
+        description="Scope rule for this agent. Null uses the platform default; edit it to fit your business."
+    )
+    guardrail_enabled: bool = Field(
+        default=True,
+        description="Apply the scope rule. Injection and disclosure protections are always on."
+    )
 
 
 class AgentCreate(AgentBase):
@@ -85,6 +93,8 @@ class AgentUpdate(BaseModel):
     require_token_auth: Optional[bool] = None
     ticketing_enabled: Optional[bool] = None
     topic_scope: Optional[str] = Field(default=None, max_length=500)
+    guardrail_prompt: Optional[str] = Field(default=None, max_length=4000)
+    guardrail_enabled: Optional[bool] = None
 
 
 class AgentKnowledge(BaseModel):
@@ -117,6 +127,8 @@ class AgentResponse(BaseModel):
     require_token_auth: bool = False
     ticketing_enabled: bool = True
     topic_scope: Optional[str] = None
+    guardrail_prompt: Optional[str] = None
+    guardrail_enabled: bool = True
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 

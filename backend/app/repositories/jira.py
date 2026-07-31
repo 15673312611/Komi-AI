@@ -94,6 +94,8 @@ class JiraRepository:
                 ask_for_rating=agent.ask_for_rating,
                 ticketing_enabled=agent.ticketing_enabled,
                 topic_scope=agent.topic_scope,
+                guardrail_prompt=agent.guardrail_prompt,
+                guardrail_enabled=agent.guardrail_enabled,
                 groups=agent.groups,
                 organization=agent.organization,
                 knowledge=[],  # Empty list as default

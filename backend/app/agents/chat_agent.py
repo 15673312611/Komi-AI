@@ -37,7 +37,7 @@ from app.agents.transfer_agent import get_agent_availability_response
 from app.agents.guardrail_policy import (
     GuardrailContext,
     apply_guardrail_policy,
-    scope_guard_prompt,
+    guardrail_scope_prompt,
     wrap_operator_block,
 )
 from app.utils.guardrail_runtime import BLOCK_REPLY, Surface, check_inbound, check_output
@@ -453,6 +453,8 @@ class ChatAgent(ChatAgentMCPMixin):
                 agent_type=agent_type.value if hasattr(agent_type, "value") else agent_type,
                 description=getattr(self.agent_data, "description", None) if self.agent_data else None,
                 topic_scope=getattr(self.agent_data, "topic_scope", None) if self.agent_data else None,
+                guardrail_prompt=getattr(self.agent_data, "guardrail_prompt", None) if self.agent_data else None,
+                guardrail_enabled=getattr(self.agent_data, "guardrail_enabled", True) if self.agent_data else True,
                 org_id=str(org_id) if org_id else None,
                 agent_id=str(agent_id) if agent_id else None,
             )
@@ -558,11 +560,14 @@ class ChatAgent(ChatAgentMCPMixin):
                 system_message = wrap_operator_block(custom_system_prompt)
             elif self.agent_data.instructions:
                 system_message = wrap_operator_block("\n".join(self.agent_data.instructions)) + knowledge_tool_prompt
-
-            # Scope rule in the instruction region, alongside knowledge_tool_prompt.
-            # Code-owned and appended after the operator fence, so a tenant can
-            # neither edit nor delete it. Applies to both branches above.
-            system_message += scope_guard_prompt(self._guardrail_ctx)
+                # Grounding rule: scopes the agent by what its knowledge base
+                # can support rather than by a topic list. Sits beside
+                # knowledge_tool_prompt, outside the operator fence, so a
+                # tenant can neither edit nor delete it.
+                # NOT applied to the custom_system_prompt (workflow) branch:
+                # a workflow is explicitly composed, so its scope belongs in an
+                # explicit guardrails node the builder adds, not injected here.
+                system_message += guardrail_scope_prompt(self._guardrail_ctx)
             
             # Add concise response instruction for better performance
             system_message += """

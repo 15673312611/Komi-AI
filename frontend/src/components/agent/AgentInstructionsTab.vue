@@ -30,6 +30,14 @@ const props = defineProps({
     type: String,
     required: true
   },
+  guardrailPrompt: {
+    type: String as () => string | null,
+    default: null
+  },
+  guardrailEnabled: {
+    type: Boolean,
+    default: true
+  },
   transferToHuman: {
     type: Boolean,
     required: true
@@ -108,6 +116,11 @@ const handleUpgrade = () => {
 
 // Create local state for all editable fields
 const localInstructions = ref(props.instructions)
+// Empty means "use the platform default". Deliberately not prefilled with the
+// default text: saving a copy would freeze this agent on today's wording and it
+// would never pick up improvements to the default.
+const localGuardrailPrompt = ref(props.guardrailPrompt ?? '')
+const localGuardrailEnabled = ref(props.guardrailEnabled)
 const localTransferToHuman = ref(props.transferToHuman)
 const localAskForRating = ref(props.askForRating)
 const localHandoffCollectEmail = ref(props.handoffCollectEmail)
@@ -115,6 +128,9 @@ const localHandoffCollectName = ref(props.handoffCollectName)
 const localSelectedGroupIds = ref<string[]>([...props.selectedGroupIds])
 
 // Watch for changes in props to update local state
+watch(() => props.guardrailPrompt, (v) => { localGuardrailPrompt.value = v ?? '' })
+watch(() => props.guardrailEnabled, (v) => { localGuardrailEnabled.value = v })
+
 watch(() => props.instructions, (newValue) => {
   localInstructions.value = newValue
 })
@@ -193,6 +209,8 @@ const handleRatingToggle = (event: Event) => {
 const handleSave = () => {
   emit('save-agent', {
     instructions: localInstructions.value,
+    guardrailPrompt: localGuardrailPrompt.value.trim() || null,
+    guardrailEnabled: localGuardrailEnabled.value,
     transferToHuman: localTransferToHuman.value,
     askForRating: localAskForRating.value,
     handoffCollectEmail: localHandoffCollectEmail.value,
@@ -256,6 +274,36 @@ const handleSave = () => {
         placeholder="Enter instructions for the agent..."
         :readonly="!isEditing"
       ></textarea>
+    </section>
+
+    <!-- Guardrail Section -->
+    <section class="detail-section guardrail-section">
+      <div class="toggle-header">
+        <h4 class="section-title">Guardrail</h4>
+        <label class="switch">
+          <input type="checkbox" v-model="localGuardrailEnabled" :disabled="!isEditing">
+          <span class="slider"></span>
+        </label>
+      </div>
+      <p class="helper-text">
+        Keeps the agent on topics related to your business, so visitors can't use it as a
+        general-purpose AI. Protection against prompt injection and against revealing its
+        configuration is always on and isn't affected by this switch.
+      </p>
+
+      <template v-if="localGuardrailEnabled">
+        <textarea
+          class="instructions-textarea"
+          v-model="localGuardrailPrompt"
+          rows="5"
+          :readonly="!isEditing"
+          placeholder="Leave empty to use the default: the agent answers anything about your product, pricing, accounts, setup, APIs and troubleshooting, and declines unrelated requests such as homework, puzzles or creative writing.&#10;&#10;Write your own rule to replace it — for example if your business IS tutoring, coding education or copywriting, so those requests should be answered."
+        ></textarea>
+        <p class="helper-text">
+          Use <code>{org}</code> to refer to your business name. Leave empty to keep the default,
+          which we improve over time.
+        </p>
+      </template>
     </section>
 
     <!-- Transfer and Rating Section -->

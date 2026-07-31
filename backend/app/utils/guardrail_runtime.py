@@ -165,6 +165,17 @@ def _business_terms(ctx) -> Tuple[str, ...]:
     return tuple(terms)
 
 
+def _default_scope_in_force(ctx) -> bool:
+    """True only when the agent runs the shipped scope rule unmodified."""
+    try:
+        if not getattr(ctx, "guardrail_enabled", True):
+            return False
+        custom = getattr(ctx, "guardrail_prompt", None)
+        return not (isinstance(custom, str) and custom.strip())
+    except Exception:
+        return True
+
+
 def _should_block(rule_ids: Tuple[str, ...]) -> bool:
     mode = (getattr(settings, "GUARDRAIL_INBOUND_ACTION", "template_only") or "off").lower()
     if mode == "strict":
@@ -196,7 +207,16 @@ def check_inbound(
         # Off-topic exercise briefs: prompt text could not hold these, so they
         # are stopped here — which also avoids paying for the inference the
         # whole change exists to prevent.
-        if detect_offtopic_exercise(text or "", _business_terms(ctx)):
+        #
+        # Only when the tenant is running the DEFAULT scope rule. The detector
+        # encodes our default's assumptions (an algorithms brief is off-topic),
+        # which is wrong for a coding bootcamp or a maths tutor — and blocking
+        # pre-inference gives the model no chance to disagree. If they switched
+        # the rule off or wrote their own, this must not fire, or the dashboard
+        # would say one thing and the code do another.
+        if _default_scope_in_force(ctx) and detect_offtopic_exercise(
+            text or "", _business_terms(ctx)
+        ):
             rules.append(RULE_OFFTOPIC_EXERCISE)
             mode = (getattr(settings, "GUARDRAIL_OFFTOPIC_ACTION", "block") or "off").lower()
             if allow_block and mode == "block":
