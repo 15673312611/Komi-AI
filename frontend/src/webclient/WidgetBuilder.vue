@@ -2034,7 +2034,7 @@ const shouldShowWelcomeMessage = computed(() => {
                         </div>
                         <div class="message-col">
                         <div class="message-bubble"
-                            :style="message.message_type === 'system' || message.message_type === 'rating' || message.message_type === 'product' || message.shopify_output ? {} :
+                            :style="message.message_type === 'system' || message.message_type === 'rating' || message.message_type === 'form' || message.message_type === 'product' || message.shopify_output ? {} :
                                    message.message_type === 'user' ? userBubbleStyles :
                                    agentBubbleStyles"
                         >
@@ -4709,7 +4709,9 @@ const shouldShowWelcomeMessage = computed(() => {
 .message.form-message {
     align-self: center;
     width: 100%;
-    max-width: 520px;
+    /* Never wider than the chat area — the widget iframe is narrower than
+       520px, and anything past 100% ignores the message gutters (#270). */
+    max-width: min(520px, 100%);
     margin: var(--space-md) 0;
 }
 
@@ -4724,6 +4726,9 @@ const shouldShowWelcomeMessage = computed(() => {
     border: 1px solid rgba(0, 0, 0, 0.06);
     width: 100%;
     max-width: none;
+    /* The iframe shell has no CSS reset, so without this the card is 100%
+       PLUS padding/border and overflows the widget frame (#270). */
+    box-sizing: border-box;
     backdrop-filter: blur(10px);
     position: relative;
     overflow: hidden;
@@ -4766,6 +4771,12 @@ const shouldShowWelcomeMessage = computed(() => {
     background-clip: text;
     margin: 0 0 var(--space-sm) 0;
     letter-spacing: -0.02em;
+}
+
+/* 28px is proportioned for the full-screen form; inside the ~370px inline
+   card it wraps into an oversized two-line heading (#270). */
+.form-message .form-title {
+    font-size: 20px;
 }
 
 .form-description {
