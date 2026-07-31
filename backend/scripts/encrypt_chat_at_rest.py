@@ -59,6 +59,10 @@ TARGETS = (
     # schema, and app.agents.encrypted_storage does not override it, so the table
     # is ai.agent_sessions — schema-qualified here or to_regclass won't find it.
     ("ai.agent_sessions", "session_id", ("memory",), JSON),
+    # Guardrail review excerpts: the snippet of the message that tripped a rule,
+    # encrypted like any other visitor text. Included so the table is covered if
+    # excerpts are ever written before the column type lands on an environment.
+    ("guardrail_events", "id", ("excerpt",), TEXT),
 )
 
 

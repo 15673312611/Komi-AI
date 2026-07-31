@@ -54,6 +54,10 @@ class AgentBase(BaseModel):
     )
     require_token_auth: bool = False
     ticketing_enabled: bool = True
+    topic_scope: Optional[str] = Field(
+        default=None, max_length=500,
+        description="Optional one-line business remit used by the platform guardrail's topic-scope line."
+    )
 
 
 class AgentCreate(AgentBase):
@@ -80,6 +84,7 @@ class AgentUpdate(BaseModel):
     )
     require_token_auth: Optional[bool] = None
     ticketing_enabled: Optional[bool] = None
+    topic_scope: Optional[str] = Field(default=None, max_length=500)
 
 
 class AgentKnowledge(BaseModel):
@@ -111,6 +116,7 @@ class AgentResponse(BaseModel):
     allowed_attachment_types: Optional[List[str]] = None
     require_token_auth: bool = False
     ticketing_enabled: bool = True
+    topic_scope: Optional[str] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 

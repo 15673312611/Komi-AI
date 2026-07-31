@@ -18,6 +18,7 @@ from typing import Dict, Any
 from datetime import datetime
 import pytz
 from agno.agent import Agent
+from app.agents.guardrail_policy import INJECTION_CLAUSE, visitor_data_block
 from app.utils.agno_utils import create_model
 from app.repositories.agent import AgentRepository
 from app.repositories.customer import CustomerRepository
@@ -42,6 +43,7 @@ class TransferResponseAgent:
 
         # Define instructions for transfer response agent
         instructions = [
+            INJECTION_CLAUSE,
             "You need to explain why you're transferring the chat to a another agent.",
             "If within business hours and agents are available, explain that you need to transfer to a better qualified agent to help.",
             "If outside business hours or no agents available, apologize and explain that the team will contact them via email.",
@@ -128,8 +130,7 @@ class TransferResponseAgent:
             f"Business Context:\n{business_context}\n"
             f"Currently within business hours: {is_business_hours}"
             f"{email_context}\n\n"
-            f"Recent conversation history:\n"
-            f"{chat_history_text}\n\n"
+            f"{visitor_data_block('CONVERSATION', chat_history_text)}\n\n"
             f"Instructions for response:\n"
             f"1. If within business hours ({is_business_hours}) and agents available ({available_agents} online), "
             f"explain that you need to transfer to a human agent who can better assist them.\n"

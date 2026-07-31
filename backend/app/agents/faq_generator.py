@@ -24,6 +24,7 @@ from app.agents.structured_output import (
     lenient_json_load,
     salvage_groq_json_error,
 )
+from app.agents.guardrail_policy import visitor_data_block
 from app.core.config import settings
 from app.core.logger import get_logger
 from app.models.schemas.faq import MAX_ANSWER_LENGTH, MAX_QUESTION_LENGTH
@@ -184,7 +185,10 @@ class FAQGeneratorAgent:
         parts = []
         if existing_questions:
             parts.append("EXISTING QUESTIONS (do not repeat):\n" + "\n".join(f"- {q}" for q in existing_questions))
-        parts.append(f"{content_label}:\n{content}")
+        # Crawled pages / imported docs are attacker-influencable content —
+        # fence them as data so embedded instructions are never followed. The
+        # limit is generous: batching upstream already bounds the content.
+        parts.append(visitor_data_block(content_label, content, limit=200_000))
         return "\n\n".join(parts)
 
     def _build_agent(self, instructions: str, tools: list, response_model, structured_outputs: bool):

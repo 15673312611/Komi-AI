@@ -34,6 +34,12 @@ from app.agents.structured_output import (
     salvage_groq_json_error,
 )
 from app.agents.transfer_agent import get_agent_availability_response
+from app.agents.guardrail_policy import (
+    GuardrailContext,
+    apply_guardrail_policy,
+    wrap_operator_block,
+)
+from app.utils.guardrail_runtime import BLOCK_REPLY, Surface, check_inbound, check_output
 from app.services.notifications import ChatNotificationEvent, notify_chat_event
 from app.models.user import User, user_groups
 from datetime import datetime
@@ -431,7 +437,25 @@ class ChatAgent(ChatAgentMCPMixin):
                             self.lead_already_captured = has_captured_lead(db, customer_id, agent_id)
                 except Exception as e:
                     logger.error(f"Failed to load lead capture config: {e}")
-        
+
+            # Guardrail context: plain scalars captured while the session is
+            # still open, so prompt assembly never touches the detached
+            # `organization` relationship after this block closes.
+            organization = getattr(self.agent_data, "organization", None) if self.agent_data else None
+            agent_type = getattr(self.agent_data, "agent_type", None) if self.agent_data else None
+            # Which surface guardrail events are attributed to. Derived once:
+            # `channel` is 'web' for the widget and the channel name otherwise.
+            self._guardrail_surface = Surface.WIDGET if self.channel == "web" else Surface.CHANNEL
+            self._guardrail_ctx = GuardrailContext(
+                org_name=getattr(organization, "name", None),
+                domain=getattr(organization, "domain", None),
+                agent_type=agent_type.value if hasattr(agent_type, "value") else agent_type,
+                description=getattr(self.agent_data, "description", None) if self.agent_data else None,
+                topic_scope=getattr(self.agent_data, "topic_scope", None) if self.agent_data else None,
+                org_id=str(org_id) if org_id else None,
+                agent_id=str(agent_id) if agent_id else None,
+            )
+
         self.api_key = api_key
         self.model_name = model_name
         self.model_type = model_type
@@ -522,13 +546,17 @@ class ChatAgent(ChatAgentMCPMixin):
                 "Always check the conversation history to confirm the issue has been properly addressed before ending the chat. Also generate a response in message field for end chat. e.g: Thank you for your time. Have a great day!"
             )
             
-            # Build system message
+            # Build system message. Operator-authored text (workflow prompt or
+            # dashboard instructions) is fenced so the platform policy block —
+            # prepended at the end of assembly — can demote it below the
+            # code-owned rules. Everything appended after this stays unfenced:
+            # it is our own text and keeps full priority.
             system_message = ""
             if custom_system_prompt:
                 # Use custom system prompt from workflow
-                system_message = custom_system_prompt
+                system_message = wrap_operator_block(custom_system_prompt)
             elif self.agent_data.instructions:
-                system_message = "\n".join(self.agent_data.instructions) +  knowledge_tool_prompt
+                system_message = wrap_operator_block("\n".join(self.agent_data.instructions)) + knowledge_tool_prompt
             
             # Add concise response instruction for better performance
             system_message += """
@@ -806,6 +834,13 @@ Keep your responses concise and focused. Provide clear, actionable information i
             else:
                 system_message += "\n\n" + extra_context
 
+        # Platform guardrail policy — single choke point covering all three
+        # branches above (workflow custom prompt, agent instructions, and the
+        # no-agent default). Prepends the code-owned policy, appends the
+        # precedence anchor, and always returns a str (which also fixes the
+        # legacy list form crashing the Groq append below).
+        system_message = apply_guardrail_policy(system_message, self._guardrail_ctx)
+
         # Initialize model with utility function
         base_max_tokens = 2000 if (self.shopify_instructions_added or self.mcp_instructions_added) else 1000
         # Groq's GPT-OSS/reasoning models spend output tokens on internal reasoning
@@ -888,6 +923,18 @@ Keep your responses concise and focused. Provide clear, actionable information i
                 
             self.agent.session_id = session_id
 
+            # Guardrail: COUNT-ONLY on the workflow path. This method persists
+            # nothing and the workflow layer owns control flow, so a block here
+            # would silently break node routing — signals are recorded and the
+            # policy block in the prompt does the refusing.
+            check_inbound(
+                message,
+                ctx=self._guardrail_ctx,
+                surface=Surface.WORKFLOW,
+                session_id=session_id,
+                allow_block=False,
+            )
+
             # Get AI response WITHOUT storing user message
             self._groq_json_capture.clear()
             try:
@@ -921,6 +968,15 @@ Keep your responses concise and focused. Provide clear, actionable information i
             response_content = ensure_nonempty_message(response_content)
             logger.debug(f"Response content: {response_content}")
 
+            # Output guardrail: replace a reply that leaked policy text,
+            # count the model's own scope refusals.
+            response_content.message, _ = check_output(
+                response_content.message,
+                ctx=self._guardrail_ctx,
+                surface=Surface.WORKFLOW,
+                session_id=session_id,
+            )
+
             # Enrich Shopify response with full product data from Redis
             response_content = enrich_shopify_response(response_content, session_id, fallback_cache_key=self._shopify_fallback_cache_key())
 
@@ -929,10 +985,10 @@ Keep your responses concise and focused. Provide clear, actionable information i
             if response_content.shopify_output and hasattr(response_content.shopify_output, 'products') and response_content.shopify_output.products:
                 response_content.message = remove_urls_from_message(response_content.message)
                 logger.debug(f"Cleaned message for Shopify output: {response_content.message}")
-            
+
             # Don't handle end chat or transfer here - let workflow handle it
             # Don't store any messages - let workflow handle storage
-            
+
             return response_content
 
         except Exception as e:
@@ -1197,10 +1253,20 @@ Keep your responses concise and focused. Provide clear, actionable information i
             if customer_id:
                 self.customer_id = customer_id
                 
+            # Pre-LLM guardrail: strong injection signals are counted, and (in
+            # blocking modes) stop the turn before inference. Checked before
+            # the insert so the verdict rides on the user row's attributes.
+            guardrail_verdict = check_inbound(
+                message,
+                ctx=self._guardrail_ctx,
+                surface=self._guardrail_surface,
+                session_id=session_id,
+            )
+
             # Use context manager for database operations
             with SessionLocal() as db:
                 chat_repo = ChatRepository(db)
-                
+
                 self.agent.session_id = session_id
 
                 # Create user message
@@ -1211,9 +1277,34 @@ Keep your responses concise and focused. Provide clear, actionable information i
                     "organization_id": org_id,
                     "agent_id": agent_id,
                     "customer_id": customer_id,
-                    "attributes": {}
+                    "attributes": guardrail_verdict.as_attributes()
                 })
 
+                if guardrail_verdict.block:
+                    # Blocked pre-inference: reply with the canned line, store
+                    # it like any bot turn, and never call the model.
+                    blocked_response = ChatResponse(
+                        message=BLOCK_REPLY,
+                        transfer_to_human=False,
+                        transfer_reason=None,
+                        transfer_description=None,
+                        end_chat=False,
+                        end_chat_reason=None,
+                        end_chat_description=None,
+                        request_rating=False,
+                        create_ticket=False,
+                        shopify_output=None
+                    )
+                    chat_repo.create_message({
+                        "message": BLOCK_REPLY,
+                        "message_type": "bot",
+                        "session_id": session_id,
+                        "organization_id": org_id,
+                        "agent_id": agent_id,
+                        "customer_id": customer_id,
+                        "attributes": guardrail_verdict.as_attributes()
+                    })
+                    return blocked_response
 
                 # Reset citation collection for this turn
                 if self.knowledge_tool is not None:
@@ -1266,6 +1357,15 @@ Keep your responses concise and focused. Provide clear, actionable information i
 
                 response_content = ensure_nonempty_message(response_content)
                 logger.debug(f"Response content: {response_content}")
+
+                # Output guardrail: replace a reply that leaked policy text,
+                # count the model's own scope refusals.
+                response_content.message, _ = check_output(
+                    response_content.message,
+                    ctx=self._guardrail_ctx,
+                    surface=self._guardrail_surface,
+                    session_id=session_id,
+                )
 
                 # Enrich Shopify response with full product data from Redis
                 response_content = enrich_shopify_response(response_content, session_id, fallback_cache_key=self._shopify_fallback_cache_key())
