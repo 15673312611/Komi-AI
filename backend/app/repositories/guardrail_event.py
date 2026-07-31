@@ -15,7 +15,7 @@ limitations under the License.
 """
 
 from datetime import datetime
-from typing import Dict, List, Optional
+from typing import Dict, Optional, Sequence
 from uuid import UUID
 
 from sqlalchemy import func
@@ -27,47 +27,53 @@ from app.models.guardrail_event import GuardrailEvent
 logger = get_logger(__name__)
 
 
-def record_guardrail_event(
+def record_guardrail_events(
     *,
+    rules: Sequence[str],
     surface: str,
     layer: str,
-    rule: str,
     action: str,
     org_id: Optional[str] = None,
     agent_id: Optional[str] = None,
     session_id: Optional[str] = None,
     score: Optional[float] = None,
-    matched: Optional[List[str]] = None,
     char_len: Optional[int] = None,
     excerpt: Optional[str] = None,
 ) -> None:
-    """Best-effort insert of one guardrail event.
+    """Best-effort insert of one row per triggered rule, in a single session.
 
     Opens its OWN session: callers may hold no session at all (the workflow
-    LLM path), and a guardrail write must never poison a caller's
-    transaction. Swallows every exception — an event that fails to record
-    must not affect the reply.
+    LLM path), and a guardrail write must never poison a caller's transaction.
+    Swallows every exception — an event that fails to record must not affect
+    the reply.
+
+    `matched` stores the rule ids that fired together, never the matched text:
+    that text is the visitor's own words and this column is unencrypted, so
+    reviewable content belongs in `excerpt` instead.
     """
+    if not rules:
+        return
     try:
         with SessionLocal() as db:
-            db.add(
-                GuardrailEvent(
-                    organization_id=org_id,
-                    agent_id=agent_id,
-                    session_id=session_id,
-                    surface=surface,
-                    layer=layer,
-                    rule=rule,
-                    action=action,
-                    score=score,
-                    matched=list(matched) if matched else None,
-                    char_len=char_len,
-                    excerpt=excerpt,
+            for rule in rules:
+                db.add(
+                    GuardrailEvent(
+                        organization_id=org_id,
+                        agent_id=agent_id,
+                        session_id=session_id,
+                        surface=surface,
+                        layer=layer,
+                        rule=rule,
+                        action=action,
+                        score=score,
+                        matched=list(rules),
+                        char_len=char_len,
+                        excerpt=excerpt,
+                    )
                 )
-            )
             db.commit()
     except Exception as e:
-        logger.error(f"Failed to record guardrail event {rule}/{action}: {e}")
+        logger.error(f"Failed to record guardrail events {list(rules)}/{action}: {e}")
 
 
 class GuardrailEventRepository:

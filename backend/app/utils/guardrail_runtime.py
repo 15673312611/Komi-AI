@@ -34,8 +34,8 @@ from typing import List, Optional, Tuple
 from app.agents.guardrail_policy import CANARY_STRINGS, looks_like_scope_refusal
 from app.core.config import settings
 from app.core.logger import get_logger
-from app.repositories.guardrail_event import record_guardrail_event
-from app.utils.guardrails import detect_injection
+from app.repositories.guardrail_event import record_guardrail_events
+from app.utils.guardrails import RULE_FRAME_TOKENS, detect_injection
 
 logger = get_logger(__name__)
 
@@ -52,6 +52,20 @@ LEAK_REPLY = (
 )
 
 _EXCERPT_MAX = 300
+
+# Output-side rule ids (the inbound ones live with their patterns in guardrails).
+RULE_PROMPT_LEAK = "injection.prompt_leak"
+RULE_MODEL_REFUSED = "offtopic.model_refused"
+
+
+class Surface:
+    """Where a guardrail event came from — the values stored in
+    guardrail_events.surface."""
+
+    WIDGET = "widget"
+    CHANNEL = "channel"
+    WORKFLOW = "workflow"
+    HELP_CENTER = "help_center"
 
 
 @dataclass(frozen=True)
@@ -81,35 +95,41 @@ def _record(
     *,
     surface: str,
     layer: str,
-    rule: str,
+    rules: Tuple[str, ...],
     action: str,
     ctx=None,
     session_id: Optional[str] = None,
-    matched: Optional[List[str]] = None,
     text: Optional[str] = None,
 ) -> None:
-    """Log line first (always), then best-effort DB row."""
+    """Log line first (always), then one best-effort write for all rules.
+
+    `matched` carries the rule ids only. The matched substring would be the
+    visitor's own words, and this column is plain JSON while `excerpt` is
+    encrypted — reviewable text belongs there, not here.
+    """
     org_id = getattr(ctx, "org_id", None)
     agent_id = getattr(ctx, "agent_id", None)
-    logger.warning(
-        f"GUARDRAIL_EVENT rule={rule} layer={layer} action={action} "
-        f"surface={surface} org={org_id} agent={agent_id} "
-        f"session={session_id} len={len(text) if text else 0}"
-    )
+    for rule in rules:
+        logger.warning(
+            f"GUARDRAIL_EVENT rule={rule} layer={layer} action={action} "
+            f"surface={surface} org={org_id} agent={agent_id} "
+            f"session={session_id} len={len(text) if text else 0}"
+        )
     if not getattr(settings, "GUARDRAIL_EVENTS_ENABLED", True):
         return
     excerpt = None
     if text and getattr(settings, "GUARDRAIL_STORE_EXCERPT", True):
         excerpt = text[:_EXCERPT_MAX]
-    record_guardrail_event(
+    # One session for the whole verdict: an attack tripping several rules used
+    # to open a connection per rule.
+    record_guardrail_events(
+        rules=rules,
         surface=surface,
         layer=layer,
-        rule=rule,
         action=action,
         org_id=org_id,
         agent_id=agent_id,
         session_id=session_id,
-        matched=matched,
         char_len=len(text) if text else None,
         excerpt=excerpt,
     )
@@ -120,14 +140,14 @@ def _should_block(rule_ids: Tuple[str, ...]) -> bool:
     if mode == "strict":
         return bool(rule_ids)
     if mode == "template_only":
-        return "injection.frame_tokens" in rule_ids
+        return RULE_FRAME_TOKENS in rule_ids
     return False
 
 
 def check_inbound(
     text: Optional[str],
     ctx=None,
-    surface: str = "widget",
+    surface: str = Surface.WIDGET,
     session_id: Optional[str] = None,
     allow_block: bool = True,
 ) -> InboundVerdict:
@@ -142,17 +162,15 @@ def check_inbound(
         if not result.triggered:
             return InboundVerdict()
         block = allow_block and _should_block(result.rule_ids)
-        for rule_id in result.rule_ids:
-            _record(
-                surface=surface,
-                layer="inbound",
-                rule=rule_id,
-                action="blocked" if block else "counted",
-                ctx=ctx,
-                session_id=session_id,
-                matched=list(result.matched),
-                text=text,
-            )
+        _record(
+            surface=surface,
+            layer="inbound",
+            rules=result.rule_ids,
+            action="blocked" if block else "counted",
+            ctx=ctx,
+            session_id=session_id,
+            text=text,
+        )
         return InboundVerdict(rule_ids=result.rule_ids, block=block, matched=result.matched)
     except Exception as e:
         logger.error(f"Inbound guardrail check failed open: {e}")
@@ -162,7 +180,7 @@ def check_inbound(
 def check_output(
     message: Optional[str],
     ctx=None,
-    surface: str = "widget",
+    surface: str = Surface.WIDGET,
     session_id: Optional[str] = None,
 ) -> Tuple[Optional[str], List[str]]:
     """Post-LLM output check.
@@ -178,24 +196,24 @@ def check_output(
             _record(
                 surface=surface,
                 layer="output",
-                rule="injection.prompt_leak",
+                rules=(RULE_PROMPT_LEAK,),
                 action="replaced",
                 ctx=ctx,
                 session_id=session_id,
                 text=message,
             )
-            return LEAK_REPLY, ["injection.prompt_leak"]
+            return LEAK_REPLY, [RULE_PROMPT_LEAK]
         if looks_like_scope_refusal(message):
             _record(
                 surface=surface,
                 layer="output",
-                rule="offtopic.model_refused",
+                rules=(RULE_MODEL_REFUSED,),
                 action="counted",
                 ctx=ctx,
                 session_id=session_id,
                 text=message,
             )
-            return message, ["offtopic.model_refused"]
+            return message, [RULE_MODEL_REFUSED]
         return message, []
     except Exception as e:
         logger.error(f"Output guardrail check failed open: {e}")

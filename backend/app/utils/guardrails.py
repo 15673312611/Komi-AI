@@ -215,12 +215,18 @@ _PERSONA_PATTERNS = [
     ),
 ]
 
-# Strong patterns grouped under the stable rule ids used by guardrail events.
+# Stable rule ids, stored in guardrail_events.rule and referenced by the
+# runtime layer — named so the two cannot drift apart.
+RULE_FRAME_TOKENS = "injection.frame_tokens"
+RULE_OVERRIDE_INSTRUCTIONS = "injection.override_instructions"
+RULE_PROMPT_EXFIL = "injection.prompt_exfil"
+RULE_ROLE_HIJACK = "injection.role_hijack"
+
 _STRONG_PATTERNS = {
-    "injection.frame_tokens": _TEMPLATE_MARKER_PATTERNS,
-    "injection.override_instructions": _OVERRIDE_PATTERNS,
-    "injection.prompt_exfil": _EXFIL_PATTERNS,
-    "injection.role_hijack": _PERSONA_PATTERNS,
+    RULE_FRAME_TOKENS: _TEMPLATE_MARKER_PATTERNS,
+    RULE_OVERRIDE_INSTRUCTIONS: _OVERRIDE_PATTERNS,
+    RULE_PROMPT_EXFIL: _EXFIL_PATTERNS,
+    RULE_ROLE_HIJACK: _PERSONA_PATTERNS,
 }
 
 _WEAK_SIGNAL_PATTERNS = [
@@ -285,7 +291,7 @@ class InjectionResult:
 
     @property
     def has_template_marker(self) -> bool:
-        return "injection.frame_tokens" in self.rule_ids
+        return RULE_FRAME_TOKENS in self.rule_ids
 
 
 def detect_injection(text: str) -> InjectionResult:

@@ -39,7 +39,7 @@ from app.agents.guardrail_policy import (
     apply_guardrail_policy,
     wrap_operator_block,
 )
-from app.utils.guardrail_runtime import BLOCK_REPLY, check_inbound, check_output
+from app.utils.guardrail_runtime import BLOCK_REPLY, Surface, check_inbound, check_output
 from app.services.notifications import ChatNotificationEvent, notify_chat_event
 from app.models.user import User, user_groups
 from datetime import datetime
@@ -443,6 +443,9 @@ class ChatAgent(ChatAgentMCPMixin):
             # `organization` relationship after this block closes.
             organization = getattr(self.agent_data, "organization", None) if self.agent_data else None
             agent_type = getattr(self.agent_data, "agent_type", None) if self.agent_data else None
+            # Which surface guardrail events are attributed to. Derived once:
+            # `channel` is 'web' for the widget and the channel name otherwise.
+            self._guardrail_surface = Surface.WIDGET if self.channel == "web" else Surface.CHANNEL
             self._guardrail_ctx = GuardrailContext(
                 org_name=getattr(organization, "name", None),
                 domain=getattr(organization, "domain", None),
@@ -927,7 +930,7 @@ Keep your responses concise and focused. Provide clear, actionable information i
             check_inbound(
                 message,
                 ctx=self._guardrail_ctx,
-                surface="workflow",
+                surface=Surface.WORKFLOW,
                 session_id=session_id,
                 allow_block=False,
             )
@@ -970,7 +973,7 @@ Keep your responses concise and focused. Provide clear, actionable information i
             response_content.message, _ = check_output(
                 response_content.message,
                 ctx=self._guardrail_ctx,
-                surface="workflow",
+                surface=Surface.WORKFLOW,
                 session_id=session_id,
             )
 
@@ -1256,7 +1259,7 @@ Keep your responses concise and focused. Provide clear, actionable information i
             guardrail_verdict = check_inbound(
                 message,
                 ctx=self._guardrail_ctx,
-                surface="widget" if self.channel == "web" else "channel",
+                surface=self._guardrail_surface,
                 session_id=session_id,
             )
 
@@ -1360,7 +1363,7 @@ Keep your responses concise and focused. Provide clear, actionable information i
                 response_content.message, _ = check_output(
                     response_content.message,
                     ctx=self._guardrail_ctx,
-                    surface="widget" if self.channel == "web" else "channel",
+                    surface=self._guardrail_surface,
                     session_id=session_id,
                 )
 

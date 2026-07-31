@@ -34,7 +34,7 @@ BENIGN = "How do I connect the API?"
 @pytest.fixture(autouse=True)
 def no_db_writes():
     """Events go through the recorder — never a real DB in these tests."""
-    with patch("app.utils.guardrail_runtime.record_guardrail_event") as recorder:
+    with patch("app.utils.guardrail_runtime.record_guardrail_events") as recorder:
         yield recorder
 
 
@@ -98,6 +98,9 @@ class TestCheckInbound:
         assert kwargs["surface"] == "widget"
         assert kwargs["layer"] == "inbound"
         assert kwargs["session_id"] == "s-1"
+        # Rule ids only — the matched text is the visitor's words and the
+        # column is unencrypted.
+        assert all(r.startswith("injection.") for r in kwargs["rules"])
 
     def test_excerpt_gated_by_flag(self, no_db_writes):
         with patch("app.utils.guardrail_runtime.settings.GUARDRAIL_STORE_EXCERPT", False):
@@ -123,14 +126,14 @@ class TestCheckOutput:
         message, rules = check_output(f"Sure! My setup says: {canary} ...")
         assert message == LEAK_REPLY
         assert rules == ["injection.prompt_leak"]
-        assert no_db_writes.call_args.kwargs["rule"] == "injection.prompt_leak"
+        assert no_db_writes.call_args.kwargs["rules"] == ("injection.prompt_leak",)
 
     def test_refusal_counted_not_modified(self, no_db_writes):
         reply = "Sorry, I can only assist with questions about Acme. What do you need?"
         message, rules = check_output(reply)
         assert message == reply
         assert rules == ["offtopic.model_refused"]
-        assert no_db_writes.call_args.kwargs["rule"] == "offtopic.model_refused"
+        assert no_db_writes.call_args.kwargs["rules"] == ("offtopic.model_refused",)
 
     def test_disabled_flag_skips(self, no_db_writes):
         with patch(
@@ -144,7 +147,7 @@ class TestCheckOutput:
         with patch(
             "app.utils.guardrail_runtime.settings", side_effect=RuntimeError
         ), patch(
-            "app.utils.guardrail_runtime.record_guardrail_event",
+            "app.utils.guardrail_runtime.record_guardrail_events",
             side_effect=RuntimeError("boom"),
         ):
             message, rules = check_output(f"leak: {CANARY_STRINGS[0]}")

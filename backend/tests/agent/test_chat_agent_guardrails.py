@@ -99,7 +99,7 @@ def mock_db_session(db):
 def no_event_db():
     """Guardrail events are recorded via their own SessionLocal — keep them
     out of the test DB and observable."""
-    with patch("app.utils.guardrail_runtime.record_guardrail_event") as recorder:
+    with patch("app.utils.guardrail_runtime.record_guardrail_events") as recorder:
         yield recorder
 
 
@@ -329,7 +329,7 @@ class TestOutputEnforcement:
             agent_id=str(test_agent.id),
         )
         assert response.message == LEAK_REPLY
-        rules = [c.kwargs["rule"] for c in no_event_db.call_args_list]
+        rules = [r for c in no_event_db.call_args_list for r in c.kwargs["rules"]]
         assert "injection.prompt_leak" in rules
 
     @pytest.mark.asyncio
@@ -346,7 +346,7 @@ class TestOutputEnforcement:
             agent_id=str(test_agent.id),
         )
         assert response.message == refusal
-        rules = [c.kwargs["rule"] for c in no_event_db.call_args_list]
+        rules = [r for c in no_event_db.call_args_list for r in c.kwargs["rules"]]
         assert "offtopic.model_refused" in rules
 
 

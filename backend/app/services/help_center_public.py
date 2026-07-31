@@ -31,7 +31,7 @@ from app.agents.guardrail_policy import (
 )
 from app.core.help_center_host import normalize_host, slug_for_host  # noqa: F401 — canonical host helpers re-exported for the public app
 from app.core.logger import get_logger
-from app.utils.guardrail_runtime import check_inbound
+from app.utils.guardrail_runtime import Surface, check_inbound
 from app.database import SessionLocal
 from app.models.faq import FAQ
 from app.models.help_center import HelpCenterSettings
@@ -176,7 +176,7 @@ async def answer_question(organization_id, agent_id, question: str) -> Optional[
     guardrail_ctx = GuardrailContext(
         org_id=str(organization_id), agent_id=str(agent_id) if agent_id else None
     )
-    if check_inbound(question, ctx=guardrail_ctx, surface="help_center").block:
+    if check_inbound(question, ctx=guardrail_ctx, surface=Surface.HELP_CENTER).block:
         return None
 
     async with _ask_concurrency:

@@ -23,7 +23,7 @@ import pytest
 from app.models.guardrail_event import GuardrailEvent
 from app.repositories.guardrail_event import (
     GuardrailEventRepository,
-    record_guardrail_event,
+    record_guardrail_events,
 )
 
 
@@ -54,13 +54,12 @@ def _add_event(db, rule="injection.frame_tokens", created_at=None, org_id=None):
 
 class TestRecord:
     def test_record_persists_event(self, patched_session):
-        record_guardrail_event(
+        record_guardrail_events(
+            rules=["injection.override_instructions"],
             surface="widget",
             layer="inbound",
-            rule="injection.override_instructions",
             action="counted",
             score=1.0,
-            matched=["ignore all previous instructions"],
             char_len=42,
         )
         rows = patched_session.query(GuardrailEvent).all()
@@ -75,27 +74,41 @@ class TestRecord:
             side_effect=RuntimeError("db down"),
         ):
             # Must swallow: a failed event write cannot affect the reply.
-            record_guardrail_event(
-                surface="widget", layer="inbound", rule="x", action="counted"
+            record_guardrail_events(
+                rules=["x"], surface="widget", layer="inbound", action="counted"
             )
 
-    def test_matched_never_contains_full_input(self, patched_session):
-        # The runtime layer passes short match tokens, not the message; the
-        # repo stores exactly what it is given, so hand it tokens and assert
-        # the row holds only those.
-        record_guardrail_event(
+    def test_matched_holds_rule_ids_only(self, patched_session):
+        # matched is plain JSON while excerpt is encrypted, so the matched
+        # SUBSTRING (the visitor's own words) must never land here.
+        record_guardrail_events(
+            rules=["injection.frame_tokens", "injection.role_hijack"],
             surface="widget",
             layer="inbound",
-            rule="injection.frame_tokens",
             action="blocked",
-            matched=["<|im_start|>"],
         )
-        row = patched_session.query(GuardrailEvent).one()
-        assert json.dumps(row.matched) == json.dumps(["<|im_start|>"])
+        rows = patched_session.query(GuardrailEvent).all()
+        assert len(rows) == 2, "one row per triggered rule"
+        for row in rows:
+            assert json.dumps(row.matched) == json.dumps(
+                ["injection.frame_tokens", "injection.role_hijack"]
+            )
+
+    def test_multiple_rules_share_one_session(self, patched_session):
+        record_guardrail_events(
+            rules=["a", "b", "c"], surface="widget", layer="inbound", action="counted"
+        )
+        assert patched_session.query(GuardrailEvent).count() == 3
+
+    def test_empty_rules_writes_nothing(self, patched_session):
+        record_guardrail_events(
+            rules=[], surface="widget", layer="inbound", action="counted"
+        )
+        assert patched_session.query(GuardrailEvent).count() == 0
 
     def test_excerpt_nullable(self, patched_session):
-        record_guardrail_event(
-            surface="help_center", layer="inbound", rule="x", action="counted"
+        record_guardrail_events(
+            rules=["x"], surface="help_center", layer="inbound", action="counted"
         )
         assert patched_session.query(GuardrailEvent).one().excerpt is None
 

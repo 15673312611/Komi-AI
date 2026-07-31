@@ -29,7 +29,7 @@ from app.services import help_center_public
 
 @pytest.fixture(autouse=True)
 def no_event_db():
-    with patch("app.utils.guardrail_runtime.record_guardrail_event") as recorder:
+    with patch("app.utils.guardrail_runtime.record_guardrail_events") as recorder:
         yield recorder
 
 
