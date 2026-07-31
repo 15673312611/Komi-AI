@@ -76,6 +76,10 @@ class AgentCustomization(Base):
     show_citations = Column(Boolean, default=False, nullable=False)
     # Optionally require the visitor's email before chatting (off by default)
     collect_email = Column(Boolean, default=False, nullable=False)
+    # Small footer line telling visitors the replies come from AI. On by default:
+    # the honest disclosure is the one users expect, and it is only ever hidden
+    # once a human agent takes the conversation over, where it would be untrue.
+    show_ai_disclaimer = Column(Boolean, default=True, nullable=False, server_default="true")
 
     # Relationship
     agent = relationship("Agent", back_populates="customization")

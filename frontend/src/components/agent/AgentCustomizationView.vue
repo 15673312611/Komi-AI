@@ -22,6 +22,7 @@ import WebFont from 'webfontloader'
 import { useSubscriptionStorage } from '@/utils/storage'
 import { useEnterpriseFeatures } from '@/composables/useEnterpriseFeatures'
 import { getGoogleFontsApiKey } from '@/config/api'
+import { AI_DISCLAIMER_TEXT } from '@/utils/aiDisclaimer'
 
 const props = defineProps<{
     agent: AgentWithCustomization
@@ -103,6 +104,7 @@ const customization = ref<AgentCustomization>({
     quick_actions: props.agent.customization?.quick_actions ?? [],
     show_citations: props.agent.customization?.show_citations ?? false,
     collect_email: props.agent.customization?.collect_email ?? false,
+    show_ai_disclaimer: props.agent.customization?.show_ai_disclaimer ?? true,
 })
 
 // Chat style options grouped into Legacy (existing looks) and New (premium presets)
@@ -274,6 +276,7 @@ watch(() => props.agent.customization, (newCustomization) => {
             quick_actions: newCustomization.quick_actions ?? [],
             show_citations: newCustomization.show_citations ?? false,
             collect_email: newCustomization.collect_email ?? false,
+            show_ai_disclaimer: newCustomization.show_ai_disclaimer ?? true,
         }
         nextTick(() => {
             isInternalUpdate.value = false
@@ -569,6 +572,15 @@ const isSectionExpanded = (sectionId: string) => {
                     <span class="citations-toggle-text">
                         <span class="citations-toggle-title">Collect email before chat</span>
                         <span class="citations-toggle-desc">Require visitors to enter their email before they can start chatting. Off by default.</span>
+                    </span>
+                </label>
+
+                <label class="citations-toggle">
+                    <input type="checkbox" v-model="customization.show_ai_disclaimer">
+                    <span class="citations-toggle-track"><span class="citations-toggle-thumb"></span></span>
+                    <span class="citations-toggle-text">
+                        <span class="citations-toggle-title">Show AI disclaimer</span>
+                        <span class="citations-toggle-desc">Adds “{{ AI_DISCLAIMER_TEXT }}” to the widget footer. Hidden automatically once a human agent takes over.</span>
                     </span>
                 </label>
             </div>

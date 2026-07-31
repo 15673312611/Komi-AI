@@ -23,6 +23,7 @@ import { marked } from 'marked'
 import { sanitizeHtml } from '../utils/sanitize'
 import { resolveOrbStyle } from '../utils/orb'
 import { isEndChatMessage } from '../utils/endChat'
+import { AI_DISCLAIMER_TEXT, shouldShowAiDisclaimer } from '../utils/aiDisclaimer'
 import { widgetEnv, resolveWidgetUploadUrl } from './widget-env'
 import { useWidgetStyles } from '../composables/useWidgetStyles'
 import { useWidgetFiles } from '../composables/useWidgetFiles'
@@ -1141,13 +1142,15 @@ const dragOver = ref(false)
 const maxFiles = 3
 const acceptTypes = 'image/*,.pdf,.doc,.docx,.txt,.csv,.xlsx,.xls'
 
+// A human agent has claimed the conversation, so replies no longer come from the AI.
+const isHandedOverToHuman = computed(() => !!humanAgent.value?.human_agent_name)
+
 const canUploadMore = computed(() => {
   // Attachments only allowed when:
   // 1. allow_attachments setting is enabled
   // 2. Chat has been handed over to a human agent (no need to wait for agent message)
   // 3. Haven't reached max file limit
-  const isHandedOverToHuman = !!humanAgent.value?.human_agent_name
-  return allowAttachments.value && isHandedOverToHuman && uploadedAttachments.value.length < maxFiles
+  return allowAttachments.value && isHandedOverToHuman.value && uploadedAttachments.value.length < maxFiles
 })
 
 
@@ -1443,6 +1446,10 @@ const showQuickActions = computed(() =>
 
 // Citations are shown only when explicitly enabled (off by default for now)
 const showCitations = computed(() => customization.value.show_citations === true)
+
+// Footer disclosure that replies are AI-generated (see utils/aiDisclaimer).
+const showAiDisclaimer = computed(() =>
+    shouldShowAiDisclaimer(customization.value.show_ai_disclaimer, isHandedOverToHuman.value))
 
 // Some knowledge documents are stored under an opaque id/hash rather than a
 // human-readable title. Showing that raw id in a chip looks broken, so fall back to
@@ -2565,6 +2572,11 @@ const shouldShowWelcomeMessage = computed(() => {
                 </div>
             </div>
 
+            <!-- AI disclosure — dropped as soon as a human agent takes over -->
+            <div v-if="showAiDisclaimer" class="ai-disclaimer" :style="messageNameStyles">
+                {{ AI_DISCLAIMER_TEXT }}
+            </div>
+
             <!-- Powered by footer -->
             <div class="powered-by" :style="messageNameStyles">
                 <svg class="chattermate-logo" width="16" height="16" viewBox="0 0 60 60" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -3143,6 +3155,18 @@ const shouldShowWelcomeMessage = computed(() => {
     40% {
         transform: scale(1);
     }
+}
+
+/* AI disclosure. Sits directly above the "Powered by" row and is deliberately
+   smaller and dimmer than it, so it reads as a footnote rather than a second
+   footer. Both carry the same inline colour (messageNameStyles), which beats any
+   stylesheet rule, so the dimming has to be opacity rather than a colour token. */
+.ai-disclaimer {
+    text-align: center;
+    padding: var(--space-xs) var(--space-md) 0;
+    font-size: 0.6875rem;
+    line-height: 1.3;
+    opacity: 0.55;
 }
 
 .powered-by {

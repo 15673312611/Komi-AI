@@ -25,6 +25,7 @@ import { useAgentChat } from '@/composables/useAgentChat'
 import WebFont from 'webfontloader'
 import { marked } from 'marked'
 import { sanitizeHtml } from '@/utils/sanitize'
+import { AI_DISCLAIMER_TEXT, shouldShowAiDisclaimer } from '@/utils/aiDisclaimer'
 
 const props = defineProps<{
     isActive: boolean
@@ -701,6 +702,12 @@ const handleInitiationClick = () => {
                 </div>
             </div>
 
+            <!-- AI disclosure. No human-takeover state exists in the preview, so
+                 the second argument is left at its default. -->
+            <div v-if="shouldShowAiDisclaimer(customization.show_ai_disclaimer)" class="ai-disclaimer" :style="messageNameStyles">
+                {{ AI_DISCLAIMER_TEXT }}
+            </div>
+
             <!-- Add powered by footer -->
             <div class="powered-by" :style="messageNameStyles">
                 <svg class="chattermate-logo" width="15" height="15" viewBox="0 0 60 60" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -1138,6 +1145,18 @@ const handleInitiationClick = () => {
     strong {
         font-weight: 600;
     }
+}
+
+/* Mirrors the widget footnote (WidgetBuilder.vue) — same size and dimming, so the
+   preview shows what visitors get. No top divider: widget-surface.css strips the
+   one on .powered-by below, so drawing one here would be the only line in the
+   footer. */
+.ai-disclaimer {
+    text-align: center;
+    padding: var(--space-xs) var(--space-md) 0;
+    font-size: 0.6875rem;
+    line-height: 1.3;
+    opacity: 0.55;
 }
 
 .powered-by {

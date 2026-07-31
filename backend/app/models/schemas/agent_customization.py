@@ -96,6 +96,7 @@ class CustomizationBase(BaseModel):
     quick_actions: Optional[List[str]] = None
     show_citations: Optional[bool] = False
     collect_email: Optional[bool] = False
+    show_ai_disclaimer: Optional[bool] = True
 
 
 class CustomizationCreate(CustomizationBase):
