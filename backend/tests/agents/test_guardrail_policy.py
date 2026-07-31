@@ -144,9 +144,13 @@ class TestTopicScope:
         assert "Acme Shoes" in line
 
     def test_tier3_org_only(self):
-        line = resolve_topic_scope(ctx())
-        assert "Acme Shoes" in line
-        assert "acmeshoes.com" in line
+        # Compare against the context values rather than repeating the literals:
+        # a bare `"acmeshoes.com" in line` also reads to CodeQL as a naive URL
+        # allowlist check (py/incomplete-url-substring-sanitization).
+        context = ctx()
+        line = resolve_topic_scope(context)
+        assert context.org_name in line
+        assert context.domain in line
 
     def test_tier4_no_context(self):
         line = resolve_topic_scope(ctx(org_name=None, domain=None))
