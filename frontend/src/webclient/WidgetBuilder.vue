@@ -4717,7 +4717,7 @@ const shouldShowWelcomeMessage = computed(() => {
 
 .form-message .message-bubble {
     background: linear-gradient(145deg, #ffffff 0%, #f8f9fa 100%);
-    padding: var(--space-xl);
+    padding: var(--space-lg);
     border-radius: 24px;
     box-shadow:
         0 20px 25px -5px rgba(0, 0, 0, 0.1),
@@ -4773,10 +4773,59 @@ const shouldShowWelcomeMessage = computed(() => {
     letter-spacing: -0.02em;
 }
 
+/* ===== Compact inline variant (#270): the card renders inside the chat, so
+   the full-screen form's generous spacing forces the visitor to scroll.
+   Tighten every step for .form-message only — the full-screen form and the
+   dashboard keep the base styles. ===== */
+
+.form-message .form-header {
+    margin-bottom: var(--space-md);
+    /* Left-aligned like the surrounding chat bubbles; a centered title that
+       wraps to two lines reads as broken in the narrow card. */
+    text-align: left;
+}
+
 /* 28px is proportioned for the full-screen form; inside the ~370px inline
-   card it wraps into an oversized two-line heading (#270). */
+   card it wraps into an oversized two-line heading. */
 .form-message .form-title {
     font-size: var(--text-lg);
+    margin-bottom: var(--space-xs);
+}
+
+.form-message .form-description {
+    font-size: var(--text-sm);
+}
+
+.form-message .form-fields {
+    gap: var(--space-md);
+}
+
+.form-message .form-field {
+    gap: var(--space-xs);
+}
+
+.form-message .field-label {
+    margin-bottom: 0;
+}
+
+.form-message .form-input,
+.form-message .form-textarea,
+.form-message .form-select {
+    padding: var(--space-sm) var(--space-md);
+    border-radius: var(--radius-lg);
+}
+
+.form-message .form-textarea {
+    min-height: 80px;
+}
+
+.form-message .form-actions {
+    margin-top: var(--space-md);
+}
+
+.form-message .form-submit-button {
+    width: 100%;
+    padding: var(--space-sm) var(--space-lg);
 }
 
 .form-description {
