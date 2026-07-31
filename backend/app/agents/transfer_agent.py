@@ -16,6 +16,7 @@ limitations under the License.
 
 from typing import Dict, Any
 from datetime import datetime
+import asyncio
 import pytz
 from agno.agent import Agent
 from app.agents.guardrail_policy import INJECTION_CLAUSE, visitor_data_block
@@ -30,6 +31,12 @@ from app.models.schemas.chat import ChatResponse
 from app.utils.response_parser import parse_response_content
 from app.core.config import settings
 logger = get_logger(__name__)
+
+# Wording used when the model can't produce a handoff line in time. The routing
+# decision itself is computed from business hours and agent availability, so a
+# timeout costs only the phrasing — the handoff still goes ahead.
+TRANSFER_TIMEOUT_MESSAGE = "Let me connect you with someone from our team."
+FOLLOW_UP_TIMEOUT_MESSAGE = "Our team will get back to you shortly."
 
 class TransferResponseAgent:
     def __init__(self, api_key: str, model_name: str, model_type: str = "OPENAI", agent_id: str = None):
@@ -144,14 +151,33 @@ class TransferResponseAgent:
             f"Generate a natural-sounding response:"
         )
 
-        response = await self.agent.arun(message=prompt, stream=False)
+        will_transfer = is_business_hours and available_agents > 0
+
+        # Bounded like the chat run: this call happens inside the visitor's turn,
+        # so a stuck run would hang the widget even though the handoff decision
+        # is already made (#269).
+        try:
+            response = await asyncio.wait_for(
+                self.agent.arun(message=prompt, stream=False),
+                timeout=settings.AGENT_RUN_TIMEOUT
+            )
+        except asyncio.TimeoutError:
+            logger.warning(
+                f"Transfer agent run timed out after {settings.AGENT_RUN_TIMEOUT}s and was "
+                f"cancelled; falling back to a plain handoff line "
+                f"(will_transfer={will_transfer})"
+            )
+            return {
+                "message": TRANSFER_TIMEOUT_MESSAGE if will_transfer else FOLLOW_UP_TIMEOUT_MESSAGE,
+                "transfer_to_human": will_transfer
+            }
 
         # Use the utility function to parse the response
         response_content = parse_response_content(response)
-        
+
         return {
             "message": response_content.message,
-            "transfer_to_human": is_business_hours and available_agents > 0
+            "transfer_to_human": will_transfer
         }
 
 async def get_agent_availability_response(

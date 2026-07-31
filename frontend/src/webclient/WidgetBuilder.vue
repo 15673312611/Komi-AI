@@ -2034,7 +2034,7 @@ const shouldShowWelcomeMessage = computed(() => {
                         </div>
                         <div class="message-col">
                         <div class="message-bubble"
-                            :style="message.message_type === 'system' || message.message_type === 'rating' || message.message_type === 'product' || message.shopify_output ? {} :
+                            :style="message.message_type === 'system' || message.message_type === 'rating' || message.message_type === 'form' || message.message_type === 'product' || message.shopify_output ? {} :
                                    message.message_type === 'user' ? userBubbleStyles :
                                    agentBubbleStyles"
                         >
@@ -2330,9 +2330,10 @@ const shouldShowWelcomeMessage = computed(() => {
                                 </div>
                             </template>
                             <template v-else>
-                                <!-- Live replies reveal char-by-char as plain text (XSS-safe) with a
-                                     caret; once finished they render as full markdown. -->
-                                <div v-if="isStreaming(index)" class="message-streaming">{{ displayText(index, message.message) }}<span class="cm-caret"></span></div>
+                                <!-- Live replies reveal char-by-char, rendering the partial slice
+                                     through the same sanitized markdown pipeline as the final text
+                                     so formatting appears mid-stream (caret rides the last block). -->
+                                <div v-if="isStreaming(index)" class="message-streaming" v-html="renderMarkdown(displayText(index, message.message))"></div>
                                 <div v-else v-html="renderMarkdown(message.message)"></div>
 
                                 <!-- Display attachments if present -->
@@ -2887,9 +2888,10 @@ const shouldShowWelcomeMessage = computed(() => {
     animation: pulse-online 2s ease-in-out infinite;
 }
 
-/* Presence line ("Online · replies instantly") in the accent colour (design comp). */
+/* Presence line ("Online · replies instantly"): accent when readable on the
+   card, muted otherwise — themeCssVars picks via --cm-presence. */
 .cm-presence {
-    color: var(--cm-accent, #C9F24E);
+    color: var(--cm-presence, var(--cm-muted, #C9F24E));
     font-size: 11.5px;
 }
 
@@ -2989,6 +2991,9 @@ const shouldShowWelcomeMessage = computed(() => {
     max-width: 85%;
     transition: all 0.2s ease;
     position: relative;
+    /* Long unbroken tokens (URLs, identifiers) wrap instead of painting past
+       the bubble edge. */
+    overflow-wrap: anywhere;
 }
 
 .message-bubble:hover {
@@ -3021,6 +3026,9 @@ const shouldShowWelcomeMessage = computed(() => {
 .message-bubble p + p { margin-top: 0.5em; }
 .message-bubble ul,
 .message-bubble ol { margin: 0.4em 0; padding-left: 1.2em; }
+
+/* Markdown code/table rules live in widget-surface.css — they target v-html
+   content, which scoped styles cannot reach. */
 
 .chat-input {
     padding: var(--space-md);
@@ -3656,12 +3664,15 @@ const shouldShowWelcomeMessage = computed(() => {
     to { opacity: 1; transform: none; }
 }
 
-/* Streaming typewriter: partial text + blinking caret while a reply reveals. */
+/* Streaming typewriter: the partial reply renders as markdown on every tick,
+   so bold/links/code appear styled mid-stream instead of as raw asterisks.
+   (No white-space: pre-wrap here — the markdown HTML owns its spacing.) */
 .message-streaming {
-    white-space: pre-wrap;
     word-break: break-word;
 }
-.cm-caret {
+/* Blinking caret rides the end of the last rendered block. */
+.message-streaming > :last-child::after {
+    content: '';
     display: inline-block;
     width: 6px;
     height: 1em;
@@ -3806,9 +3817,9 @@ const shouldShowWelcomeMessage = computed(() => {
     .citation-chips,
     .reading-bars span,
     .cm-typing-dot,
-    .cm-caret,
+    .message-streaming > :last-child::after,
     .status-indicator.online { animation: none !important; }
-    .cm-caret { display: none; }
+    .message-streaming > :last-child::after { display: none; }
 }
 
 /* ========================================================== */
@@ -4709,13 +4720,15 @@ const shouldShowWelcomeMessage = computed(() => {
 .message.form-message {
     align-self: center;
     width: 100%;
-    max-width: 520px;
+    /* Never wider than the chat area — the widget iframe is narrower than
+       520px, and anything past 100% ignores the message gutters (#270). */
+    max-width: min(520px, 100%);
     margin: var(--space-md) 0;
 }
 
 .form-message .message-bubble {
     background: linear-gradient(145deg, #ffffff 0%, #f8f9fa 100%);
-    padding: var(--space-xl);
+    padding: var(--space-lg);
     border-radius: 24px;
     box-shadow:
         0 20px 25px -5px rgba(0, 0, 0, 0.1),
@@ -4724,6 +4737,9 @@ const shouldShowWelcomeMessage = computed(() => {
     border: 1px solid rgba(0, 0, 0, 0.06);
     width: 100%;
     max-width: none;
+    /* The iframe shell has no CSS reset, so without this the card is 100%
+       PLUS padding/border and overflows the widget frame (#270). */
+    box-sizing: border-box;
     backdrop-filter: blur(10px);
     position: relative;
     overflow: hidden;
@@ -4766,6 +4782,61 @@ const shouldShowWelcomeMessage = computed(() => {
     background-clip: text;
     margin: 0 0 var(--space-sm) 0;
     letter-spacing: -0.02em;
+}
+
+/* ===== Compact inline variant (#270): the card renders inside the chat, so
+   the full-screen form's generous spacing forces the visitor to scroll.
+   Tighten every step for .form-message only — the full-screen form and the
+   dashboard keep the base styles. ===== */
+
+.form-message .form-header {
+    margin-bottom: var(--space-md);
+    /* Left-aligned like the surrounding chat bubbles; a centered title that
+       wraps to two lines reads as broken in the narrow card. */
+    text-align: left;
+}
+
+/* 28px is proportioned for the full-screen form; inside the ~370px inline
+   card it wraps into an oversized two-line heading. */
+.form-message .form-title {
+    font-size: var(--text-lg);
+    margin-bottom: var(--space-xs);
+}
+
+.form-message .form-description {
+    font-size: var(--text-sm);
+}
+
+.form-message .form-fields {
+    gap: var(--space-md);
+}
+
+.form-message .form-field {
+    gap: var(--space-xs);
+}
+
+.form-message .field-label {
+    margin-bottom: 0;
+}
+
+.form-message .form-input,
+.form-message .form-textarea,
+.form-message .form-select {
+    padding: var(--space-sm) var(--space-md);
+    border-radius: var(--radius-lg);
+}
+
+.form-message .form-textarea {
+    min-height: 80px;
+}
+
+.form-message .form-actions {
+    margin-top: var(--space-md);
+}
+
+.form-message .form-submit-button {
+    width: 100%;
+    padding: var(--space-sm) var(--space-lg);
 }
 
 .form-description {

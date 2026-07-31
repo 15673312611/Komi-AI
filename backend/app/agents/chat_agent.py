@@ -949,11 +949,20 @@ Keep your responses concise and focused. Provide clear, actionable information i
             # Get AI response WITHOUT storing user message
             self._groq_json_capture.clear()
             try:
-                response = await self.agent.arun(
-                    message=message,
-                    session_id=session_id,
-                    stream=False
+                response = await asyncio.wait_for(
+                    self.agent.arun(
+                        message=message,
+                        session_id=session_id,
+                        stream=False
+                    ),
+                    timeout=settings.AGENT_RUN_TIMEOUT
                 )
+            except asyncio.TimeoutError:
+                logger.warning(
+                    f"Agent run timed out after {settings.AGENT_RUN_TIMEOUT}s and was cancelled "
+                    f"(session_id={session_id}, agent_id={agent_id}, org_id={org_id})"
+                )
+                raise
             except Exception as arun_exc:
                 # Groq only: a truncated `json` tool call is rejected as invalid JSON;
                 # salvage the (mostly-complete) fields so the lead/end_chat survive.
@@ -1325,11 +1334,20 @@ Keep your responses concise and focused. Provide clear, actionable information i
                 self._groq_json_capture.clear()
                 _salvaged_content = None
                 try:
-                    response = await self.agent.arun(
-                        message=message,
-                        session_id=session_id,
-                        stream=False
+                    response = await asyncio.wait_for(
+                        self.agent.arun(
+                            message=message,
+                            session_id=session_id,
+                            stream=False
+                        ),
+                        timeout=settings.AGENT_RUN_TIMEOUT
                     )
+                except asyncio.TimeoutError:
+                    logger.warning(
+                        f"Agent run timed out after {settings.AGENT_RUN_TIMEOUT}s and was cancelled "
+                        f"(session_id={session_id}, agent_id={agent_id}, org_id={org_id})"
+                    )
+                    raise
                 except Exception as arun_exc:
                     # Groq only: salvage a truncated `json` tool call (see get_response).
                     salvaged = _salvage_groq_json_error(arun_exc) if self._use_groq_json_tool else None

@@ -18,10 +18,15 @@ from agno.agent import Agent
 from agno.models.openai import OpenAIChat
 from app.core.logger import get_logger
 from app.core.config import settings
+from app.utils.agno_patches import apply_agno_patches
 from typing import Dict, Any, Optional, List
 from fastapi import HTTPException
 
 logger = get_logger(__name__)
+
+# Every code path that builds an agno model goes through this module, so this
+# is the single choke point where the 1.7.6 runtime patches get applied.
+apply_agno_patches()
 
 def create_model(model_type: str, api_key: str, model_name: str, max_tokens: int = 1000, response_format: Optional[Dict[str, Any]] = None) -> Any:
     """

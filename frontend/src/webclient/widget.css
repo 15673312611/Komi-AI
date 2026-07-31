@@ -63,6 +63,9 @@
 .form-input,
 .form-textarea,
 .form-select {
+    /* The widget iframe shell has no CSS reset; content-box + this padding
+       makes the fields overflow their column (#270). */
+    box-sizing: border-box;
     padding: 16px 20px;
     border: 2px solid transparent;
     background: rgba(248, 249, 250, 0.8);
