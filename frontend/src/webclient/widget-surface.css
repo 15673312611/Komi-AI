@@ -103,6 +103,45 @@
     cursor: pointer;
 }
 .chat-container.cm-surface .message-bubble a:hover { opacity: 0.82; }
+/* Markdown code & wide content (v-html, so global rules): scroll inside the
+   bubble instead of painting past it and forcing the chat to scroll sideways.
+   Backgrounds derive from currentColor so they read on light and dark bubbles. */
+.chat-container.cm-surface .message-bubble pre {
+    max-width: 100%;
+    overflow-x: auto;
+    margin: 0.5em 0;
+    padding: var(--space-sm, 12px);
+    border-radius: 8px;
+    background: color-mix(in srgb, currentColor 8%, transparent);
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+}
+.chat-container.cm-surface .message-bubble pre code {
+    /* Code keeps its formatting; the <pre> scrollbar handles long lines. */
+    white-space: pre;
+    overflow-wrap: normal;
+    background: none;
+    padding: 0;
+}
+.chat-container.cm-surface .message-bubble code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.9em;
+    background: color-mix(in srgb, currentColor 8%, transparent);
+    padding: 1px 5px;
+    border-radius: 6px;
+}
+.chat-container.cm-surface .message-bubble table {
+    display: block;
+    max-width: 100%;
+    overflow-x: auto;
+    border-collapse: collapse;
+    margin: 0.5em 0;
+}
+.chat-container.cm-surface .message-bubble th,
+.chat-container.cm-surface .message-bubble td {
+    border: 1px solid color-mix(in srgb, currentColor 20%, transparent);
+    padding: 4px 8px;
+}
 /* Agent/bot bubble: agent surface + hairline, tail top-left. */
 .chat-container.cm-surface .agent-message .message-bubble,
 .chat-container.cm-surface .assistant-message .message-bubble {

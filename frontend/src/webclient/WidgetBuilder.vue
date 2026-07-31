@@ -2332,7 +2332,7 @@ const shouldShowWelcomeMessage = computed(() => {
                             <template v-else>
                                 <!-- Live replies reveal char-by-char as plain text (XSS-safe) with a
                                      caret; once finished they render as full markdown. -->
-                                <div v-if="isStreaming(index)" class="message-streaming">{{ displayText(index, message.message) }}<span class="cm-caret"></span></div>
+                                <div v-if="isStreaming(index)" class="message-streaming" v-html="renderMarkdown(displayText(index, message.message))"></div>
                                 <div v-else v-html="renderMarkdown(message.message)"></div>
 
                                 <!-- Display attachments if present -->
@@ -3026,50 +3026,8 @@ const shouldShowWelcomeMessage = computed(() => {
 .message-bubble ul,
 .message-bubble ol { margin: 0.4em 0; padding-left: 1.2em; }
 
-/* ===== Markdown code & wide content: scroll inside the bubble instead of
-   painting past it and forcing the whole chat to scroll sideways. The
-   backgrounds derive from currentColor so they read on light and dark
-   bubbles alike. ===== */
-.message-bubble pre {
-    max-width: 100%;
-    overflow-x: auto;
-    margin: 0.5em 0;
-    padding: var(--space-sm);
-    border-radius: 8px;
-    background: color-mix(in srgb, currentColor 8%, transparent);
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: thin;
-}
-
-.message-bubble pre code {
-    /* Code keeps its formatting; the <pre> scrollbar handles long lines. */
-    white-space: pre;
-    overflow-wrap: normal;
-    background: none;
-    padding: 0;
-}
-
-.message-bubble code {
-    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-    font-size: 0.9em;
-    background: color-mix(in srgb, currentColor 8%, transparent);
-    padding: 1px 5px;
-    border-radius: 6px;
-}
-
-.message-bubble table {
-    display: block;
-    max-width: 100%;
-    overflow-x: auto;
-    border-collapse: collapse;
-    margin: 0.5em 0;
-}
-
-.message-bubble th,
-.message-bubble td {
-    border: 1px solid color-mix(in srgb, currentColor 20%, transparent);
-    padding: 4px 8px;
-}
+/* Markdown code/table rules live in widget-surface.css — they target v-html
+   content, which scoped styles cannot reach. */
 
 .chat-input {
     padding: var(--space-md);
@@ -3705,12 +3663,15 @@ const shouldShowWelcomeMessage = computed(() => {
     to { opacity: 1; transform: none; }
 }
 
-/* Streaming typewriter: partial text + blinking caret while a reply reveals. */
+/* Streaming typewriter: the partial reply renders as markdown on every tick,
+   so bold/links/code appear styled mid-stream instead of as raw asterisks.
+   (No white-space: pre-wrap here — the markdown HTML owns its spacing.) */
 .message-streaming {
-    white-space: pre-wrap;
     word-break: break-word;
 }
-.cm-caret {
+/* Blinking caret rides the end of the last rendered block. */
+.message-streaming > :last-child::after {
+    content: '';
     display: inline-block;
     width: 6px;
     height: 1em;
@@ -3855,9 +3816,9 @@ const shouldShowWelcomeMessage = computed(() => {
     .citation-chips,
     .reading-bars span,
     .cm-typing-dot,
-    .cm-caret,
+    .message-streaming > :last-child::after,
     .status-indicator.online { animation: none !important; }
-    .cm-caret { display: none; }
+    .message-streaming > :last-child::after { display: none; }
 }
 
 /* ========================================================== */
