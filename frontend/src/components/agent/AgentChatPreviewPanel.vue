@@ -1153,11 +1153,14 @@ const handleInitiationClick = () => {
    footer. */
 .ai-disclaimer {
     text-align: center;
-    padding: var(--space-xs) var(--space-md) 0;
+    /* No top padding — .chat-input above already ends with a full gap. */
+    padding: 0 var(--space-md) 2px;
     font-size: 0.6875rem;
     line-height: 1.3;
     opacity: 0.55;
 }
+
+.ai-disclaimer + .powered-by { padding-top: 0; }
 
 .powered-by {
     display: flex;
