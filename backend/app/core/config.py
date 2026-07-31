@@ -175,6 +175,11 @@ class Settings(BaseSettings):
     #                                   offending text on each event for review.
     GUARDRAIL_POLICY_ENABLED: bool = os.getenv("GUARDRAIL_POLICY_ENABLED", "true").lower() == "true"
     GUARDRAIL_INBOUND_ACTION: str = os.getenv("GUARDRAIL_INBOUND_ACTION", "template_only")
+    # Long self-contained exercise briefs with no business context. Defaults to
+    # "block": prompt text demonstrably failed to hold these in production, and
+    # blocking here also avoids paying for the inference. "count" or "off" to
+    # relax without a deploy.
+    GUARDRAIL_OFFTOPIC_ACTION: str = os.getenv("GUARDRAIL_OFFTOPIC_ACTION", "block")
     GUARDRAIL_OUTPUT_CHECK_ENABLED: bool = os.getenv("GUARDRAIL_OUTPUT_CHECK_ENABLED", "true").lower() == "true"
     GUARDRAIL_EVENTS_ENABLED: bool = os.getenv("GUARDRAIL_EVENTS_ENABLED", "true").lower() == "true"
     GUARDRAIL_STORE_EXCERPT: bool = os.getenv("GUARDRAIL_STORE_EXCERPT", "true").lower() == "true"

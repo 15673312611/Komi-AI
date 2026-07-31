@@ -35,7 +35,12 @@ from app.agents.guardrail_policy import CANARY_STRINGS, looks_like_scope_refusal
 from app.core.config import settings
 from app.core.logger import get_logger
 from app.repositories.guardrail_event import record_guardrail_events
-from app.utils.guardrails import RULE_FRAME_TOKENS, detect_injection
+from app.utils.guardrails import (
+    RULE_FRAME_TOKENS,
+    RULE_OFFTOPIC_EXERCISE,
+    detect_injection,
+    detect_offtopic_exercise,
+)
 
 logger = get_logger(__name__)
 
@@ -68,11 +73,23 @@ class Surface:
     HELP_CENTER = "help_center"
 
 
+def offtopic_reply(org_name: Optional[str]) -> str:
+    """The scope decline, used when an exercise brief is stopped in code. Says
+    the same thing the policy asks the model to say, so a visitor cannot tell
+    which layer answered."""
+    who = (org_name or "").strip() or "this business"
+    return (
+        f"I can only help with questions about {who}. "
+        f"What can I help you with?"
+    )
+
+
 @dataclass(frozen=True)
 class InboundVerdict:
     rule_ids: Tuple[str, ...] = ()
     block: bool = False
     matched: Tuple[str, ...] = ()
+    reply: str = BLOCK_REPLY
 
     @property
     def triggered(self) -> bool:
@@ -135,6 +152,19 @@ def _record(
     )
 
 
+def _business_terms(ctx) -> Tuple[str, ...]:
+    """Org name and the domain's own label — a message naming either is about
+    the business, whatever else it contains."""
+    terms = []
+    for attr in ("org_name", "domain"):
+        value = getattr(ctx, attr, None)
+        if isinstance(value, str) and value.strip():
+            terms.append(value.strip())
+            if attr == "domain" and "." in value:
+                terms.append(value.split(".", 1)[0])
+    return tuple(terms)
+
+
 def _should_block(rule_ids: Tuple[str, ...]) -> bool:
     mode = (getattr(settings, "GUARDRAIL_INBOUND_ACTION", "template_only") or "off").lower()
     if mode == "strict":
@@ -159,19 +189,34 @@ def check_inbound(
     """
     try:
         result = detect_injection(text or "")
-        if not result.triggered:
-            return InboundVerdict()
+        rules = list(result.rule_ids)
         block = allow_block and _should_block(result.rule_ids)
+        reply = BLOCK_REPLY
+
+        # Off-topic exercise briefs: prompt text could not hold these, so they
+        # are stopped here — which also avoids paying for the inference the
+        # whole change exists to prevent.
+        if detect_offtopic_exercise(text or "", _business_terms(ctx)):
+            rules.append(RULE_OFFTOPIC_EXERCISE)
+            mode = (getattr(settings, "GUARDRAIL_OFFTOPIC_ACTION", "block") or "off").lower()
+            if allow_block and mode == "block":
+                block = True
+                reply = offtopic_reply(getattr(ctx, "org_name", None))
+
+        if not rules:
+            return InboundVerdict()
         _record(
             surface=surface,
             layer="inbound",
-            rules=result.rule_ids,
+            rules=tuple(rules),
             action="blocked" if block else "counted",
             ctx=ctx,
             session_id=session_id,
             text=text,
         )
-        return InboundVerdict(rule_ids=result.rule_ids, block=block, matched=result.matched)
+        return InboundVerdict(
+            rule_ids=tuple(rules), block=block, matched=result.matched, reply=reply
+        )
     except Exception as e:
         logger.error(f"Inbound guardrail check failed open: {e}")
         return InboundVerdict()
