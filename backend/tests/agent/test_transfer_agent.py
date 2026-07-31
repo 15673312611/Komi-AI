@@ -14,12 +14,19 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+import asyncio
 import pytest
 import pytz
 from datetime import datetime, timedelta
 from unittest.mock import patch, MagicMock, AsyncMock
 import sys
-from app.agents.transfer_agent import TransferResponseAgent, get_agent_availability_response
+from app.agents.transfer_agent import (
+    FOLLOW_UP_TIMEOUT_MESSAGE,
+    TRANSFER_TIMEOUT_MESSAGE,
+    TransferResponseAgent,
+    get_agent_availability_response,
+)
+from app.core.config import settings
 from app.models.chat_history import ChatHistory
 from app.models.agent import Agent, AgentType
 from app.models.organization import Organization
@@ -294,6 +301,52 @@ async def test_get_transfer_response():
         
         assert response["message"] == "I'll transfer you to a human agent."
         assert response["transfer_to_human"] is False
+
+@pytest.mark.asyncio
+async def test_get_transfer_response_timeout():
+    """A stuck transfer run is cancelled and falls back to a plain handoff line,
+    keeping the routing decision intact (issue #269)."""
+    mock_agent_repo = MagicMock()
+    mock_agent_repo.get_by_agent_id.return_value = None
+
+    with patch('app.agents.transfer_agent.AgentRepository', return_value=mock_agent_repo), \
+         patch('app.utils.agno_utils.create_model', return_value=MagicMock()), \
+         patch('app.agents.transfer_agent.Agent', return_value=MockPhiAgent()):
+
+        agent = TransferResponseAgent(
+            api_key="test_key",
+            model_name="gpt-4",
+            model_type="OPENAI"
+        )
+
+        async def hung_run(*args, **kwargs):
+            await asyncio.sleep(60)
+
+        agent.agent.arun = hung_run
+        business_hours = {'monday': {'start': '09:00', 'end': '17:00', 'enabled': True}}
+
+        with patch.object(settings, 'AGENT_RUN_TIMEOUT', 1):
+            # Agents available -> still transfers, with the fallback wording
+            response = await agent.get_transfer_response(
+                chat_history=[],
+                business_hours=business_hours,
+                available_agents=3,
+                is_business_hours=True,
+                customer_email=None
+            )
+            assert response["message"] == TRANSFER_TIMEOUT_MESSAGE
+            assert response["transfer_to_human"] is True
+
+            # Nobody available -> follow-up wording, no transfer
+            response = await agent.get_transfer_response(
+                chat_history=[],
+                business_hours=business_hours,
+                available_agents=0,
+                is_business_hours=False,
+                customer_email=None
+            )
+            assert response["message"] == FOLLOW_UP_TIMEOUT_MESSAGE
+            assert response["transfer_to_human"] is False
 
 @pytest.mark.asyncio
 async def test_get_agent_availability_response(test_agent, test_user_group, test_user, test_chat_history):
