@@ -44,6 +44,14 @@ class BotProtectionError(Exception):
     automated browser. Signals the user should add the content manually."""
 
 
+class EmptyCrawlError(Exception):
+    """Raised when a crawl stored no pages for a reason other than bot protection.
+
+    A run that indexes nothing is a failure, not a success: without this the queue
+    item completes and the source appears in the dashboard as a healthy source with
+    zero pages, so nobody learns the agent has no content to answer from."""
+
+
 @dataclass
 class EnhancedWebsiteReader(WebsiteReader):
     """Enhanced Reader for Websites with more robust content extraction"""

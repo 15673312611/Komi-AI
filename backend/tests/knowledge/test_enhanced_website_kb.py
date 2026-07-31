@@ -103,25 +103,38 @@ class TestEnhancedWebsiteKnowledgeBase:
         assert kb.reader.max_depth == 4
         assert kb.reader.max_links == 15
 
-    def test_raise_if_bot_blocked(self):
-        """A fully bot-blocked crawl (0 docs, pages skipped) raises, so the queue
-        item fails with a clear reason instead of silently completing."""
-        from app.knowledge.enhanced_website_reader import BotProtectionError
+    def test_raise_if_nothing_stored(self):
+        """A run that stored no pages must raise so the queue item fails.
+
+        Previously only the bot-blocked case raised; an empty crawl for any other
+        reason was marked COMPLETED, making a broken source look identical to a
+        healthy one with no sub-pages.
+        """
+        from app.knowledge.enhanced_website_reader import (
+            BotProtectionError,
+            EmptyCrawlError,
+        )
         reader = EnhancedWebsiteReader(max_links=5)
         kb = EnhancedWebsiteKnowledgeBase(urls=TEST_URLS, reader=reader)
 
-        # Nothing blocked → never raises, regardless of doc count.
+        # Anything stored → never raises, whatever happened along the way.
         reader._challenge_blocked = 0
-        kb._raise_if_bot_blocked(0)
-        kb._raise_if_bot_blocked(5)
+        kb._raise_if_nothing_stored(5)
+        reader._challenge_blocked = 3
+        kb._raise_if_nothing_stored(2)
 
-        # Blocked pages AND zero documents extracted → raise.
+        # Zero stored because bot protection blocked every page → the specific,
+        # actionable error, which takes precedence.
         reader._challenge_blocked = 3
         with pytest.raises(BotProtectionError):
-            kb._raise_if_bot_blocked(0)
+            kb._raise_if_nothing_stored(0)
 
-        # Blocked some pages but others succeeded → don't raise.
-        kb._raise_if_bot_blocked(2)
+        # Zero stored for any other reason → still a failure, not a success.
+        reader._challenge_blocked = 0
+        with pytest.raises(EmptyCrawlError) as excinfo:
+            kb._raise_if_nothing_stored(0)
+        # The message names the source so the dashboard error is actionable.
+        assert TEST_URLS[0] in str(excinfo.value)
     
     def test_document_lists_property(self, mock_reader):
         """Test the document_lists property"""
