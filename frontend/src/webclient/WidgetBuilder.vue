@@ -2887,9 +2887,10 @@ const shouldShowWelcomeMessage = computed(() => {
     animation: pulse-online 2s ease-in-out infinite;
 }
 
-/* Presence line ("Online · replies instantly") in the accent colour (design comp). */
+/* Presence line ("Online · replies instantly"): accent when readable on the
+   card, muted otherwise — themeCssVars picks via --cm-presence. */
 .cm-presence {
-    color: var(--cm-accent, #C9F24E);
+    color: var(--cm-presence, var(--cm-muted, #C9F24E));
     font-size: 11.5px;
 }
 

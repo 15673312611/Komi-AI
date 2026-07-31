@@ -169,6 +169,14 @@ export function themeCssVars(chatStyle?: string | null, overrides?: ThemeOverrid
     const agentBg = hasCustomBg ? adjustColorBrightness(customBg, 20) : t.agentBg
 
     const accent = overrides?.accent_color || t.accent
+
+    // Presence line ("Online · replies instantly"): the comp colours it with the
+    // accent, but a light accent on a light card (e.g. lime on the white Sunrise
+    // header) — or a dark accent on a dark card — is unreadable. Fall back to the
+    // contrast-derived muted colour in that case. Same luminance rule as onAccent().
+    const cardIsLight = hasCustomBg ? !isColorDark(customBg) : t.light
+    const accentIsLight = onAccent(accent) === '#0B0C10'
+    const presence = cardIsLight === accentIsLight ? muted : accent
     // font_family may be a bare name ("Space Grotesk") or a full stack
     // ("Instrument Sans, sans-serif"); append it raw so the comma-separated stack
     // stays valid (quoting the whole stack would make the first token invalid).
@@ -183,6 +191,7 @@ export function themeCssVars(chatStyle?: string | null, overrides?: ThemeOverrid
         '--cm-agent-bg': agentBg,
         '--cm-accent': accent,
         '--cm-on-accent': onAccent(accent),
+        '--cm-presence': presence,
         '--cm-border': t.border,
         '--cm-glow': t.glow,
         '--cm-radius': `${t.radius}px`,

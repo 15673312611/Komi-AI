@@ -37,13 +37,15 @@
     font-weight: 600;
     line-height: 1.15;
 }
+/* --cm-presence is the accent when it is readable on the card, otherwise the
+   contrast-derived muted colour (see themeCssVars). */
 .chat-container.cm-surface .cm-presence,
 .chat-container.cm-surface .status-text {
-    color: var(--cm-accent);
+    color: var(--cm-presence, var(--cm-accent));
     font-size: 11.5px;
 }
 .chat-container.cm-surface .status-indicator.online {
-    background: var(--cm-accent);
+    background: var(--cm-presence, var(--cm-accent));
     box-shadow: none;
 }
 
