@@ -1319,6 +1319,11 @@ const startNewConversationWorkflow = async () => {
 const handleStartNewConversation = async () => {
     shouldShowNewConversationOption.value = false
     messages.value = [] // Clear messages
+    // Drop any human agent from the previous conversation. humanAgent is only ever
+    // set (on takeover, and from loaded history), never cleared, so without this the
+    // fresh AI-handled chat would keep the old agent's name in the header, keep
+    // attachments enabled, and hide the AI disclaimer while the AI is answering.
+    humanAgent.value = {}
     await startNewConversationWorkflow()
 }
 
