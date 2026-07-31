@@ -77,17 +77,26 @@ def load_key() -> bytes:
 
     Outside development and tests a missing or malformed key is fatal: chat
     messages, session summaries and agent memory are all encrypted with it.
+
+    Usability of the key is checked here rather than left to ``Fernet()`` in
+    get_keys(), so that the .env.example placeholder and the common near-miss of
+    pasting a raw ``Fernet.generate_key()`` (base64-encoded once, not twice) both
+    surface the message below instead of a bare "must be 32 url-safe base64-encoded
+    bytes" from deep inside the library.
     """
     env_key = os.getenv(ENCRYPTION_KEY_ENV)
     if env_key:
         try:
-            return base64.b64decode(env_key)
+            key = base64.b64decode(env_key)
+            Fernet(key)
+            return key
         except Exception as e:
             logger.error(f"Invalid encryption key format: {str(e)}")
             if not _is_throwaway_environment():
                 raise RuntimeError(
-                    f"{ENCRYPTION_KEY_ENV} is set but is not valid base64. Encrypted "
-                    "data cannot be read; refusing to start with a different key."
+                    f"{ENCRYPTION_KEY_ENV} is set but is not a usable Fernet key. "
+                    "Encrypted data cannot be read; refusing to start with a "
+                    f"different key. Generate one with:\n{GENERATE_KEY_HINT}"
                 ) from e
 
     if not _is_throwaway_environment():

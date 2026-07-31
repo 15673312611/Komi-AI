@@ -17,10 +17,11 @@ limitations under the License.
 import os
 
 # Set before any app import: app.core.encryption reads these when it first loads a
-# key, and a fixed key keeps encrypted fixtures reproducible across runs.
+# key, and a fixed key keeps encrypted fixtures reproducible across runs. This key
+# is for tests only — deployments generate their own (see backend/.env.example).
 os.environ.setdefault("ENVIRONMENT", "test")
 os.environ.setdefault(
-    "ENCRYPTION_KEY", "RFQ4SzhyRTVYdGtsLUxsc25SaDB0QlZpbTdQRmlVRlpsZUlCaFRlU2Vxbz0=")
+    "ENCRYPTION_KEY", "QmFTbXc5RWQ4czRfQWpqSnhqZjhraGtYSGFYaXZ4SkRNS2kxZFB1Y2NrMD0=")
 
 import pytest
 import uuid

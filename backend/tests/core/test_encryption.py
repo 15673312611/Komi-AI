@@ -14,15 +14,20 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+import base64
 import sys
 from pathlib import Path
 from uuid import uuid4
 
+import pytest
+from cryptography.fernet import Fernet
 from sqlalchemy import text
 
+from app.core.config import settings
 from app.core.encryption import (
     CURRENT_KEY_ID,
     ENCRYPTED_PREFIX,
+    ENCRYPTION_KEY_ENV,
     JSON_MARKER,
     SEPARATOR,
     EncryptedText,
@@ -31,6 +36,7 @@ from app.core.encryption import (
     encrypt_json,
     encrypt_value,
     is_encrypted,
+    load_key,
 )
 from app.database import Base
 from app.models.chat_history import ChatHistory
@@ -189,3 +195,46 @@ def test_legacy_plaintext_row_still_reads(db, test_organization_id):
         ChatHistory.message_type == "user"
     ).order_by(ChatHistory.id.desc()).first()
     assert stored.message == "written before encryption"
+
+
+def _double_encoded(key: bytes) -> str:
+    """The wire format ENCRYPTION_KEY uses: a Fernet key, base64-encoded again."""
+    return base64.b64encode(key).decode()
+
+
+def test_load_key_accepts_a_double_encoded_key(monkeypatch):
+    monkeypatch.setattr(settings, "ENVIRONMENT", "production")
+    key = Fernet.generate_key()
+    monkeypatch.setenv(ENCRYPTION_KEY_ENV, _double_encoded(key))
+    assert load_key() == key
+
+
+def test_load_key_rejects_base64_that_is_not_a_fernet_key(monkeypatch):
+    """Encoding the key once instead of twice decodes cleanly but is 32 raw bytes,
+    not Fernet key material — it must fail here, not later inside Fernet()."""
+    monkeypatch.setattr(settings, "ENVIRONMENT", "production")
+    monkeypatch.setenv(ENCRYPTION_KEY_ENV, base64.b64encode(b"x" * 32).decode())
+    with pytest.raises(RuntimeError, match="not a usable Fernet key"):
+        load_key()
+
+
+def test_load_key_rejects_the_env_example_placeholder(monkeypatch):
+    monkeypatch.setattr(settings, "ENVIRONMENT", "production")
+    monkeypatch.setenv(ENCRYPTION_KEY_ENV, "your_fernet_encryption_key_here")
+    with pytest.raises(RuntimeError, match="not a usable Fernet key"):
+        load_key()
+
+
+def test_load_key_is_fatal_when_unset_outside_development(monkeypatch):
+    monkeypatch.setattr(settings, "ENVIRONMENT", "production")
+    monkeypatch.delenv(ENCRYPTION_KEY_ENV, raising=False)
+    with pytest.raises(RuntimeError, match="is not set"):
+        load_key()
+
+
+def test_load_key_falls_back_to_a_throwaway_key_in_development(monkeypatch):
+    """An unusable key must not stop local development — a generated one is fine
+    there, since nothing durable is encrypted under it."""
+    monkeypatch.setattr(settings, "ENVIRONMENT", "development")
+    monkeypatch.setenv(ENCRYPTION_KEY_ENV, "your_fernet_encryption_key_here")
+    Fernet(load_key())  # usable, and no raise

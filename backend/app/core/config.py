@@ -64,9 +64,9 @@ class Settings(BaseSettings):
 
     # app.core.encryption owns the actual key loading (reads the env var directly and
     # refuses to start without it outside development). This mirror exists only so
-    # check_secret_configuration can audit it; the demo default is what that audit
-    # flags in production.
-    ENCRYPTION_KEY: str = os.getenv("ENCRYPTION_KEY", "RFQ4SzhyRTVYdGtsLUxsc25SaDB0QlZpbTdQRmlVRlpsZUlCaFRlU2Vxbz0=")
+    # check_secret_configuration can audit it, hence no default: unset is itself
+    # one of the states that audit flags.
+    ENCRYPTION_KEY: str = os.getenv("ENCRYPTION_KEY", "")
 
     # SMTP Settings
     SMTP_SERVER: str = os.getenv("SMTP_SERVER", "smtp.gmail.com")
@@ -259,9 +259,10 @@ settings = Settings()
 logger = get_logger(__name__)
 
 
-# Values that ship in the repo (config defaults / .env.example). They are public,
-# so a deployment still using them can have its tokens forged and its stored
-# credentials decrypted by anyone.
+# Values that were once shipped in the repo (config defaults / .env.example) and so
+# are public: a deployment still using them can have its tokens forged and its
+# stored credentials decrypted by anyone. They no longer appear as defaults above,
+# but they stay listed here to catch deployments that copied them before that.
 _INSECURE_DEFAULTS = {
     "SECRET_KEY": "your-secret-key",
     "CONVERSATION_SECRET_KEY": "your-conversation-secret-key",
