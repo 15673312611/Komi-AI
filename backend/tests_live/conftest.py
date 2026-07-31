@@ -23,6 +23,7 @@ means tests/conftest.py never loads, so app.core.config reads the real .env
 (real DATABASE_URL and ENCRYPTION_KEY) instead of the in-memory SQLite harness.
 """
 
+import asyncio
 import os
 import uuid
 
@@ -101,6 +102,13 @@ def _agent_flags(db, agent_id):
     return {"transfer": bool(row[0]), "ticketing": bool(row[1]), "lead": bool(lead)}
 
 
+# A normal turn takes a few seconds. This only has to be generous enough that a
+# slow-but-working model is never failed, while a genuine hang is bounded: the
+# agent can loop on knowledge-search tool calls, and without this a stuck turn
+# hangs the whole suite indefinitely rather than failing one test.
+TURN_TIMEOUT_SECONDS = int(os.getenv("LIVE_TURN_TIMEOUT", "120"))
+
+
 class Conversation:
     """One widget-style session against one agent. `say()` is a visitor turn."""
 
@@ -113,13 +121,23 @@ class Conversation:
         self.turns = []
 
     async def say(self, message):
-        response = await self._agent.get_response(
-            message=message,
-            session_id=str(self.session_id),
-            org_id=self.org_id,
-            agent_id=self.agent_id,
-            customer_id=self.customer_id,
-        )
+        try:
+            response = await asyncio.wait_for(
+                self._agent.get_response(
+                    message=message,
+                    session_id=str(self.session_id),
+                    org_id=self.org_id,
+                    agent_id=self.agent_id,
+                    customer_id=self.customer_id,
+                ),
+                timeout=TURN_TIMEOUT_SECONDS,
+            )
+        except asyncio.TimeoutError:
+            pytest.fail(
+                f"turn timed out after {TURN_TIMEOUT_SECONDS}s — the agent is "
+                f"most likely looping on tool calls. Raise LIVE_TURN_TIMEOUT if "
+                f"this model is simply slow.\n  visitor said: {message[:200]}"
+            )
         self.turns.append((message, response))
         print(f"\n  > {message[:120]}\n  < {(response.message or '')[:300]}")
         return response

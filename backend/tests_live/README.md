@@ -56,6 +56,11 @@ inference) and records every attempt for review.
   money or depend on a local database. It also keeps `tests/conftest.py` out of
   the picture, so the real `.env` (DATABASE_URL, ENCRYPTION_KEY) is used
   instead of the in-memory SQLite harness.
+- **Every turn is bounded by `LIVE_TURN_TIMEOUT`** (default 120s). The agent
+  can loop on knowledge-search tool calls; without a bound one stuck turn hangs
+  the whole suite instead of failing one test. A failure saying *"turn timed
+  out"* means the agent stalled, not that the guardrail is wrong — raise the
+  value if the model is simply slow.
 - **It needs a usable local org**: an active `ai_configs` row and an active
   non-workflow agent. One is discovered automatically, preferring an org with
   indexed knowledge. Override with `LIVE_ORG_ID` and `LIVE_AGENT_ID`.
