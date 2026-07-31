@@ -17,6 +17,16 @@ ENV PIP_DEFAULT_TIMEOUT=120
 COPY backend/requirements.txt .
 RUN pip install --no-cache-dir --retries 10 -r requirements.txt
 
+# Node.js + npx and uv/uvx for STDIO MCP servers (npx @elastic/mcp-server-…,
+# uvx mcp-server-…). Copied from the official images instead of apt, which
+# only ships an EOL Node 18 on bookworm. Kept below the pip layer so an
+# upstream node/uv tag bump can't invalidate the torch-sized wheel cache.
+COPY --from=node:22-slim /usr/local/bin/node /usr/local/bin/node
+COPY --from=node:22-slim /usr/local/lib/node_modules /usr/local/lib/node_modules
+RUN ln -s /usr/local/lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm && \
+    ln -s /usr/local/lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx
+COPY --from=ghcr.io/astral-sh/uv:0.12 /uv /uvx /usr/local/bin/
+
 # Copy application code
 COPY backend/app ./app
 COPY backend/alembic.ini .
