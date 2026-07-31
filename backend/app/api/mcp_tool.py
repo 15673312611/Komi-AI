@@ -33,8 +33,9 @@ except ImportError:
 from app.models.schemas.mcp_tool import (
     MCPToolCreate, MCPToolUpdate, MCPToolResponse,
     MCPToolToAgentCreate, MCPToolToAgentResponse,
-    AgentMCPToolsResponse
+    AgentMCPToolsResponse, MCPToolTestResponse
 )
+from app.tools.mcp_manager import MCPToolsManager
 from sqlalchemy.orm import Session
 from uuid import UUID
 
@@ -151,6 +152,42 @@ async def get_mcp_tool(
         raise e
     except Exception as e:
         logger.error(f"Error fetching MCP tool: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/{mcp_tool_id}/test", response_model=MCPToolTestResponse)
+async def test_mcp_tool(
+    mcp_tool_id: int,
+    current_user: User = Depends(require_permissions("manage_agents")),
+    db: Session = Depends(get_db)
+):
+    """Connect to a configured MCP tool once and report whether it comes up
+    and which functions it exposes — surfaces environment problems (e.g. a
+    missing npx) that otherwise only show as a silent 0-tool run."""
+    try:
+        check_mcp_feature_access(current_user, db)
+
+        mcp_tool_repo = MCPToolRepository(db)
+        mcp_tool = mcp_tool_repo.get_mcp_tool(mcp_tool_id)
+
+        if not mcp_tool:
+            raise HTTPException(
+                status_code=404,
+                detail="MCP tool not found"
+            )
+
+        if mcp_tool.organization_id != current_user.organization_id:
+            raise HTTPException(
+                status_code=403,
+                detail="Not authorized to access this MCP tool"
+            )
+
+        return await MCPToolsManager().test_tool_config(mcp_tool)
+
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        logger.error(f"MCP tool test error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

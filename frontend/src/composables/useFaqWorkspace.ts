@@ -100,6 +100,9 @@ export function useFaqWorkspace(organizationId: () => string | undefined) {
   const isNewFaq = ref(false)
   const draftQuestion = ref('')
   const draftAnswer = ref('')
+  // Topic (stored as the FAQ's free-form category). Empty on create means the
+  // server default; empty on edit means "keep the current topic".
+  const draftCategory = ref('')
   // Per-article SEO overrides. Empty means "derive it" — the server normalizes
   // a hand-typed slug and treats blanks as cleared, so no client-side slugify.
   const draftSlug = ref('')
@@ -357,6 +360,7 @@ export function useFaqWorkspace(organizationId: () => string | undefined) {
     isNewFaq.value = false
     draftQuestion.value = faq.question
     draftAnswer.value = faq.answer
+    draftCategory.value = faq.category
     setSeoDraft(faq)
   }
 
@@ -365,6 +369,7 @@ export function useFaqWorkspace(organizationId: () => string | undefined) {
     isNewFaq.value = true
     draftQuestion.value = ''
     draftAnswer.value = ''
+    draftCategory.value = ''
     setSeoDraft(null)
   }
 
@@ -373,6 +378,7 @@ export function useFaqWorkspace(organizationId: () => string | undefined) {
     isNewFaq.value = false
     draftQuestion.value = ''
     draftAnswer.value = ''
+    draftCategory.value = ''
     setSeoDraft(null)
   }
 
@@ -391,13 +397,18 @@ export function useFaqWorkspace(organizationId: () => string | undefined) {
       meta_title: draftMetaTitle.value.trim(),
       meta_description: draftMetaDescription.value.trim(),
     }
+    // The server rejects a blank category, so only send one when set: on
+    // create a blank falls back to the server default, on edit it keeps the
+    // FAQ's current topic.
+    const category = draftCategory.value.trim()
+    const withCategory = category ? { category } : {}
     isSaving.value = true
     try {
       if (isNewFaq.value) {
-        const created = await faqService.createFaq({ question, answer, ...seo })
+        const created = await faqService.createFaq({ question, answer, ...withCategory, ...seo })
         faqs.value = [...faqs.value, created]
       } else if (editingId.value) {
-        const updated = await faqService.updateFaq(editingId.value, { question, answer, ...seo })
+        const updated = await faqService.updateFaq(editingId.value, { question, answer, ...withCategory, ...seo })
         faqs.value = faqs.value.map((f) => (f.id === updated.id ? updated : f))
       }
       cancelEdit()
@@ -454,6 +465,7 @@ export function useFaqWorkspace(organizationId: () => string | undefined) {
     isNewFaq,
     draftQuestion,
     draftAnswer,
+    draftCategory,
     draftSlug,
     draftMetaTitle,
     draftMetaDescription,

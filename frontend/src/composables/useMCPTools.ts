@@ -16,7 +16,7 @@ limitations under the License.
 
 import { ref, reactive } from 'vue'
 import { mcpService } from '@/services/mcp'
-import type { MCPTool, MCPToolCreate, MCPToolUpdate, MCPTransportType } from '@/types/mcp'
+import type { MCPTool, MCPToolCreate, MCPToolUpdate, MCPToolTestResult, MCPTransportType } from '@/types/mcp'
 import { toast } from 'vue-sonner'
 
 export function useMCPTools(agentId: string) {
@@ -167,6 +167,24 @@ export function useMCPTools(agentId: string) {
     }
   }
 
+  // Connection test results, per tool id. A tool that saves fine can still be
+  // dead at runtime (missing npx, bad key, unreachable server) — the Test
+  // button surfaces that instead of a silent 0-tool run.
+  const testResults = ref<Record<number, MCPToolTestResult>>({})
+  const testingToolId = ref<number | null>(null)
+
+  const testMCPTool = async (toolId: number) => {
+    testingToolId.value = toolId
+    try {
+      testResults.value = { ...testResults.value, [toolId]: await mcpService.testMCPTool(toolId) }
+    } catch (err: any) {
+      const errorMessage = err.response?.data?.detail || 'Failed to test MCP tool'
+      testResults.value = { ...testResults.value, [toolId]: { success: false, functions: [], error: errorMessage } }
+    } finally {
+      testingToolId.value = null
+    }
+  }
+
   // Apply preset to form
   const applyPreset = (preset: typeof mcpPresets[0]) => {
     Object.assign(createForm, {
@@ -293,6 +311,9 @@ export function useMCPTools(agentId: string) {
     linkMCPTool,
     unlinkMCPTool,
     deleteMCPTool,
+    testMCPTool,
+    testResults,
+    testingToolId,
     applyPreset,
     resetCreateForm,
     confirmDelete,

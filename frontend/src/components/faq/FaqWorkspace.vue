@@ -61,6 +61,7 @@ const {
   isNewFaq,
   draftQuestion,
   draftAnswer,
+  draftCategory,
   draftSlug,
   draftMetaTitle,
   draftMetaDescription,
@@ -265,12 +266,13 @@ async function runConfirm() {
   }
 }
 
-// Placeholder card for a manually added FAQ.
+// Placeholder card for a manually added FAQ. The category mirrors the server
+// default applied when the topic field is left blank.
 const newFaqStub = computed<FaqItem>(() => ({
   id: 'new',
   question: '',
   answer: '',
-  category: 'New',
+  category: 'General',
   status: 'draft',
   knowledge_id: null,
   source_label: 'Added manually',
@@ -331,8 +333,10 @@ onUnmounted(stopPolling)
               :editing="true"
               :is-new="true"
               :saving="isSaving"
+              :categories="categories"
               v-model:draft-question="draftQuestion"
               v-model:draft-answer="draftAnswer"
+              v-model:draft-category="draftCategory"
               v-model:draft-slug="draftSlug"
               v-model:draft-meta-title="draftMetaTitle"
               v-model:draft-meta-description="draftMetaDescription"
@@ -392,13 +396,16 @@ onUnmounted(stopPolling)
                 :saving="isSaving"
                 :selectable="selectionActive"
                 :selected="selectedIds.has(faq.id)"
+                :categories="categories"
                 :draft-question="draftQuestion"
                 :draft-answer="draftAnswer"
+                :draft-category="draftCategory"
                 :draft-slug="draftSlug"
                 :draft-meta-title="draftMetaTitle"
                 :draft-meta-description="draftMetaDescription"
                 @update:draft-question="draftQuestion = $event"
                 @update:draft-answer="draftAnswer = $event"
+                @update:draft-category="draftCategory = $event"
                 @update:draft-slug="draftSlug = $event"
                 @update:draft-meta-title="draftMetaTitle = $event"
                 @update:draft-meta-description="draftMetaDescription = $event"

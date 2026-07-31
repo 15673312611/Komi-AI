@@ -206,3 +206,54 @@ def test_agent_association_endpoints(client: TestClient, db):
     assert resp3.json()["message"] == "MCP tool removed from agent successfully"
 
 
+
+
+def test_test_mcp_tool_endpoint(client: TestClient, db):
+    """POST /{id}/test proxies the manager's connection probe."""
+    from unittest.mock import AsyncMock, patch
+
+    mcp_api.HAS_ENTERPRISE = False
+    payload = {
+        "name": "Probe",
+        "transport_type": MCPTransportType.STDIO.value,
+        "command": "npx",
+        "args": ["-y", "@elastic/mcp-server-elasticsearch"],
+        "enabled": True,
+    }
+    tool_id = client.post("/api/mcp", json=payload).json()["id"]
+
+    with patch.object(
+        mcp_api.MCPToolsManager, "test_tool_config",
+        new=AsyncMock(return_value={"success": False, "functions": [], "error": "[Errno 2] No such file or directory: 'npx'"}),
+    ):
+        resp = client.post(f"/api/mcp/{tool_id}/test")
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["success"] is False
+    assert "npx" in body["error"]
+
+    # Unknown id → 404
+    resp2 = client.post("/api/mcp/999999/test")
+    assert resp2.status_code == 404
+
+
+def test_test_mcp_tool_endpoint_other_org_forbidden(client: TestClient, db):
+    """Testing a tool owned by another organization is rejected."""
+    from app.models.mcp_tool import MCPTool
+
+    mcp_api.HAS_ENTERPRISE = False
+    other_org_tool = MCPTool(
+        name="Other org tool",
+        transport_type=MCPTransportType.STDIO,
+        command="npx",
+        args=["-y", "some-server"],
+        enabled=True,
+        organization_id=uuid4(),
+    )
+    db.add(other_org_tool)
+    db.commit()
+    db.refresh(other_org_tool)
+
+    resp = client.post(f"/api/mcp/{other_org_tool.id}/test")
+    assert resp.status_code == 403

@@ -31,6 +31,10 @@ const props = defineProps<{
   draftSlug?: string
   draftMetaTitle?: string
   draftMetaDescription?: string
+  /** Topic (category) draft plus the org's existing topics for autocomplete.
+   *  Optional for the same reason as the SEO drafts. */
+  draftCategory?: string
+  categories?: string[]
   locked?: boolean
   /** Selection mode is on somewhere in the list (keeps checkboxes visible). */
   selectable?: boolean
@@ -46,6 +50,7 @@ const emit = defineEmits<{
   'toggle-select': []
   'update:draftQuestion': [value: string]
   'update:draftAnswer': [value: string]
+  'update:draftCategory': [value: string]
   'update:draftSlug': [value: string]
   'update:draftMetaTitle': [value: string]
   'update:draftMetaDescription': [value: string]
@@ -55,7 +60,15 @@ function onQuestionInput(event: Event) {
   emit('update:draftQuestion', (event.target as HTMLInputElement).value)
 }
 
+function onCategoryInput(event: Event) {
+  emit('update:draftCategory', (event.target as HTMLInputElement).value)
+}
+
 const sourceLabel = () => props.faq.source_label || 'Generated'
+
+// Mirrors the category column width in app/models/faq.py — the API 422s
+// anything longer, so this only stops the user typing past the limit.
+const MAX_TOPIC = 100
 
 // Answers are stored as Markdown; strip the syntax and cap the length for the
 // compact, line-clamped card preview (the public article page and the editor
@@ -90,6 +103,22 @@ function answerPreview(md: string): string {
         @update:model-value="$emit('update:draftAnswer', $event)"
       />
       <p class="edit-hint">Markdown supported — headings, <strong>bold</strong>, lists, links and images.</p>
+      <label class="edit-topic">
+        <span class="edit-topic__label">Topic</span>
+        <input
+          type="text"
+          class="edit-topic__input"
+          list="faq-topic-options"
+          :maxlength="MAX_TOPIC"
+          :placeholder="isNew ? 'General' : 'Keeps the current topic if left empty'"
+          :value="draftCategory"
+          @input="onCategoryInput"
+        />
+        <datalist id="faq-topic-options">
+          <option v-for="c in categories" :key="c" :value="c" />
+        </datalist>
+        <span class="edit-topic__hint">Pick an existing topic or type a new one to create it.</span>
+      </label>
       <FaqSeoFields
         :slug="draftSlug"
         :meta-title="draftMetaTitle"
@@ -363,6 +392,43 @@ function answerPreview(md: string): string {
   font-size: 14.5px;
   font-weight: 600;
   margin-bottom: 9px;
+}
+
+.edit-topic {
+  display: block;
+  margin-top: 12px;
+}
+
+.edit-topic__label {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted2);
+  margin-bottom: 6px;
+}
+
+.edit-topic__input {
+  width: 100%;
+  max-width: 320px;
+  display: block;
+  background: var(--bg);
+  border: 1px solid var(--o12);
+  border-radius: 10px;
+  padding: 9px 12px;
+  color: var(--text);
+  outline: none;
+  box-sizing: border-box;
+  font-family: var(--font-sans);
+  font-size: 13.5px;
+}
+
+.edit-topic__hint {
+  display: block;
+  margin-top: 6px;
+  font-size: 11.5px;
+  color: var(--muted2);
 }
 
 /* .edit-answer wraps the MarkdownEditor, which supplies its own chrome. */

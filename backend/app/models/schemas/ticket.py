@@ -139,6 +139,8 @@ class InvestigationRunOut(BaseModel):
     output_tokens: int = 0
     metered: bool = False
     model_name: Optional[str] = None
+    # {"configured": N, "loaded": M, "failed": [{"name", "error"}]}
+    connector_status: Optional[dict] = None
     started_at: Optional[datetime] = None
     finished_at: Optional[datetime] = None
     created_at: Optional[datetime] = None

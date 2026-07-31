@@ -123,6 +123,23 @@ describe('FaqCard edit mode', () => {
     expect(wrapper.emitted('update:draftAnswer')?.[0]).toEqual(['New answer'])
   })
 
+  it('renders the topic input with existing topics as autocomplete options', () => {
+    const wrapper = createWrapper({
+      editing: true,
+      draftCategory: 'Billing',
+      categories: ['Billing', 'Getting started'],
+    })
+    expect((wrapper.find('.edit-topic__input').element as HTMLInputElement).value).toBe('Billing')
+    const options = wrapper.findAll('#faq-topic-options option')
+    expect(options.map((o) => o.attributes('value'))).toEqual(['Billing', 'Getting started'])
+  })
+
+  it('emits topic draft updates on input', async () => {
+    const wrapper = createWrapper({ editing: true })
+    await wrapper.find('.edit-topic__input').setValue('Refunds')
+    expect(wrapper.emitted('update:draftCategory')?.[0]).toEqual(['Refunds'])
+  })
+
   it('emits save and cancel', async () => {
     const wrapper = createWrapper({ editing: true })
     await wrapper.find('.btn-save').trigger('click')

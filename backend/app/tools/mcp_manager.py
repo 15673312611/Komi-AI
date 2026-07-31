@@ -33,6 +33,11 @@ class MCPToolsManager:
 
     def __init__(self):
         self.mcp_tools: List[MCPTools] = []
+        # Names of tools that connected, and {name, error} for those that
+        # didn't. Unlike mcp_tools (cleared on cleanup) these survive the run,
+        # so callers can report "loaded N of M" afterwards.
+        self.connected_tool_names: List[str] = []
+        self.failed_tools: List[dict] = []
 
     async def initialize_mcp_tools_by_ids(
         self, org_id: str, tool_ids: List[int]
@@ -51,6 +56,13 @@ class MCPToolsManager:
         except Exception as e:
             logger.error(f"Failed to load MCP tools {tool_ids} for org {org_id}: {e}")
             return []
+        found_ids = {config.id for config in configs}
+        for missing_id in tool_ids:
+            if missing_id not in found_ids:
+                self.failed_tools.append({
+                    "name": f"Tool #{missing_id}",
+                    "error": "Configured tool no longer exists or is disabled",
+                })
         return await self._initialize_from_configs(configs)
 
     async def initialize_mcp_tools(self, agent_id: str, org_id: str) -> List[MCPTools]:
@@ -79,73 +91,13 @@ class MCPToolsManager:
             for mcp_tool_config in configs:
                 try:
                     logger.debug(f"Initializing MCP tool: {mcp_tool_config.name}")
-
-                    if mcp_tool_config.transport_type == MCPTransportType.STDIO:
-                        # Build command string for STDIO transport
-                        if mcp_tool_config.command and mcp_tool_config.args:
-                            # For filesystem MCP server, ensure we have proper directory arguments
-                            command_parts = [mcp_tool_config.command] + mcp_tool_config.args
-                            
-                            # Check if we need to add directories from env_vars
-                            if "@modelcontextprotocol/server-filesystem" in str(mcp_tool_config.args):
-                                # Check if there are directory arguments after the package name
-                                args_after_package = []
-                                package_found = False
-                                for arg in mcp_tool_config.args:
-                                    if package_found:
-                                        args_after_package.append(arg)
-                                    elif arg == "@modelcontextprotocol/server-filesystem":
-                                        package_found = True
-                                
-                                # If no directories in args, check env_vars
-                                if not args_after_package and mcp_tool_config.env_vars:
-                                    allowed_dirs_env = mcp_tool_config.env_vars.get("ALLOWED_DIRECTORIES")
-                                    if allowed_dirs_env:
-                                        # Parse comma-separated directories from env_vars
-                                        directories = [dir.strip() for dir in allowed_dirs_env.split(",") if dir.strip()]
-                                        if directories:
-                                            command_parts.extend(directories)
-                                            logger.debug(f"Added directories from env_vars: {directories}")
-                                        else:
-                                            logger.warning(f"Filesystem MCP tool {mcp_tool_config.name} has empty ALLOWED_DIRECTORIES, skipping")
-                                            continue
-                                    else:
-                                        logger.warning(f"Filesystem MCP tool {mcp_tool_config.name} missing ALLOWED_DIRECTORIES in env_vars, skipping")
-                                        continue
-                                elif not args_after_package:
-                                    logger.warning(f"Filesystem MCP tool {mcp_tool_config.name} missing directory arguments, skipping")
-                                    continue
-                            
-                            # Special handling for uvx commands with Python packages
-                            if mcp_tool_config.command == "uvx":
-                                # For uvx, we might need to handle Python MCP servers differently
-                                logger.debug(f"Using uvx command for MCP tool: {mcp_tool_config.name}")
-                            
-                            command_str = " ".join(command_parts)
-                            logger.debug(f"Creating STDIO MCP tool with command: {command_str}")
-                            
-                            # Prepare environment variables if provided (excluding ALLOWED_DIRECTORIES which we handled above)
-                            env_vars_for_process = None
-                            if mcp_tool_config.env_vars:
-                                env_vars_for_process = {k: v for k, v in mcp_tool_config.env_vars.items() if k != "ALLOWED_DIRECTORIES"}
-                                if env_vars_for_process:
-                                    logger.debug(f"Environment variables configured: {env_vars_for_process}")
-                                
-                            # Create MCPTools instance with environment variables
-                            mcp_tool = MCPTools(command_str, env=env_vars_for_process)
-                            await self._connect_and_register(mcp_tool, mcp_tool_config.name)
-
-                        else:
-                            logger.warning(f"STDIO MCP tool {mcp_tool_config.name} missing command or args")
-
-                    elif mcp_tool_config.transport_type in [MCPTransportType.SSE, MCPTransportType.HTTP]:
-                        mcp_tool = self._build_remote_tool(mcp_tool_config)
-                        await self._connect_and_register(mcp_tool, mcp_tool_config.name)
-
+                    mcp_tool = self._build_tool(mcp_tool_config)
+                    await self._connect_and_register(mcp_tool, mcp_tool_config.name)
                 except Exception as e:
                     logger.error(f"Failed to initialize MCP tool {mcp_tool_config.name}: {e}")
                     import traceback
                     logger.error(f"MCP tool error traceback: {traceback.format_exc()}")
+                    self.failed_tools.append({"name": mcp_tool_config.name, "error": str(e)})
                     continue
 
         except Exception as e:
@@ -153,6 +105,78 @@ class MCPToolsManager:
 
         logger.debug(f"Initialized {len(self.mcp_tools)} MCP tools")
         return self.mcp_tools
+
+    @classmethod
+    def _build_tool(cls, config) -> Optional[MCPTools]:
+        """MCPTools for a config of any transport, or None (with a logged
+        reason) when the config is unusable."""
+        if config.transport_type == MCPTransportType.STDIO:
+            return cls._build_stdio_tool(config)
+        if config.transport_type in (MCPTransportType.SSE, MCPTransportType.HTTP):
+            return cls._build_remote_tool(config)
+        logger.warning(f"MCP tool {config.name} has unsupported transport {config.transport_type}, skipping")
+        return None
+
+    @staticmethod
+    def _build_stdio_tool(config) -> Optional[MCPTools]:
+        """MCPTools for a local subprocess server (npx/uvx/binary)."""
+        if not (config.command and config.args):
+            logger.warning(f"STDIO MCP tool {config.name} missing command or args")
+            return None
+
+        command_parts = [config.command] + config.args
+
+        # The filesystem server takes its allowed directories as trailing
+        # arguments; accept them from ALLOWED_DIRECTORIES too.
+        if "@modelcontextprotocol/server-filesystem" in str(config.args):
+            args_after_package = []
+            package_found = False
+            for arg in config.args:
+                if package_found:
+                    args_after_package.append(arg)
+                elif arg == "@modelcontextprotocol/server-filesystem":
+                    package_found = True
+
+            if not args_after_package:
+                allowed_dirs_env = (config.env_vars or {}).get("ALLOWED_DIRECTORIES")
+                directories = [d.strip() for d in (allowed_dirs_env or "").split(",") if d.strip()]
+                if not directories:
+                    logger.warning(f"Filesystem MCP tool {config.name} missing directory arguments (args or ALLOWED_DIRECTORIES), skipping")
+                    return None
+                command_parts.extend(directories)
+                logger.debug(f"Added directories from env_vars: {directories}")
+
+        command_str = " ".join(command_parts)
+        logger.debug(f"Creating STDIO MCP tool with command: {command_str}")
+
+        # Prepare environment variables if provided (excluding ALLOWED_DIRECTORIES which we handled above)
+        env_vars_for_process = None
+        if config.env_vars:
+            env_vars_for_process = {k: v for k, v in config.env_vars.items() if k != "ALLOWED_DIRECTORIES"}
+            if env_vars_for_process:
+                # Values may hold credentials (API keys, tokens) — log names only
+                logger.debug(f"Environment variables configured: {list(env_vars_for_process.keys())}")
+
+        return MCPTools(command_str, env=env_vars_for_process)
+
+    async def test_tool_config(self, config) -> dict:
+        """Connect to a configured tool once and report what happened — backs
+        the Test button on the MCP config page. Goes through the same
+        build/connect path as a real run, so the reported error is exactly
+        what a run would record. Never raises."""
+        failures_before = len(self.failed_tools)
+        try:
+            mcp_tool = self._build_tool(config)
+            connected = await self._connect_and_register(mcp_tool, config.name)
+        except Exception as e:
+            return {"success": False, "functions": [], "error": str(e)}
+        if connected:
+            functions = list(getattr(mcp_tool, "functions", None) or {})
+            await self.cleanup_mcp_tools()
+            return {"success": True, "functions": functions, "error": None}
+        new_failures = self.failed_tools[failures_before:]
+        error = new_failures[-1]["error"] if new_failures else "Failed to connect to the server"
+        return {"success": False, "functions": [], "error": error}
 
     @staticmethod
     def _build_remote_tool(config) -> Optional[MCPTools]:
@@ -188,12 +212,20 @@ class MCPToolsManager:
         """Connect a built tool, verify it exposes functions, and register it
         for use + cleanup. Failed tools are torn down, never registered."""
         if mcp_tool is None:
+            self.failed_tools.append({
+                "name": name,
+                "error": "Tool is misconfigured — check its command/args (STDIO) or URL (SSE/HTTP)",
+            })
             return False
         try:
             await asyncio.wait_for(mcp_tool.__aenter__(), timeout=CONNECT_TIMEOUT_SECONDS)
             logger.debug(f"Entered MCP tool context: {name}")
         except asyncio.TimeoutError:
             logger.error(f"Timeout connecting to MCP tool {name}")
+            self.failed_tools.append({
+                "name": name,
+                "error": f"Timed out after {CONNECT_TIMEOUT_SECONDS:.0f}s connecting to the server",
+            })
             await self._abort_tool(mcp_tool)
             return False
         except Exception as e:
@@ -201,6 +233,7 @@ class MCPToolsManager:
             # For package not found errors (like Git server), skip silently after first error
             if "404" in str(e) or "not found" in str(e).lower() or "no such package" in str(e).lower():
                 logger.warning(f"MCP tool package not found, skipping: {name}")
+            self.failed_tools.append({"name": name, "error": str(e)})
             await self._abort_tool(mcp_tool)
             return False
 
@@ -211,8 +244,10 @@ class MCPToolsManager:
             # evidence log) attribute each tool call to its connector.
             mcp_tool._connector_name = name
             self.mcp_tools.append(mcp_tool)
+            self.connected_tool_names.append(name)
             return True
         logger.warning(f"MCP tool {name} has no functions available after connection")
+        self.failed_tools.append({"name": name, "error": "Connected, but the server exposed no tools"})
         await self._abort_tool(mcp_tool)
         return False
 

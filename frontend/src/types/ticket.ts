@@ -130,6 +130,11 @@ export interface InvestigationRun {
   output_tokens?: number
   metered?: boolean
   model_name?: string | null
+  connector_status?: {
+    configured: number
+    loaded: number
+    failed: { name: string; error: string }[]
+  } | null
   started_at?: string | null
   finished_at?: string | null
   created_at?: string | null

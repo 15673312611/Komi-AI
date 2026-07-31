@@ -364,17 +364,17 @@ def _build_db_tools(db, ticket: Ticket, run):
 
 
 async def _investigate_with_tools(
-    db, run, service, ticket, agent, context_message, settings_row, recorder
+    db, run, service, ticket, agent, context_message, settings_row, recorder, manager
 ):
     """Connect the org's investigation tools (MCP connectors + guardrailed DB
     connectors), run the hypothesis phases, then clean the tools up — ALL in
     this one coroutine. It's driven under asyncio.wait_for (a child task), so
     MCP init, every tool call and cleanup must live in the same task or the
-    anyio cancel scope owning the MCP streams gets crossed on timeout."""
+    anyio cancel scope owning the MCP streams gets crossed on timeout. The
+    manager is caller-owned so its connect/fail bookkeeping stays readable
+    after a timeout cancels this coroutine."""
     from app.services.ticket_investigation import run_investigation_phases
-    from app.tools.mcp_manager import MCPToolsManager
 
-    manager = MCPToolsManager()
     mcp_tools = []
     try:
         tool_ids = settings_row.investigation_mcp_tool_ids or []
@@ -430,12 +430,16 @@ async def _process_investigation(db, run, service: TicketService, ticket: Ticket
         ticket.title, ticket.description, transcript, similar, extra_sections=extra_sections
     )
 
+    from app.tools.mcp_manager import MCPToolsManager
+
+    mcp_manager = MCPToolsManager()
     hypotheses = []
     partial = False
     try:
         hypotheses, budget_exhausted = await asyncio.wait_for(
             _investigate_with_tools(
-                db, run, service, ticket, agent, context_message, settings_row, recorder
+                db, run, service, ticket, agent, context_message, settings_row,
+                recorder, mcp_manager
             ),
             timeout=run.max_wall_seconds or DEFAULT_MAX_WALL_SECONDS,
         )
@@ -456,6 +460,16 @@ async def _process_investigation(db, run, service: TicketService, ticket: Ticket
         db.commit()
 
     run.tool_calls_used = recorder.tool_calls
+    # Surface the connector outcome on the run — a run that "completed" with 0
+    # of its configured MCP tools (missing npx, bad key, unreachable server)
+    # must be visible on the dashboard, not just in worker logs (issue #271).
+    configured_tool_ids = settings_row.investigation_mcp_tool_ids or []
+    if configured_tool_ids:
+        run.connector_status = {
+            "configured": len(configured_tool_ids),
+            "loaded": len(mcp_manager.connected_tool_names),
+            "failed": mcp_manager.failed_tools,
+        }
     rca = await synthesize_and_store_rca(
         db, run, ticket, agent, context_message, hypotheses, recorder, partial
     )

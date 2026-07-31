@@ -15,7 +15,7 @@ limitations under the License.
 */
 
 import api from './api'
-import type { MCPTool, MCPToolCreate, MCPToolUpdate, MCPToolToAgent, AgentMCPTools } from '@/types/mcp'
+import type { MCPTool, MCPToolCreate, MCPToolUpdate, MCPToolToAgent, AgentMCPTools, MCPToolTestResult } from '@/types/mcp'
 
 export const mcpService = {
   // MCP Tool management
@@ -43,6 +43,11 @@ export const mcpService = {
 
   async deleteMCPTool(toolId: number): Promise<void> {
     await api.delete(`/mcp-tools/${toolId}`)
+  },
+
+  async testMCPTool(toolId: number): Promise<MCPToolTestResult> {
+    const response = await api.post(`/mcp-tools/${toolId}/test`)
+    return response.data
   },
 
   // Agent-MCP Tool associations
