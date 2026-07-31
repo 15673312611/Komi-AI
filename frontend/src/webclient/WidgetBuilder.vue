@@ -3168,11 +3168,17 @@ const shouldShowWelcomeMessage = computed(() => {
    stylesheet rule, so the dimming has to be opacity rather than a colour token. */
 .ai-disclaimer {
     text-align: center;
-    padding: var(--space-xs) var(--space-md) 0;
+    /* No top padding: .chat-input above already ends with var(--space-md), and
+       stacking another gap on it made the footer visibly top-heavy. */
+    padding: 0 var(--space-md) 2px;
     font-size: 0.6875rem;
     line-height: 1.3;
     opacity: 0.55;
 }
+
+/* Close the gap between the two footer lines, but only when the disclosure is
+   shown — with it off, the footer keeps its original spacing exactly. */
+.ai-disclaimer + .powered-by { padding-top: 0; }
 
 .powered-by {
     text-align: center;
