@@ -14,8 +14,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+import asyncio
 import pytest
 from fastapi.testclient import TestClient
+from app.core.config import settings
 from app.models.user import User
 from app.models.role import Role
 from app.models.permission import Permission, role_permissions
@@ -389,4 +391,65 @@ async def test_chat_agent_error_handling(test_organization_id, test_agent, test_
         assert "error" in response.message.lower()
         assert not response.transfer_to_human
         assert response.transfer_reason is None
-        assert response.transfer_description is None 
+        assert response.transfer_description is None
+
+@pytest.mark.asyncio
+async def test_chat_agent_run_timeout(test_organization_id, test_agent, test_user, mock_db_session):
+    """A hung agent run is cancelled by the AGENT_RUN_TIMEOUT guard and the
+    visitor gets the normal error reply instead of waiting forever (issue #269)."""
+    with patch('app.agents.chat_agent.AgentShopifyConfigRepository') as mock_shopify_config_repo, \
+         patch('app.agents.chat_agent.JiraRepository') as mock_jira_repo, \
+         patch('app.agents.chat_agent.EncryptedPostgresAgentStorage', return_value=MockAgentStorage()):
+        mock_shopify_config_repo.return_value.get_agent_shopify_config.return_value = None
+
+        agent_with_jira_config = AgentWithJiraConfig(
+            id=test_agent.id,
+            name=test_agent.name,
+            display_name=test_agent.display_name,
+            description=test_agent.description,
+            instructions=test_agent.instructions,
+            tools=test_agent.tools,
+            agent_type=test_agent.agent_type,
+            is_default=test_agent.is_default,
+            is_active=test_agent.is_active,
+            organization_id=test_agent.organization_id,
+            transfer_to_human=test_agent.transfer_to_human,
+            ask_for_rating=test_agent.ask_for_rating,
+            knowledge=[],
+            jira_enabled=False,
+            jira_project_key=None,
+            jira_issue_type_id=None,
+            groups=[],
+            organization=None
+        )
+        mock_jira_repo.return_value.get_agent_with_jira_config.return_value = agent_with_jira_config
+
+        chat_agent = ChatAgent(
+            api_key="test_key",
+            model_name="gpt-4",
+            model_type="OPENAI",
+            org_id=str(test_organization_id),
+            agent_id=str(test_agent.id),
+            customer_id=str(test_user.id),
+            session_id=str(uuid4())
+        )
+
+        # Simulate the runaway model <-> agno loop: a run that never returns.
+        async def hung_run(*args, **kwargs):
+            await asyncio.sleep(60)
+
+        chat_agent.agent.arun = hung_run
+
+        session_id = str(uuid4())
+        with patch.object(settings, 'AGENT_RUN_TIMEOUT', 1):
+            response = await chat_agent.get_response(
+                message="Hello",
+                session_id=session_id,
+                org_id=str(test_organization_id),
+                agent_id=str(test_agent.id),
+                customer_id=str(test_user.id)
+            )
+
+        assert isinstance(response, ChatResponse)
+        assert "error" in response.message.lower()
+        assert not response.transfer_to_human 
