@@ -90,17 +90,45 @@ const filteredNotifications = computed(() =>
 
 const hasUnread = computed(() => notifications.value.some(n => !n.is_read))
 
+// One request that clears everything, not one per loaded row. The list is a
+// 50-row page, so looping it could never clear a badge showing 99+ however many
+// times you tapped.
 const markAllRead = async () => {
-    const unread = notifications.value.filter(n => !n.is_read)
-    for (const n of unread) {
-        try {
-            await notificationService.markAsRead(n.id)
-            n.is_read = true
-        } catch (err) {
-            console.error('Error marking notification as read:', err)
-        }
+    try {
+        await notificationService.markAllAsRead()
+        notifications.value.forEach(n => { n.is_read = true })
+        emit('notification-read')
+    } catch (err) {
+        console.error('Error marking all notifications as read:', err)
+        error.value = 'Could not mark everything as read'
     }
-    if (unread.length) emit('notification-read')
+}
+
+const deleteNotification = async (id: number) => {
+    const previous = notifications.value
+    // Optimistic: the row disappears on tap, and comes back if the call fails.
+    notifications.value = notifications.value.filter(n => n.id !== id)
+    try {
+        await notificationService.deleteNotification(id)
+        emit('notification-read')
+    } catch (err) {
+        console.error('Error deleting notification:', err)
+        notifications.value = previous
+        error.value = 'Could not delete that notification'
+    }
+}
+
+const clearAll = async () => {
+    const previous = notifications.value
+    notifications.value = []
+    try {
+        await notificationService.clearAll()
+        emit('notification-read')
+    } catch (err) {
+        console.error('Error clearing notifications:', err)
+        notifications.value = previous
+        error.value = 'Could not clear notifications'
+    }
 }
 
 const formatTime = (timestamp: string): string => {
@@ -157,7 +185,10 @@ onMounted(fetchNotifications)
                 <button class="filter-tab" :class="{ active: activeFilter === 'all' }" @click="activeFilter = 'all'">All</button>
                 <button class="filter-tab" :class="{ active: activeFilter === 'unread' }" @click="activeFilter = 'unread'">Unread</button>
             </div>
-            <button class="mark-all" :disabled="!hasUnread" @click="markAllRead">Mark all read</button>
+            <div class="filter-actions">
+                <button class="mark-all" :disabled="!hasUnread" @click="markAllRead">Mark all read</button>
+                <button class="mark-all" :disabled="!notifications.length" @click="clearAll">Clear all</button>
+            </div>
         </div>
 
         <div class="drawer-content">
@@ -191,6 +222,13 @@ onMounted(fetchNotifications)
                         <div class="notification-message">{{ notification.message }}</div>
                     </div>
                     <span class="unread-dot" :class="{ on: !notification.is_read }"></span>
+                    <!-- .stop: the row itself deep-links to the conversation -->
+                    <button
+                        class="delete-notification"
+                        :aria-label="`Delete notification: ${notification.title}`"
+                        title="Delete"
+                        @click.stop="deleteNotification(notification.id)"
+                    >&times;</button>
                 </div>
             </div>
         </div>
@@ -334,6 +372,35 @@ onMounted(fetchNotifications)
 .filter-tab.active {
     background: var(--accent-bg-12);
     color: var(--accent-ink);
+}
+
+.filter-actions {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+}
+
+/* Sits over the row; the row itself is the deep-link, so the button stops
+   propagation. 32px keeps it thumb-reachable without crowding the text. */
+.delete-notification {
+    flex-shrink: 0;
+    width: 32px;
+    height: 32px;
+    border: none;
+    background: none;
+    border-radius: var(--radius-sm);
+    color: var(--text-muted);
+    font-size: 20px;
+    line-height: 1;
+    cursor: pointer;
+    opacity: 0.55;
+    transition: opacity 0.15s ease, background-color 0.15s ease;
+}
+
+.delete-notification:hover,
+.delete-notification:focus-visible {
+    opacity: 1;
+    background: var(--o07);
 }
 
 .mark-all {

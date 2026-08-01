@@ -344,3 +344,123 @@ def test_send_test_notification(
     assert notification is not None
     assert notification.title == "Test Notification"
     assert notification.type == NotificationType.CHAT 
+
+def test_mark_all_as_read_clears_every_unread(
+    client,
+    db,
+    test_user,
+    test_notifications
+):
+    """One request must clear the whole backlog, not just the fetched page.
+
+    The client used to loop the 50 rows it had loaded, so anyone with more unread
+    than that could never clear the badge — it sat at 99+ no matter how often
+    they tapped "Mark all read".
+    """
+    response = client.post("/api/notifications/read-all")
+    assert response.status_code == 200
+    assert response.json()["updated"] == 2  # the fixture leaves two unread
+
+    for n in test_notifications:
+        db.refresh(n)
+        assert n.is_read is True
+
+
+def test_mark_all_as_read_leaves_other_users_alone(
+    client,
+    db,
+    test_user,
+    test_notifications
+):
+    """A bulk UPDATE is exactly where a missing user filter goes unnoticed."""
+    other_user = User(
+        email="bulk-other@example.com",
+        hashed_password="x",
+        full_name="Other",
+        organization_id=test_user.organization_id,
+        role_id=test_user.role_id,
+    )
+    db.add(other_user)
+    db.commit()
+    theirs = Notification(
+        user_id=other_user.id,
+        type=NotificationType.CHAT,
+        title="Theirs",
+        message="Theirs",
+        is_read=False,
+    )
+    db.add(theirs)
+    db.commit()
+
+    client.post("/api/notifications/read-all")
+
+    db.refresh(theirs)
+    assert theirs.is_read is False
+
+
+def test_delete_notification(
+    client,
+    db,
+    test_user,
+    test_notifications
+):
+    target = test_notifications[0]
+    response = client.delete(f"/api/notifications/{target.id}")
+    assert response.status_code == 200
+
+    assert db.query(Notification).filter(Notification.id == target.id).first() is None
+    # The others survive
+    assert db.query(Notification).filter(
+        Notification.user_id == test_user.id
+    ).count() == len(test_notifications) - 1
+
+
+def test_delete_notification_not_found(client, db, test_user):
+    response = client.delete("/api/notifications/999999")
+    assert response.status_code == 404
+
+
+def test_delete_another_users_notification_is_not_found(
+    client,
+    db,
+    test_user
+):
+    """Must 404 rather than delete someone else's row."""
+    other_user = User(
+        email="delete-other@example.com",
+        hashed_password="x",
+        full_name="Other",
+        organization_id=test_user.organization_id,
+        role_id=test_user.role_id,
+    )
+    db.add(other_user)
+    db.commit()
+    theirs = Notification(
+        user_id=other_user.id,
+        type=NotificationType.CHAT,
+        title="Theirs",
+        message="Theirs",
+        is_read=False,
+    )
+    db.add(theirs)
+    db.commit()
+    db.refresh(theirs)
+
+    response = client.delete(f"/api/notifications/{theirs.id}")
+    assert response.status_code == 404
+    assert db.query(Notification).filter(Notification.id == theirs.id).first() is not None
+
+
+def test_clear_all_notifications(
+    client,
+    db,
+    test_user,
+    test_notifications
+):
+    response = client.delete("/api/notifications")
+    assert response.status_code == 200
+    assert response.json()["deleted"] == len(test_notifications)
+
+    assert db.query(Notification).filter(
+        Notification.user_id == test_user.id
+    ).count() == 0

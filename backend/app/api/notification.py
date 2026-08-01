@@ -93,6 +93,96 @@ async def mark_as_read(
         )
 
 
+@router.post("/read-all")
+async def mark_all_as_read(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Mark every unread notification as read, in one statement.
+
+    The client used to loop over the notifications it had fetched and PATCH each
+    one. That page is 50 rows, so anyone with more unread than that could never
+    clear the badge however often they tapped "Mark all read" — and it cost 50
+    round trips to not fix it.
+    """
+    try:
+        updated = db.query(Notification)\
+            .filter(
+                Notification.user_id == current_user.id,
+                Notification.is_read == False
+        ).update({Notification.is_read: True}, synchronize_session=False)
+        db.commit()
+
+        return {"message": "Notifications marked as read", "updated": updated}
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error marking all notifications as read: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to update notifications"
+        )
+
+
+@router.delete("/{notification_id}")
+async def delete_notification(
+    notification_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Delete one notification.
+
+    Scoped to the caller: another user's id must 404 rather than delete.
+    """
+    try:
+        notification = db.query(Notification)\
+            .filter(
+                Notification.id == notification_id,
+                Notification.user_id == current_user.id
+        ).first()
+
+        if not notification:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Notification not found"
+            )
+
+        db.delete(notification)
+        db.commit()
+
+        return {"message": "Notification deleted"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error deleting notification: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to delete notification"
+        )
+
+
+@router.delete("")
+async def clear_notifications(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Delete all of the caller's notifications."""
+    try:
+        deleted = db.query(Notification)\
+            .filter(Notification.user_id == current_user.id)\
+            .delete(synchronize_session=False)
+        db.commit()
+
+        return {"message": "Notifications cleared", "deleted": deleted}
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error clearing notifications: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to clear notifications"
+        )
+
+
 @router.get("/unread-count")
 async def get_unread_count(
     current_user: User = Depends(get_current_user),
