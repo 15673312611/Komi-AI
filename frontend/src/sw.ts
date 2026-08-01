@@ -116,8 +116,13 @@ if (firebaseConfig.apiKey) {
 
     self.registration.showNotification(title, {
       body,
+      // icon = the large icon in the expanded tray, which may be full colour.
+      // badge = the status-bar icon, which Android builds from the ALPHA CHANNEL
+      // alone: it throws the colours away and tints the silhouette. Pointing this
+      // at the colour PWA icon is why it rendered as a grey blob — the whole
+      // square is opaque, so the silhouette is a square.
       icon: '/pwa-192x192.png',
-      badge: '/pwa-192x192.png',
+      badge: '/notification-badge-96.png',
       // One stacked notification per conversation (or per notification otherwise)
       tag: sessionId || payload.data?.notification_id || undefined,
       data: payload.data,

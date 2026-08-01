@@ -253,14 +253,14 @@ watch(() => currentChat.value?.session_id, () => refreshLinkedTicket())
             @click="$router.push(`/tickets/${linkedTicketId}`)"
           >
             <font-awesome-icon icon="fa-solid fa-ticket-alt" />
-            View ticket
+            <span class="btn-label">View ticket</span>
           </button>
           <!-- Jira connected: keep the familiar Jira flow primary, native in
                the dropdown (orgs that configured Jira keep their board). -->
           <div v-else-if="jiraConnected" class="ticket-btn-group">
             <button class="create-ticket-btn" @click="handleCreateTicket">
               <font-awesome-icon icon="fa-solid fa-ticket-alt" />
-              Create Ticket
+              <span class="btn-label">Create Ticket</span>
             </button>
             <button
               v-if="canUseNativeTickets"
@@ -286,7 +286,7 @@ watch(() => currentChat.value?.session_id, () => refreshLinkedTicket())
             @click="showTicketModal = true"
           >
             <font-awesome-icon icon="fa-solid fa-ticket-alt" />
-            Create Ticket
+            <span class="btn-label">Create Ticket</span>
           </button>
         </template>
         <button class="info-btn" aria-label="Conversation details" @click="emit('info')">

@@ -42,6 +42,19 @@ export const notificationService = {
     await api.patch(`/notifications/${notificationId}/read`)
   },
 
+  /** Clears every unread notification server-side, not just the fetched page. */
+  async markAllAsRead(): Promise<void> {
+    await api.post('/notifications/read-all')
+  },
+
+  async deleteNotification(notificationId: number): Promise<void> {
+    await api.delete(`/notifications/${notificationId}`)
+  },
+
+  async clearAll(): Promise<void> {
+    await api.delete('/notifications')
+  },
+
   async getUnreadCount(): Promise<number> {
     const response = await api.get('/notifications/unread-count')
     return response.data.count
