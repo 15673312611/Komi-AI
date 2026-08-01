@@ -902,7 +902,7 @@ Keep your responses concise and focused. Provide clear, actionable information i
            agent_id=str(agent_id),
            storage=storage,
            add_history_to_messages=True,
-           tool_call_limit=5,  # Allow up to 5 tool calls - balance between functionality and performance
+           tool_call_limit=settings.AGENT_TOOL_CALL_LIMIT,
            num_history_responses=5,  # Reduced from 10 to 5 to minimize context size and improve speed
            read_chat_history=True,
            markdown=False,
