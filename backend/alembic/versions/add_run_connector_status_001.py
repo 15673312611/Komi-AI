@@ -17,7 +17,7 @@ limitations under the License.
 """add investigation_runs.connector_status
 
 Revision ID: add_run_connector_status_001
-Revises: add_agent_guardrail_prompt_001
+Revises: add_ai_disclaimer_001
 Create Date: 2026-07-31
 
 Records the MCP connector outcome of each investigation run ({"configured": N,
@@ -31,7 +31,7 @@ from sqlalchemy.dialects.postgresql import JSON
 
 # revision identifiers, used by Alembic.
 revision = 'add_run_connector_status_001'
-down_revision = 'add_agent_guardrail_prompt_001'
+down_revision = 'add_ai_disclaimer_001'
 branch_labels = None
 depends_on = None
 
