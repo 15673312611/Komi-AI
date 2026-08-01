@@ -33,8 +33,15 @@ limitations under the License.
 # What we actually want is a bounded run that still answers: at the limit, stop
 # offering tools and let the model reply from what it already retrieved. Clearing
 # `tools` for the next completion does exactly that, and it also makes the runaway
-# loop impossible — a model with no tools cannot call one. The hard stop is kept
-# as a backstop for the case that should now be unreachable.
+# loop impossible — a model with no tools cannot call one.
+#
+# There is deliberately NO hard-stop backstop. An earlier version kept one for the
+# case where withdrawal somehow failed, and it turned out to be the only remaining
+# producer of empty replies: it fired occasionally and cost the visitor an answer
+# every time. The hang it guarded against is already prevented by the
+# AGENT_RUN_TIMEOUT wrapper around every agno run, which does not depend on this
+# module patching the right entry points. Two locks on one door, and this was the
+# lock that slammed on the user.
 
 from agno.models.base import Model
 
@@ -44,19 +51,20 @@ logger = get_logger(__name__)
 
 _PATCHED_FLAG = "_chattermate_answers_at_limit"
 
-# Both live on the Model instance. Safe as instance state: create_model() builds
-# a fresh Model per ChatAgent and ChatAgent is built per request, so neither
-# outlives a single run.
+# Set on the Model instance once this run has spent its tool budget. Safe as
+# instance state: create_model() builds a fresh Model per ChatAgent and ChatAgent
+# is built per request, so it never outlives a single run.
 #
-# _ROUND counts model round-trips; _EXHAUSTED_AT records the round the budget ran
-# out in. The distinction is load-bearing: a model can request SEVERAL tools in
-# one assistant message, and agno walks that whole batch before calling the model
-# again. Every over-budget call in the batch arrives here, so a plain
-# "have we been here before" flag mistakes the second parallel call for a genuine
-# repeat and terminates the run — reintroducing the empty reply this patch exists
-# to prevent. Observed in local testing with tool_call_limit=1.
-_ROUND = "_chattermate_round"
-_EXHAUSTED_AT = "_chattermate_exhausted_round"
+# A model can request SEVERAL tools in one assistant message and agno walks that
+# whole batch before calling the model again, so this is hit repeatedly within a
+# single round. That is fine — setting it twice is a no-op. It mattered only while
+# there was a backstop that had to tell a parallel sibling apart from a genuine
+# repeat; without one, a plain flag is enough.
+_EXHAUSTED = "_chattermate_tools_exhausted"
+
+# Groq's structured output arrives as a tool call of this name rather than as
+# text. Kept in step with app.agents.structured_output.build_groq_json_tool.
+CAPTURE_TOOL_NAME = "json"
 
 # Replaces agno's own limit-error text, which only tells the model it may not
 # call the tool again. Left at that, gpt-4o-mini narrated the plumbing to the
@@ -74,15 +82,36 @@ _LIMIT_INSTRUCTION = (
 )
 
 
-def _strip_tools(self, kwargs: dict) -> dict:
-    """Drop the tool definitions from a model call once the budget is spent.
+def _tool_name(tool) -> str:
+    """Name out of a provider-format tool definition, whatever the nesting."""
+    if not isinstance(tool, dict):
+        return ""
+    fn = tool.get("function")
+    if isinstance(fn, dict):
+        return fn.get("name") or ""
+    return tool.get("name") or ""
 
-    Also counts the round, since this runs exactly once per model round-trip.
+
+def _strip_tools(self, kwargs: dict) -> dict:
+    """Withdraw the action tools once the budget is spent — but never the tool
+    the model answers THROUGH.
+
+    On Groq the structured response is not text: it is a tool call named `json`
+    whose arguments are the response fields (see app.agents.structured_output).
+    Withdrawing every tool would take away the only way that model has to reply,
+    so a Groq agent hitting the limit would return an empty turn every time —
+    precisely the failure this patch exists to remove.
     """
-    setattr(self, _ROUND, getattr(self, _ROUND, 0) + 1)
-    if getattr(self, _EXHAUSTED_AT, None) is not None and kwargs.get("tools"):
-        kwargs = {**kwargs, "tools": None, "tool_choice": None}
-    return kwargs
+    tools = kwargs.get("tools")
+    if not getattr(self, _EXHAUSTED, False) or not tools:
+        return kwargs
+
+    kept = [t for t in tools if _tool_name(t) == CAPTURE_TOOL_NAME]
+    if kept:
+        # Leave tool_choice alone: the capture tool is how the answer is emitted,
+        # so the model must still be allowed — or required — to call it.
+        return {**kwargs, "tools": kept}
+    return {**kwargs, "tools": None, "tool_choice": None}
 
 
 def apply_agno_patches() -> None:
@@ -102,8 +131,6 @@ def apply_agno_patches() -> None:
 
     def create_tool_call_limit_error_result(self, function_call):
         message = original_limit_result(self, function_call)
-        current_round = getattr(self, _ROUND, 0)
-        exhausted_at = getattr(self, _EXHAUSTED_AT, None)
 
         # Every over-budget call in the batch gets the instruction, not just the
         # first: the model reads all of the tool results, and leaving agno's
@@ -111,23 +138,12 @@ def apply_agno_patches() -> None:
         # narrating the limit to the visitor.
         message.content = _LIMIT_INSTRUCTION
 
-        if exhausted_at is None:
-            setattr(self, _EXHAUSTED_AT, current_round)
+        if not getattr(self, _EXHAUSTED, False):
+            setattr(self, _EXHAUSTED, True)
             logger.warning(
                 "Tool call limit reached; answering without further tools "
                 f"(tool={function_call.function.name})"
             )
-        elif current_round > exhausted_at:
-            # A LATER round still asking for tools means withdrawal did not take
-            # effect. Unreachable in practice — a model offered no tools cannot
-            # call one — but end the run rather than risk the #269 loop.
-            message.stop_after_tool_call = True
-            logger.warning(
-                "Tool call limit reached in a later round despite tools being "
-                f"withdrawn; terminating agent run (tool={function_call.function.name})"
-            )
-        # Same round: another tool from the same parallel batch. Already handled
-        # by the first one — say nothing and let the run continue to the answer.
         return message
 
     def _process_model_response(self, *args, **kwargs):

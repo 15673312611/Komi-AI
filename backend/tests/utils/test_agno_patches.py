@@ -29,11 +29,7 @@ def _model_stub():
 
 
 def _next_round(model, tools=None):
-    """Advance to the next model round-trip, the way agno's loop does.
-
-    _strip_tools runs exactly once per round, so going through it is what
-    separates a genuine later round from another tool in the same parallel batch.
-    """
+    """One model round-trip, the way agno's loop does it."""
     return _strip_tools(
         model, {"tools": tools if tools is not None else [{"name": "search"}], "tool_choice": "auto"}
     )
@@ -72,6 +68,29 @@ def test_tools_are_withdrawn_once_the_budget_is_spent():
     kwargs = _next_round(model)
     assert kwargs["tools"] is None
     assert kwargs["tool_choice"] is None
+
+
+def test_the_structured_output_tool_is_never_withdrawn():
+    """On Groq the reply IS a tool call named `json`, not text.
+
+    Withdrawing every tool would leave that model no way to answer at all, so a
+    Groq agent reaching the limit would return an empty turn every single time —
+    the exact failure this patch removes for everyone else.
+    """
+    model = _model_stub()
+    _next_round(model)
+    _limit_error_message(model)
+
+    kwargs = _strip_tools(model, {
+        "tools": [
+            {"type": "function", "function": {"name": "search_knowledge_base"}},
+            {"type": "function", "function": {"name": "json"}},
+        ],
+        "tool_choice": "auto",
+    })
+    assert [t["function"]["name"] for t in kwargs["tools"]] == ["json"]
+    # tool_choice must survive — it is how the capture tool gets called.
+    assert kwargs["tool_choice"] == "auto"
 
 
 def test_tools_survive_until_the_limit_is_hit():
@@ -114,16 +133,27 @@ def test_parallel_tool_calls_in_one_batch_do_not_end_the_run():
     assert not third.stop_after_tool_call
 
 
-def test_a_later_round_still_over_budget_terminates_as_a_backstop():
-    """Unreachable while withdrawal works — a model offered no tools cannot call
-    one. If it ever is reached, end the run rather than risk the #269 loop."""
+def test_the_run_is_never_hard_stopped():
+    """No branch may set stop_after_tool_call — that is what cost the answer.
+
+    A previous version kept a hard stop for the case where tool withdrawal
+    somehow failed. It fired occasionally in real traffic and every time it did,
+    the visitor got the empty-turn fallback instead of a reply. The hang it
+    guarded is already prevented by the AGENT_RUN_TIMEOUT wrapper around every
+    agno run, which does not depend on this module patching the right methods.
+
+    Covers a later round as well as the same batch, since the old backstop keyed
+    on exactly that distinction.
+    """
     model = _model_stub()
     _next_round(model)
-    _limit_error_message(model)
+    assert not _limit_error_message(model).stop_after_tool_call
 
-    _next_round(model)  # a genuine second round-trip
-    later = _limit_error_message(model, call_id="call_2")
-    assert later.stop_after_tool_call is True
+    _next_round(model)
+    assert not _limit_error_message(model, call_id="call_2").stop_after_tool_call
+
+    _next_round(model)
+    assert not _limit_error_message(model, call_id="call_3").stop_after_tool_call
 
 
 def test_exhaustion_does_not_leak_between_runs():

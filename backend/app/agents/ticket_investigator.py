@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+import asyncio
 from typing import Callable, List, Optional, Type
 
 from pydantic import BaseModel, ValidationError
@@ -246,8 +247,21 @@ class TicketInvestigatorAgent:
 
         try:
             self._count_call()
-            response = await agent.arun(message)
+            # Bounded like the chat and transfer runs. Hypothesis testing passes a
+            # tool_call_limit, and reaching it no longer terminates the run (see
+            # app.utils.agno_patches) — so the timeout is now the only thing
+            # standing between a model that keeps asking for tools and a worker
+            # that never finishes the investigation (#269).
+            response = await asyncio.wait_for(
+                agent.arun(message),
+                timeout=settings.AGENT_RUN_TIMEOUT
+            )
             self._capture_usage(agent, response)
+        except asyncio.TimeoutError:
+            logger.warning(
+                f"{name} run timed out after {settings.AGENT_RUN_TIMEOUT}s and was cancelled"
+            )
+            return None
         except Exception as e:
             logger.error(f"{name} LLM call failed: {e}")
             return None
