@@ -214,7 +214,7 @@ class TestGuardrailScopePrompt:
     def test_default_is_used_when_tenant_has_not_written_one(self):
         out = guardrail_scope_prompt(ctx())
         assert "Acme Shoes" in out
-        assert "Decline anything else" in out
+        assert "homework" in out
 
     def test_org_placeholder_is_substituted(self):
         assert "{org}" not in guardrail_scope_prompt(ctx())
@@ -249,11 +249,31 @@ class TestGuardrailScopePrompt:
         out = guardrail_scope_prompt(ctx(guardrail_prompt="x" * 9000))
         assert len(out) < 4200
 
-    def test_default_covers_technical_support(self):
-        # Compressing these examples out made the model refuse docker and curl.
+    def test_default_says_nothing_about_what_is_in_scope(self):
+        """Deny-only, by design.
+
+        An earlier version listed what WAS in scope (docker, sudo, tracebacks,
+        code samples, APIs...) because compressing those examples out had once
+        made the model refuse docker and curl questions. That list caused a worse
+        problem: it can only ever describe one kind of business, and its
+        "software unrelated to {org}" clause refused integration questions —
+        which all name third-party software. It declined "how do I connect
+        Elasticsearch", i.e. core product usage.
+
+        The protection against over-refusing is now the explicit allow-bias
+        below, not an enumeration. Docker/curl-style questions must be
+        re-verified live against a real model whenever this wording changes —
+        no unit test can stand in for that.
+        """
         default = " ".join(DEFAULT_GUARDRAIL_PROMPT.split())
-        for term in ("docker", "sudo", "tracebacks", "code samples", "APIs"):
-            assert term in default
+        assert "Everything else is in scope" in default
+        assert "If you are unsure, answer" in default
+        assert "software unrelated" not in default
+
+    def test_default_stays_short(self):
+        """It sits in every prompt on every turn, and long deny lists are what
+        produced the false declines. Keep it cheap and blunt."""
+        assert len(DEFAULT_GUARDRAIL_PROMPT) < 700
 
 
 class TestRefusalDetection:

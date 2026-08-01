@@ -27,6 +27,8 @@ from app.repositories.knowledge import KnowledgeRepository
 from app.models.schemas.agent import AgentUpdate, AgentResponse, AgentCreate, AgentWithCustomizationResponse
 from sqlalchemy.orm import Session
 from app.models.agent import Agent, AgentCustomization
+from app.models.organization import Organization
+from app.agents.guardrail_policy import DEFAULT_GUARDRAIL_PROMPT
 from app.models.schemas.agent_customization import CustomizationCreate, CustomizationResponse
 import aiofiles
 from uuid import uuid4
@@ -330,6 +332,27 @@ async def update_agent(
     except Exception as e:
         logger.error(f"Agent update error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/guardrail-default")
+async def get_guardrail_default(
+    auth_info: dict = Depends(get_unified_auth),
+    db: Session = Depends(get_db)
+):
+    """The shipped scope rule, with {org} already filled in.
+
+    The dashboard shows this as the starting text so operators can read and edit
+    the actual rule instead of a prose summary of it — which drifted from the real
+    wording the first time the default changed. Served from the backend rather
+    than duplicated in the frontend so there is one source of truth.
+
+    Declared before /{agent_id} so the literal path wins the route match.
+    """
+    org = db.query(Organization).filter(
+        Organization.id == auth_info["organization_id"]
+    ).first()
+    label = (org.name or "").strip() if org else ""
+    return {"prompt": DEFAULT_GUARDRAIL_PROMPT.replace("{org}", label or "this business")}
 
 
 @router.get("/list/shopify", response_model=List[AgentWithCustomizationResponse])

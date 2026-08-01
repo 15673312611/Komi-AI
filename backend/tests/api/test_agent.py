@@ -378,6 +378,28 @@ def test_create_agent_customization(
     assert customization["show_ai_disclaimer"] is True
 
 
+def test_guardrail_default_is_served_with_the_org_filled_in(client, db, test_user):
+    """The dashboard shows this as editable starting text.
+
+    Served from the backend rather than copied into the frontend: the previous
+    UI described the rule in prose and went stale the first time the wording
+    changed. {org} must already be substituted, so the operator reads exactly
+    what the model is sent.
+    """
+    response = client.get("/api/agents/guardrail-default")
+    assert response.status_code == 200
+
+    prompt = response.json()["prompt"]
+    assert "{org}" not in prompt
+    assert "general-purpose AI" in prompt
+
+
+def test_guardrail_default_route_is_not_shadowed_by_agent_id(client, db, test_agent):
+    """It sits next to GET /{agent_id}; a literal path declared after the
+    parameterised one would be swallowed by it and return 404/422."""
+    assert client.get("/api/agents/guardrail-default").status_code == 200
+
+
 def test_ai_disclaimer_toggle_round_trips(client, db, test_agent):
     """Turning the footer disclaimer off must survive the round trip.
 

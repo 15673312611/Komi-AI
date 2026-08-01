@@ -157,10 +157,10 @@ class Settings(BaseSettings):
     AGENT_RUN_TIMEOUT: int = int(os.getenv("AGENT_RUN_TIMEOUT", "90"))
 
     # Tool calls allowed in a single turn before the agent must answer from what
-    # it has. An agent with several knowledge sources routinely searches more than
-    # a handful of times, so this is not a tight budget — AGENT_RUN_TIMEOUT is the
-    # real safety net (see app.utils.agno_patches).
-    AGENT_TOOL_CALL_LIMIT: int = int(os.getenv("AGENT_TOOL_CALL_LIMIT", "10"))
+    # it already has. Reaching this is no longer fatal — the agent answers without
+    # further tools rather than returning nothing (see app.utils.agno_patches) —
+    # so the budget can stay tight. AGENT_RUN_TIMEOUT is the real safety net.
+    AGENT_TOOL_CALL_LIMIT: int = int(os.getenv("AGENT_TOOL_CALL_LIMIT", "5"))
 
     # Knowledge base content summarization settings
     KNOWLEDGE_SUMMARY_ENABLED: bool = os.getenv("KNOWLEDGE_SUMMARY_ENABLED", "false").lower() == "true"
