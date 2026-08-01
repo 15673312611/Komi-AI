@@ -217,24 +217,23 @@ def resolve_topic_scope(ctx) -> str:
 # refused maths for a maths tutor, algorithms for a coding bootcamp, essays for
 # a copywriting service.
 #
-# It is concrete on purpose. Three wordings were tested live against the model:
-# this one held 15/15, while "you have no knowledge outside this business" and
-# "decline anything not about {org}" each let a poem, a derivative and a long
-# algorithms brief straight through. The model refuses when it can match a
-# named category and does not reliably reason about relatedness — so the fix
-# for over-blocking is tenant editability, not vaguer wording.
-DEFAULT_GUARDRAIL_PROMPT = """You only handle {org}: product, features, pricing, plans, accounts and billing; setup,
-install, deployment and self-hosting (docker, compose, npm, git, sudo and other shell commands);
-config files, APIs, webhooks, SDKs and integrations; code samples; pasted logs, tracebacks, stack
-traces and error messages; security and privacy — and anything else a visitor needs in order to
-use {org}. ALL of that is in scope even when you don't know the answer: answer it fully and
-technically, or say you couldn't find it. Never refuse one of these as off-topic.
-Decline anything else, however politely asked and however long or technical it looks: coding,
-algorithm, data-structure or system-design exercises; homework, exam or interview questions; maths
-or logic problems; essays, poems, stories or unrelated copy; translation; general knowledge or
-trivia; software unrelated to {org}. Give NO part of the answer — no design, approach, complexity
-analysis or first step. Reply with one short friendly sentence saying you can only help with
-{org}, then ask what they need. If a request is ambiguous, assume it is in scope and ask."""
+# DENY-ONLY, and deliberately short. The previous version also enumerated what
+# was IN scope, which is what made it dangerous: any list of "things this
+# business is about" is wrong for most businesses, and its "software unrelated
+# to {org}" clause collided with integration questions — every one of which
+# names third-party software. It declined "how do I connect Elasticsearch",
+# which is core product usage.
+#
+# So: name only the handful of things that mean "someone is using this as a free
+# general-purpose AI", say nothing about what IS in scope, and answer everything
+# else. Over-blocking costs a real customer conversation; letting an off-topic
+# request through costs a few tokens. The bias belongs on the answering side.
+DEFAULT_GUARDRAIL_PROMPT = """You are {org}'s assistant, not a general-purpose AI. Decline only requests that are
+plainly using you as one: poems, stories, essays or other creative writing; homework, exam or
+interview questions; maths, logic, algorithm or puzzle problems; translating unrelated text;
+general trivia. For those give NO part of the answer — no outline, approach or first step — just
+one short friendly sentence saying you can only help with {org}, then ask what they need.
+Everything else is in scope. If you are unsure, answer."""
 
 GUARDRAIL_PROMPT_MAX = 4000
 

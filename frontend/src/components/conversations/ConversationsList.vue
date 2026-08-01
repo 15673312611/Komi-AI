@@ -345,7 +345,14 @@ onBeforeUnmount(() => {
           selectedChat && loadChatDetail(selectedChat.session_id, true);
           emit('refresh');
         }"
-        @chatUpdated="selectedChat = $event"
+        @chatUpdated="(updated) => {
+          // Forward as well as store locally. Taking a chat over from the chat
+          // pane changes user_id, and the info panel decides whether to offer
+          // 'End Chat' from its own chatInfo prop — which only the parent can
+          // update. Without this the button stayed hidden until a refresh.
+          selectedChat = updated;
+          emit('chatUpdated', updated);
+        }"
         @clearUnread="clearUnread"
         @back="emit('back')"
         @info="emit('info')"

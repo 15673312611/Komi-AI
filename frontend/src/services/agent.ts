@@ -139,8 +139,14 @@ export const agentService = {
     return response.data
   },
   
+  /** The shipped guardrail rule with {org} filled in, shown as editable starting text. */
+  async getGuardrailDefault(): Promise<string> {
+    const response = await api.get('/agent/guardrail-default')
+    return response.data?.prompt ?? ''
+  },
+
   async generateInstructions(prompt: string, existingInstructions?: string[]): Promise<string[]> {
-    const response = await api.post('/agent/generate-instructions', { 
+    const response = await api.post('/agent/generate-instructions', {
         prompt,
         existing_instructions: existingInstructions 
     })

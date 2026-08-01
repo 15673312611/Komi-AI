@@ -15,7 +15,8 @@ limitations under the License.
 -->
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
+import { agentService } from '@/services/agent'
 import { useAgentEdit } from '@/composables/useAgentEdit'
 import { useSubscriptionStorage } from '@/utils/storage'
 import { useEnterpriseFeatures } from '@/composables/useEnterpriseFeatures'
@@ -116,11 +117,19 @@ const handleUpgrade = () => {
 
 // Create local state for all editable fields
 const localInstructions = ref(props.instructions)
-// Empty means "use the platform default". Deliberately not prefilled with the
-// default text: saving a copy would freeze this agent on today's wording and it
-// would never pick up improvements to the default.
+// The box shows the real shipped rule so it can be read and edited, rather than a
+// prose summary of it — that summary drifted from the actual wording the first
+// time the default changed. NULL in the database still means "follow the shipped
+// default", so an agent left untouched keeps picking up improvements: on save we
+// send null whenever the text is empty or still identical to the default.
 const localGuardrailPrompt = ref(props.guardrailPrompt ?? '')
+const defaultGuardrailPrompt = ref('')
 const localGuardrailEnabled = ref(props.guardrailEnabled)
+
+const isGuardrailDefault = computed(() => {
+  const text = localGuardrailPrompt.value.trim()
+  return !text || text === defaultGuardrailPrompt.value.trim()
+})
 const localTransferToHuman = ref(props.transferToHuman)
 const localAskForRating = ref(props.askForRating)
 const localHandoffCollectEmail = ref(props.handoffCollectEmail)
@@ -128,7 +137,24 @@ const localHandoffCollectName = ref(props.handoffCollectName)
 const localSelectedGroupIds = ref<string[]>([...props.selectedGroupIds])
 
 // Watch for changes in props to update local state
-watch(() => props.guardrailPrompt, (v) => { localGuardrailPrompt.value = v ?? '' })
+// Show the shipped rule when this agent has not written its own. Fetched rather
+// than duplicated here so the box can never drift from the wording actually sent
+// to the model. If it fails, the box stays empty and still means "use the
+// default" — the feature degrades to what it was before.
+onMounted(async () => {
+  try {
+    defaultGuardrailPrompt.value = await agentService.getGuardrailDefault()
+    if (!localGuardrailPrompt.value.trim()) {
+      localGuardrailPrompt.value = defaultGuardrailPrompt.value
+    }
+  } catch (e) {
+    console.error('Could not load the default guardrail rule:', e)
+  }
+})
+
+watch(() => props.guardrailPrompt, (v) => {
+  localGuardrailPrompt.value = v ?? defaultGuardrailPrompt.value
+})
 watch(() => props.guardrailEnabled, (v) => { localGuardrailEnabled.value = v })
 
 watch(() => props.instructions, (newValue) => {
@@ -209,7 +235,9 @@ const handleRatingToggle = (event: Event) => {
 const handleSave = () => {
   emit('save-agent', {
     instructions: localInstructions.value,
-    guardrailPrompt: localGuardrailPrompt.value.trim() || null,
+    // null when untouched, so this agent keeps following the shipped default
+    // rather than freezing a copy of today's wording.
+    guardrailPrompt: isGuardrailDefault.value ? null : localGuardrailPrompt.value.trim(),
     guardrailEnabled: localGuardrailEnabled.value,
     transferToHuman: localTransferToHuman.value,
     askForRating: localAskForRating.value,
@@ -297,11 +325,18 @@ const handleSave = () => {
           v-model="localGuardrailPrompt"
           rows="5"
           :readonly="!isEditing"
-          placeholder="Leave empty to use the default: the agent answers anything about your product, pricing, accounts, setup, APIs and troubleshooting, and declines unrelated requests such as homework, puzzles or creative writing.&#10;&#10;Write your own rule to replace it — for example if your business IS tutoring, coding education or copywriting, so those requests should be answered."
+          placeholder="Leave empty to use the platform default."
         ></textarea>
         <p class="helper-text">
-          Use <code>{org}</code> to refer to your business name. Leave empty to keep the default,
-          which we improve over time.
+          <template v-if="isGuardrailDefault">
+            This is the platform default. Edit it to suit your business — for example if you
+            <em>are</em> a tutoring, coding-education or copywriting service, so those requests
+            should be answered.
+          </template>
+          <template v-else>
+            Your own rule, replacing the platform default. Clear the box to go back to the default.
+          </template>
+          Use <code>{org}</code> to refer to your business name.
         </p>
       </template>
     </section>
