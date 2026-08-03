@@ -35,7 +35,18 @@ class UserBase(BaseModel):
     last_seen: Optional[datetime] = None
 
 
-class UserCreate(UserBase):
+class ChatScopeFields(BaseModel):
+    """The two chat-scope toggles on the user form.
+
+    Both default to None, meaning "whatever the chosen role already grants".
+    A client that predates these fields keeps its old behaviour; the form
+    sends explicit values because it renders the role's current scope.
+    """
+    see_all_ai_chats: Optional[bool] = None
+    see_all_org_chats: Optional[bool] = None
+
+
+class UserCreate(UserBase, ChatScopeFields):
     password: str
     role_id: int
 
@@ -48,7 +59,7 @@ class UserCreate(UserBase):
         return validate_password_strength(value)
 
 
-class UserUpdate(BaseModel):
+class UserUpdate(ChatScopeFields):
     email: Optional[EmailStr] = None
     full_name: Optional[str] = None
     password: Optional[str] = None

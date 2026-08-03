@@ -15,7 +15,7 @@ limitations under the License.
 */
 
 import { ref } from 'vue'
-import type { User } from '@/types/user'
+import type { ChatScopeFields, User } from '@/types/user'
 import { listUsers, createUser, updateUser, deleteUser, resetUserPassword } from '@/services/users'
 import { toast } from 'vue-sonner'
 
@@ -47,7 +47,7 @@ export function useUsers() {
     showEditModal.value = true
   }
 
-  const handleUpdateUser = async (userData: Partial<User>) => {
+  const handleUpdateUser = async (userData: Partial<User> & ChatScopeFields) => {
     if (!selectedUser.value) return
 
     try {
@@ -155,7 +155,7 @@ export function useUsers() {
     }
   }
 
-  const handleCreateUser = async (userData: Partial<User> & { password?: string }) => {
+  const handleCreateUser = async (userData: Partial<User> & ChatScopeFields & { password?: string }) => {
     try {
       loading.value = true
       error.value = null

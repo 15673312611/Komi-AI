@@ -15,7 +15,7 @@ limitations under the License.
 */
 
 import api from './api'
-import type { User } from '@/types/user'
+import type { ChatScopeFields, User } from '@/types/user'
 
 export interface TeamAgentStats {
   id: string
@@ -94,12 +94,12 @@ export async function getUser(id: string): Promise<User> {
   return response.data
 }
 
-export async function createUser(userData: Partial<User>): Promise<User> {
+export async function createUser(userData: Partial<User> & ChatScopeFields): Promise<User> {
   const response = await api.post('users', userData)
   return response.data
 }
 
-export async function updateUser(id: string, userData: Partial<User>): Promise<User> {
+export async function updateUser(id: string, userData: Partial<User> & ChatScopeFields): Promise<User> {
   const response = await api.put(`users/${id}`, userData)
   return response.data
 }

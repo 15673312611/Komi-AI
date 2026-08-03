@@ -36,6 +36,7 @@ from app.core.logger import get_logger
 from app.repositories.user import UserRepository
 from pydantic import BaseModel
 from app.models.role import Role
+from app.services.chat_scope_roles import resolve_role
 from app.core.s3 import get_s3_signed_url, upload_file_to_s3, delete_file_from_s3
 from app.core.config import settings
 from app.repositories.shopify_shop_repository import ShopifyShopRepository
@@ -74,7 +75,7 @@ ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif"}
 MAX_FILE_SIZE = 5 * 1024 * 1024  # 5MB
 
 
-def _require_role_in_org(db, role_id, org_id) -> None:
+def _require_role_in_org(db, role_id, org_id) -> Optional[Role]:
     """A user may only be given a role defined in their own organization.
 
     Role ids are sequential integers, so without this an admin could bind a
@@ -82,10 +83,11 @@ def _require_role_in_org(db, role_id, org_id) -> None:
     breaking the other org's "is this role in use" accounting.
     """
     if role_id is None:
-        return
+        return None
     role = db.query(Role).filter(Role.id == role_id).first()
     if not role or role.organization_id != org_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Role not found")
+    return role
 
 def get_file_extension(filename: str) -> str:
     return os.path.splitext(filename)[1].lower()
@@ -155,7 +157,14 @@ async def create_user(
                     )
         
         # The role must belong to the caller's own organization.
-        _require_role_in_org(db, user_data.role_id, current_user.organization_id)
+        role = _require_role_in_org(db, user_data.role_id, current_user.organization_id)
+
+        # The chat-scope toggles may point at a different role than the one
+        # picked in the dropdown. Returns the same role when they match it.
+        role = resolve_role(
+            db, current_user, role,
+            user_data.see_all_ai_chats, user_data.see_all_org_chats,
+        )
 
         # Hash the password
         hashed_password = User.get_password_hash(user_data.password)
@@ -167,7 +176,7 @@ async def create_user(
             hashed_password=hashed_password,
             organization_id=current_user.organization_id,
             is_active=user_data.is_active,
-            role_id=user_data.role_id
+            role_id=role.id
         )
 
         return new_user.to_dict()
@@ -878,7 +887,7 @@ async def update_user(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
     # A supplied role must belong to the caller's org, not another tenant's.
-    _require_role_in_org(db, user_data.role_id, current_user.organization_id)
+    role = _require_role_in_org(db, user_data.role_id, current_user.organization_id)
 
     # Check if updating email and if it's already taken
     if user_data.email and user_data.email != user.email:
@@ -914,6 +923,21 @@ async def update_user(
         # nothing. Resetting someone else's password has its own endpoint below.
         fields.pop('password', None)
         fields.pop('current_password', None)
+
+        # The toggles describe a chat scope, not a column. They resolve against
+        # whichever role the user is ending up with — the one just picked, or
+        # the one they already had when the dropdown was left alone.
+        see_all_ai_chats = fields.pop('see_all_ai_chats', None)
+        see_all_org_chats = fields.pop('see_all_org_chats', None)
+        base_role = role or user.role
+        if base_role is not None:
+            # Assigned unconditionally, not only when it differs from the role
+            # in the payload: the toggles can resolve back to a role the person
+            # is already on, and letting the dropdown's id win there would
+            # silently narrow them.
+            fields['role_id'] = resolve_role(
+                db, current_user, base_role, see_all_ai_chats, see_all_org_chats
+            ).id
 
         updated_user = user_repo.update_user(user_id, **fields)
 

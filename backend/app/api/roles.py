@@ -22,6 +22,7 @@ from app.models.user import User
 from app.core.auth import (
     check_permissions,
     require_any_permission,
+    require_grantable,
     require_permissions,
 )
 from app.repositories.role import RoleRepository
@@ -32,7 +33,7 @@ from app.models.schemas.role import (
     RoleResponse,
     PermissionResponse
 )
-from typing import Iterable, List
+from typing import List
 from uuid import UUID
 
 router = APIRouter()
@@ -42,25 +43,6 @@ router = APIRouter()
 # (manage_users). Gating reads on manage_roles alone breaks user invite.
 ROLE_READ_PERMISSIONS = ("manage_roles", "manage_users")
 
-
-def _require_grantable(current_user: User, permission_names: Iterable[str]) -> None:
-    """You cannot grant a permission you do not hold yourself.
-
-    Without this, manage_roles was equivalent to super_admin — and in fact so
-    was *any* authenticated session, since these endpoints carried no permission
-    check at all: POST /roles/{my_role_id}/permissions/super_admin was enough.
-    check_permissions short-circuits on super_admin, so an org owner granting
-    anything is unaffected.
-    """
-    ungrantable = sorted(
-        name for name in permission_names
-        if not check_permissions(current_user, [name])
-    )
-    if ungrantable:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=f"Cannot grant a permission you do not hold: {', '.join(ungrantable)}"
-        )
 
 @router.post("", response_model=RoleResponse)
 async def create_role(
@@ -93,7 +75,7 @@ async def create_role(
             )
         # A new role is a grant too — otherwise the rule is one "create role,
         # then assign myself to it" away from being bypassed.
-        _require_grantable(current_user, {p.name for p in existing_permissions})
+        require_grantable(current_user, {p.name for p in existing_permissions})
 
     try:
         role = role_repo.create_role(
@@ -178,7 +160,7 @@ async def update_role(
         # Only the diff: re-saving a role that already holds a permission the
         # caller lacks is legitimate; adding one is the escalation.
         already_held = {p.name for p in role.permissions}
-        _require_grantable(
+        require_grantable(
             current_user,
             {p.name for p in existing_permissions} - already_held,
         )
@@ -240,7 +222,7 @@ async def add_role_permission(
     # reads as 404 rather than "you may not grant that".
     if not db.query(Permission).filter(Permission.name == permission).first():
         raise HTTPException(status_code=404, detail="Permission not found")
-    _require_grantable(current_user, [permission])
+    require_grantable(current_user, [permission])
 
     success = role_repo.add_permission(role_id, permission)
     if not success:
