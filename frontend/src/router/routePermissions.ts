@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Groups from the leaf module, not from permissions.ts: this map is built at
+// module scope, and permissions.ts sits inside the router import cycle.
 import {
   AGENT_PERMISSIONS,
   AI_CONFIG_PERMISSIONS,
@@ -22,8 +24,9 @@ import {
   ORGANIZATION_PERMISSIONS,
   PEOPLE_PERMISSIONS,
   TICKET_PERMISSIONS,
-  hasAnyPermission,
-} from '@/utils/permissions'
+} from '@/utils/permissionGroups'
+// Only ever called at runtime, so a partially-initialised module is harmless.
+import { hasAnyPermission } from '@/utils/permissions'
 
 /**
  * The one place a route's required permissions are written down.

@@ -15,6 +15,17 @@ limitations under the License.
 */
 
 import { userService } from '@/services/user'
+import {
+  AGENT_PERMISSIONS,
+  AI_CONFIG_PERMISSIONS,
+  CHAT_MANAGE_PERMISSIONS,
+  CHAT_VIEW_PERMISSIONS,
+  KNOWLEDGE_PERMISSIONS,
+  ORGANIZATION_PERMISSIONS,
+  PEOPLE_PERMISSIONS,
+  SUBSCRIPTION_PERMISSIONS,
+  TICKET_PERMISSIONS,
+} from '@/utils/permissionGroups'
 
 export function hasPermission(permission: string): boolean {
   const user = userService.getCurrentUser()
@@ -27,33 +38,9 @@ export function hasAnyPermission(permissions: string[]): boolean {
   return hasPermission('super_admin') || permissions.some(permission => hasPermission(permission))
 }
 
-// Permission groups, mirroring the constants in backend/app/core/auth.py.
-// Exported so the route map can name the same sets the API enforces.
-
-/** Seeing conversations — CHAT_VIEW_PERMISSIONS. */
-export const CHAT_VIEW_PERMISSIONS = [
-  'view_all_chats',
-  'view_assigned_chats',
-  'view_unassigned_chats',
-]
-
-/** Acting on one: takeover, reassign, outbound — CHAT_MANAGE_PERMISSIONS. */
-export const CHAT_MANAGE_PERMISSIONS = ['manage_all_chats', 'manage_assigned_chats']
-
-/** Working the inbox at all — INBOX_PERMISSIONS. */
-export const INBOX_PERMISSIONS = [...CHAT_VIEW_PERMISSIONS, ...CHAT_MANAGE_PERMISSIONS]
-
-/** The people directory — PEOPLE_READ_PERMISSIONS. Writes match reads. */
-export const PEOPLE_PERMISSIONS = ['view_people', ...INBOX_PERMISSIONS]
-
-// The remaining view/manage pairs, named once so the route map and the checks
-// below cannot drift apart.
-export const AGENT_PERMISSIONS = ['manage_agents', 'view_agents']
-export const KNOWLEDGE_PERMISSIONS = ['manage_knowledge', 'view_knowledge']
-export const TICKET_PERMISSIONS = ['view_tickets', 'manage_tickets']
-export const ORGANIZATION_PERMISSIONS = ['manage_organization', 'view_organization']
-export const AI_CONFIG_PERMISSIONS = ['manage_ai_config', 'view_ai_config']
-export const SUBSCRIPTION_PERMISSIONS = ['manage_subscription', 'view_subscription']
+// The groups live in a leaf module (see permissionGroups.ts for why) and are
+// re-exported here so existing importers keep working.
+export * from '@/utils/permissionGroups'
 
 // Common permission checks.
 //
