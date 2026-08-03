@@ -86,11 +86,14 @@ export async function deleteUser(id: string): Promise<void> {
   await api.delete(`users/${id}`)
 }
 
-export async function updateUserPassword(id: string, currentPassword: string, newPassword: string): Promise<void> {
-  await api.put(`users/${id}/password`, {
-    current_password: currentPassword,
-    new_password: newPassword
-  })
+/**
+ * Admin-set password for another user in the organization. The admin never
+ * knows the old one, so nothing is verified here — `manage_users` is the gate,
+ * and the API refuses to reset your own password (that goes through profile
+ * settings, which does ask for the current password).
+ */
+export async function resetUserPassword(id: string, newPassword: string): Promise<void> {
+  await api.post(`users/${id}/reset-password`, { new_password: newPassword })
 }
 
 export async function updateUserProfile(id: string, profileData: Partial<User>): Promise<User> {

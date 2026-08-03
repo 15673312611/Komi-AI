@@ -18,7 +18,8 @@ limitations under the License.
 import { ref, onMounted, inject, computed, watch } from 'vue'
 import { useAuth } from '@/composables/useAuth'
 import { userService } from '@/services/user'
-import { validatePassword, type PasswordStrength } from '@/utils/validators'
+import { meetsPasswordPolicy, validatePassword, type PasswordStrength } from '@/utils/validators'
+import PasswordStrengthMeter from '@/components/common/PasswordStrengthMeter.vue'
 import userAvatar from '@/assets/user.svg'
 import type { User } from '@/types/user'
 import { isAbsoluteUrl } from '@/utils/avatars'
@@ -249,7 +250,7 @@ const updateProfile = async () => {
       if (!formData.value.current_password) {
         throw new Error('Current password is required to set new password')
       }
-      if (passwordStrength.value.score < 3) {
+      if (!meetsPasswordPolicy(passwordStrength.value)) {
         throw new Error('Password is not strong enough')
       }
       updateData.password = formData.value.new_password
@@ -404,25 +405,10 @@ const handleProfilePicClick = () => {
           </div>
         </div>
 
-        <div v-if="passwordTouched && formData.new_password" class="password-strength">
-          <div class="strength-meter">
-            <div
-              class="strength-bar"
-              :style="{ width: `${(passwordStrength.score / 5) * 100}%` }"
-              :class="[
-                passwordStrength.score < 3 ? 'weak' :
-                passwordStrength.score < 4 ? 'medium' : 'strong'
-              ]"
-            ></div>
-          </div>
-          <ul class="strength-requirements">
-            <li :class="{ met: passwordStrength.hasMinLength }">At least 8 characters</li>
-            <li :class="{ met: passwordStrength.hasUpperCase }">Contains uppercase letter</li>
-            <li :class="{ met: passwordStrength.hasLowerCase }">Contains lowercase letter</li>
-            <li :class="{ met: passwordStrength.hasNumber }">Contains number</li>
-            <li :class="{ met: passwordStrength.hasSpecialChar }">Contains special character (!@#$%^&*)</li>
-          </ul>
-        </div>
+        <PasswordStrengthMeter
+          v-if="passwordTouched && formData.new_password"
+          :strength="passwordStrength"
+        />
       </div>
 
       <div v-if="error" class="error-message">{{ error }}</div>
@@ -954,58 +940,4 @@ input:checked + .slider:before {
   }
 }
 
-.password-strength {
-  margin-top: var(--space-md);
-}
-
-.strength-meter {
-  height: 4px;
-  background: var(--o10);
-  border-radius: var(--radius-full);
-  margin-bottom: var(--space-sm);
-}
-
-.strength-bar {
-  height: 100%;
-  border-radius: var(--radius-full);
-  transition: width var(--transition-normal);
-}
-
-.strength-bar.weak {
-  background: var(--error-color);
-}
-
-.strength-bar.medium {
-  background: var(--warning-color);
-}
-
-.strength-bar.strong {
-  background: var(--success-color);
-}
-
-.strength-requirements {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-  font-size: var(--text-sm);
-  color: var(--text-color);
-  opacity: 0.7;
-}
-
-.strength-requirements li {
-  margin-bottom: var(--space-xs);
-  display: flex;
-  align-items: center;
-  gap: var(--space-xs);
-}
-
-.strength-requirements li::before {
-  content: '×';
-  color: var(--error-color);
-}
-
-.strength-requirements li.met::before {
-  content: '✓';
-  color: var(--success-color);
-}
 </style> 

@@ -15,10 +15,11 @@ limitations under the License.
 -->
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, onMounted } from 'vue'
 import type { Role, User } from '@/types/user'
-import { validatePassword, type PasswordStrength } from '@/utils/validators'
+import { meetsPasswordPolicy, validatePassword, type PasswordStrength } from '@/utils/validators'
 import { listRoles } from '@/services/roles'
+import PasswordStrengthMeter from '@/components/common/PasswordStrengthMeter.vue'
 import { toast } from 'vue-sonner'
 
 const props = defineProps<{
@@ -67,12 +68,6 @@ const handleConfirmPasswordInput = () => {
   }
 }
 
-const strengthClass = computed(() => {
-  if (passwordStrength.value.score >= 4) return 'strong'
-  if (passwordStrength.value.score >= 3) return 'medium'
-  return 'weak'
-})
-
 const fetchRoles = async () => {
   try {
     loadingRoles.value = true
@@ -97,7 +92,9 @@ const handleSubmit = () => {
       error.value = 'Passwords do not match'
       return
     }
-    if (passwordStrength.value.score < 3) {
+    // The initial password an admin picks clears the same bar as a reset —
+    // three surfaces used to disagree on what "strong enough" meant.
+    if (!meetsPasswordPolicy(passwordStrength.value)) {
       error.value = 'Password is not strong enough'
       return
     }
@@ -181,32 +178,7 @@ const handleSubmit = () => {
           autocomplete="new-password"
           @input="handlePasswordInput(password)"
         />
-        <div v-if="passwordTouched" class="password-strength">
-          <div class="strength-meter">
-            <div 
-              class="strength-bar" 
-              :class="strengthClass"
-              :style="{ width: `${(passwordStrength.score / 4) * 100}%` }"
-            />
-          </div>
-          <ul class="strength-requirements">
-            <li :class="{ met: passwordStrength.hasMinLength }">
-              At least 8 characters
-            </li>
-            <li :class="{ met: passwordStrength.hasUpperCase }">
-              At least one uppercase letter
-            </li>
-            <li :class="{ met: passwordStrength.hasLowerCase }">
-              At least one lowercase letter
-            </li>
-            <li :class="{ met: passwordStrength.hasNumber }">
-              At least one number
-            </li>
-            <li :class="{ met: passwordStrength.hasSpecialChar }">
-              At least one special character
-            </li>
-          </ul>
-        </div>
+        <PasswordStrengthMeter v-if="passwordTouched" :strength="passwordStrength" />
       </div>
 
       <div class="form-group">
@@ -285,61 +257,6 @@ const handleSubmit = () => {
   justify-content: flex-end;
   gap: var(--space-sm);
   margin-top: var(--space-sm);
-}
-
-.password-strength {
-  margin-top: var(--space-sm);
-}
-
-.strength-meter {
-  height: 4px;
-  background: var(--background-mute);
-  border-radius: var(--radius-full);
-  margin-bottom: var(--space-sm);
-}
-
-.strength-bar {
-  height: 100%;
-  border-radius: var(--radius-full);
-  transition: width var(--transition-normal);
-}
-
-.strength-bar.weak {
-  background: var(--error-color);
-}
-
-.strength-bar.medium {
-  background: var(--warning-color);
-}
-
-.strength-bar.strong {
-  background: var(--success-color);
-}
-
-.strength-requirements {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-  font-size: var(--text-sm);
-  color: var(--text-color);
-  opacity: 0.7;
-}
-
-.strength-requirements li {
-  margin-bottom: var(--space-xs);
-  display: flex;
-  align-items: center;
-  gap: var(--space-xs);
-}
-
-.strength-requirements li::before {
-  content: '×';
-  color: var(--error-color);
-}
-
-.strength-requirements li.met::before {
-  content: '✓';
-  color: var(--success-color);
 }
 
 .error-message {

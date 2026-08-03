@@ -16,6 +16,7 @@ limitations under the License.
 
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict
+import re
 import uuid
 from jose import JWTError, jwt
 from passlib.context import CryptContext
@@ -34,6 +35,33 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 30
 REFRESH_TOKEN_EXPIRE_DAYS = 7
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+# Password policy for passwords one person sets on behalf of another (today:
+# an admin resetting an agent's password). Mirrors the strength meter the UI
+# draws — minimum length plus three of the four character classes — so the
+# form and the API agree on what "strong enough" means.
+MIN_PASSWORD_LENGTH = 8
+MIN_PASSWORD_CHARACTER_CLASSES = 3
+
+_PASSWORD_CHARACTER_CLASSES = (r"[A-Z]", r"[a-z]", r"[0-9]", r"[^A-Za-z0-9]")
+
+
+def validate_password_strength(password: str) -> str:
+    """Return the password, or raise ValueError describing what it is missing."""
+    if len(password or "") < MIN_PASSWORD_LENGTH:
+        raise ValueError(
+            f"Password must be at least {MIN_PASSWORD_LENGTH} characters long"
+        )
+
+    classes = sum(1 for pattern in _PASSWORD_CHARACTER_CLASSES if re.search(pattern, password))
+    if classes < MIN_PASSWORD_CHARACTER_CLASSES:
+        raise ValueError(
+            f"Password must include at least {MIN_PASSWORD_CHARACTER_CLASSES} of: "
+            "uppercase letter, lowercase letter, number, special character"
+        )
+
+    return password
+
 
 def _fernet():
     """The shared encryption-at-rest key, loaded by app.core.encryption.

@@ -16,7 +16,7 @@ limitations under the License.
 
 import { ref } from 'vue'
 import type { User } from '@/types/user'
-import { listUsers, createUser, updateUser, deleteUser } from '@/services/users'
+import { listUsers, createUser, updateUser, deleteUser, resetUserPassword } from '@/services/users'
 import { toast } from 'vue-sonner'
 
 export function useUsers() {
@@ -27,6 +27,8 @@ export function useUsers() {
   const showDeleteModal = ref(false)
   const selectedUser = ref<User | null>(null)
   const showCreateModal = ref(false)
+  const showResetPasswordModal = ref(false)
+  const resettingPassword = ref(false)
 
   const fetchUsers = async () => {
     try {
@@ -76,6 +78,44 @@ export function useUsers() {
       })
     } finally {
       loading.value = false
+    }
+  }
+
+  const handleResetPassword = (user: User) => {
+    selectedUser.value = user
+    showResetPasswordModal.value = true
+  }
+
+  const confirmResetPassword = async (newPassword: string) => {
+    if (!selectedUser.value) return
+
+    try {
+      resettingPassword.value = true
+      error.value = null
+      await resetUserPassword(selectedUser.value.id, newPassword)
+
+      showResetPasswordModal.value = false
+      selectedUser.value = null
+      toast.success('Success', {
+        description: 'Password reset successfully',
+        duration: 4000,
+        closeButton: true
+      })
+    } catch (err: any) {
+      const detail = err.response?.data?.detail
+      // A rejected password comes back as FastAPI's validation-error array.
+      const description = Array.isArray(detail) ? detail[0]?.msg : detail
+      error.value = 'Failed to reset password'
+      // Never the raw axios error: its `config.data` carries the plaintext
+      // password, which would land in the browser console on a network failure.
+      console.error('Error resetting password:', description ?? err.message)
+      toast.error('Error', {
+        description: 'Failed to reset password' + (description ? ' - ' + description : ''),
+        duration: 4000,
+        closeButton: true
+      })
+    } finally {
+      resettingPassword.value = false
     }
   }
 
@@ -148,11 +188,15 @@ export function useUsers() {
     showDeleteModal,
     selectedUser,
     showCreateModal,
+    showResetPasswordModal,
+    resettingPassword,
     fetchUsers,
     handleEditUser,
     handleUpdateUser,
     handleDeleteUser,
     confirmDeleteUser,
-    handleCreateUser
+    handleCreateUser,
+    handleResetPassword,
+    confirmResetPassword
   }
 } 
