@@ -28,10 +28,10 @@ from uuid import UUID
 from app.database import get_db
 from app.models.user import User
 from app.models.session_to_agent import SessionToAgent, SessionStatus
-from app.models.schemas.user import UserCreate, UserStatusUpdate, UserUpdate, UserResponse, TokenResponse
+from app.models.schemas.user import AdminPasswordReset, TeammateResponse, UserCreate, UserStatusUpdate, UserUpdate, UserResponse, TokenResponse
 from datetime import datetime, timezone
-from app.core.security import create_access_token, create_refresh_token, verify_token
-from app.core.auth import get_current_user, require_permissions
+from app.core.security import create_access_token, create_refresh_token, validate_password_strength, verify_token
+from app.core.auth import INBOX_PERMISSIONS, get_current_user, require_any_permission, require_permissions
 from app.core.logger import get_logger
 from app.repositories.user import UserRepository
 from pydantic import BaseModel
@@ -370,6 +370,25 @@ async def get_team_overview(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(e)
         )
+
+
+@router.get("/teammates", response_model=List[TeammateResponse])
+async def list_teammates(
+    current_user: User = Depends(require_any_permission(*INBOX_PERMISSIONS)),
+    db: Session = Depends(get_db)
+):
+    """The colleagues an inbox user can hand a conversation to.
+
+    Declared above GET /{user_id}: below it, "teammates" parses as a user id
+    and the request lands on the manage_users route — a 403 for exactly the
+    agents this exists for.
+
+    Deliberately not a relaxation of GET /users, which returns each teammate's
+    role and its full permission list. Reassigning a chat needs a name and a
+    face, so that is all this returns.
+    """
+    users = UserRepository(db).get_users_by_organization(current_user.organization_id)
+    return [user for user in users if user.is_active]
 
 
 @router.get("/{user_id}", response_model=UserResponse)
@@ -789,29 +808,40 @@ async def update_profile(
                     detail="Email already registered"
                 )
         
-        # Verify current password if updating password
-        if data.password:
-            if not data.current_password:
+        fields = data.dict(exclude_unset=True)
+        # `password` and `current_password` are request-only fields; the column
+        # is `hashed_password`. Passing `password` through wrote a stray
+        # attribute onto the ORM object that was never persisted, so changing
+        # your own password quietly did nothing while returning 200.
+        new_password = fields.pop('password', None)
+        current_password = fields.pop('current_password', None)
+
+        if new_password:
+            if not current_password:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="Current password is required"
                 )
-            if not current_user.verify_password(data.current_password):
+            if not current_user.verify_password(current_password):
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="Incorrect current password"
                 )
-            
-            # Hash new password
-            data.password = User.get_password_hash(data.password)
-        
-        # Remove current_password from update data
-        if hasattr(data, 'current_password'):
-            delattr(data, 'current_password')
-        
+            # Same bar an admin-set password has to clear — otherwise the
+            # policy is one self-service change away from being bypassed.
+            try:
+                validate_password_strength(new_password)
+            except ValueError as e:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=str(e)
+                )
+
+            fields['hashed_password'] = User.get_password_hash(new_password)
+
         updated_user = user_repo.update_user(
             current_user.id,
-            **data.dict(exclude_unset=True)
+            **fields
         )
                 # Generate signed URL if using S3 and user has a profile picture
         if settings.S3_FILE_STORAGE and updated_user.profile_pic:
@@ -878,8 +908,15 @@ async def update_user(
                     )
     
     try:
-        updated_user = user_repo.update_user(user_id, **user_data.dict(exclude_unset=True))
-        
+        fields = user_data.dict(exclude_unset=True)
+        # A password sent here used to be written straight onto the ORM object as
+        # a `password` attribute the User model does not have — silently doing
+        # nothing. Resetting someone else's password has its own endpoint below.
+        fields.pop('password', None)
+        fields.pop('current_password', None)
+
+        updated_user = user_repo.update_user(user_id, **fields)
+
         # Generate signed URL if using S3 and user has a profile picture
         if settings.S3_FILE_STORAGE and updated_user.profile_pic:
             signed_url = await get_s3_signed_url(updated_user.profile_pic)
@@ -895,6 +932,47 @@ async def update_user(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to update user"
         )
+
+
+@router.post("/{user_id}/reset-password")
+async def reset_user_password(
+    user_id: str,
+    data: AdminPasswordReset,
+    current_user: User = Depends(require_permissions("manage_users")),
+    db: Session = Depends(get_db)
+):
+    """Set a new password for another user in the caller's organization.
+
+    For the common case of an agent locked out of their account: the admin sets
+    a password and hands it over, rather than the agent going through the
+    email OTP flow (which the community edition does not ship).
+    """
+    user_repo = UserRepository(db)
+    user = user_repo.get_user(user_id)
+
+    if not user or user.organization_id != current_user.organization_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+    # Changing your own password still goes through /users/me, which proves you
+    # know the current one. Allowing it here would let anyone holding a stolen
+    # admin session lock the real admin out without ever learning their password.
+    if user.id == current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Use your profile settings to change your own password"
+        )
+
+    try:
+        user_repo.update_user(user_id, hashed_password=User.get_password_hash(data.new_password))
+    except Exception as e:
+        logger.error(f"Failed to reset password for user {user_id}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to reset password"
+        )
+
+    logger.info(f"User {current_user.id} reset the password of user {user_id}")
+    return {"message": "Password reset successfully"}
 
 
 @router.post("/{user_id}/status")

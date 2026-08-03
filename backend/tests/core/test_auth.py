@@ -26,7 +26,9 @@ from app.core.auth import (
     get_current_organization,
     require_permissions,
     require_permission,
-    require_subscription_management
+    require_subscription_management,
+    require_unified_permissions,
+    require_any_unified_permission
 )
 from app.models.user import User
 from app.models.organization import Organization
@@ -601,27 +603,85 @@ async def test_get_unified_auth_jwt_inactive_user(mock_db, mock_user):
 
 
 @pytest.mark.asyncio
-async def test_get_unified_auth_jwt_no_permissions(mock_db, mock_user):
-    """Test get_unified_auth without manage_agents permission"""
+async def test_get_unified_auth_authenticates_without_permissions(mock_db, mock_user):
+    """get_unified_auth authenticates; it does not authorize.
+
+    It used to hardcode a manage_agents check, so every route sharing the helper
+    inherited it — including reading your own org's subscription, which locked
+    every non-admin out of the entire app.
+    """
     request = MagicMock(spec=Request)
     request.url = "https://example.com/api/agents"
     request.query_params = {}
     request.cookies.get.return_value = "valid_token"
     request.headers.get.return_value = None
 
-    # Remove manage_agents permission
-    view_only_perm = Permission(id=1, name="view_only")
-    mock_user.role.permissions = [view_only_perm]
+    mock_user.role.permissions = [Permission(id=1, name="view_only")]
 
     payload = {"sub": str(mock_user.id)}
     mock_db.query.return_value.filter.return_value.first.return_value = mock_user
 
     with patch('app.core.auth.verify_token', return_value=payload):
-        with pytest.raises(HTTPException) as exc_info:
-            await get_unified_auth(request, mock_db)
+        result = await get_unified_auth(request, mock_db)
+
+    assert result["auth_type"] == "jwt"
+    assert result["current_user"] is mock_user
+
+
+@pytest.mark.asyncio
+async def test_require_unified_permissions_rejects_missing_permission(mock_user):
+    """The wrapper is what enforces the route's requirement."""
+    mock_user.role.permissions = [Permission(id=1, name="view_only")]
+
+    checker = require_unified_permissions("manage_agents")
+    with pytest.raises(HTTPException) as exc_info:
+        await checker(auth_info={"auth_type": "jwt", "current_user": mock_user})
 
     assert exc_info.value.status_code == 403
     assert exc_info.value.detail == "Not enough permissions"
+
+
+@pytest.mark.asyncio
+async def test_require_unified_permissions_allows_holder(mock_user):
+    """A user holding the permission passes through unchanged."""
+    mock_user.role.permissions = [Permission(id=1, name="manage_agents")]
+    auth_info = {"auth_type": "jwt", "current_user": mock_user}
+
+    checker = require_unified_permissions("manage_agents")
+
+    assert await checker(auth_info=auth_info) is auth_info
+
+
+@pytest.mark.asyncio
+async def test_require_any_unified_permission_is_or_semantics(mock_user):
+    """Any one of the listed permissions is enough."""
+    mock_user.role.permissions = [Permission(id=1, name="view_agents")]
+
+    checker = require_any_unified_permission("view_agents", "manage_agents")
+    result = await checker(auth_info={"auth_type": "jwt", "current_user": mock_user})
+
+    assert result["auth_type"] == "jwt"
+
+
+@pytest.mark.asyncio
+async def test_unified_permissions_pass_through_shop_session():
+    """A Shopify shop session authenticates a store, not a person.
+
+    It carries no current_user and no role, so there is nothing to check — it
+    must pass through exactly as it did before authorization moved out.
+    """
+    auth_info = {"auth_type": "shopify", "organization_id": uuid4()}
+
+    assert await require_unified_permissions("manage_agents")(auth_info=auth_info) is auth_info
+    assert await require_any_unified_permission("manage_agents")(auth_info=auth_info) is auth_info
+
+
+@pytest.mark.asyncio
+async def test_unified_permissions_tolerate_absent_current_user_key():
+    """Callers that omit the key entirely must not blow up with a KeyError."""
+    auth_info = {"auth_type": "jwt", "organization_id": uuid4()}
+
+    assert await require_unified_permissions("manage_agents")(auth_info=auth_info) is auth_info
 
 
 @pytest.mark.asyncio

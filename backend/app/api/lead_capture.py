@@ -20,7 +20,7 @@ from uuid import UUID
 
 from app.core.logger import get_logger
 from app.database import get_db
-from app.core.auth import require_permissions
+from app.core.auth import require_any_permission, require_permissions
 from app.models.user import User
 from app.models.agent import Agent
 from app.repositories.lead_capture import LeadCaptureConfigRepository
@@ -68,7 +68,8 @@ def _get_owned_agent(agent_id: UUID, current_user: User, db: Session) -> Agent:
 @router.get("/{agent_id}/lead-capture", response_model=LeadCaptureConfigResponse)
 async def get_lead_capture_config(
     agent_id: UUID,
-    current_user: User = Depends(require_permissions("manage_agents")),
+    current_user: User = Depends(
+        require_any_permission("view_agents", "manage_agents")),
     db: Session = Depends(get_db),
 ):
     """Fetch the agent's lead-capture config, lazily creating a default (OFF) row."""

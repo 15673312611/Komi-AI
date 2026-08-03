@@ -21,6 +21,7 @@ import { Menu, MenuButton, MenuItems, MenuItem } from '@headlessui/vue'
 import { EllipsisVerticalIcon } from '@heroicons/vue/24/outline'
 import { useUsers } from '@/composables/useUsers'
 import UserForm from './UserForm.vue'
+import ResetPasswordForm from './ResetPasswordForm.vue'
 import Modal from '@/components/common/Modal.vue'
 import { userService } from '@/services/user'
 import { useRouter } from 'vue-router'
@@ -45,13 +46,17 @@ const {
   showEditModal,
   showDeleteModal,
   showCreateModal,
+  showResetPasswordModal,
+  resettingPassword,
   selectedUser,
   fetchUsers,
   handleEditUser,
   handleUpdateUser,
   handleDeleteUser,
   confirmDeleteUser,
-  handleCreateUser
+  handleCreateUser,
+  handleResetPassword,
+  confirmResetPassword
 } = useUsers()
 
 const currentUser = userService.getCurrentUser()
@@ -291,6 +296,14 @@ const onDeleteRow = (row: AgentRow) => {
   handleDeleteUser(user)
 }
 
+// Your own password goes through profile settings, which asks for the current
+// one — the API rejects a self-reset, so the row menu doesn't offer it either.
+const onResetPasswordRow = (row: AgentRow) => {
+  const user = findUser(row.id)
+  if (!user) return
+  handleResetPassword(user)
+}
+
 // Wrap the CRUD handlers so the parent gets notified to reload counts.
 const handleCreateUserAndNotify = async (
   userData: Partial<User> & { password?: string },
@@ -439,6 +452,11 @@ onMounted(async () => {
                 </button>
               </MenuItem>
               <MenuItem v-if="row.id !== currentUser?.id" v-slot="{ active }">
+                <button :class="['menu-item', { active }]" @click="onResetPasswordRow(row)">
+                  Reset Password
+                </button>
+              </MenuItem>
+              <MenuItem v-if="row.id !== currentUser?.id" v-slot="{ active }">
                 <button :class="['menu-item', { active }]" @click="onDeleteRow(row)">
                   Delete
                 </button>
@@ -461,6 +479,19 @@ onMounted(async () => {
           :user="selectedUser"
           @submit="handleUpdateUser"
           @cancel="showEditModal = false"
+        />
+      </template>
+    </Modal>
+
+    <!-- Reset Password Modal -->
+    <Modal v-if="showResetPasswordModal && selectedUser" persistent @close="showResetPasswordModal = false">
+      <template #title>Reset Password</template>
+      <template #content>
+        <ResetPasswordForm
+          :user="selectedUser"
+          :submitting="resettingPassword"
+          @submit="confirmResetPassword"
+          @cancel="showResetPasswordModal = false"
         />
       </template>
     </Modal>

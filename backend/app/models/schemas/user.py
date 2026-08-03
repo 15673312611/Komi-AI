@@ -14,12 +14,13 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-from pydantic import BaseModel, EmailStr, field_serializer
+from pydantic import BaseModel, EmailStr, field_serializer, field_validator
 from typing import Optional, List
 from uuid import UUID
 from datetime import datetime
 
 from app.core.s3 import sign_s3_url
+from app.core.security import validate_password_strength
 
 from app.models.schemas.role import RoleResponse
 
@@ -38,6 +39,14 @@ class UserCreate(UserBase):
     password: str
     role_id: int
 
+    @field_validator('password')
+    @classmethod
+    def _check_strength(cls, value: str) -> str:
+        # The password an admin picks for a new teammate clears the same bar as
+        # one set by a reset — otherwise the policy is one invite away from
+        # being bypassed.
+        return validate_password_strength(value)
+
 
 class UserUpdate(BaseModel):
     email: Optional[EmailStr] = None
@@ -48,6 +57,42 @@ class UserUpdate(BaseModel):
     role_id: Optional[int] = None
     profile_pic: Optional[str] = None
     is_online: Optional[bool] = None
+
+class TeammateResponse(BaseModel):
+    """A colleague as the inbox needs them: enough to pick one and render them.
+
+    No role, no permissions, no timestamps — an agent listing who they can hand
+    a chat to has no business reading the org's permission matrix, which is
+    what UserResponse would give them.
+    """
+    id: UUID
+    full_name: Optional[str] = None
+    email: EmailStr
+    profile_pic: Optional[str] = None
+    is_online: Optional[bool] = False
+
+    @field_serializer('profile_pic')
+    def _sign_profile_pic(self, v: Optional[str]) -> Optional[str]:
+        return sign_s3_url(v) if v else v
+
+    class Config:
+        from_attributes = True
+
+
+class AdminPasswordReset(BaseModel):
+    """An admin setting a new password for someone else in their organization.
+
+    No current_password: the admin does not know it — that is the point of a
+    reset. The policy check lives here because nobody is around to see the
+    form's strength meter when the call arrives from a script.
+    """
+    new_password: str
+
+    @field_validator('new_password')
+    @classmethod
+    def _check_strength(cls, value: str) -> str:
+        return validate_password_strength(value)
+
 
 class UserStatusUpdate(BaseModel):
     is_online: bool

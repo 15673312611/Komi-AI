@@ -14,13 +14,23 @@ See the License for the specific language governing permissions and
 limitations under the License.
 -->
 
+<script setup lang="ts">
+import DashboardLayout from '@/layouts/DashboardLayout.vue'
+import { resolveLandingRoute } from '@/router/landing'
+
+// Not '/': that redirects to the landing route, which for a user who was just
+// denied is often another denial. Resolved once — the component is created
+// fresh per visit, and permissions do not change mid-render.
+const landingRoute = resolveLandingRoute()
+</script>
+
 <template>
   <DashboardLayout>
     <div class="unauthorized">
       <h1>Access Denied</h1>
       <p>You don't have permission to access this page.</p>
-      <router-link to="/" class="back-link">
-        Return to Dashboard
+      <router-link :to="landingRoute" class="back-link">
+        Go to a page you can open
       </router-link>
     </div>
   </DashboardLayout>

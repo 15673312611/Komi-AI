@@ -33,6 +33,7 @@ from app.api.channels.accounts import get_org_account_or_404
 from app.channels import get_adapter
 from app.channels.meta_base import fetch_message_templates, graph_detail, graph_get
 from app.core.auth import (
+    CHAT_MANAGE_PERMISSIONS,
     INBOX_PERMISSIONS,
     get_current_organization,
     require_any_permission,
@@ -57,10 +58,16 @@ router = APIRouter()
 # Meta's own template authoring UI, which is where we send people to write one.
 TEMPLATE_LIBRARY_URL = "https://business.facebook.com/latest/whatsapp_manager/template_library"
 
-# Template sending is inbox work — reopening a window, starting a conversation
-# — done by support agents, not org admins. INBOX_PERMISSIONS is shared with
-# the People page so the two surfaces can't disagree about who works the inbox.
+# Reading the template list is inbox work — the picker needs it — so any role
+# that works the inbox qualifies. INBOX_PERMISSIONS is shared with the People
+# page so the two surfaces can't disagree about who that is.
 require_inbox_agent = require_any_permission(*INBOX_PERMISSIONS)
+
+# Sending is not: an outbound template is a billable Meta message to a phone
+# number, with opt-in obligations attached. It takes the same grant as taking
+# over or reassigning a chat, so a view-only role can browse templates without
+# being able to fire one.
+require_inbox_sender = require_any_permission(*CHAT_MANAGE_PERMISSIONS)
 
 
 def _whatsapp_account_or_404(db: Session, account_id: UUID, organization: Organization):
@@ -101,7 +108,7 @@ def _waba_credentials(db: Session, account) -> tuple[str, str]:
 async def start_whatsapp_conversation(
     account_id: UUID,
     request: OutboundConversationRequest,
-    current_user: User = Depends(require_inbox_agent),
+    current_user: User = Depends(require_inbox_sender),
     organization: Organization = Depends(get_current_organization),
     db: Session = Depends(get_db),
 ):
@@ -128,7 +135,7 @@ async def start_whatsapp_conversation(
 async def send_whatsapp_template(
     account_id: UUID,
     request: TemplateSendRequest,
-    current_user: User = Depends(require_inbox_agent),
+    current_user: User = Depends(require_inbox_sender),
     organization: Organization = Depends(get_current_organization),
     db: Session = Depends(get_db),
 ):

@@ -22,6 +22,7 @@ from unittest.mock import patch, MagicMock
 from app.database import Base, get_db
 from fastapi import FastAPI, HTTPException
 from app.models.user import User, UserGroup
+from app.models.organization import Organization
 from app.models.role import Role
 from app.models.permission import Permission, role_permissions
 from uuid import UUID, uuid4
@@ -189,7 +190,7 @@ def test_create_user(admin_client: TestClient, test_role: Role, test_organizatio
     user_data = {
         "email": "newuser@test.com",
         "full_name": "New Test User",
-        "password": "testpassword123",
+        "password": "TestPassw0rd!",
         "is_active": True,
         "role_id": test_role.id,
         "organization_id": str(test_organization.id)
@@ -201,12 +202,28 @@ def test_create_user(admin_client: TestClient, test_role: Role, test_organizatio
     assert data["full_name"] == user_data["full_name"]
     assert data["is_active"] == user_data["is_active"]
 
+def test_create_user_rejects_weak_password(admin_client: TestClient, db: Session, test_role: Role, test_organization):
+    """An invite has to clear the same password policy as a reset"""
+    user_data = {
+        "email": "weakpass@test.com",
+        "full_name": "Weak Password User",
+        "password": "short1",
+        "is_active": True,
+        "role_id": test_role.id,
+        "organization_id": str(test_organization.id)
+    }
+    response = admin_client.post("/api/v1/users", json=user_data)
+
+    assert response.status_code == 422
+    assert db.query(User).filter(User.email == "weakpass@test.com").first() is None
+
+
 def test_create_user_duplicate_email(client: TestClient, test_user: User, test_role: Role):
     """Test creating a user with duplicate email"""
     user_data = {
         "email": test_user.email,
         "full_name": "Another User",
-        "password": "testpassword123",
+        "password": "TestPassw0rd!",
         "is_active": True,
         "role_id": test_role.id
     }
@@ -220,7 +237,7 @@ def test_create_user_rejects_disposable_email(admin_client: TestClient, test_rol
     user_data = {
         "email": "someone@yopmail.com",
         "full_name": "Throwaway User",
-        "password": "testpassword123",
+        "password": "TestPassw0rd!",
         "is_active": True,
         "role_id": test_role.id,
         "organization_id": str(test_organization.id)
@@ -364,14 +381,42 @@ def test_update_profile(client: TestClient, test_user: User):
     assert data["full_name"] == update_data["full_name"]
     assert data["email"] == update_data["email"]
 
-def test_update_password(client: TestClient, test_user: User):
+def test_update_password(client: TestClient, db: Session, test_user: User):
     """Test updating user's password"""
     update_data = {
         "current_password": "testpassword",
-        "password": "newpassword123"
+        "password": "NewPassw0rd!"
     }
     response = client.patch("/api/v1/users/me", json=update_data)
     assert response.status_code == 200
+    # The new hash has to reach the column, not a stray ORM attribute
+    db.refresh(test_user)
+    assert verify_password("NewPassw0rd!", test_user.hashed_password)
+
+
+def test_update_password_rejects_weak_password(client: TestClient, db: Session, test_user: User):
+    """A self-service change has to clear the same policy as an admin reset"""
+    response = client.patch(
+        "/api/v1/users/me",
+        json={"current_password": "testpassword", "password": "short1"},
+    )
+
+    assert response.status_code == 400
+    db.refresh(test_user)
+    assert verify_password("testpassword", test_user.hashed_password)
+
+
+def test_update_password_rejects_wrong_current_password(client: TestClient, db: Session, test_user: User):
+    """The old password still has to be proven"""
+    response = client.patch(
+        "/api/v1/users/me",
+        json={"current_password": "wrongpassword", "password": "NewPassw0rd!"},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Incorrect current password"
+    db.refresh(test_user)
+    assert verify_password("testpassword", test_user.hashed_password)
 
 def test_update_status(client: TestClient, test_user: User):
     """Test updating user's online status"""
@@ -429,7 +474,6 @@ def test_clear_fcm_token(client: TestClient, test_user: User, db: Session):
 @pytest.fixture
 def foreign_role(db) -> Role:
     """A role defined in a different organization."""
-    from app.models.organization import Organization
     other_org = Organization(id=uuid4(), name="Other Org", domain="other-role.example.com")
     db.add(other_org)
     db.commit()
@@ -445,7 +489,7 @@ def test_create_user_rejects_foreign_role(admin_client, foreign_role, test_organ
     user_data = {
         "email": "roletest@test.com",
         "full_name": "Role Test",
-        "password": "testpassword123",
+        "password": "TestPassw0rd!",
         "is_active": True,
         "role_id": foreign_role.id,
         "organization_id": str(test_organization.id),
@@ -467,3 +511,285 @@ def test_update_user_rejects_foreign_role(admin_client, db, test_user, foreign_r
     assert response.json()["detail"] == "Role not found"
     db.refresh(test_user)
     assert test_user.role_id != foreign_role.id
+
+
+# ---------------------------------------------------------------- admin reset
+
+@pytest.fixture
+def agent_user(db: Session, test_organization, test_role: Role) -> User:
+    """A second user in the same org — the one an admin resets."""
+    user = User(
+        id=uuid4(),
+        email="agent@test.com",
+        hashed_password=get_password_hash("oldpassword"),
+        organization_id=test_organization.id,
+        role_id=test_role.id,
+        is_active=True,
+        full_name="Agent User",
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+def test_reset_user_password(admin_client: TestClient, db: Session, agent_user: User):
+    """An admin can set a new password for an agent in their organization"""
+    response = admin_client.post(
+        f"/api/v1/users/{agent_user.id}/reset-password",
+        json={"new_password": "NewPassw0rd!"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["message"] == "Password reset successfully"
+    db.refresh(agent_user)
+    assert verify_password("NewPassw0rd!", agent_user.hashed_password)
+    assert not verify_password("oldpassword", agent_user.hashed_password)
+
+
+@pytest.fixture
+def agent_client(db: Session, test_organization, agent_user: User) -> TestClient:
+    """A client authenticated as a user whose role grants nothing.
+
+    The `client` fixture's require_permissions override targets the factory
+    rather than the closure Depends() actually calls, so it authenticates as a
+    user who *does* hold manage_users. Gate tests need a real unprivileged user.
+    """
+    plain_role = Role(name="Agent Only", organization_id=test_organization.id)
+    db.add(plain_role)
+    db.commit()
+    agent_user.role_id = plain_role.id
+    db.commit()
+    db.refresh(agent_user)
+
+    async def override_get_current_user():
+        return agent_user
+
+    def override_get_db():
+        try:
+            session = TestingSessionLocal()
+            yield session
+        finally:
+            session.close()
+
+    app.dependency_overrides[get_current_user] = override_get_current_user
+    app.dependency_overrides[get_db] = override_get_db
+
+    yield TestClient(app)
+    app.dependency_overrides.clear()
+
+
+def test_reset_user_password_requires_permission(agent_client: TestClient, test_user: User):
+    """Without manage_users the reset is refused"""
+    response = agent_client.post(
+        f"/api/v1/users/{test_user.id}/reset-password",
+        json={"new_password": "NewPassw0rd!"},
+    )
+    assert response.status_code == 403
+
+
+def test_reset_user_password_rejects_weak_password(admin_client: TestClient, db: Session, agent_user: User):
+    """A password below the policy is rejected and nothing is written"""
+    response = admin_client.post(
+        f"/api/v1/users/{agent_user.id}/reset-password",
+        json={"new_password": "short1"},
+    )
+
+    assert response.status_code == 422
+    db.refresh(agent_user)
+    assert verify_password("oldpassword", agent_user.hashed_password)
+
+
+def test_reset_own_password_rejected(admin_client: TestClient, test_user: User):
+    """Changing your own password still requires proving the current one"""
+    response = admin_client.post(
+        f"/api/v1/users/{test_user.id}/reset-password",
+        json={"new_password": "NewPassw0rd!"},
+    )
+
+    assert response.status_code == 400
+    assert "profile settings" in response.json()["detail"]
+
+
+def test_reset_password_rejects_other_org_user(admin_client: TestClient, db: Session, test_role: Role):
+    """A user in another organization is invisible, not resettable"""
+    other_org = Organization(id=uuid4(), name="Other Org", domain="other-reset.example.com")
+    db.add(other_org)
+    db.commit()
+    outsider = User(
+        id=uuid4(),
+        email="outsider@test.com",
+        hashed_password=get_password_hash("oldpassword"),
+        organization_id=other_org.id,
+        is_active=True,
+        full_name="Outsider",
+    )
+    db.add(outsider)
+    db.commit()
+
+    response = admin_client.post(
+        f"/api/v1/users/{outsider.id}/reset-password",
+        json={"new_password": "NewPassw0rd!"},
+    )
+
+    assert response.status_code == 404
+    db.refresh(outsider)
+    assert verify_password("oldpassword", outsider.hashed_password)
+
+
+def test_update_user_ignores_password_field(admin_client: TestClient, db: Session, agent_user: User):
+    """PUT /users/{id} no longer pretends to accept a password"""
+    response = admin_client.put(
+        f"/api/v1/users/{agent_user.id}",
+        json={"full_name": "Renamed", "password": "IgnoredPassw0rd!"},
+    )
+
+    assert response.status_code == 200
+    db.refresh(agent_user)
+    assert agent_user.full_name == "Renamed"
+    assert verify_password("oldpassword", agent_user.hashed_password)
+
+
+# ------------------------------------------------------------------ teammates
+
+@pytest.fixture
+def inbox_agent_client(db: Session, test_organization, agent_user: User) -> TestClient:
+    """Authenticated as a seeded Human Agent — the four permissions and no more."""
+    role = Role(id=88, name="Human Agent", organization_id=test_organization.id)
+    db.add(role)
+    db.commit()
+    for name in ("view_assigned_chats", "manage_assigned_chats",
+                 "view_unassigned_chats", "view_people"):
+        perm = db.query(Permission).filter(Permission.name == name).first()
+        if perm is None:
+            perm = Permission(name=name, description=name)
+            db.add(perm)
+            db.commit()
+            db.refresh(perm)
+        db.execute(role_permissions.insert().values(role_id=role.id, permission_id=perm.id))
+    db.commit()
+    agent_user.role_id = role.id
+    db.commit()
+    db.refresh(agent_user)
+
+    async def override_get_current_user():
+        return agent_user
+
+    def override_get_db():
+        session = TestingSessionLocal()
+        try:
+            yield session
+        finally:
+            session.close()
+
+    app.dependency_overrides[get_current_user] = override_get_current_user
+    app.dependency_overrides[get_db] = override_get_db
+
+    yield TestClient(app)
+    app.dependency_overrides.clear()
+
+
+def test_teammates_visible_to_inbox_roles(inbox_agent_client: TestClient, db: Session, test_organization, test_role: Role):
+    """An agent can list who to hand a chat to, without manage_users.
+
+    The inbox used to call GET /users for this, which 403'd — so Reassign, an
+    action the API allows an agent to perform, had an empty dropdown.
+    """
+    colleague = User(
+        id=uuid4(),
+        email="colleague@test.com",
+        hashed_password=get_password_hash("pw"),
+        organization_id=test_organization.id,
+        role_id=test_role.id,
+        is_active=True,
+        full_name="Colleague",
+    )
+    db.add(colleague)
+    db.commit()
+
+    response = inbox_agent_client.get("/api/v1/users/teammates")
+
+    assert response.status_code == 200
+    emails = {u["email"] for u in response.json()}
+    assert "colleague@test.com" in emails
+
+
+def test_teammates_does_not_leak_roles_or_permissions(inbox_agent_client: TestClient):
+    """The payload is a name and a face — not the org's permission matrix"""
+    response = inbox_agent_client.get("/api/v1/users/teammates")
+
+    assert response.status_code == 200
+    for teammate in response.json():
+        assert set(teammate) <= {"id", "full_name", "email", "profile_pic", "is_online"}
+
+
+def test_teammates_is_org_scoped(inbox_agent_client: TestClient, db: Session):
+    """A teammate from another organization is not a teammate"""
+    other_org = Organization(id=uuid4(), name="Other", domain="other-teammates.example.com")
+    db.add(other_org)
+    db.commit()
+    outsider = User(
+        id=uuid4(),
+        email="outsider@other.com",
+        hashed_password=get_password_hash("pw"),
+        organization_id=other_org.id,
+        is_active=True,
+        full_name="Outsider",
+    )
+    db.add(outsider)
+    db.commit()
+
+    response = inbox_agent_client.get("/api/v1/users/teammates")
+
+    assert response.status_code == 200
+    assert "outsider@other.com" not in {u["email"] for u in response.json()}
+
+
+def test_teammates_requires_an_inbox_permission(db: Session, test_organization) -> None:
+    """Someone with no chat grant at all has no business reading the directory"""
+    role = Role(id=77, name="Nothing", organization_id=test_organization.id)
+    db.add(role)
+    db.commit()
+    user = User(
+        id=uuid4(),
+        email="nothing@test.com",
+        hashed_password=get_password_hash("pw"),
+        organization_id=test_organization.id,
+        role_id=role.id,
+        is_active=True,
+        full_name="Nothing",
+    )
+    db.add(user)
+    db.commit()
+
+    async def override_get_current_user():
+        return user
+
+    def override_get_db():
+        session = TestingSessionLocal()
+        try:
+            yield session
+        finally:
+            session.close()
+
+    app.dependency_overrides[get_current_user] = override_get_current_user
+    app.dependency_overrides[get_db] = override_get_db
+    try:
+        response = TestClient(app).get("/api/v1/users/teammates")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 403
+
+
+def test_teammates_route_is_not_shadowed_by_the_user_id_route(inbox_agent_client: TestClient):
+    """Declared above GET /{user_id}.
+
+    Below it, "teammates" parses as a user id and the request lands on the
+    manage_users route — a 403 for exactly the agents the endpoint is for. A
+    200 here is the proof it resolved to the right handler.
+    """
+    response = inbox_agent_client.get("/api/v1/users/teammates")
+
+    assert response.status_code == 200
+    assert isinstance(response.json(), list)

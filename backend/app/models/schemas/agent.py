@@ -104,6 +104,21 @@ class AgentKnowledge(BaseModel):
     type: str
 
 
+class AgentRosterItem(BaseModel):
+    """An AI agent as the inbox filter needs it: a name to group chats by.
+
+    Deliberately none of AgentResponse's configuration — `instructions`, and
+    especially `guardrail_prompt`, which tells a reader how to phrase a bypass.
+    """
+    id: UUID
+    name: str
+    display_name: Optional[str] = None
+    is_active: bool = True
+
+    class Config:
+        from_attributes = True
+
+
 class AgentResponse(BaseModel):
     id: UUID
     name: str

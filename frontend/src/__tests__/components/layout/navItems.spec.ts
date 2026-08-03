@@ -16,13 +16,15 @@ limitations under the License.
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-const permissions = await vi.hoisted(async () => {
-  const { createPermissionMocks } = await import('../../fixtures/permissions')
-  return createPermissionMocks()
-})
+// Drive the REAL permission checks from a cached user, rather than mocking
+// permissionChecks. Nav visibility and the router now read the same map, and a
+// mock of the checks cannot catch the two disagreeing — which is exactly the
+// bug this suite missed: People was listed for anyone with a chat grant while
+// the route required view_people, so the link bounced.
+const currentUser = await vi.hoisted(async () => ({ value: null as unknown }))
 
-vi.mock('@/utils/permissions', () => ({
-  permissionChecks: permissions,
+vi.mock('@/services/user', () => ({
+  userService: { getCurrentUser: () => currentUser.value },
 }))
 
 vi.mock('@/composables/useEnterpriseFeatures', () => ({
@@ -30,11 +32,22 @@ vi.mock('@/composables/useEnterpriseFeatures', () => ({
 }))
 
 import { useNavItems, PRIMARY_NAV_PATHS } from '@/components/layout/navItems'
+import { userWithPermissions, HUMAN_AGENT_PERMISSIONS } from '../../fixtures/permissions'
+
+const ALL_PERMISSIONS = [
+  'manage_agents', 'view_agents', 'manage_users', 'view_all_chats', 'manage_all_chats',
+  'view_assigned_chats', 'manage_assigned_chats', 'view_unassigned_chats', 'view_people',
+  'manage_knowledge', 'view_knowledge', 'view_analytics', 'view_tickets', 'manage_tickets',
+  'manage_organization', 'view_organization', 'manage_ai_config', 'view_ai_config',
+  'manage_subscription', 'view_subscription',
+]
+
+const asUser = (permissions: string[]) => {
+  currentUser.value = userWithPermissions(permissions)
+}
 
 describe('useNavItems', () => {
-  beforeEach(() => {
-    Object.values(permissions).forEach((fn) => fn.mockReturnValue(true))
-  })
+  beforeEach(() => asUser(ALL_PERMISSIONS))
 
   it('splits primary (bottom-nav) and overflow (More sheet) items', () => {
     const { primaryNavItems, moreNavItems } = useNavItems()
@@ -45,7 +58,6 @@ describe('useNavItems', () => {
       '/ai-agents',
       '/analytics',
     ])
-    // Overflow contains the rest, never a primary path or a section header
     const morePaths = moreNavItems.value.map((i) => i.to)
     expect(morePaths).toContain('/human-agents')
     expect(morePaths).toContain('/knowledge')
@@ -55,9 +67,7 @@ describe('useNavItems', () => {
   })
 
   it('hides permission-gated items for restricted users', () => {
-    permissions.canViewChats.mockReturnValue(false)
-    permissions.canViewAnalytics.mockReturnValue(false)
-    permissions.canManageUsers.mockReturnValue(false)
+    asUser(['manage_agents'])
 
     const { primaryNavItems, moreNavItems, navItems } = useNavItems()
 
@@ -70,6 +80,47 @@ describe('useNavItems', () => {
     expect(moreNavItems.value.map((i) => i.to)).not.toContain('/human-agents')
     // User settings is always available
     expect(navItems.value.map((i) => i.to)).toContain('/settings/user')
+  })
+
+  // The product requirement, as a test: a Human Agent sees the inbox, the
+  // people they talk to, and their own settings. Nothing else.
+  it('shows a Human Agent exactly Inbox, People and User Settings', () => {
+    asUser(HUMAN_AGENT_PERMISSIONS)
+
+    const { navItems } = useNavItems()
+
+    expect(navItems.value.filter((i) => i.to).map((i) => i.to)).toEqual([
+      '/conversations',
+      '/people',
+      '/settings/user',
+    ])
+  })
+
+  // A role with only view_people gets the People link; one with only a chat
+  // grant does not. The nav used to gate People on chat permissions while the
+  // route required view_people, so both cases were wrong in opposite ways.
+  it('gates People on the same permissions as its route', () => {
+    asUser(['view_people'])
+    expect(useNavItems().navItems.value.map((i) => i.to)).toContain('/people')
+
+    asUser(['view_assigned_chats'])
+    expect(useNavItems().navItems.value.map((i) => i.to)).toContain('/people')
+
+    asUser(['manage_knowledge'])
+    expect(useNavItems().navItems.value.map((i) => i.to)).not.toContain('/people')
+  })
+
+  // super_admin bypasses every check on the backend; a frontend check that
+  // does not bypass gives that role an almost-empty sidebar.
+  it('shows everything to a super_admin', () => {
+    asUser(['super_admin'])
+
+    const paths = useNavItems().navItems.value.filter((i) => i.to).map((i) => i.to)
+
+    expect(paths).toContain('/ai-agents')
+    expect(paths).toContain('/human-agents')
+    expect(paths).toContain('/knowledge')
+    expect(paths).toContain('/settings/organization')
   })
 
   it('excludes enterprise subscription when enterprise module is absent', () => {
@@ -102,9 +153,9 @@ describe('useNavItems', () => {
   // User Settings is always visible while the Settings heading used to be
   // permission-gated separately, which orphaned the item into Main Menu.
   it('keeps always-visible settings items under Settings for restricted users', () => {
-    permissions.canViewOrganization.mockReturnValue(false)
-    permissions.canManageOrganization.mockReturnValue(false)
-    permissions.canViewAIConfig.mockReturnValue(false)
+    // Knowledge, so Main Menu still has a non-primary item to group; no
+    // settings grants, so Settings holds only the always-visible entry.
+    asUser(['manage_knowledge'])
 
     const { moreNavGroups } = useNavItems()
     const settings = moreNavGroups.value.find((g) => g.section === 'Settings')
@@ -115,7 +166,7 @@ describe('useNavItems', () => {
   })
 
   it('drops a section whose every item is permission-hidden', () => {
-    Object.values(permissions).forEach((fn) => fn.mockReturnValue(false))
+    asUser([])
 
     const { moreNavGroups, navItems } = useNavItems()
 

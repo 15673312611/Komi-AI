@@ -44,6 +44,15 @@ export const validatePassword = (password: string): PasswordStrength => {
   return strength
 }
 
+/**
+ * The bar the API enforces (app/core/security.py: validate_password_strength):
+ * 8 characters plus at least three of the four character classes. Since the
+ * length check is one of the five criteria the meter counts, "length met and
+ * score >= 4" is exactly that rule. Keep the two in step.
+ */
+export const meetsPasswordPolicy = (strength: PasswordStrength): boolean =>
+  strength.hasMinLength && strength.score >= 4
+
 export const validateDomain = (domain: string): boolean => {
   const domainRegex = /^(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$/
   return domainRegex.test(domain)

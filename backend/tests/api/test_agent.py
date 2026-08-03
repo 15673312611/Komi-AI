@@ -156,21 +156,12 @@ def client(db, test_user) -> TestClient:
         return test_user
 
     async def override_get_unified_auth():
-        # Refresh the user to get the latest role and permissions from the database
+        # Authentication only — the permission check belongs to
+        # require_unified_permissions, which wraps this. Re-implementing it here
+        # made these tests pass whether or not the routes were actually gated.
         db.refresh(test_user)
         db.refresh(test_user.role)
-        
-        # Get user permissions
-        user_permissions = {p.name for p in test_user.role.permissions}
-        
-        # Check if user has manage_agents permission
-        if "manage_agents" not in user_permissions:
-            from fastapi import HTTPException
-            raise HTTPException(
-                status_code=403,
-                detail="Not enough permissions"
-            )
-        
+
         return {
             "auth_type": "jwt",
             "organization_id": test_user.organization_id,  # Keep as UUID, not string
@@ -1676,3 +1667,212 @@ def test_performance_with_complex_agent_data(
     
     assert response.status_code == 200
     assert retrieval_time < 2.0  # Should complete within 2 seconds
+
+
+# ---------------------------------------------------------------- permissions
+
+@pytest.fixture
+def unprivileged_client(db, test_organization_id) -> TestClient:
+    """A client whose role grants nothing.
+
+    get_unified_auth authenticates only; require_unified_permissions is what
+    refuses. Before that split the check lived inside the auth helper, so every
+    route sharing it — including reading your own org's subscription — demanded
+    manage_agents.
+    """
+    role = Role(name="No Permissions", organization_id=test_organization_id)
+    db.add(role)
+    db.commit()
+    user = User(
+        id=uuid4(),
+        email="nopermissions@example.com",
+        hashed_password="hashed_password",
+        is_active=True,
+        organization_id=test_organization_id,
+        full_name="No Permissions",
+        role_id=role.id,
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+
+    async def override_get_unified_auth():
+        return {
+            "auth_type": "jwt",
+            "organization_id": user.organization_id,
+            "user_id": user.id,
+            "current_user": user,
+        }
+
+    def override_get_db():
+        yield db
+
+    app.dependency_overrides[get_unified_auth] = override_get_unified_auth
+    app.dependency_overrides[get_db] = override_get_db
+
+    yield TestClient(app)
+    app.dependency_overrides.clear()
+
+
+def test_agent_list_requires_manage_agents(unprivileged_client: TestClient):
+    """Reading the agent list still needs manage_agents after the authn/authz split"""
+    assert unprivileged_client.get("/api/agents/list").status_code == 403
+
+
+def test_agent_detail_requires_manage_agents(unprivileged_client: TestClient, test_agent: Agent):
+    """Agent config carries instructions and the guardrail prompt — not for everyone"""
+    assert unprivileged_client.get(f"/api/agents/{test_agent.id}").status_code == 403
+
+
+def test_agent_update_requires_manage_agents(unprivileged_client: TestClient, test_agent: Agent):
+    """A missed wrapper here would let any org member rewrite an agent"""
+    response = unprivileged_client.put(
+        f"/api/agents/{test_agent.id}", json={"name": "Hijacked"}
+    )
+    assert response.status_code == 403
+
+
+def test_agent_customization_requires_manage_agents(unprivileged_client: TestClient, test_agent: Agent):
+    """Customization is customer-facing branding"""
+    response = unprivileged_client.post(
+        f"/api/agents/{test_agent.id}/customization", json={"chat_bubble_color": "#000000"}
+    )
+    assert response.status_code == 403
+
+
+def test_guardrail_default_requires_manage_agents(unprivileged_client: TestClient):
+    """The default guardrail prompt tells a reader how to phrase a bypass"""
+    assert unprivileged_client.get("/api/agents/guardrail-default").status_code == 403
+
+
+# -------------------------------------------------------------------- roster
+
+@pytest.fixture
+def inbox_agent_client(db, test_organization_id) -> TestClient:
+    """A seeded Human Agent: works the inbox, manages no AI agents."""
+    role = Role(name="Human Agent", organization_id=test_organization_id)
+    db.add(role)
+    db.commit()
+    for name in ("view_assigned_chats", "manage_assigned_chats", "view_people"):
+        perm = Permission(name=name, description=name)
+        db.add(perm)
+        db.commit()
+        db.execute(role_permissions.insert().values(role_id=role.id, permission_id=perm.id))
+    db.commit()
+    user = User(
+        id=uuid4(),
+        email="inboxagent@example.com",
+        hashed_password="hashed_password",
+        is_active=True,
+        organization_id=test_organization_id,
+        full_name="Inbox Agent",
+        role_id=role.id,
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+
+    async def override_get_current_user():
+        return user
+
+    def override_get_db():
+        yield db
+
+    app.dependency_overrides[get_current_user] = override_get_current_user
+    app.dependency_overrides[get_db] = override_get_db
+
+    yield TestClient(app)
+    app.dependency_overrides.clear()
+
+
+def test_roster_readable_by_inbox_roles(inbox_agent_client: TestClient, test_agent: Agent):
+    """The inbox filter needs agent names; it does not need manage_agents"""
+    response = inbox_agent_client.get("/api/agents/roster")
+
+    assert response.status_code == 200
+    assert [a["name"] for a in response.json()] == [test_agent.name]
+
+
+def test_roster_withholds_instructions_and_guardrail(inbox_agent_client: TestClient, test_agent: Agent):
+    """A guardrail prompt tells a reader how to phrase a bypass"""
+    response = inbox_agent_client.get("/api/agents/roster")
+
+    assert response.status_code == 200
+    for item in response.json():
+        assert set(item) == {"id", "name", "display_name", "is_active"}
+
+
+def test_roster_is_org_scoped(inbox_agent_client: TestClient, db, test_agent: Agent):
+    """Another tenant's agents are not on this roster"""
+    other_org = Organization(id=uuid4(), name="Other", domain="other-roster.example.com")
+    db.add(other_org)
+    db.commit()
+    db.add(Agent(
+        id=uuid4(),
+        name="Foreign Agent",
+        display_name="Foreign",
+        agent_type=AgentType.CUSTOMER_SUPPORT,
+        instructions=["secret"],
+        is_active=True,
+        organization_id=other_org.id,
+    ))
+    db.commit()
+
+    response = inbox_agent_client.get("/api/agents/roster")
+
+    assert response.status_code == 200
+    assert "Foreign Agent" not in [a["name"] for a in response.json()]
+
+
+def test_roster_route_is_not_shadowed_by_the_agent_id_route(inbox_agent_client: TestClient):
+    """Declared above GET /{agent_id}, which takes a UUID — below it, 422"""
+    assert inbox_agent_client.get("/api/agents/roster").status_code == 200
+
+
+def test_view_agents_grants_the_reads(db, test_organization_id, test_agent: Agent):
+    """view_agents was declared in the catalogue but enforced nowhere.
+
+    An admin could tick it on a role and nothing happened: every /agent read
+    still demanded manage_agents, so the page rendered and then 403'd.
+    """
+    role = Role(name="Agent Viewer", organization_id=test_organization_id)
+    db.add(role)
+    db.commit()
+    perm = Permission(name="view_agents", description="Can view chat agents")
+    db.add(perm)
+    db.commit()
+    db.execute(role_permissions.insert().values(role_id=role.id, permission_id=perm.id))
+    db.commit()
+    viewer = User(
+        id=uuid4(),
+        email="viewer@example.com",
+        hashed_password="hashed_password",
+        is_active=True,
+        organization_id=test_organization_id,
+        full_name="Viewer",
+        role_id=role.id,
+    )
+    db.add(viewer)
+    db.commit()
+
+    async def override_get_unified_auth():
+        return {
+            "auth_type": "jwt",
+            "organization_id": viewer.organization_id,
+            "user_id": viewer.id,
+            "current_user": viewer,
+        }
+
+    def override_get_db():
+        yield db
+
+    app.dependency_overrides[get_unified_auth] = override_get_unified_auth
+    app.dependency_overrides[get_db] = override_get_db
+    try:
+        client = TestClient(app)
+        assert client.get("/api/agents/list").status_code == 200
+        assert client.get(f"/api/agents/{test_agent.id}").status_code == 200
+        # Reading is not managing
+        assert client.put(f"/api/agents/{test_agent.id}", json={"name": "X"}).status_code == 403
+    finally:
+        app.dependency_overrides.clear()

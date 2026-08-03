@@ -54,6 +54,28 @@ export async function listUsers(): Promise<User[]> {
   return response.data
 }
 
+/** A colleague as the inbox needs them, from GET /users/teammates. */
+export interface Teammate {
+  id: string
+  full_name: string | null
+  email: string
+  profile_pic?: string | null
+  is_online?: boolean
+}
+
+/**
+ * Who a conversation can be handed to.
+ *
+ * The inbox used to call GET /users for this, which needs manage_users — so an
+ * agent got a 403 and an empty Reassign dropdown for an action the API would
+ * have allowed. This endpoint is gated on the inbox permissions instead, and
+ * returns no roles or permission lists.
+ */
+export async function listTeammates(): Promise<Teammate[]> {
+  const response = await api.get('users/teammates')
+  return response.data
+}
+
 /**
  * Aggregated Human-Agents dashboard (KPIs + per-agent load/resolved).
  * Returns null if the backend endpoint isn't available yet (graceful fallback).
@@ -86,11 +108,14 @@ export async function deleteUser(id: string): Promise<void> {
   await api.delete(`users/${id}`)
 }
 
-export async function updateUserPassword(id: string, currentPassword: string, newPassword: string): Promise<void> {
-  await api.put(`users/${id}/password`, {
-    current_password: currentPassword,
-    new_password: newPassword
-  })
+/**
+ * Admin-set password for another user in the organization. The admin never
+ * knows the old one, so nothing is verified here — `manage_users` is the gate,
+ * and the API refuses to reset your own password (that goes through profile
+ * settings, which does ask for the current password).
+ */
+export async function resetUserPassword(id: string, newPassword: string): Promise<void> {
+  await api.post(`users/${id}/reset-password`, { new_password: newPassword })
 }
 
 export async function updateUserProfile(id: string, profileData: Partial<User>): Promise<User> {

@@ -21,18 +21,18 @@ import { chatService } from '@/services/chat'
 import { userService } from '@/services/user'
 import { socketService } from '@/services/socket'
 import { toast } from 'vue-sonner'
-import api from '@/services/api'
 import LinkedTicketCard from '@/components/tickets/LinkedTicketCard.vue'
 import { permissionChecks } from '@/utils/permissions'
 import { canRequestRating, endChatMessage as endChatMessageFor } from '@/utils/endChat'
 import { getInitials } from '@/utils/text'
+import type { Teammate } from '@/services/users'
 import { canTakeOverChat } from '@/utils/chatState'
 
 const canViewTickets = permissionChecks.canViewTickets()
 
 interface Props {
   chatInfo: ChatDetail | null
-  users: Array<{id: string, full_name: string, email: string}>
+  users: Teammate[]
   isLoading?: boolean
 }
 
@@ -51,8 +51,8 @@ const actionLoading = ref(false)
 const reassigning = ref(false)
 const showReassign = ref(false)
 const selectedUserId = ref('')
-const users = ref<Array<{id: string, full_name: string, email: string}>>([])
-const loadingUsers = ref(false)
+// Reassigning is a manage-chat action; the parent supplies the teammate list.
+const canReassign = permissionChecks.canTakeOverChats()
 
 // Chat action functions
 const currentUserId = userService.getUserId()
@@ -194,7 +194,7 @@ const getUserNameById = (userId: string | null): string => {
     return props.chatInfo?.agent?.name || 'AI Agent'
   }
   const user = props.users.find(u => u.id === userId)
-  return user ? user.full_name : 'Unknown User'
+  return user?.full_name || 'Assigned teammate'
 }
 
 // Helper function to format date
@@ -223,22 +223,12 @@ const customerInitials = computed(() =>
   getInitials(props.chatInfo?.customer?.full_name || props.chatInfo?.customer?.email)
 )
 
-// Load users for reassign dropdown
-const loadUsers = async () => {
-  if (loadingUsers.value) return
-  loadingUsers.value = true
-  try {
-    const response = await api.get('/users')
-    users.value = response.data
-  } catch (e) {
-    console.error('Failed to load users', e)
-  } finally {
-    loadingUsers.value = false
-  }
-}
-
-const openReassign = async () => {
-  await loadUsers()
+// The teammate list arrives as a prop (ConversationsView loads it once from
+// /users/teammates). This component used to fetch /users itself into a local
+// ref that shadowed the prop — which needed manage_users, so for an agent the
+// dropdown was always empty even though the API would have allowed the
+// reassign.
+const openReassign = () => {
   showReassign.value = true
 }
 
@@ -371,9 +361,9 @@ const confirmReassign = async () => {
           </button>
           
           <button 
-            v-if="chatInfo.status === 'open' && chatInfo.user_id"
+            v-if="canReassign && chatInfo.status === 'open' && chatInfo.user_id && users.length"
             class="action-btn"
-            :disabled="reassigning || loadingUsers"
+            :disabled="reassigning"
             @click="openReassign"
           >
             Reassign Chat

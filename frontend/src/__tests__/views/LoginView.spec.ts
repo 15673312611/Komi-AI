@@ -28,15 +28,16 @@ vi.mock('@/services/auth', () => ({
   }
 }))
 
-// Mock the permission checks
-vi.mock('@/utils/permissions', () => ({
-  permissionChecks: {
-    canManageAgents: vi.fn().mockReturnValue(false),
-    canViewChats: vi.fn().mockReturnValue(false),
-    canManageUsers: vi.fn().mockReturnValue(false),
-    canViewOrganization: vi.fn().mockReturnValue(false),
-    canViewAIConfig: vi.fn().mockReturnValue(false)
-  }
+// The landing route is resolved from the real permission checks reading the
+// cached user, so this drives the user rather than mocking the checks away.
+const currentUser = vi.hoisted(() => ({ value: null as unknown }))
+
+vi.mock('@/services/user', () => ({
+  userService: {
+    getCurrentUser: () => currentUser.value,
+    setCurrentUser: vi.fn(),
+    getUserId: () => 'user-1',
+  },
 }))
 
 // Mock enterprise features
@@ -81,7 +82,7 @@ vi.mock('@/composables/useNotifications', () => ({
 
 // Import the mocked modules
 import { authService } from '@/services/auth'
-import { permissionChecks } from '@/utils/permissions'
+import { userWithPermissions } from '../fixtures/permissions'
 
 describe('LoginView', () => {
   let wrapper: VueWrapper
@@ -98,6 +99,7 @@ describe('LoginView', () => {
         { path: '/human-agents', name: 'human-agents', component: { template: '<div>Human Agents</div>' } },
         { path: '/settings/organization', name: 'org-settings', component: { template: '<div>Organization Settings</div>' } },
         { path: '/settings/ai-config', name: 'ai-config', component: { template: '<div>AI Config</div>' } },
+        { path: '/settings/user', name: 'user-settings', component: { template: '<div>User Settings</div>' } },
         { path: '/403', name: 'forbidden', component: { template: '<div>403</div>' } }
       ]
     })
@@ -109,10 +111,8 @@ describe('LoginView', () => {
     await router.push('/')
     await router.isReady()
     
-    // Reset all permission checks to false
-    Object.keys(permissionChecks).forEach(key => {
-      ;(permissionChecks[key as keyof typeof permissionChecks] as any).mockReturnValue(false)
-    })
+    // A user with no grants unless a test says otherwise
+    currentUser.value = userWithPermissions([])
     
     wrapper = mount(LoginView, {
       global: {
@@ -163,8 +163,8 @@ describe('LoginView', () => {
     // Mock successful login
     ;(authService.login as any).mockResolvedValue({ id: 1, email: 'test@example.com' })
     
-    // Mock permissions - user can manage agents
-    ;(permissionChecks.canManageAgents as any).mockReturnValue(true)
+    // User can manage agents
+    currentUser.value = userWithPermissions(['manage_agents'])
 
     await wrapper.find('input[type="email"]').setValue('test@example.com')
     await wrapper.find('input[type="password"]').setValue('password123')
@@ -202,36 +202,15 @@ describe('LoginView', () => {
     ;(authService.login as any).mockResolvedValue({ id: 1, email: 'test@example.com' })
 
     const testCases = [
-      {
-        permission: 'canManageAgents',
-        route: '/ai-agents'
-      },
-      {
-        permission: 'canViewChats',
-        route: '/conversations'
-      },
-      {
-        permission: 'canManageUsers',
-        route: '/human-agents'
-      },
-      {
-        permission: 'canViewOrganization',
-        route: '/settings/organization'
-      },
-      {
-        permission: 'canViewAIConfig',
-        route: '/settings/ai-config'
-      }
+      { permission: 'manage_agents', route: '/ai-agents' },
+      { permission: 'view_assigned_chats', route: '/conversations' },
+      { permission: 'manage_users', route: '/human-agents' },
+      { permission: 'view_organization', route: '/settings/organization' },
+      { permission: 'view_ai_config', route: '/settings/ai-config' },
     ]
 
     for (const testCase of testCases) {
-      // Reset all permission checks to false
-      Object.keys(permissionChecks).forEach(key => {
-        ;(permissionChecks[key as keyof typeof permissionChecks] as any).mockReturnValue(false)
-      })
-      
-      // Set the current permission to true
-      ;(permissionChecks[testCase.permission as keyof typeof permissionChecks] as any).mockReturnValue(true)
+      currentUser.value = userWithPermissions([testCase.permission])
 
       // Reset router and wait for it to be ready
       await router.push('/')
@@ -249,13 +228,11 @@ describe('LoginView', () => {
     }
   })
 
-  it('redirects to 403 when no permissions are granted', async () => {
+  // Used to land on /403 — which was not a registered route, so the user
+  // silently ended up on /ai-agents, a page they had just been refused.
+  it('lands a permissionless user on their own settings, never on 403', async () => {
     ;(authService.login as any).mockResolvedValue({ id: 1, email: 'test@example.com' })
-    
-    // Set all permissions to false
-    Object.keys(permissionChecks).forEach(key => {
-      ;(permissionChecks[key as keyof typeof permissionChecks] as any).mockReturnValue(false)
-    })
+    currentUser.value = userWithPermissions([])
 
     await wrapper.find('input[type="email"]').setValue('test@example.com')
     await wrapper.find('input[type="password"]').setValue('password123')
@@ -264,6 +241,6 @@ describe('LoginView', () => {
     // Wait for all promises to resolve
     await flushPromises()
     
-    expect(router.currentRoute.value.path).toBe('/403')
+    expect(router.currentRoute.value.path).toBe('/settings/user')
   })
 }) 

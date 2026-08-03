@@ -24,7 +24,7 @@ import ChatInfoPanel from '@/components/conversations/ChatInfoPanel.vue'
 import type { Conversation, ChatDetail } from '@/types/chat'
 import { chatService } from '@/services/chat'
 import { agentService } from '@/services/agent'
-import api from '@/services/api'
+import { listTeammates, type Teammate } from '@/services/users'
 import channelsService, { type ChannelAccount } from '@/services/channels'
 import NewWhatsAppConversation from '@/components/conversations/NewWhatsAppConversation.vue'
 import { useBreakpoint } from '@/composables/useBreakpoint'
@@ -104,7 +104,7 @@ const filterValues = ref({
   userFilter: ''
 })
 const showFilters = ref(false)
-const users = ref<Array<{id: string, full_name: string, email: string}>>([])
+const users = ref<Teammate[]>([])
 const loadingUsers = ref(false)
 const agents = ref<Array<{id: string, name: string, display_name: string | null}>>([])
 const loadingAgents = ref(false)
@@ -222,13 +222,15 @@ const toggleFilters = () => {
 
 const loadUsers = async () => {
   if (loadingUsers.value) return
-  
+
   loadingUsers.value = true
   try {
-    const response = await api.get('/users')
-    users.value = response.data
+    // /users/teammates, not /users: the latter needs manage_users, so this
+    // 403'd on every inbox mount for an agent and left the assignee filter and
+    // the Reassign dropdown empty.
+    users.value = await listTeammates()
   } catch (error) {
-    console.error('Failed to load users:', error)
+    console.error('Failed to load teammates:', error)
   } finally {
     loadingUsers.value = false
   }
@@ -239,8 +241,9 @@ const loadAgents = async () => {
   
   loadingAgents.value = true
   try {
-    const agentsList = await agentService.getOrganizationAgents()
-    agents.value = agentsList
+    // The roster, not the full agent list: filtering needs names, and
+    // getOrganizationAgents needs manage_agents.
+    agents.value = await agentService.getAgentRoster()
   } catch (error) {
     console.error('Failed to load agents:', error)
   } finally {

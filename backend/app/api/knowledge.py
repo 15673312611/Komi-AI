@@ -17,7 +17,7 @@ limitations under the License.
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Depends, Body, Query, status
 from typing import List, Optional
 from app.models.user import User
-from app.core.auth import get_current_user, require_permissions
+from app.core.auth import get_current_user, require_any_permission, require_permissions
 from app.core.logger import get_logger
 import os
 import asyncio
@@ -745,7 +745,8 @@ async def get_knowledge_by_agent(
     agent_id: str,
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=10, ge=1, le=100),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(
+        require_any_permission("view_knowledge", "manage_knowledge")),
     db: Session = Depends(get_db)
 ):
     """Get knowledge sources and their data for an agent with pagination"""
@@ -755,6 +756,14 @@ async def get_knowledge_by_agent(
             agent_uuid = UUID(agent_id)
         except ValueError:
             raise HTTPException(status_code=400, detail="Invalid agent ID format")
+
+        # The agent must belong to the caller's organization. count_by_agent and
+        # get_by_agent below filter on agent_uuid alone, so without this an id
+        # from another tenant returns that tenant's knowledge inventory — the
+        # link/unlink routes have always checked this; this read never did.
+        agent = db.query(Agent).filter(Agent.id == agent_uuid).first()
+        if not agent or agent.organization_id != current_user.organization_id:
+            raise HTTPException(status_code=404, detail="Agent not found")
 
         logger.debug(f"Getting knowledge for agent {agent_uuid}")
         knowledge_repo = KnowledgeRepository(db)
@@ -893,7 +902,8 @@ async def get_agent_queue_items(
 @router.get("/queue/organization/{org_id}")
 async def get_organization_queue_items(
     org_id: UUID,
-    current_user: User = Depends(require_permissions("manage_knowledge")),
+    current_user: User = Depends(
+        require_any_permission("view_knowledge", "manage_knowledge")),
     db: Session = Depends(get_db)
 ):
     """Get all in-flight queue items (pending, processing, failed) for an org."""
@@ -958,7 +968,8 @@ async def get_knowledge_by_organization(
     org_id: str,
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=10, ge=1, le=100),
-    current_user: User = Depends(require_permissions("manage_knowledge")),
+    current_user: User = Depends(
+        require_any_permission("view_knowledge", "manage_knowledge")),
     db: Session = Depends(get_db)
 ):
     """Get knowledge sources and their data for an organization with pagination"""
@@ -1057,7 +1068,8 @@ async def get_knowledge_by_organization(
 @router.get("/queue/{queue_id}")
 async def get_queue_status(
     queue_id: int,
-    current_user: User = Depends(require_permissions("manage_knowledge")),
+    current_user: User = Depends(
+        require_any_permission("view_knowledge", "manage_knowledge")),
     db: Session = Depends(get_db)
 ):
     """Get status of a queued knowledge item"""
@@ -1087,7 +1099,8 @@ async def get_queue_status(
 
 @router.get("/processor/status")
 async def get_processor_status(
-    current_user: User = Depends(require_permissions("manage_knowledge")),
+    current_user: User = Depends(
+        require_any_permission("view_knowledge", "manage_knowledge")),
     db: Session = Depends(get_db)
 ):
     """Get status of the knowledge processor for user's organization"""

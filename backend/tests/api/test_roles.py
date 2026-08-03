@@ -24,7 +24,7 @@ from app.models.role import Role
 from app.models.permission import Permission, role_permissions
 from uuid import UUID, uuid4
 from app.api import roles as roles_router
-from app.core.auth import get_current_user, require_permissions
+from app.core.auth import get_current_user
 from app.main import app
 from app.core.config import settings
 from tests.conftest import engine, TestingSessionLocal, create_tables
@@ -108,11 +108,14 @@ def test_user(db: Session, test_organization, test_role: Role) -> User:
 
 @pytest.fixture
 def client(test_user: User) -> TestClient:
-    """Create test client with mocked dependencies"""
-    async def override_get_current_user():
-        return test_user
+    """Client authenticated as a user whose role really holds manage_roles.
 
-    async def override_require_permissions(*args, **kwargs):
+    There used to be a `dependency_overrides[require_permissions]` line here.
+    It never did anything — require_permissions is a factory and FastAPI keys
+    overrides on the closure it returns — so it read as coverage while the real
+    gates ran unchecked. The fixture role grants the permissions instead.
+    """
+    async def override_get_current_user():
         return test_user
 
     def override_get_db():
@@ -123,10 +126,10 @@ def client(test_user: User) -> TestClient:
             db.close()
 
     app.dependency_overrides[get_current_user] = override_get_current_user
-    app.dependency_overrides[require_permissions] = lambda x: override_require_permissions
     app.dependency_overrides[get_db] = override_get_db
-    
-    return TestClient(app)
+
+    yield TestClient(app)
+    app.dependency_overrides.clear()
 
 def test_create_role(client: TestClient, test_permissions):
     """Test creating a new role"""
@@ -313,3 +316,173 @@ def test_remove_invalid_permission(client: TestClient, test_role):
     response = client.delete(f"/api/v1/roles/{test_role.id}/permissions/invalid_permission")
     assert response.status_code == 404
     assert "Permission not found" in response.json()["detail"] 
+
+# ------------------------------------------------- permission gating & escalation
+
+@pytest.fixture
+def unprivileged_client(db: Session, test_organization) -> TestClient:
+    """A client whose role grants nothing.
+
+    Every endpoint here except POST used to be Depends(get_current_user) with
+    only an org check, so any authenticated user could rewrite roles — including
+    granting their own role super_admin.
+    """
+    # Explicit id: the test_role fixture hardcodes id=1, so an autoincrement
+    # here collides depending on which fixture resolves first.
+    role = Role(id=99, name="No Permissions", organization_id=test_organization.id)
+    db.add(role)
+    db.commit()
+    user = User(
+        id=uuid4(),
+        email="nopermissions@test.com",
+        hashed_password="hashed_password",
+        organization_id=test_organization.id,
+        role_id=role.id,
+        is_active=True,
+        full_name="No Permissions",
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+
+    async def override_get_current_user():
+        return user
+
+    def override_get_db():
+        session = TestingSessionLocal()
+        try:
+            yield session
+        finally:
+            session.close()
+
+    app.dependency_overrides[get_current_user] = override_get_current_user
+    app.dependency_overrides[get_db] = override_get_db
+
+    yield TestClient(app)
+    app.dependency_overrides.clear()
+
+
+def test_role_endpoints_require_permissions(unprivileged_client: TestClient, test_role: Role):
+    """None of the role endpoints are reachable without manage_roles/manage_users"""
+    role_id = test_role.id
+    assert unprivileged_client.get("/api/v1/roles").status_code == 403
+    assert unprivileged_client.get(f"/api/v1/roles/{role_id}").status_code == 403
+    assert unprivileged_client.get("/api/v1/roles/permissions/all").status_code == 403
+    assert unprivileged_client.post("/api/v1/roles", json={"name": "X", "permissions": []}).status_code == 403
+    assert unprivileged_client.put(f"/api/v1/roles/{role_id}", json={"name": "X"}).status_code == 403
+    assert unprivileged_client.delete(f"/api/v1/roles/{role_id}").status_code == 403
+    assert unprivileged_client.post(f"/api/v1/roles/{role_id}/permissions/manage_roles").status_code == 403
+    assert unprivileged_client.delete(f"/api/v1/roles/{role_id}/permissions/manage_roles").status_code == 403
+
+
+def test_cannot_grant_permission_caller_does_not_hold(client: TestClient, db: Session, test_role: Role):
+    """The reported hole: POST /roles/{own_role_id}/permissions/super_admin"""
+    db.add(Permission(name="super_admin", description="Has all permissions"))
+    db.commit()
+
+    response = client.post(f"/api/v1/roles/{test_role.id}/permissions/super_admin")
+
+    assert response.status_code == 403
+    assert "do not hold" in response.json()["detail"]
+    db.refresh(test_role)
+    assert "super_admin" not in {p.name for p in test_role.permissions}
+
+
+def test_cannot_grant_unheld_permission_via_update(client: TestClient, db: Session, test_role: Role):
+    """The same escalation through PUT rather than the permissions route"""
+    super_admin = Permission(name="super_admin", description="Has all permissions")
+    db.add(super_admin)
+    db.commit()
+    db.refresh(super_admin)
+
+    response = client.put(
+        f"/api/v1/roles/{test_role.id}",
+        json={
+            "name": test_role.name,
+            "permissions": [
+                {"id": super_admin.id, "name": "super_admin", "description": "Has all permissions"}
+            ],
+        },
+    )
+
+    assert response.status_code == 403
+    db.refresh(test_role)
+    assert "super_admin" not in {p.name for p in test_role.permissions}
+
+
+def test_cannot_create_role_with_unheld_permission(client: TestClient, db: Session):
+    """Creating a role is a grant too — otherwise the rule is trivially bypassed"""
+    super_admin = Permission(name="super_admin", description="Has all permissions")
+    db.add(super_admin)
+    db.commit()
+    db.refresh(super_admin)
+
+    response = client.post(
+        "/api/v1/roles",
+        json={
+            "name": "Backdoor",
+            "description": "",
+            "permissions": [{"id": super_admin.id, "name": "super_admin", "description": "Has all permissions"}],
+        },
+    )
+
+    assert response.status_code == 403
+
+
+def test_can_grant_permission_caller_holds(client: TestClient, db: Session, test_organization):
+    """Granting something you do hold is unaffected"""
+    other_role = Role(name="Other Role", organization_id=test_organization.id)
+    db.add(other_role)
+    db.commit()
+    db.refresh(other_role)
+
+    response = client.post(f"/api/v1/roles/{other_role.id}/permissions/manage_users")
+
+    assert response.status_code == 200
+    db.refresh(other_role)
+    assert "manage_users" in {p.name for p in other_role.permissions}
+
+
+def test_super_admin_can_grant_anything(db: Session, test_organization):
+    """check_permissions short-circuits on super_admin, so an owner is unaffected"""
+    super_admin = Permission(name="super_admin", description="Has all permissions")
+    db.add(super_admin)
+    db.commit()
+    owner_role = Role(name="Owner", organization_id=test_organization.id)
+    db.add(owner_role)
+    db.commit()
+    db.execute(role_permissions.insert().values(role_id=owner_role.id, permission_id=super_admin.id))
+    db.commit()
+    owner = User(
+        id=uuid4(),
+        email="owner@test.com",
+        hashed_password="hashed_password",
+        organization_id=test_organization.id,
+        role_id=owner_role.id,
+        is_active=True,
+        full_name="Owner",
+    )
+    db.add(owner)
+    target = Role(name="Target", organization_id=test_organization.id)
+    db.add(target)
+    db.commit()
+    db.refresh(target)
+
+    async def override_get_current_user():
+        return owner
+
+    def override_get_db():
+        session = TestingSessionLocal()
+        try:
+            yield session
+        finally:
+            session.close()
+
+    app.dependency_overrides[get_current_user] = override_get_current_user
+    app.dependency_overrides[get_db] = override_get_db
+    try:
+        response = TestClient(app).post(f"/api/v1/roles/{target.id}/permissions/super_admin")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200

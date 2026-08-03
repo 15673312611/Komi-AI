@@ -23,6 +23,7 @@ import { resolveOrbStyle } from '@/utils/orb'
 import { useAgentStorage, useSubscriptionStorage } from '@/utils/storage'
 import { onMounted, onUnmounted, ref, computed } from 'vue';
 import { agentService } from '@/services/agent'
+import { permissionChecks } from '@/utils/permissions'
 import AgentDetail from './AgentDetail.vue'
 import CreateAgentModal from './CreateAgentModal.vue'
 import { widgetService } from '@/services/widget'
@@ -116,6 +117,10 @@ const filteredAgents = computed(() => {
         (a.description || '').toLowerCase().includes(q)
     )
 })
+
+// A view_agents role can read the list; it cannot create. Gating only the
+// first-run wizard left these three doing the same job for the same user.
+const canManageAgents = permissionChecks.canManageAgents()
 
 const isAgentCreationLocked = computed(() => {
     if (!hasEnterpriseModule) return false
@@ -281,7 +286,11 @@ const getOrbStyle = (agent: Agent): Record<string, string> => {
                 </div>
                 <div class="resume-actions">
                     <button class="resume-dismiss" @click="dismissBanner">Dismiss</button>
-                    <button class="resume-cta" @click="emit('resume-onboarding')">Resume setup →</button>
+                    <button
+                        v-if="canManageAgents"
+                        class="resume-cta"
+                        @click="emit('resume-onboarding')"
+                    >Resume setup →</button>
                 </div>
             </div>
 
@@ -299,6 +308,7 @@ const getOrbStyle = (agent: Agent): Record<string, string> => {
                     />
                 </div>
                 <button
+                    v-if="canManageAgents"
                     class="create-agent-button"
                     :class="{ 'locked': isAgentCreationLocked }"
                     :disabled="isAgentCreationLocked"
@@ -452,7 +462,7 @@ const getOrbStyle = (agent: Agent): Record<string, string> => {
                 <div class="empty-orb"></div>
                 <h3>No agents yet</h3>
                 <p>Create your first AI agent to start handling conversations automatically.</p>
-                <button class="create-agent-button" @click="handleCreateAgent">
+                <button v-if="canManageAgents" class="create-agent-button" @click="handleCreateAgent">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
                     Create Agent
                 </button>
