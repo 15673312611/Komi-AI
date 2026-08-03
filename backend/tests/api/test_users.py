@@ -648,3 +648,148 @@ def test_update_user_ignores_password_field(admin_client: TestClient, db: Sessio
     db.refresh(agent_user)
     assert agent_user.full_name == "Renamed"
     assert verify_password("oldpassword", agent_user.hashed_password)
+
+
+# ------------------------------------------------------------------ teammates
+
+@pytest.fixture
+def inbox_agent_client(db: Session, test_organization, agent_user: User) -> TestClient:
+    """Authenticated as a seeded Human Agent — the four permissions and no more."""
+    role = Role(id=88, name="Human Agent", organization_id=test_organization.id)
+    db.add(role)
+    db.commit()
+    for name in ("view_assigned_chats", "manage_assigned_chats",
+                 "view_unassigned_chats", "view_people"):
+        perm = db.query(Permission).filter(Permission.name == name).first()
+        if perm is None:
+            perm = Permission(name=name, description=name)
+            db.add(perm)
+            db.commit()
+            db.refresh(perm)
+        db.execute(role_permissions.insert().values(role_id=role.id, permission_id=perm.id))
+    db.commit()
+    agent_user.role_id = role.id
+    db.commit()
+    db.refresh(agent_user)
+
+    async def override_get_current_user():
+        return agent_user
+
+    def override_get_db():
+        session = TestingSessionLocal()
+        try:
+            yield session
+        finally:
+            session.close()
+
+    app.dependency_overrides[get_current_user] = override_get_current_user
+    app.dependency_overrides[get_db] = override_get_db
+
+    yield TestClient(app)
+    app.dependency_overrides.clear()
+
+
+def test_teammates_visible_to_inbox_roles(inbox_agent_client: TestClient, db: Session, test_organization, test_role: Role):
+    """An agent can list who to hand a chat to, without manage_users.
+
+    The inbox used to call GET /users for this, which 403'd — so Reassign, an
+    action the API allows an agent to perform, had an empty dropdown.
+    """
+    colleague = User(
+        id=uuid4(),
+        email="colleague@test.com",
+        hashed_password=get_password_hash("pw"),
+        organization_id=test_organization.id,
+        role_id=test_role.id,
+        is_active=True,
+        full_name="Colleague",
+    )
+    db.add(colleague)
+    db.commit()
+
+    response = inbox_agent_client.get("/api/v1/users/teammates")
+
+    assert response.status_code == 200
+    emails = {u["email"] for u in response.json()}
+    assert "colleague@test.com" in emails
+
+
+def test_teammates_does_not_leak_roles_or_permissions(inbox_agent_client: TestClient):
+    """The payload is a name and a face — not the org's permission matrix"""
+    response = inbox_agent_client.get("/api/v1/users/teammates")
+
+    assert response.status_code == 200
+    for teammate in response.json():
+        assert set(teammate) <= {"id", "full_name", "email", "profile_pic", "is_online"}
+
+
+def test_teammates_is_org_scoped(inbox_agent_client: TestClient, db: Session):
+    """A teammate from another organization is not a teammate"""
+    other_org = Organization(id=uuid4(), name="Other", domain="other-teammates.example.com")
+    db.add(other_org)
+    db.commit()
+    outsider = User(
+        id=uuid4(),
+        email="outsider@other.com",
+        hashed_password=get_password_hash("pw"),
+        organization_id=other_org.id,
+        is_active=True,
+        full_name="Outsider",
+    )
+    db.add(outsider)
+    db.commit()
+
+    response = inbox_agent_client.get("/api/v1/users/teammates")
+
+    assert response.status_code == 200
+    assert "outsider@other.com" not in {u["email"] for u in response.json()}
+
+
+def test_teammates_requires_an_inbox_permission(db: Session, test_organization) -> None:
+    """Someone with no chat grant at all has no business reading the directory"""
+    role = Role(id=77, name="Nothing", organization_id=test_organization.id)
+    db.add(role)
+    db.commit()
+    user = User(
+        id=uuid4(),
+        email="nothing@test.com",
+        hashed_password=get_password_hash("pw"),
+        organization_id=test_organization.id,
+        role_id=role.id,
+        is_active=True,
+        full_name="Nothing",
+    )
+    db.add(user)
+    db.commit()
+
+    async def override_get_current_user():
+        return user
+
+    def override_get_db():
+        session = TestingSessionLocal()
+        try:
+            yield session
+        finally:
+            session.close()
+
+    app.dependency_overrides[get_current_user] = override_get_current_user
+    app.dependency_overrides[get_db] = override_get_db
+    try:
+        response = TestClient(app).get("/api/v1/users/teammates")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 403
+
+
+def test_teammates_route_is_not_shadowed_by_the_user_id_route(inbox_agent_client: TestClient):
+    """Declared above GET /{user_id}.
+
+    Below it, "teammates" parses as a user id and the request lands on the
+    manage_users route — a 403 for exactly the agents the endpoint is for. A
+    200 here is the proof it resolved to the right handler.
+    """
+    response = inbox_agent_client.get("/api/v1/users/teammates")
+
+    assert response.status_code == 200
+    assert isinstance(response.json(), list)

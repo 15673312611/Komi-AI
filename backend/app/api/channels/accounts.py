@@ -22,6 +22,7 @@ from sqlalchemy.orm import Session
 
 from app.core.auth import (
     INBOX_PERMISSIONS,
+    check_permissions,
     get_current_organization,
     require_any_permission,
     require_permissions,
@@ -62,12 +63,22 @@ def get_org_account_or_404(db: Session, account_id: UUID, organization: Organiza
     return account
 
 
-def to_account_out(db: Session, account, config=_UNRESOLVED) -> ChannelAccountOut:
+def to_account_out(
+    db: Session, account, config=_UNRESOLVED, include_webhook_url: bool = True
+) -> ChannelAccountOut:
+    """Serialise a channel account.
+
+    Pass include_webhook_url=False for callers who are not org admins: the URL
+    embeds `webhook_secret`, which is the ONLY authentication on the inbound
+    email and SMS webhooks (api/webhooks/email.py, api/webhooks/sms.py).
+    Handing it to an agent would let them post forged inbound messages into any
+    of the org's conversations.
+    """
     if config is _UNRESOLVED:
         config = AgentChannelConfigRepository(db).get_by_account(account.id)
     out = ChannelAccountOut.model_validate(account)
     out.agent_id = config.agent_id if config and config.is_active else None
-    out.webhook_url = channel_webhook_url(account)
+    out.webhook_url = channel_webhook_url(account) if include_webhook_url else None
     return out
 
 
@@ -76,7 +87,6 @@ async def list_channel_accounts(
     # Org admins (Integrations settings) OR inbox agents: the inbox reads this
     # to know whether there is a WhatsApp number to start a conversation from,
     # so gating it admin-only hid the feature from the people it is for.
-    # ChannelAccountOut carries no secrets — ids, names, and the webhook URL.
     current_user: User = Depends(
         require_any_permission("manage_organization", *INBOX_PERMISSIONS)),
     organization: Organization = Depends(get_current_organization),
@@ -85,4 +95,10 @@ async def list_channel_accounts(
     """All connected channel accounts for the organization."""
     accounts = ChannelAccountRepository(db).list_by_org(organization.id)
     configs = AgentChannelConfigRepository(db).map_by_accounts([a.id for a in accounts])
-    return [to_account_out(db, account, configs.get(account.id)) for account in accounts]
+    # Only the Integrations settings screen needs the webhook URL, and only an
+    # org admin can act on it — see to_account_out.
+    include_webhook_url = check_permissions(current_user, ["manage_organization"])
+    return [
+        to_account_out(db, account, configs.get(account.id), include_webhook_url)
+        for account in accounts
+    ]

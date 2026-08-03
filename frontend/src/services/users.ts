@@ -54,6 +54,28 @@ export async function listUsers(): Promise<User[]> {
   return response.data
 }
 
+/** A colleague as the inbox needs them, from GET /users/teammates. */
+export interface Teammate {
+  id: string
+  full_name: string | null
+  email: string
+  profile_pic?: string | null
+  is_online?: boolean
+}
+
+/**
+ * Who a conversation can be handed to.
+ *
+ * The inbox used to call GET /users for this, which needs manage_users — so an
+ * agent got a 403 and an empty Reassign dropdown for an action the API would
+ * have allowed. This endpoint is gated on the inbox permissions instead, and
+ * returns no roles or permission lists.
+ */
+export async function listTeammates(): Promise<Teammate[]> {
+  const response = await api.get('users/teammates')
+  return response.data
+}
+
 /**
  * Aggregated Human-Agents dashboard (KPIs + per-agent load/resolved).
  * Returns null if the backend endpoint isn't available yet (graceful fallback).

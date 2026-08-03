@@ -18,7 +18,8 @@ import { createRouter, createWebHistory } from 'vue-router'
 import type { RouteLocationNormalized, NavigationGuardNext } from 'vue-router'
 import { userService } from '@/services/user'
 import { getSetupStatus } from '@/services/organization'
-import { permissionChecks, hasAnyPermission } from '@/utils/permissions'
+import { canAccessMatchedPaths } from '@/router/routePermissions'
+import { resolveLandingRoute } from '@/router/landing'
 import { getApiUrl } from '@/config/api'
 import HumanAgentView from '@/views/HumanAgentView.vue'
 import OrganizationSettings from '@/views/settings/OrganizationSettings.vue'
@@ -36,7 +37,14 @@ const { hasEnterpriseModule, loadModule, moduleImports, NotAvailableComponent } 
 const baseRoutes = [
   {
     path: '/',
-    redirect: '/ai-agents',
+    // A function, not a string: permissions live in localStorage and are not
+    // readable when this module is first evaluated. Also the landing spot for
+    // an installed PWA (manifest start_url) and for pushes with no session.
+    //
+    // Only resolve with a session in hand. Resolving for a signed-out visitor
+    // yields the no-permission floor, which the guard then carries into
+    // ?redirect= and honours after login — landing an admin on User Settings.
+    redirect: () => (userService.isAuthenticated() ? resolveLandingRoute() : '/login'),
   },
   {
     path: '/login',
@@ -64,7 +72,6 @@ const baseRoutes = [
       requiresAuth: true,
       layout: 'dashboard',
       title: 'Analytics Dashboard',
-      permissions: ['view_analytics'],
     },
   },
   {
@@ -75,7 +82,6 @@ const baseRoutes = [
       requiresAuth: true,
       layout: 'dashboard',
       title: 'Knowledge Base',
-      permissions: ['manage_knowledge'],
     },
   },
   {
@@ -86,7 +92,6 @@ const baseRoutes = [
       requiresAuth: true,
       layout: 'dashboard',
       title: 'FAQ & Help Center',
-      permissions: ['manage_knowledge'],
     },
   },
   {
@@ -97,7 +102,6 @@ const baseRoutes = [
       requiresAuth: true,
       layout: 'dashboard',
       title: 'Tickets',
-      permissions: ['view_tickets', 'manage_tickets'],
     },
   },
   {
@@ -108,7 +112,6 @@ const baseRoutes = [
       requiresAuth: true,
       layout: 'dashboard',
       title: 'Ticket',
-      permissions: ['view_tickets', 'manage_tickets'],
     },
   },
   {
@@ -119,7 +122,6 @@ const baseRoutes = [
       requiresAuth: true,
       layout: 'dashboard',
       title: 'Ticketing Settings',
-      permissions: ['manage_organization'],
     },
   },
   {
@@ -135,7 +137,6 @@ const baseRoutes = [
     // Any inbox grant — own/group chats, the unclaimed queue, or everything
     meta: {
       requiresAuth: true,
-      permissions: ['view_all_chats', 'view_assigned_chats', 'view_unassigned_chats'],
     },
   },
   {
@@ -146,14 +147,13 @@ const baseRoutes = [
     component: () => import('../views/PeopleView.vue'),
     meta: {
       requiresAuth: true,
-      permissions: ['view_people', 'view_all_chats', 'manage_all_chats'],
     },
   },
   {
     path: '/human-agents',
     name: 'human-agents',
     component: HumanAgentView,
-    meta: { requiresAuth: true, permissions: ['manage_users'] },
+    meta: { requiresAuth: true },
   },
   {
     path: '/settings/organization',
@@ -162,7 +162,6 @@ const baseRoutes = [
     meta: {
       requiresAuth: true,
       layout: 'dashboard',
-      permissions: ['manage_organization', 'view_organization'],
     },
   },
   {
@@ -172,7 +171,6 @@ const baseRoutes = [
     meta: {
       requiresAuth: true,
       layout: 'dashboard',
-      permissions: ['manage_ai_config', 'view_ai_config'],
     },
   },
   {
@@ -182,7 +180,6 @@ const baseRoutes = [
     meta: {
       requiresAuth: true,
       layout: 'dashboard',
-      permissions: ['manage_organization'],
     },
   },
   {
@@ -192,7 +189,6 @@ const baseRoutes = [
     meta: {
       requiresAuth: true,
       layout: 'dashboard',
-      permissions: ['manage_organization'],
     },
   },
   {
@@ -205,8 +201,18 @@ const baseRoutes = [
     },
   },
   {
+    // Registered, and reachable: the guard used to send denials to /403 with
+    // no such route, so they fell through this catch-all onto /ai-agents —
+    // which had no meta.permissions and therefore always rendered. A user was
+    // silently dropped on a page they had just been refused.
+    path: '/403',
+    name: 'forbidden',
+    component: () => import('@/views/403.vue'),
+    meta: { requiresAuth: true, layout: 'dashboard' },
+  },
+  {
     path: '/:pathMatch(.*)*',
-    redirect: '/ai-agents',
+    redirect: () => (userService.isAuthenticated() ? resolveLandingRoute() : '/login'),
   },
 ]
 
@@ -330,7 +336,6 @@ router.beforeEach(async (to, from, next) => {
   // Always check setup status to decide between Setup vs Login/Signup
   const isSetupComplete = await getSetupStatus()
   const requiresAuth = to.matched.some((record) => record.meta.requiresAuth)
-  const requiredPermissions = to.meta.permissions as string[] | undefined
 
   // Standard app navigation logic
   if (!isAuthenticated) {
@@ -350,9 +355,10 @@ router.beforeEach(async (to, from, next) => {
     }
   }
 
-  if (requiredPermissions && !hasAnyPermission(requiredPermissions)) {
-    // Redirect to 403 page or dashboard if user lacks required permissions
-    return next('/403')
+  // ROUTE_PERMISSIONS is the single source of truth, shared with the sidebar
+  // so a visible link can never lead to a refusal.
+  if (!canAccessMatchedPaths(to.matched.map((record) => record.path))) {
+    return next({ name: 'forbidden' })
   }
 
   return next()

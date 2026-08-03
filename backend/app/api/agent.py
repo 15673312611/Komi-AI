@@ -20,10 +20,17 @@ from typing import List, Union
 from app.core.logger import get_logger
 from app.database import get_db
 from app.models.user import User, UserGroup
-from app.core.auth import get_current_user, require_permissions, require_unified_permissions
+from app.core.auth import (
+    INBOX_PERMISSIONS,
+    get_current_user,
+    require_any_permission,
+    require_any_unified_permission,
+    require_permissions,
+    require_unified_permissions,
+)
 from app.repositories.agent import AgentRepository
 from app.repositories.knowledge import KnowledgeRepository
-from app.models.schemas.agent import AgentUpdate, AgentResponse, AgentCreate, AgentWithCustomizationResponse
+from app.models.schemas.agent import AgentUpdate, AgentResponse, AgentCreate, AgentRosterItem, AgentWithCustomizationResponse
 from sqlalchemy.orm import Session
 from app.models.agent import Agent, AgentCustomization
 from app.models.organization import Organization
@@ -333,9 +340,28 @@ async def update_agent(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/roster", response_model=List[AgentRosterItem])
+async def get_agent_roster(
+    current_user: User = Depends(require_any_permission(*INBOX_PERMISSIONS)),
+    db: Session = Depends(get_db)
+):
+    """Names of the org's AI agents, for the inbox filter.
+
+    Declared above GET /{agent_id}, which takes a UUID — below it, "roster"
+    fails UUID parsing and 422s.
+
+    Deliberately not GET /agent/list: AgentResponse carries `instructions` and
+    `guardrail_prompt`, and the guardrail prompt tells a reader exactly how to
+    phrase a bypass. Filtering conversations needs a name.
+    """
+    agents = AgentRepository(db).get_all_agents(current_user.organization_id)
+    return agents
+
+
 @router.get("/guardrail-default")
 async def get_guardrail_default(
-    auth_info: dict = Depends(require_unified_permissions("manage_agents")),
+    auth_info: dict = Depends(
+        require_any_unified_permission("view_agents", "manage_agents")),
     db: Session = Depends(get_db)
 ):
     """The shipped scope rule, with {org} already filled in.
@@ -357,7 +383,8 @@ async def get_guardrail_default(
 @router.get("/list/shopify", response_model=List[AgentWithCustomizationResponse])
 @router.get("/list", response_model=List[AgentWithCustomizationResponse])
 async def get_organization_agents(
-    auth_info: dict = Depends(require_unified_permissions("manage_agents")),
+    auth_info: dict = Depends(
+        require_any_unified_permission("view_agents", "manage_agents")),
     db: Session = Depends(get_db)
 ):
     """Get organization agents - supports both JWT and Shopify session token auth"""
@@ -615,7 +642,8 @@ async def update_agent_groups(
 @router.get("/{agent_id}", response_model=AgentWithCustomizationResponse)
 async def get_agent_by_id(
     agent_id: UUID,
-    auth_info: dict = Depends(require_unified_permissions("manage_agents")),
+    auth_info: dict = Depends(
+        require_any_unified_permission("view_agents", "manage_agents")),
     db: Session = Depends(get_db)
 ):
     """Get agent by ID with customization - supports both JWT and Shopify session token auth"""

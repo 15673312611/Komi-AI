@@ -19,6 +19,17 @@ import type { AgentCustomization, Agent, AgentUpdate } from '@/types/agent'
 import { agentStorage } from '@/utils/storage'
 
 export const agentService = {
+  /**
+   * Names of the org's AI agents, for the inbox filter.
+   *
+   * Not getOrganizationAgents: that needs manage_agents and returns each
+   * agent's instructions and guardrail prompt. Filtering needs a name.
+   */
+  async getAgentRoster(): Promise<Array<{ id: string; name: string; display_name: string | null }>> {
+    const response = await api.get('/agent/roster')
+    return response.data
+  },
+
   async getOrganizationAgents(): Promise<Agent[]> {
     // Check if we're in a Shopify context (has shop query param or session token)
     const urlParams = new URLSearchParams(window.location.search)

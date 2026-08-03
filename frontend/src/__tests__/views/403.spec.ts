@@ -77,11 +77,14 @@ describe('403 View', () => {
     expect(dashboardLayout.exists()).toBe(true)
   })
 
-  it('contains a link back to dashboard', () => {
+  // Not '/': that redirects to the landing route, which for someone who was
+  // just denied is frequently another denial. With no permissions the floor is
+  // /settings/user, which requires none.
+  it('links somewhere the denied user can actually open', () => {
     const backLink = wrapper.find('.back-link')
     expect(backLink.exists()).toBe(true)
-    expect(backLink.text()).toBe('Return to Dashboard')
-    expect(backLink.attributes('href')).toBe('/')
+    expect(backLink.attributes('href')).toBe('/settings/user')
+    expect(backLink.attributes('href')).not.toBe('/')
   })
 
   it('applies correct styling', () => {

@@ -30,6 +30,14 @@ from app.repositories.agent import AgentRepository
 from app.api.shopify import _require_shopify_agent_in_org
 from app.api.jira import _require_jira_agent_in_org
 from app.api.tickets import _validate_assignment_references
+from app.api import knowledge as knowledge_router
+from app.core.auth import get_current_user
+from app.database import get_db
+from app.models.permission import Permission
+from app.models.role import Role
+from app.models.user import User
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
 
 @pytest.fixture
@@ -114,3 +122,54 @@ class TestTicketAssignmentGuard:
         db.add(foreign_group)
         db.commit()
         _raises_404(_validate_assignment_references, db, test_organization.id, None, foreign_group.id)
+
+
+class TestKnowledgeByAgentScoping:
+    """GET /knowledge/agent/{agent_id} filtered on the agent id alone.
+
+    count_by_agent/get_by_agent take a UUID and no organization, so any
+    authenticated user who knew another tenant's agent id read that tenant's
+    knowledge inventory. link/unlink on the same router have always checked
+    agent.organization_id; this read never did.
+    """
+
+    def _client(self, db, user):
+        api = FastAPI()
+        api.include_router(knowledge_router.router, prefix="/api/v1/knowledge")
+        api.dependency_overrides[get_current_user] = lambda: user
+        api.dependency_overrides[get_db] = lambda: (yield db)
+        return TestClient(api)
+
+    def _knowledge_reader(self, db, organization):
+        role = Role(name="Knowledge Reader", organization_id=organization.id)
+        role.permissions = [Permission(name="view_knowledge")]
+        db.add(role)
+        db.commit()
+        db.refresh(role)
+        user = User(
+            id=uuid4(),
+            email=f"reader-{uuid4().hex[:6]}@example.com",
+            full_name="Reader",
+            hashed_password="x",
+            is_active=True,
+            organization_id=organization.id,
+            role_id=role.id,
+        )
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+        return user
+
+    def test_rejects_another_orgs_agent(self, db, test_organization, foreign_agent):
+        user = self._knowledge_reader(db, test_organization)
+
+        response = self._client(db, user).get(f"/api/v1/knowledge/agent/{foreign_agent.id}")
+
+        assert response.status_code == 404
+
+    def test_allows_an_agent_in_the_callers_org(self, db, test_organization, test_agent):
+        user = self._knowledge_reader(db, test_organization)
+
+        response = self._client(db, user).get(f"/api/v1/knowledge/agent/{test_agent.id}")
+
+        assert response.status_code == 200

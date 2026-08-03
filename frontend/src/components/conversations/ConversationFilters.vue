@@ -15,6 +15,7 @@ limitations under the License.
 -->
 
 <script setup lang="ts">
+import type { Teammate } from '@/services/users'
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 
 interface FilterValues {
@@ -28,7 +29,7 @@ interface FilterValues {
 interface Props {
   showFilters: boolean
   filterValues: FilterValues
-  users: Array<{id: string, full_name: string, email: string}>
+  users: Teammate[]
   agents: Array<{id: string, name: string, display_name: string | null}>
   loadingUsers?: boolean
   loadingAgents?: boolean

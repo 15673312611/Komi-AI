@@ -19,9 +19,16 @@ import { mount } from '@vue/test-utils'
 import { createRouter, createWebHistory } from 'vue-router'
 import BottomNav from '@/components/layout/BottomNav.vue'
 
-vi.mock('@/utils/permissions', async () => {
-  const { createPermissionMocks } = await import('../../fixtures/permissions')
-  return { permissionChecks: createPermissionMocks() }
+// Nav visibility comes from the real permission checks reading the cached
+// user, so give this spec a user who holds everything.
+vi.mock('@/services/user', async () => {
+  const { userWithPermissions } = await import('../../fixtures/permissions')
+  const user = userWithPermissions([
+    'manage_agents', 'manage_users', 'view_all_chats', 'manage_all_chats', 'view_people',
+    'manage_knowledge', 'view_analytics', 'view_tickets', 'manage_organization',
+    'manage_ai_config', 'manage_subscription',
+  ])
+  return { userService: { getCurrentUser: () => user } }
 })
 
 vi.mock('@/composables/useEnterpriseFeatures', () => ({

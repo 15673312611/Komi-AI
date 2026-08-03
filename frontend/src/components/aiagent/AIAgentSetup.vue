@@ -26,6 +26,7 @@ const AIAgentOnboarding = defineAsyncComponent(() => import('./onboarding/AIAgen
 import { useAgentStorage } from '@/utils/storage'
 import { aiService } from '@/services/ai'
 import { agentService } from '@/services/agent'
+import { permissionChecks } from '@/utils/permissions'
 import { AxiosError } from 'axios'
 
 const agentStorage = useAgentStorage()
@@ -103,10 +104,10 @@ onMounted(async () => {
             agentStorage.setAgents(agents)
             return
         }
-        // No agents yet → always show the guided first-agent setup. "Skip for
-        // now" only dismisses it for the current view; it returns on reload /
-        // re-entry until the first agent actually exists.
-        showOnboarding.value = true
+        // No agents yet → show the guided first-agent setup, but only to
+        // someone who can actually create one. A view-only role was being
+        // dropped into a creation wizard whose every step would 403.
+        showOnboarding.value = permissionChecks.canManageAgents()
     } catch (err) {
         error.value = 'Failed to load agents'
         console.error(err)

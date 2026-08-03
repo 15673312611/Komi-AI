@@ -21,6 +21,12 @@ from unittest.mock import AsyncMock, patch
 from uuid import uuid4
 
 import pytest
+
+from app.core.security import get_password_hash
+from app.models.channels import ChannelAccount, ChannelType
+from app.models.permission import Permission
+from app.models.role import Role
+from app.models.user import User
 from fastapi.testclient import TestClient
 
 import app.main  # noqa: F401 — ensures routers are registered on the FastAPI app
@@ -43,12 +49,14 @@ def client(db, test_user, test_organization, monkeypatch):
     monkeypatch.setattr(settings, "META_APP_SECRET", APP_SECRET)
     monkeypatch.setattr(settings, "META_WEBHOOK_VERIFY_TOKEN", "vtok")
 
-    # Template sending is inbox-agent work (require_inbox_agent), not an
-    # org-admin capability; the shared test_role only carries admin perms.
+    # Reading templates is inbox work; SENDING one is a manage action — a
+    # billable Meta message with opt-in obligations, gated like takeover and
+    # reassign. The shared test_role only carries admin perms, so grant both.
     from app.models.permission import Permission
-    inbox_perm = Permission(name="view_all_chats")
-    db.add(inbox_perm)
-    test_user.role.permissions.append(inbox_perm)
+    for name in ("view_all_chats", "manage_all_chats"):
+        perm = Permission(name=name)
+        db.add(perm)
+        test_user.role.permissions.append(perm)
     db.commit()
 
     async def override_user():
@@ -1169,3 +1177,95 @@ class TestInboxAgentCanActuallyReachTheFeature:
         WhatsApp Manager, where templates are written, stays org-admin."""
         r = inbox_client.get(f"{BASE}/whatsapp/{waba_account.id}/template-library")
         assert r.status_code == 403
+
+    def test_a_view_only_role_cannot_send(self, inbox_client, waba_account):
+        """Reading the picker is not permission to fire a billable message.
+
+        This role holds view_all_chats and nothing else. Sending takes the same
+        grant as taking a chat over, so a read-only observer can browse the
+        templates without being able to message a customer.
+        """
+        r = inbox_client.post(
+            f"{BASE}/whatsapp/{waba_account.id}/conversations",
+            json={"phone": "+15551234567", "template_name": "order_update",
+                  "language": "en_US", "body_params": []},
+        )
+        assert r.status_code == 403
+
+    def test_an_assigned_chats_agent_can_send(
+            self, db, test_organization, waba_account, test_agent, monkeypatch):
+        """manage_assigned_chats — what the seeded Agent role holds — is enough."""
+        monkeypatch.setattr(settings, "META_APP_SECRET", APP_SECRET)
+        role = Role(name="Sending Agent", organization_id=test_organization.id)
+        role.permissions = [
+            Permission(name="view_assigned_chats"),
+            Permission(name="manage_assigned_chats"),
+        ]
+        db.add(role); db.commit(); db.refresh(role)
+        sender = User(
+            id=uuid4(), organization_id=test_organization.id,
+            email="sender@example.com", full_name="Sender",
+            hashed_password=get_password_hash("pw"), is_active=True,
+            role_id=role.id)
+        db.add(sender); db.commit()
+
+        app.dependency_overrides[get_current_user] = lambda: sender
+        app.dependency_overrides[get_current_organization] = lambda: test_organization
+        app.dependency_overrides[get_db] = lambda: (yield db)
+        try:
+            r = TestClient(app).post(
+                f"{BASE}/whatsapp/{waba_account.id}/conversations",
+                json={"phone": "+15551234567", "template_name": "nope",
+                      "language": "en_US", "body_params": []},
+            )
+        finally:
+            app.dependency_overrides.clear()
+
+        # Past the permission gate — it fails on the unapproved template, not 403.
+        assert r.status_code != 403
+
+
+class TestChannelAccountSecrets:
+    """The webhook URL in a channel account embeds `webhook_secret`, which is
+    the only authentication on the inbound email and SMS webhooks. Widening the
+    accounts list to inbox agents must not hand that to them."""
+
+    @pytest.fixture
+    def inbox_client(self, db, test_organization, monkeypatch):
+        role = Role(name="Inbox Only", organization_id=test_organization.id)
+        role.permissions = [Permission(name="view_assigned_chats")]
+        db.add(role); db.commit(); db.refresh(role)
+        agent_user = User(
+            id=uuid4(), organization_id=test_organization.id,
+            email="secrets@example.com", full_name="Agent",
+            hashed_password=get_password_hash("pw"), is_active=True,
+            role_id=role.id)
+        db.add(agent_user); db.commit()
+
+        app.dependency_overrides[get_current_user] = lambda: agent_user
+        app.dependency_overrides[get_current_organization] = lambda: test_organization
+        app.dependency_overrides[get_db] = lambda: (yield db)
+        yield TestClient(app)
+        app.dependency_overrides.clear()
+
+    def test_agent_sees_accounts_without_the_webhook_secret(self, inbox_client, waba_account):
+        r = inbox_client.get("/api/v1/channels/accounts")
+
+        assert r.status_code == 200
+        assert r.json(), "the agent should still see the accounts"
+        for account in r.json():
+            assert account["webhook_url"] is None
+
+    def test_admin_still_gets_the_webhook_url(self, client, waba_account, db, test_organization):
+        db.add(ChannelAccount(
+            id=uuid4(), organization_id=test_organization.id,
+            channel_type=ChannelType.EMAIL.value, display_name="Support Inbox",
+            external_account_id="support@example.com", is_active=True,
+            encrypted_credentials="{}", webhook_secret="s3cret"))
+        db.commit()
+
+        r = client.get("/api/v1/channels/accounts")
+
+        assert r.status_code == 200
+        email_account = next(a for a in r.json() if a["channel_type"] == "email")
+        assert "s3cret" in email_account["webhook_url"]

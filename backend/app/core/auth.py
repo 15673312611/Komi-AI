@@ -78,25 +78,42 @@ def require_permissions(*required_permissions: str):
     return permission_checker
 
 
-# Working the inbox: seeing conversations and the people in them. Either chat
-# capability grants it — which require_permissions, whose semantics are AND,
-# cannot express. Defined once because it gates two surfaces (the WhatsApp
-# template/outbound endpoints and the People page) that must agree: a role
-# that can open a conversation but not read the templates it needs to answer
-# one has the feature only in theory.
+# Seeing conversations. Either scope grants it — which require_permissions,
+# whose semantics are AND, cannot express.
 #
 # manage_all_chats, not "manage_chats" — the latter appears in several hand-
 # rolled checks but is not in Permission.default_permissions(), so it has
 # never matched anyone.
-INBOX_PERMISSIONS = ("view_all_chats", "manage_all_chats")
+CHAT_VIEW_PERMISSIONS = (
+    "view_all_chats",
+    "view_assigned_chats",
+    "view_unassigned_chats",
+)
 
-# The people directory. view_people is the read-only grant handed to agents;
-# the org-wide chat permissions imply it, so admins keep access unchanged.
+# Acting on a conversation: taking it over, reassigning it, sending outbound.
+# Deliberately NOT derived from INBOX_PERMISSIONS — folding the view grants in
+# here would let a read-only role reassign other people's conversations.
+CHAT_MANAGE_PERMISSIONS = ("manage_all_chats", "manage_assigned_chats")
+
+# Working the inbox, in the sense the surfaces around it mean it: an agent who
+# can open a conversation must also be able to read the channel accounts and
+# message templates needed to answer one, or the feature exists only in theory.
+# This used to be just the two org-wide grants, which excluded the very agents
+# the comment described.
+INBOX_PERMISSIONS = CHAT_VIEW_PERMISSIONS + CHAT_MANAGE_PERMISSIONS
+
+# The narrower org-wide scope, for the places that genuinely mean "can see the
+# whole org's chats" rather than "works the inbox".
+ORG_CHAT_PERMISSIONS = ("view_all_chats", "manage_all_chats")
+
+# The people directory.
 PEOPLE_READ_PERMISSIONS = ("view_people",) + INBOX_PERMISSIONS
 
-# Mutating a person (marking a customer, editing attributes) stays with the
-# roles that can already manage the whole inbox.
-PEOPLE_WRITE_PERMISSIONS = INBOX_PERMISSIONS
+# Correcting a person's details, marking them a customer and pushing them to a
+# connected CRM are inbox work, not administration — people.py documents the
+# PATCH as the agent's identification tool. So view_people grants both; there
+# is no separate read-only directory role today.
+PEOPLE_WRITE_PERMISSIONS = PEOPLE_READ_PERMISSIONS
 
 
 def has_any_permission(user: User, permissions: Iterable[str]) -> bool:

@@ -25,7 +25,7 @@ from fastapi import APIRouter, HTTPException, Depends, status
 from sqlalchemy.orm import Session
 from app.core.logger import get_logger
 from app.models.user import User
-from app.core.auth import get_current_user, has_any_permission
+from app.core.auth import CHAT_MANAGE_PERMISSIONS, get_current_user, has_any_permission
 from app.database import get_db
 from app.services.chat_notifications import notify_chat_assigned
 from app.services.message_delivery import deliver_to_customer
@@ -34,10 +34,6 @@ from app.services.message_delivery import deliver_to_customer
 logger = get_logger(__name__)
 
 router = APIRouter()
-
-# Claiming or handing on a chat is a "manage" action: either the org-wide
-# grant or the assigned-chats one an agent holds.
-MANAGE_CHAT_PERMISSIONS = ("manage_all_chats", "manage_assigned_chats")
 
 # Shown to the customer when a human takes over an external-channel chat. The
 # widget surfaces the handover in its own UI, so only channels need a message.
@@ -91,7 +87,7 @@ async def takeover_chat(
         # manage_all_chats, not "manage_chats" — the latter is not a real
         # permission and never matched. has_any_permission also honours the
         # super_admin bypass the previous hand-rolled set check ignored.
-        if not has_any_permission(current_user, MANAGE_CHAT_PERMISSIONS):
+        if not has_any_permission(current_user, CHAT_MANAGE_PERMISSIONS):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Not enough permissions"
@@ -193,7 +189,7 @@ async def reassign_chat(
         # super_admin bypass the previous hand-rolled set check ignored. It
         # also checked "manage_chats", which is not a real permission and so
         # never matched.
-        if not has_any_permission(current_user, MANAGE_CHAT_PERMISSIONS):
+        if not has_any_permission(current_user, CHAT_MANAGE_PERMISSIONS):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Not enough permissions"

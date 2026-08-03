@@ -28,10 +28,10 @@ from uuid import UUID
 from app.database import get_db
 from app.models.user import User
 from app.models.session_to_agent import SessionToAgent, SessionStatus
-from app.models.schemas.user import AdminPasswordReset, UserCreate, UserStatusUpdate, UserUpdate, UserResponse, TokenResponse
+from app.models.schemas.user import AdminPasswordReset, TeammateResponse, UserCreate, UserStatusUpdate, UserUpdate, UserResponse, TokenResponse
 from datetime import datetime, timezone
 from app.core.security import create_access_token, create_refresh_token, validate_password_strength, verify_token
-from app.core.auth import get_current_user, require_permissions
+from app.core.auth import INBOX_PERMISSIONS, get_current_user, require_any_permission, require_permissions
 from app.core.logger import get_logger
 from app.repositories.user import UserRepository
 from pydantic import BaseModel
@@ -370,6 +370,25 @@ async def get_team_overview(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(e)
         )
+
+
+@router.get("/teammates", response_model=List[TeammateResponse])
+async def list_teammates(
+    current_user: User = Depends(require_any_permission(*INBOX_PERMISSIONS)),
+    db: Session = Depends(get_db)
+):
+    """The colleagues an inbox user can hand a conversation to.
+
+    Declared above GET /{user_id}: below it, "teammates" parses as a user id
+    and the request lands on the manage_users route — a 403 for exactly the
+    agents this exists for.
+
+    Deliberately not a relaxation of GET /users, which returns each teammate's
+    role and its full permission list. Reassigning a chat needs a name and a
+    face, so that is all this returns.
+    """
+    users = UserRepository(db).get_users_by_organization(current_user.organization_id)
+    return [user for user in users if user.is_active]
 
 
 @router.get("/{user_id}", response_model=UserResponse)

@@ -58,6 +58,27 @@ class UserUpdate(BaseModel):
     profile_pic: Optional[str] = None
     is_online: Optional[bool] = None
 
+class TeammateResponse(BaseModel):
+    """A colleague as the inbox needs them: enough to pick one and render them.
+
+    No role, no permissions, no timestamps — an agent listing who they can hand
+    a chat to has no business reading the org's permission matrix, which is
+    what UserResponse would give them.
+    """
+    id: UUID
+    full_name: Optional[str] = None
+    email: EmailStr
+    profile_pic: Optional[str] = None
+    is_online: Optional[bool] = False
+
+    @field_serializer('profile_pic')
+    def _sign_profile_pic(self, v: Optional[str]) -> Optional[str]:
+        return sign_s3_url(v) if v else v
+
+    class Config:
+        from_attributes = True
+
+
 class AdminPasswordReset(BaseModel):
     """An admin setting a new password for someone else in their organization.
 

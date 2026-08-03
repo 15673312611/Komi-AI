@@ -21,6 +21,7 @@ import { peopleService, type PersonCrmStatus } from '@/services/people'
 import channelsService, { type ChannelAccount } from '@/services/channels'
 import NewWhatsAppConversation from '@/components/conversations/NewWhatsAppConversation.vue'
 import type { PersonDetail } from '@/types/people'
+import { permissionChecks } from '@/utils/permissions'
 
 const PROVIDER_LABELS: Record<string, string> = { hubspot: 'HubSpot', pipedrive: 'Pipedrive' }
 const providerLabel = (p: string) => PROVIDER_LABELS[p] || p
@@ -76,7 +77,12 @@ const syncedSummary = computed(() =>
 const connectedSummary = computed(() =>
   (crm.value?.connected_providers || []).map(providerLabel).join(', '))
 // The CRM dedupes on email, so a person needs one before they can sync.
-const canSync = computed(() => !!person.value?.email)
+// Editing a person, marking them a customer and pushing to CRM all take the
+// same grant the API requires (PEOPLE_WRITE_PERMISSIONS). These buttons used to
+// render for everyone who could read the directory and 403 on click.
+const canEditPeople = permissionChecks.canManagePeople()
+
+const canSync = computed(() => !!person.value?.email && canEditPeople)
 
 async function loadCrm() {
   try { crm.value = await peopleService.getCrmStatus(props.customerId) }
@@ -210,7 +216,7 @@ onMounted(() => { load(); loadWhatsAppAccounts(); loadCrm() })
         </div>
 
         <button
-          v-if="person.lead_stage !== 'customer'"
+          v-if="canEditPeople && person.lead_stage !== 'customer'"
           class="pdd-mark"
           :disabled="marking || !person.identified"
           :title="person.identified ? '' : 'Add an email or phone first — this person is anonymous'"
@@ -235,7 +241,12 @@ onMounted(() => { load(); loadWhatsAppAccounts(); loadCrm() })
         <!-- Contact edit: the one place a wrong phone can be corrected -->
         <div class="pdd-section-title">
           CONTACT
-          <button v-if="!editing" type="button" class="pdd-edit-link" @click="startEdit">Edit</button>
+          <button
+            v-if="canEditPeople && !editing"
+            type="button"
+            class="pdd-edit-link"
+            @click="startEdit"
+          >Edit</button>
         </div>
         <div v-if="editing" class="pdd-edit">
           <label class="pdd-edit-field">

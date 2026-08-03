@@ -16,6 +16,9 @@ limitations under the License.
 
 import { computed } from 'vue'
 import { permissionChecks } from '@/utils/permissions'
+// Visibility comes from the same map the router enforces, so a link can never
+// appear for a page the guard will refuse (People used to do exactly that).
+import { canAccessPath } from '@/router/routePermissions'
 import { useEnterpriseFeatures } from '@/composables/useEnterpriseFeatures'
 
 // Re-exported so nav consumers keep a single import site
@@ -57,49 +60,49 @@ export function useNavItems() {
             to: '/ai-agents',
             icon: 'agents',
             label: 'AI Agents',
-            show: permissionChecks.canViewAgents(),
+            show: canAccessPath('/ai-agents'),
           },
           {
             to: '/human-agents',
             icon: 'humans',
             label: 'Human Agents',
-            show: permissionChecks.canManageUsers(),
+            show: canAccessPath('/human-agents'),
           },
           {
             to: '/conversations',
             icon: 'inbox',
             label: 'Inbox',
-            show: permissionChecks.canViewChats(),
+            show: canAccessPath('/conversations'),
           },
           {
             to: '/tickets',
             icon: 'tickets',
             label: 'Tickets',
-            show: permissionChecks.canViewTickets(),
+            show: canAccessPath('/tickets'),
           },
           {
             to: '/people',
             icon: 'people',
             label: 'People',
-            show: permissionChecks.canViewChats(),
+            show: canAccessPath('/people'),
           },
           {
             to: '/knowledge',
             icon: 'knowledge',
             label: 'Knowledge',
-            show: permissionChecks.canManageKnowledge(),
+            show: canAccessPath('/knowledge'),
           },
           {
             to: '/faq',
             icon: 'faq',
             label: 'Help center',
-            show: permissionChecks.canManageKnowledge(),
+            show: canAccessPath('/faq'),
           },
           {
             to: '/analytics',
             icon: 'analytics',
             label: 'Analytics',
-            show: permissionChecks.canViewAnalytics(),
+            show: canAccessPath('/analytics'),
           },
         ],
       },
@@ -110,37 +113,37 @@ export function useNavItems() {
             to: '/settings/organization',
             icon: 'org',
             label: 'Organization',
-            show: permissionChecks.canViewOrganization(),
+            show: canAccessPath('/settings/organization'),
           },
           {
             to: '/settings/subscription',
             icon: 'subscription',
             label: 'Subscription',
-            show: hasEnterpriseModule && permissionChecks.canViewOrganization(),
+            show: hasEnterpriseModule && permissionChecks.canViewSubscription(),
           },
           {
             to: '/settings/ticketing',
             icon: 'ticketing',
             label: 'Ticketing',
-            show: permissionChecks.canManageOrganization(),
+            show: canAccessPath('/settings/ticketing'),
           },
           {
             to: '/settings/integrations',
             icon: 'integrations',
             label: 'Integrations',
-            show: permissionChecks.canViewOrganization(),
+            show: canAccessPath('/settings/integrations'),
           },
           {
             to: '/settings/widget-apps',
             icon: 'widgets',
             label: 'Widget Apps',
-            show: permissionChecks.canManageOrganization(),
+            show: canAccessPath('/settings/widget-apps'),
           },
           {
             to: '/settings/ai-config',
             icon: 'aiconfig',
             label: 'AI Configuration',
-            show: permissionChecks.canViewAIConfig(),
+            show: canAccessPath('/settings/ai-config'),
           },
           {
             to: '/settings/user',

@@ -27,32 +27,59 @@ export function hasAnyPermission(permissions: string[]): boolean {
   return hasPermission('super_admin') || permissions.some(permission => hasPermission(permission))
 }
 
-// Common permission checks
+// Permission groups, mirroring the constants in backend/app/core/auth.py.
+// Exported so the route map can name the same sets the API enforces.
+
+/** Seeing conversations — CHAT_VIEW_PERMISSIONS. */
+export const CHAT_VIEW_PERMISSIONS = [
+  'view_all_chats',
+  'view_assigned_chats',
+  'view_unassigned_chats',
+]
+
+/** Acting on one: takeover, reassign, outbound — CHAT_MANAGE_PERMISSIONS. */
+export const CHAT_MANAGE_PERMISSIONS = ['manage_all_chats', 'manage_assigned_chats']
+
+/** Working the inbox at all — INBOX_PERMISSIONS. */
+export const INBOX_PERMISSIONS = [...CHAT_VIEW_PERMISSIONS, ...CHAT_MANAGE_PERMISSIONS]
+
+/** The people directory — PEOPLE_READ_PERMISSIONS. Writes match reads. */
+export const PEOPLE_PERMISSIONS = ['view_people', ...INBOX_PERMISSIONS]
+
+// The remaining view/manage pairs, named once so the route map and the checks
+// below cannot drift apart.
+export const AGENT_PERMISSIONS = ['manage_agents', 'view_agents']
+export const KNOWLEDGE_PERMISSIONS = ['manage_knowledge', 'view_knowledge']
+export const TICKET_PERMISSIONS = ['view_tickets', 'manage_tickets']
+export const ORGANIZATION_PERMISSIONS = ['manage_organization', 'view_organization']
+export const AI_CONFIG_PERMISSIONS = ['manage_ai_config', 'view_ai_config']
+export const SUBSCRIPTION_PERMISSIONS = ['manage_subscription', 'view_subscription']
+
+// Common permission checks.
+//
+// Every check goes through hasAnyPermission, never bare hasPermission: it is
+// the only one that honours super_admin, and the backend's check_permissions
+// bypasses on it. When the two layers disagree the page renders and then 403s.
 export const permissionChecks = {
-  canManageOrganization: () => hasPermission('manage_organization'),
-  canViewOrganization: () => hasAnyPermission(['manage_organization', 'view_organization']),
-  canManageAIConfig: () => hasPermission('manage_ai_config'),
-  canViewAIConfig: () => hasAnyPermission(['manage_ai_config', 'view_ai_config']),
-  canManageUsers: () => hasPermission('manage_users'),
-  canViewAgents: () => hasAnyPermission(['manage_agents', 'view_agents']),
-  canManageAgents: () => hasPermission('manage_agents'),
-  // Any inbox grant opens the Inbox: own/group chats, the unclaimed AI queue,
-  // or everything. Keep in sync with get_unified_chat_auth in core/auth.py.
-  canViewChats: () =>
-    hasAnyPermission(['view_all_chats', 'view_assigned_chats', 'view_unassigned_chats']),
-  // The people directory is its own read grant; the org-wide chat permissions
-  // imply it. Mirrors PEOPLE_READ_PERMISSIONS in core/auth.py.
-  canViewPeople: () => hasAnyPermission(['view_people', 'view_all_chats', 'manage_all_chats']),
-  // Editing a person (mark customer, correct a phone) needs the stronger grant
-  canManagePeople: () => hasAnyPermission(['view_all_chats', 'manage_all_chats']),
-  // Claiming a chat. Mirrors TAKEOVER_PERMISSIONS in api/session_to_agent.py
-  canTakeOverChats: () => hasAnyPermission(['manage_all_chats', 'manage_assigned_chats']),
-  canManageKnowledge: () => hasPermission('manage_knowledge'),
-  canViewAnalytics: () => hasPermission('view_analytics'),
-  canViewTickets: () => hasAnyPermission(['view_tickets', 'manage_tickets']),
-  // hasAnyPermission, not hasPermission: the backend's approve check bypasses
-  // on super_admin, so the frontend must too or the banner hides Approve/Reject
-  // for an admin the API would happily let approve (two layers disagreeing).
+  canManageOrganization: () => hasAnyPermission(['manage_organization']),
+  canViewOrganization: () => hasAnyPermission(ORGANIZATION_PERMISSIONS),
+  canManageAIConfig: () => hasAnyPermission(['manage_ai_config']),
+  canViewAIConfig: () => hasAnyPermission(AI_CONFIG_PERMISSIONS),
+  canManageUsers: () => hasAnyPermission(['manage_users']),
+  canViewAgents: () => hasAnyPermission(AGENT_PERMISSIONS),
+  canManageAgents: () => hasAnyPermission(['manage_agents']),
+  canViewChats: () => hasAnyPermission(CHAT_VIEW_PERMISSIONS),
+  canViewPeople: () => hasAnyPermission(PEOPLE_PERMISSIONS),
+  // Correcting a person or marking them a customer is inbox work, not
+  // administration — PEOPLE_WRITE_PERMISSIONS equals the read set.
+  canManagePeople: () => hasAnyPermission(PEOPLE_PERMISSIONS),
+  canTakeOverChats: () => hasAnyPermission(CHAT_MANAGE_PERMISSIONS),
+  canManageKnowledge: () => hasAnyPermission(['manage_knowledge']),
+  canViewKnowledge: () => hasAnyPermission(KNOWLEDGE_PERMISSIONS),
+  canViewAnalytics: () => hasAnyPermission(['view_analytics']),
+  canViewTickets: () => hasAnyPermission(TICKET_PERMISSIONS),
   canManageTickets: () => hasAnyPermission(['manage_tickets']),
   canApproveTicketActions: () => hasAnyPermission(['approve_ticket_actions']),
+  canViewSubscription: () => hasAnyPermission(SUBSCRIPTION_PERMISSIONS),
+  canManageSubscription: () => hasAnyPermission(['manage_subscription']),
 }

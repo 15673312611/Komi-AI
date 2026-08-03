@@ -27,6 +27,7 @@ import notificationIcon from '@/assets/notification.svg'
 import NotificationList from '@/components/notifications/NotificationList.vue'
 import EnablePushPrompt from '@/components/notifications/EnablePushPrompt.vue'
 import { userService } from '@/services/user'
+import { permissionChecks } from '@/utils/permissions'
 import type { User } from '@/types/user'
 import { useNotifications } from '@/composables/useNotifications'
 import { notificationService } from '@/services/notification'
@@ -202,6 +203,12 @@ const navigateToUpgrade = () => {
     router.push('/settings/subscription')
 }
 
+// The usage warning is for everyone — an agent hitting a message ceiling needs
+// to know why replies stop. The two remedies are not: both lead to pages a
+// non-admin cannot open, so they rendered as doors into a 403.
+const canManageSubscription = permissionChecks.canManageSubscription()
+const canViewAIConfig = permissionChecks.canViewAIConfig()
+
 // Computed for layout classes
 const layoutClasses = computed(() => ({
     'sidebar-collapsed': !isSidebarOpen.value || props.hideSidebar,
@@ -244,11 +251,19 @@ const openNotificationsFromSheet = () => {
                         <span class="banner-icon" v-else>ℹ️</span>
                         {{ messageLimitStatus.message }}
                     </div>
-                    <div class="banner-actions">
-                        <button class="action-button" @click="navigateToUpgrade">
+                    <div v-if="canManageSubscription || canViewAIConfig" class="banner-actions">
+                        <button
+                            v-if="canManageSubscription"
+                            class="action-button"
+                            @click="navigateToUpgrade"
+                        >
                             Upgrade Plan
                         </button>
-                        <button class="action-button secondary" @click="router.push('/settings/ai-config')">
+                        <button
+                            v-if="canViewAIConfig"
+                            class="action-button secondary"
+                            @click="router.push('/settings/ai-config')"
+                        >
                             Configure Own Model
                         </button>
                     </div>
@@ -284,8 +299,9 @@ const openNotificationsFromSheet = () => {
                             </div>
                             <div v-else-if="isInTrial" class="trial-info">
                                 <span
-                                    class="trial-badge clickable"
-                                    @click="navigateToUpgrade"
+                                    class="trial-badge"
+                                    :class="{ clickable: canManageSubscription }"
+                                    @click="canManageSubscription && navigateToUpgrade()"
                                 >
                                     Trial ({{ trialDaysLeft }} days left)
                                 </span>

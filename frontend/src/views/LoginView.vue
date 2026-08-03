@@ -18,7 +18,7 @@ limitations under the License.
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { authService } from '@/services/auth'
-import { permissionChecks } from '@/utils/permissions'
+import { resolveLandingRoute } from '@/router/landing'
 import { useEnterpriseFeatures } from '@/composables/useEnterpriseFeatures'
 import { useForgotPassword } from '@/composables/useForgotPassword'
 import InstallPrompt from '@/components/pwa/InstallPrompt.vue'
@@ -69,26 +69,10 @@ const verifyAndResetPassword = forgotPassword?.verifyAndResetPassword ?? (() => 
 const resetForgotPasswordForm = forgotPassword?.resetForm ?? (() => {})
 const goBackToEmailStep = forgotPassword?.goBackToEmailStep ?? (() => {})
 
-const getInitialRoute = () => {
-    // Check permissions in order of priority
-    if (permissionChecks.canManageAgents()) {
-        return '/ai-agents'
-    }
-    if (permissionChecks.canViewChats()) {
-        return '/conversations'
-    }
-    if (permissionChecks.canManageUsers()) {
-        return '/human-agents'
-    }
-    if (permissionChecks.canViewOrganization()) {
-        return '/settings/organization'
-    }
-    if (permissionChecks.canViewAIConfig()) {
-        return '/settings/ai-config'
-    }
-    // Default route if no specific permissions
-    return '/403'
-}
+// One ordered candidate list, shared with '/', the catch-all and the 403 page.
+// It used to end at '/403', which is not somewhere to land — and the route was
+// not even registered, so the user silently ended up on /ai-agents instead.
+const getInitialRoute = () => resolveLandingRoute()
 
 const handleLogin = async () => {
     try {
