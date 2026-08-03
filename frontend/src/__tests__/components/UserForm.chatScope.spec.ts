@@ -111,6 +111,23 @@ describe('UserForm – chat scope toggles', () => {
     })
   })
 
+  it('unticks both for a role that grants nothing', async () => {
+    const EMPTY_ROLE = { id: '13', name: 'Empty', permissions: [] } as unknown as Role
+    listRoles.mockResolvedValue([AGENT_ROLE, EMPTY_ROLE])
+
+    const wrapper = await mountForm()
+    await wrapper.find('#role').setValue('10')
+    await flushPromises()
+    expect((scopeBoxes(wrapper)[0].element as HTMLInputElement).checked).toBe(true)
+
+    await wrapper.find('#role').setValue('13')
+    await flushPromises()
+
+    const [aiChats, orgChats] = scopeBoxes(wrapper)
+    expect((aiChats.element as HTMLInputElement).checked).toBe(false)
+    expect((orgChats.element as HTMLInputElement).checked).toBe(false)
+  })
+
   it('hides the toggles for a super_admin role, where they grant nothing', async () => {
     const wrapper = await mountForm()
     await wrapper.find('#role').setValue('12')

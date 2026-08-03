@@ -19,6 +19,7 @@ import { computed, ref, onMounted, watch } from 'vue'
 import type { ChatScopeFields, Role, User } from '@/types/user'
 import { meetsPasswordPolicy, validatePassword, type PasswordStrength } from '@/utils/validators'
 import { listRoles } from '@/services/roles'
+import { AI_QUEUE_PERMISSION, ALL_CHATS_PERMISSION } from '@/utils/permissionGroups'
 import PasswordStrengthMeter from '@/components/common/PasswordStrengthMeter.vue'
 import { toast } from 'vue-sonner'
 
@@ -50,9 +51,12 @@ const loadingRoles = ref(false)
 const seeAllAiChats = ref(true)
 const seeAllOrgChats = ref(false)
 
-const permissionsOfSelectedRole = computed(
+const selectedRoleObject = computed(
   () => roles.value.find(role => String(role.id) === String(selectedRole.value))
-    ?.permissions?.map(permission => permission.name) ?? []
+)
+
+const permissionsOfSelectedRole = computed(
+  () => selectedRoleObject.value?.permissions?.map(permission => permission.name) ?? []
 )
 
 // super_admin passes every check, so the toggles would be decorative.
@@ -61,10 +65,13 @@ const scopeApplies = computed(
 )
 
 const syncScopeFromRole = () => {
+  // Only bail when the role itself is missing — still loading, or nothing
+  // picked yet. A role that exists and grants nothing should untick both,
+  // which testing for an empty permission list would get wrong.
+  if (!selectedRoleObject.value) return
   const permissions = permissionsOfSelectedRole.value
-  if (!permissions.length) return
-  seeAllAiChats.value = permissions.includes('view_unassigned_chats')
-  seeAllOrgChats.value = permissions.includes('view_all_chats')
+  seeAllAiChats.value = permissions.includes(AI_QUEUE_PERMISSION)
+  seeAllOrgChats.value = permissions.includes(ALL_CHATS_PERMISSION)
 }
 
 watch(selectedRole, syncScopeFromRole)

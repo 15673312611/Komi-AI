@@ -108,10 +108,15 @@ def resolve_role(
         (wanted.see_all_ai_chats, AI_QUEUE_PERMISSION),
         (wanted.see_all_org_chats, ALL_CHATS_PERMISSION),
     ):
-        desired.add(permission) if granted else desired.discard(permission)
+        if granted:
+            desired.add(permission)
+        else:
+            desired.discard(permission)
 
     # Same rule as the Roles editor: an admin cannot hand out what they do not
-    # hold themselves.
+    # hold themselves. Only the added permissions are checked, not the base
+    # role's own — someone with manage_users can already assign any role in the
+    # org as it stands, so carrying its permissions across grants nothing new.
     require_grantable(current_user, desired - held)
 
     existing = _role_granting(db, base_role.organization_id, desired)

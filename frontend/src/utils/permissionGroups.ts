@@ -25,11 +25,19 @@ limitations under the License.
  * unit tests never see it, because they mock services/user and break the loop.
  */
 
+/**
+ * The two the user form's chat-scope toggles map to. Named individually
+ * because the form reads and writes them one at a time; they mirror
+ * AI_QUEUE_PERMISSION / ALL_CHATS_PERMISSION in services/chat_scope_roles.py.
+ */
+export const AI_QUEUE_PERMISSION = 'view_unassigned_chats'
+export const ALL_CHATS_PERMISSION = 'view_all_chats'
+
 /** Seeing conversations — CHAT_VIEW_PERMISSIONS. */
 export const CHAT_VIEW_PERMISSIONS = [
-  'view_all_chats',
+  ALL_CHATS_PERMISSION,
   'view_assigned_chats',
-  'view_unassigned_chats',
+  AI_QUEUE_PERMISSION,
 ]
 
 /** Acting on one: takeover, reassign, outbound — CHAT_MANAGE_PERMISSIONS. */
