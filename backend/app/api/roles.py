@@ -19,7 +19,11 @@ from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 from app.database import get_db
 from app.models.user import User
-from app.core.auth import get_current_user, require_permissions
+from app.core.auth import (
+    check_permissions,
+    require_any_permission,
+    require_permissions,
+)
 from app.repositories.role import RoleRepository
 from app.models.permission import Permission
 from app.models.schemas.role import (
@@ -28,10 +32,35 @@ from app.models.schemas.role import (
     RoleResponse,
     PermissionResponse
 )
-from typing import List
+from typing import Iterable, List
 from uuid import UUID
 
 router = APIRouter()
+
+# Reading the role catalogue is part of two surfaces: the Roles editor
+# (manage_roles) and the invite form, which needs the role dropdown
+# (manage_users). Gating reads on manage_roles alone breaks user invite.
+ROLE_READ_PERMISSIONS = ("manage_roles", "manage_users")
+
+
+def _require_grantable(current_user: User, permission_names: Iterable[str]) -> None:
+    """You cannot grant a permission you do not hold yourself.
+
+    Without this, manage_roles was equivalent to super_admin — and in fact so
+    was *any* authenticated session, since these endpoints carried no permission
+    check at all: POST /roles/{my_role_id}/permissions/super_admin was enough.
+    check_permissions short-circuits on super_admin, so an org owner granting
+    anything is unaffected.
+    """
+    ungrantable = sorted(
+        name for name in permission_names
+        if not check_permissions(current_user, [name])
+    )
+    if ungrantable:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Cannot grant a permission you do not hold: {', '.join(ungrantable)}"
+        )
 
 @router.post("", response_model=RoleResponse)
 async def create_role(
@@ -62,7 +91,10 @@ async def create_role(
                 status_code=400,
                 detail="Invalid permission"
             )
-    
+        # A new role is a grant too — otherwise the rule is one "create role,
+        # then assign myself to it" away from being bypassed.
+        _require_grantable(current_user, {p.name for p in existing_permissions})
+
     try:
         role = role_repo.create_role(
             name=role_data.name,
@@ -80,7 +112,7 @@ async def create_role(
 
 @router.get("", response_model=List[RoleResponse])
 async def list_roles(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_any_permission(*ROLE_READ_PERMISSIONS)),
     db: Session = Depends(get_db)
 ):
     """List all roles in the organization"""
@@ -90,7 +122,7 @@ async def list_roles(
 @router.get("/{role_id}", response_model=RoleResponse)
 async def get_role(
     role_id: int,  # Changed from UUID to int
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_any_permission(*ROLE_READ_PERMISSIONS)),
     db: Session = Depends(get_db)
 ):
     """Get role details including permissions"""
@@ -106,7 +138,7 @@ async def get_role(
 async def update_role(
     role_id: int,
     role_data: RoleUpdate,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permissions("manage_roles")),
     db: Session = Depends(get_db)
 ):
     """Update role details"""
@@ -143,7 +175,14 @@ async def update_role(
                 status_code=400,
                 detail="Invalid permission"
             )
-    
+        # Only the diff: re-saving a role that already holds a permission the
+        # caller lacks is legitimate; adding one is the escalation.
+        already_held = {p.name for p in role.permissions}
+        _require_grantable(
+            current_user,
+            {p.name for p in existing_permissions} - already_held,
+        )
+
     try:
         updated_role = role_repo.update_role(
             role_id,
@@ -159,7 +198,7 @@ async def update_role(
 @router.delete("/{role_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_role(
     role_id: int,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permissions("manage_roles")),
     db: Session = Depends(get_db)
 ):
     """Delete a role"""
@@ -187,16 +226,22 @@ async def delete_role(
 async def add_role_permission(
     role_id: int,
     permission: str,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permissions("manage_roles")),
     db: Session = Depends(get_db)
 ):
     """Add a permission to a role"""
     role_repo = RoleRepository(db)
     role = role_repo.get_role(role_id)
-    
+
     if not role or role.organization_id != current_user.organization_id:
         raise HTTPException(status_code=404, detail="Role not found")
-        
+
+    # Resolve the name before the grant check so an unknown permission still
+    # reads as 404 rather than "you may not grant that".
+    if not db.query(Permission).filter(Permission.name == permission).first():
+        raise HTTPException(status_code=404, detail="Permission not found")
+    _require_grantable(current_user, [permission])
+
     success = role_repo.add_permission(role_id, permission)
     if not success:
         raise HTTPException(status_code=404, detail="Permission not found")
@@ -206,7 +251,7 @@ async def add_role_permission(
 async def remove_role_permission(
     role_id: int,
     permission: str,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_permissions("manage_roles")),
     db: Session = Depends(get_db)
 ):
     """Remove a permission from a role"""
@@ -223,7 +268,7 @@ async def remove_role_permission(
 
 @router.get("/permissions/all", response_model=List[PermissionResponse])
 async def list_permissions(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_any_permission(*ROLE_READ_PERMISSIONS)),
     db: Session = Depends(get_db)
 ):
     """List all available permissions"""

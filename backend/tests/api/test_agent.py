@@ -156,21 +156,12 @@ def client(db, test_user) -> TestClient:
         return test_user
 
     async def override_get_unified_auth():
-        # Refresh the user to get the latest role and permissions from the database
+        # Authentication only — the permission check belongs to
+        # require_unified_permissions, which wraps this. Re-implementing it here
+        # made these tests pass whether or not the routes were actually gated.
         db.refresh(test_user)
         db.refresh(test_user.role)
-        
-        # Get user permissions
-        user_permissions = {p.name for p in test_user.role.permissions}
-        
-        # Check if user has manage_agents permission
-        if "manage_agents" not in user_permissions:
-            from fastapi import HTTPException
-            raise HTTPException(
-                status_code=403,
-                detail="Not enough permissions"
-            )
-        
+
         return {
             "auth_type": "jwt",
             "organization_id": test_user.organization_id,  # Keep as UUID, not string
@@ -1676,3 +1667,79 @@ def test_performance_with_complex_agent_data(
     
     assert response.status_code == 200
     assert retrieval_time < 2.0  # Should complete within 2 seconds
+
+
+# ---------------------------------------------------------------- permissions
+
+@pytest.fixture
+def unprivileged_client(db, test_organization_id) -> TestClient:
+    """A client whose role grants nothing.
+
+    get_unified_auth authenticates only; require_unified_permissions is what
+    refuses. Before that split the check lived inside the auth helper, so every
+    route sharing it — including reading your own org's subscription — demanded
+    manage_agents.
+    """
+    role = Role(name="No Permissions", organization_id=test_organization_id)
+    db.add(role)
+    db.commit()
+    user = User(
+        id=uuid4(),
+        email="nopermissions@example.com",
+        hashed_password="hashed_password",
+        is_active=True,
+        organization_id=test_organization_id,
+        full_name="No Permissions",
+        role_id=role.id,
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+
+    async def override_get_unified_auth():
+        return {
+            "auth_type": "jwt",
+            "organization_id": user.organization_id,
+            "user_id": user.id,
+            "current_user": user,
+        }
+
+    def override_get_db():
+        yield db
+
+    app.dependency_overrides[get_unified_auth] = override_get_unified_auth
+    app.dependency_overrides[get_db] = override_get_db
+
+    yield TestClient(app)
+    app.dependency_overrides.clear()
+
+
+def test_agent_list_requires_manage_agents(unprivileged_client: TestClient):
+    """Reading the agent list still needs manage_agents after the authn/authz split"""
+    assert unprivileged_client.get("/api/agents/list").status_code == 403
+
+
+def test_agent_detail_requires_manage_agents(unprivileged_client: TestClient, test_agent: Agent):
+    """Agent config carries instructions and the guardrail prompt — not for everyone"""
+    assert unprivileged_client.get(f"/api/agents/{test_agent.id}").status_code == 403
+
+
+def test_agent_update_requires_manage_agents(unprivileged_client: TestClient, test_agent: Agent):
+    """A missed wrapper here would let any org member rewrite an agent"""
+    response = unprivileged_client.put(
+        f"/api/agents/{test_agent.id}", json={"name": "Hijacked"}
+    )
+    assert response.status_code == 403
+
+
+def test_agent_customization_requires_manage_agents(unprivileged_client: TestClient, test_agent: Agent):
+    """Customization is customer-facing branding"""
+    response = unprivileged_client.post(
+        f"/api/agents/{test_agent.id}/customization", json={"chat_bubble_color": "#000000"}
+    )
+    assert response.status_code == 403
+
+
+def test_guardrail_default_requires_manage_agents(unprivileged_client: TestClient):
+    """The default guardrail prompt tells a reader how to phrase a bypass"""
+    assert unprivileged_client.get("/api/agents/guardrail-default").status_code == 403

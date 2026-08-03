@@ -152,21 +152,10 @@ def client(db, test_user) -> TestClient:
         return test_user
 
     async def override_get_unified_auth():
-        # Refresh the user to get the latest role and permissions from the database
+        # Authentication only — see the note in tests/api/test_agent.py.
         db.refresh(test_user)
         db.refresh(test_user.role)
-        
-        # Get user permissions
-        user_permissions = {p.name for p in test_user.role.permissions}
-        
-        # Check if user has manage_agents permission
-        if "manage_agents" not in user_permissions:
-            from fastapi import HTTPException
-            raise HTTPException(
-                status_code=403,
-                detail="Not enough permissions"
-            )
-        
+
         return {
             "auth_type": "jwt",
             "organization_id": test_user.organization_id,  # Keep as UUID

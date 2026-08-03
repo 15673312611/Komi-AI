@@ -17,7 +17,7 @@ limitations under the License.
 from fastapi import Depends, HTTPException, status, Cookie, Request
 from fastapi.security import HTTPBearer
 from sqlalchemy.orm import Session
-from typing import Iterable, Optional, List
+from typing import Callable, Iterable, Optional, List
 
 from app.database import get_db
 from app.models.user import User
@@ -264,7 +264,12 @@ def get_auth_info_from_request(request: Request) -> dict:
 
 
 async def get_unified_auth(request: Request, db: Session = Depends(get_db)) -> dict:
-    """Unified authentication that handles both regular JWT and Shopify session tokens"""
+    """Authenticate a JWT, a PAT, or a Shopify session token.
+
+    Authentication only — it deliberately holds no permission check. Wrap it in
+    require_unified_permissions / require_any_unified_permission to declare what
+    a route needs.
+    """
     from app.services.shopify_session import require_shopify_or_jwt_auth
 
     try:
@@ -314,8 +319,6 @@ async def get_unified_auth(request: Request, db: Session = Depends(get_db)) -> d
                             detail="Invalid or revoked access token",
                             headers={"WWW-Authenticate": "Bearer"},
                         )
-                    if not check_permissions(current_user, ["manage_agents"]):
-                        raise HTTPException(status_code=403, detail="Not enough permissions")
                     return {
                         "auth_type": "pat",
                         "organization_id": current_user.organization_id,
@@ -354,13 +357,6 @@ async def get_unified_auth(request: Request, db: Session = Depends(get_db)) -> d
                         headers={"WWW-Authenticate": "Bearer"},
                     )
 
-                # Check permissions
-                if not check_permissions(current_user, ["manage_agents"]):
-                    raise HTTPException(
-                        status_code=403,
-                        detail="Not enough permissions"
-                    )
-                
                 return {
                     "auth_type": "jwt",
                     "organization_id": current_user.organization_id,  # Keep as UUID
@@ -382,6 +378,54 @@ async def get_unified_auth(request: Request, db: Session = Depends(get_db)) -> d
     except Exception as e:
         logger.error(f"Authentication error: {str(e)}")
         raise HTTPException(status_code=401, detail="Authentication failed")
+
+
+def _authorize_unified(auth_info: dict, permitted: Callable[[User], bool]) -> dict:
+    """Apply a permission check to a get_unified_auth result.
+
+    A Shopify shop session authenticates a *store*, not a person, so it carries
+    no `current_user` and there is no role to check — those requests pass
+    through exactly as they did before authorization moved out of the helper.
+    """
+    current_user = auth_info.get("current_user")
+    if current_user is None:
+        return auth_info
+    if not permitted(current_user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not enough permissions"
+        )
+    return auth_info
+
+
+def require_unified_permissions(*required_permissions: str):
+    """get_unified_auth + AND-semantics permissions, for JWT/PAT callers.
+
+    get_unified_auth used to hardcode a manage_agents check, which meant every
+    route sharing the helper inherited it — including reading your own org's
+    subscription, which locked every non-admin out of the whole app. The helper
+    now only authenticates; each route declares what it needs.
+    """
+    async def permission_checker(
+        auth_info: dict = Depends(get_unified_auth)
+    ) -> dict:
+        return _authorize_unified(
+            auth_info,
+            lambda user: check_permissions(user, list(required_permissions)),
+        )
+    return permission_checker
+
+
+def require_any_unified_permission(*permissions: str):
+    """The OR counterpart of require_unified_permissions."""
+    async def permission_checker(
+        auth_info: dict = Depends(get_unified_auth)
+    ) -> dict:
+        return _authorize_unified(
+            auth_info,
+            lambda user: has_any_permission(user, permissions),
+        )
+    return permission_checker
 
 
 async def get_unified_chat_auth(request: Request, db: Session = Depends(get_db)) -> dict:
