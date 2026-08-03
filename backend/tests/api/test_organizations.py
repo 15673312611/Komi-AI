@@ -21,7 +21,11 @@ from fastapi import FastAPI
 from app.models.user import User
 from app.models.organization import Organization
 from app.models.role import Role
-from app.models.permission import Permission, role_permissions
+from app.models.permission import (
+    Permission,
+    role_permissions,
+    DEFAULT_AGENT_ROLE_PERMISSIONS,
+)
 from uuid import UUID, uuid4
 from datetime import datetime, timezone
 from app.api import organizations as organizations_router
@@ -242,6 +246,25 @@ def test_create_organization(client, db, monkeypatch):
     # Verify the role in database
     db_role = db.query(Role).filter(Role.id == role["id"]).first()
     assert db_role is not None
+
+    # The seeded roles, pinned. The hosted seeder drifted from this one for a
+    # year — two permissions instead of four, and both roles is_default — and
+    # nothing here failed, because the only claim made was the Admin name.
+    # Every assertion below is one that drift broke.
+    roles = db.query(Role).filter(Role.organization_id == UUID(data["id"])).all()
+    by_name = {r.name: r for r in roles}
+    assert set(by_name) == {"Admin", "Agent"}
+
+    # Exactly one default: get_default_role() takes .first() with no ordering,
+    # so a second one means an invited user can land on Admin.
+    assert [r.name for r in roles if r.is_default] == ["Agent"]
+
+    assert {p.name for p in by_name["Agent"].permissions} == set(
+        DEFAULT_AGENT_ROLE_PERMISSIONS
+    )
+    assert {p.name for p in by_name["Admin"].permissions} == {
+        name for name, _ in Permission.default_permissions()
+    }
 
 
 def test_get_organization(client, test_organization):

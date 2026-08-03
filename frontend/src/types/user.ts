@@ -23,7 +23,20 @@ export interface Role {
   permissions?: Permission[]
   created_at?: string
   updated_at?: string
-  is_default?: boolean 
+  is_default?: boolean
+}
+
+/**
+ * The two chat-scope toggles on the user form.
+ *
+ * Not properties of a user — permissions live on roles. These describe the
+ * chat scope a person should have and the API resolves them to a role,
+ * reusing an existing one where it can. Omitted means "whatever the chosen
+ * role already grants".
+ */
+export interface ChatScopeFields {
+  see_all_ai_chats?: boolean
+  see_all_org_chats?: boolean
 }
 
 export interface UserGroup {

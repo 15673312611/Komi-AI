@@ -191,13 +191,31 @@ const loadOverview = async () => {
 
 // Rows always reflect the current users list (so create/delete stays in sync),
 // merged with overview stats by id when available.
+//
+// Anything an edit can change has to be read from the users list, which the
+// update handler replaces — the overview payload is fetched once and never
+// refetched, so taking the role from it left the cell showing the old role
+// until a page reload. That matters more now the chat-scope toggles can move
+// someone to a different role without the role dropdown being touched.
 const rows = computed<AgentRow[]>(() => {
   if (usingOverview.value) {
     const userById = new Map(users.value.map((u) => [u.id, u]))
     return overviewRows.value
       // keep only agents that still exist in the CRUD list (handles deletes)
       .filter((r) => userById.has(r.id) || users.value.length === 0)
-      .map((r) => r)
+      .map((r) => {
+        const user = userById.get(r.id)
+        if (!user) return r
+        const role = user.role?.name ?? r.role
+        return {
+          ...r,
+          full_name: user.full_name ?? r.full_name,
+          email: user.email ?? r.email,
+          is_active: user.is_active ?? r.is_active,
+          role,
+          is_admin: !!role && /admin/i.test(role),
+        }
+      })
   }
   return mapUsersToRows(users.value)
 })

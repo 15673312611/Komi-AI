@@ -34,7 +34,7 @@ from app.core.auth import get_current_user, require_permissions
 from app.core.security import create_access_token, create_refresh_token
 from app.core.logger import get_logger
 from app.models.role import Role
-from app.models.permission import Permission
+from app.models.permission import Permission, DEFAULT_AGENT_ROLE_PERMISSIONS
 from app.repositories.organization import OrganizationRepository
 from app.models.agent import Agent
 from app.models.session_to_agent import SessionToAgent
@@ -127,12 +127,7 @@ async def create_organization(
             is_default=True
         )
         agent_role.permissions = [
-            permissions["view_assigned_chats"],
-            permissions["manage_assigned_chats"],
-            # Lets an agent see and claim chats the AI is still handling
-            permissions["view_unassigned_chats"],
-            # Read-only directory access; mutating a person still needs more
-            permissions["view_people"]
+            permissions[name] for name in DEFAULT_AGENT_ROLE_PERMISSIONS
         ]
         db.add(agent_role)
         db.flush()

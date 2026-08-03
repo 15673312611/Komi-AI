@@ -15,10 +15,11 @@ limitations under the License.
 -->
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import type { Role, User } from '@/types/user'
+import { computed, ref, onMounted, watch } from 'vue'
+import type { ChatScopeFields, Role, User } from '@/types/user'
 import { meetsPasswordPolicy, validatePassword, type PasswordStrength } from '@/utils/validators'
 import { listRoles } from '@/services/roles'
+import { AI_QUEUE_PERMISSION, ALL_CHATS_PERMISSION } from '@/utils/permissionGroups'
 import PasswordStrengthMeter from '@/components/common/PasswordStrengthMeter.vue'
 import { toast } from 'vue-sonner'
 
@@ -27,7 +28,7 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
-  submit: [userData: Partial<User> & { password?: string, role_id?: number }]
+  submit: [userData: Partial<User> & ChatScopeFields & { password?: string, role_id?: number }]
   cancel: []
 }>()
 
@@ -42,6 +43,38 @@ const error = ref('')
 const roles = ref<Role[]>([])
 const selectedRole = ref(props.user?.role?.id || '')
 const loadingRoles = ref(false)
+
+// Chat scope. A new agent starts able to pick up whatever the AI is still
+// handling, and unable to read colleagues' conversations — tick the second one
+// to let someone cover a teammate's inbox. Once roles load these re-derive from
+// whichever role is selected, so they always show what that role actually does.
+const seeAllAiChats = ref(true)
+const seeAllOrgChats = ref(false)
+
+const selectedRoleObject = computed(
+  () => roles.value.find(role => String(role.id) === String(selectedRole.value))
+)
+
+const permissionsOfSelectedRole = computed(
+  () => selectedRoleObject.value?.permissions?.map(permission => permission.name) ?? []
+)
+
+// super_admin passes every check, so the toggles would be decorative.
+const scopeApplies = computed(
+  () => !permissionsOfSelectedRole.value.includes('super_admin')
+)
+
+const syncScopeFromRole = () => {
+  // Only bail when the role itself is missing — still loading, or nothing
+  // picked yet. A role that exists and grants nothing should untick both,
+  // which testing for an empty permission list would get wrong.
+  if (!selectedRoleObject.value) return
+  const permissions = permissionsOfSelectedRole.value
+  seeAllAiChats.value = permissions.includes(AI_QUEUE_PERMISSION)
+  seeAllOrgChats.value = permissions.includes(ALL_CHATS_PERMISSION)
+}
+
+watch(selectedRole, syncScopeFromRole)
 
 const passwordStrength = ref<PasswordStrength>({
   score: 0,
@@ -72,6 +105,7 @@ const fetchRoles = async () => {
   try {
     loadingRoles.value = true
     roles.value = await listRoles()
+    syncScopeFromRole()
   } catch (err) {
     console.error('Error loading roles:', err)
     toast.error('Error', {
@@ -110,6 +144,10 @@ const handleSubmit = () => {
     email: email.value,
     is_active: isActive.value,
     role_id: Number(selectedRole.value),
+    ...(scopeApplies.value && {
+      see_all_ai_chats: seeAllAiChats.value,
+      see_all_org_chats: seeAllOrgChats.value
+    }),
     ...(showPasswordFields.value && { password: password.value })
   }
 
@@ -164,6 +202,24 @@ const handleSubmit = () => {
         </option>
       </select>
       <span v-if="loadingRoles" class="loading-text">Loading roles...</span>
+    </div>
+
+    <div v-if="scopeApplies" class="form-group">
+      <label>Which chats can they see?</label>
+      <label class="checkbox-label">
+        <input type="checkbox" v-model="seeAllAiChats" />
+        <span>
+          All AI chats
+          <small>Conversations the AI is handling that nobody has picked up.</small>
+        </span>
+      </label>
+      <label class="checkbox-label">
+        <input type="checkbox" v-model="seeAllOrgChats" />
+        <span>
+          All chats in the organization
+          <small>Including other people's conversations — useful for covering leave.</small>
+        </span>
+      </label>
     </div>
 
     <template v-if="showPasswordFields">
@@ -246,10 +302,22 @@ const handleSubmit = () => {
 
 .checkbox-label {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: var(--space-sm);
   font-size: var(--text-sm);
   color: var(--text);
+}
+
+.checkbox-label input[type="checkbox"] {
+  margin-top: 2px;
+  flex-shrink: 0;
+}
+
+.checkbox-label small {
+  display: block;
+  color: var(--text3);
+  font-size: var(--text-xs);
+  margin-top: 2px;
 }
 
 .form-actions {

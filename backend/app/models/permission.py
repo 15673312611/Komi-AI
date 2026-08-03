@@ -26,6 +26,21 @@ role_permissions = Table(
 )
 
 
+# What a newly seeded "Agent" role can do: work the chats assigned to them, pick
+# up whatever the AI is still handling, and look up who they are talking to.
+#
+# Named here rather than spelled out in each signup handler because there are
+# two of them — community (api/organizations.py) and hosted (enterprise
+# signup) — and they drifted. Hosted seeded only the first two for a year, so
+# its agents could not see the unclaimed queue or open People at all.
+DEFAULT_AGENT_ROLE_PERMISSIONS = (
+    "view_assigned_chats",
+    "manage_assigned_chats",
+    "view_unassigned_chats",
+    "view_people",
+)
+
+
 class Permission(Base):
     __tablename__ = "permissions"
 

@@ -64,6 +64,29 @@ def check_permissions(user: User, required_permissions: List[str]) -> bool:
         return True
     return all(perm in user_permissions for perm in required_permissions)
 
+
+def require_grantable(current_user: User, permission_names: Iterable[str]) -> None:
+    """You cannot grant a permission you do not hold yourself.
+
+    Without this, manage_roles was equivalent to super_admin — and in fact so
+    was *any* authenticated session, since the /roles endpoints carried no
+    permission check at all: POST /roles/{my_role_id}/permissions/super_admin
+    was enough. check_permissions short-circuits on super_admin, so an org
+    owner granting anything is unaffected.
+
+    Lives here rather than in api/roles.py because granting is not confined to
+    that router — the chat-scope toggles on the user form widen a role too.
+    """
+    ungrantable = sorted(
+        name for name in permission_names
+        if not check_permissions(current_user, [name])
+    )
+    if ungrantable:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Cannot grant a permission you do not hold: {', '.join(ungrantable)}"
+        )
+
 def require_permissions(*required_permissions: str):
     """Dependency to check user permissions"""
     async def permission_checker(
