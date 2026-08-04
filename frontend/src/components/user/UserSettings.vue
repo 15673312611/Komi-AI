@@ -23,7 +23,7 @@ import PasswordStrengthMeter from '@/components/common/PasswordStrengthMeter.vue
 import userAvatar from '@/assets/user.svg'
 import type { User } from '@/types/user'
 import { isAbsoluteUrl } from '@/utils/avatars'
-import { resolveUploadUrl } from '@/config/api'
+import { myAvatarUrl } from '@/config/api'
 import { useNotificationSettings } from '@/composables/useNotificationSettings'
 import { useNotifications } from '@/composables/useNotifications'
 import type { NotificationSettings } from '@/services/notification'
@@ -120,17 +120,10 @@ const discardChanges = () => {
 
 const userAvatarSrc = computed(() => {
   if (profilePicPreview.value) return profilePicPreview.value
-  if (user.value?.profile_pic) {
-    // Absolute S3/CDN URL — use it directly
-    if (isAbsoluteUrl(user.value.profile_pic)) {
-      return user.value.profile_pic
-    }
-    // Local storage: resolve against the runtime API origin, cache-busted so a
-    // freshly uploaded picture replaces the one the browser already cached.
-    const timestamp = new Date().getTime()
-    return `${resolveUploadUrl(user.value.profile_pic)}?t=${timestamp}`
-  }
-  return userAvatar
+  if (!user.value?.profile_pic) return userAvatar
+  // Same reasoning as the header avatar: the stored URL was signed at login and
+  // expires within the hour, so ask the API to sign a fresh one instead.
+  return myAvatarUrl(new Date().getTime())
 })
 
 onMounted(async () => {

@@ -15,7 +15,7 @@ limitations under the License.
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status, Response, Request, Body, File, UploadFile
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.security import HTTPBearer, OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from typing import List, Optional
@@ -37,7 +37,7 @@ from app.repositories.user import UserRepository
 from pydantic import BaseModel
 from app.models.role import Role
 from app.services.chat_scope_roles import resolve_role
-from app.core.s3 import get_s3_signed_url, upload_file_to_s3, delete_file_from_s3
+from app.core.s3 import get_s3_signed_url, sign_s3_url, upload_file_to_s3, delete_file_from_s3
 from app.core.config import settings
 from app.repositories.shopify_shop_repository import ShopifyShopRepository
 from app.models.schemas.shopify.shopify_shop import ShopifyShopUpdate
@@ -398,6 +398,41 @@ async def list_teammates(
     """
     users = UserRepository(db).get_users_by_organization(current_user.organization_id)
     return [user for user in users if user.is_active]
+
+
+@router.get("/me/avatar")
+async def get_my_avatar(current_user: User = Depends(get_current_user)):
+    """Redirect to the caller's profile picture, signed at request time.
+
+    The dashboard used to render the URL held in the cached `user_info` blob.
+    That blob is written at login and never rewritten, but the URL inside it is
+    an S3 presigned link good for S3_PRESIGN_EXPIRY_SECONDS — an hour by
+    default. Every session outlasted its own avatar, and the only way to get a
+    working one back was to log out and in again.
+
+    A stable path fixes that for good: the browser asks us, and whatever it
+    gets handed is freshly signed. no-store because the *redirect* must not be
+    cached — the object it points at still can be.
+
+    Declared above GET /{user_id}, or "me" parses as a user id.
+    """
+    if not current_user.profile_pic:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No profile picture")
+
+    location = sign_s3_url(current_user.profile_pic)
+    if not location.startswith(("http://", "https://")):
+        # Local storage. save_upload_file stores "/uploads/user/...", but the
+        # static mount lives under the API prefix, so the bare path 404s.
+        path = location.lstrip("/")
+        if path.startswith("uploads/"):
+            path = f"{settings.API_V1_STR.strip('/')}/{path}"
+        location = f"/{path}"
+
+    return RedirectResponse(
+        url=location,
+        status_code=status.HTTP_307_TEMPORARY_REDIRECT,
+        headers={"Cache-Control": "no-store"},
+    )
 
 
 @router.get("/{user_id}", response_model=UserResponse)
