@@ -49,6 +49,8 @@ class AgentCustomizationResponse(BaseModel):
     show_citations: Optional[bool] = None
     collect_email: Optional[bool] = None
     show_ai_disclaimer: Optional[bool] = None
+    # Free-form extras (avatar_style, widget_display placement defaults, ...)
+    customization_metadata: Optional[dict] = None
 
     @field_serializer('photo_url')
     def _sign_photo_url(self, v: Optional[str]) -> Optional[str]:
