@@ -1230,22 +1230,50 @@ const initializeWidget = async () => {
     }
 }
 
+// Parent-window messages. Registered synchronously during setup — NOT inside
+// setupEventListeners(), which onMounted only reaches after initializeWidget()'s
+// awaits; the embed loader posts WIDGET_DISPLAY/PREFILL_MESSAGE on iframe load,
+// which would race that gap and be dropped.
+// (The handler bodies run on later macrotasks, so refs declared further down —
+// parentDisplay — are initialized by the time they're touched.)
+window.addEventListener('message', (event) => {
+    // Only the embedding page (the loader, or the dashboard preview) may drive the
+    // widget; hostile sibling frames can reach this window via top.frames[i].
+    if (event.source !== window.parent) return
+    if (!event.data || typeof event.data.type !== 'string') return
+    if (event.data.type === 'SCROLL_TO_BOTTOM') {
+        scrollToBottom()
+    }
+    if (event.data.type === 'TOKEN_RECEIVED') {
+        // Parent confirmed token storage
+        localStorage.setItem(TOKEN_KEY, event.data.token)
+    }
+    if (event.data.type === 'WIDGET_DISPLAY') {
+        // The embed loader's final display geometry (developer options merged with
+        // dashboard defaults) — drives the fill-the-iframe sizing below.
+        parentDisplay.value = {
+            mode: event.data.mode,
+            width: event.data.width,
+            height: event.data.height,
+        }
+    }
+    if (event.data.type === 'PREFILL_MESSAGE' && typeof event.data.text === 'string') {
+        // Prefill (never auto-send) the chat input, e.g. ChatterMate.open({ message }).
+        newMessage.value = event.data.text.slice(0, 2000)
+        nextTick(() => {
+            const input = document.querySelector<HTMLInputElement>(
+                '.message-input input, .welcome-message-field'
+            )
+            input?.focus()
+        })
+    }
+})
+
 // Setup event listeners and callbacks
 const setupEventListeners = () => {
     // Register takeover callback
     onTakeover(async () => {
         await checkAuthorization()
-    })
-
-    // Listen for scroll message from parent
-    window.addEventListener('message', (event) => {
-        if (event.data.type === 'SCROLL_TO_BOTTOM') {
-            scrollToBottom()
-        }
-        if (event.data.type === 'TOKEN_RECEIVED') {
-            // Parent confirmed token storage
-            localStorage.setItem(TOKEN_KEY, event.data.token)
-        }
     })
 
     // Register workflow state callback
@@ -1517,6 +1545,33 @@ const submitEmailGate = async () => {
     }
 }
 
+// Display geometry pushed by the embed loader (WIDGET_DISPLAY). Falls back to the
+// dashboard metadata for direct-iframe embeds where no loader is present.
+const parentDisplay = ref<{ mode?: string; width?: number; height?: number } | null>(null)
+
+// Classic floating-window geometry — must mirror the chattermate.js config defaults
+// (displayMode/containerWidth/containerHeight); at these values the loader behaves
+// exactly as before display modes existed.
+const CLASSIC_DISPLAY = { mode: 'floating', width: 400, height: 560 }
+
+const resolvedDisplay = computed<Record<string, any> | null>(() =>
+    parentDisplay.value
+    || (customization.value.customization_metadata as Record<string, any> | undefined)?.widget_display
+    || null
+)
+
+const hasCustomDisplay = computed(() => {
+    const display = resolvedDisplay.value
+    if (!display) return false
+    // Anything beyond the classic floating window means the host container has
+    // custom geometry the interior must fill rather than fight.
+    return (
+        (typeof display.mode === 'string' && display.mode !== CLASSIC_DISPLAY.mode) ||
+        (typeof display.width === 'number' && display.width !== CLASSIC_DISPLAY.width) ||
+        (typeof display.height === 'number' && display.height !== CLASSIC_DISPLAY.height)
+    )
+})
+
 const containerStyles = computed(() => {
     // Always fill the embed iframe exactly. chattermate.js sizes the iframe itself
     // (fixed size on desktop, full-screen on mobile), so 100%/100% here guarantees the
@@ -1527,6 +1582,14 @@ const containerStyles = computed(() => {
         width: '100%',
         height: '100%',
         borderRadius: 'var(--radius-lg)'
+    }
+
+    // Sidebar / custom-size embeds: the loader drives the geometry — fill it.
+    // The fixed interior sizes below would fight a 100dvh drawer or a 520px window.
+    if (hasCustomDisplay.value) {
+        const mode = resolvedDisplay.value?.mode
+        const isSidebar = mode === 'sidebar-left' || mode === 'sidebar-right'
+        return isSidebar ? { ...baseStyles, borderRadius: '0' } : baseStyles
     }
 
     if (isAskAnythingStyle.value) {
