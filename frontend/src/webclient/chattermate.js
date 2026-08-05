@@ -79,12 +79,49 @@ window.chattermateConfig;
     devOverrides[key] = true
   }
 
+  const DISPLAY_MODES = ['floating', 'sidebar-left', 'sidebar-right', 'search-bar']
+
+  // Dashboard "Widget placement" defaults (customization_metadata.widget_display,
+  // validated server-side) arriving over CUSTOMIZATION_UPDATE. Fills only the keys
+  // the developer didn't set. Types are re-checked because this crosses a frame.
+  function applyDashboardDisplay(display) {
+    if (!display || typeof display !== 'object') return
+    const set = function (configKey, value) {
+      if (!devOverrides[configKey]) config[configKey] = value
+    }
+    if (DISPLAY_MODES.indexOf(display.mode) !== -1) set('displayMode', display.mode)
+    if (display.side === 'left' || display.side === 'right') set('side', display.side)
+    if (typeof display.launcher === 'boolean') set('launcher', display.launcher)
+    if (isNumber(display.width)) set('containerWidth', Math.max(280, display.width))
+    if (isNumber(display.height)) set('containerHeight', Math.max(400, display.height))
+    if (isNumber(display.sidebar_width)) set('sidebarWidth', Math.max(280, display.sidebar_width))
+    if (typeof display.search_placeholder === 'string' && display.search_placeholder) {
+      set('searchPlaceholder', display.search_placeholder.slice(0, 80))
+    }
+    if (isNumber(display.offset_bottom)) set('launcherBottom', Math.max(0, display.offset_bottom))
+    if (isNumber(display.offset_side)) set('launcherRight', Math.max(0, display.offset_side))
+    if (isNumber(display.z_index)) set('zIndex', Math.max(1, Math.floor(display.z_index)))
+  }
+
+  // Geometry the widget interior needs to adapt its own sizing (see WidgetBuilder).
+  function widgetDisplayPayload() {
+    return {
+      type: 'WIDGET_DISPLAY',
+      mode: config.displayMode,
+      width: config.containerWidth,
+      height: config.containerHeight,
+    }
+  }
+
   // The chat window's open/close mechanics live inside initialize() (they need the
   // DOM elements it creates). This controller is populated there so the public API
   // below can reach them; calls made before then are queued and flushed on init.
   let controller = null
   const pendingCalls = []
   let triggerClickQueued = false
+  // The widget iframe's window, once created — message handlers accept commands
+  // only from it, so other embedded frames (ads etc.) can't drive the widget.
+  let widgetFrameWindow = null
   function withController(fn) {
     if (controller) {
       fn()
@@ -153,6 +190,14 @@ window.chattermateConfig;
 
   // Create and inject styles
   function updateStyles() {
+    const mode = config.displayMode
+    const isSidebar = mode === 'sidebar-left' || mode === 'sidebar-right'
+    // Sidebar modes pin the window to their own edge; everything else (launcher,
+    // nudge, floating window) follows the configured side.
+    const side = mode === 'sidebar-left' ? 'left' : (mode === 'sidebar-right' ? 'right' : config.side)
+    // The search bar is shorter than the bubble launcher; dependent offsets track it.
+    const launcherHeight = mode === 'search-bar' ? 48 : 64
+
     const style = document.createElement('style')
     style.id = 'chattermate-styles'
     style.textContent = `
@@ -160,7 +205,7 @@ window.chattermateConfig;
       #${config.buttonId} {
         position: fixed;
         bottom: ${config.launcherBottom}px;
-        right: ${config.launcherRight}px;
+        ${side}: ${config.launcherRight}px;
         width: 64px;
         height: 64px;
         border-radius: 20px 20px 20px 6px;
@@ -268,6 +313,57 @@ window.chattermateConfig;
         animation: chattermate-spin 0.6s linear infinite;
       }
 
+      /* Search-bar trigger content: hidden unless search-bar mode (below) shows it. */
+      #${config.buttonId} .cm-search { display: none; }
+
+      ${mode === 'search-bar' ? `
+      @media (min-width: 769px) {
+        /* ===== Search-bar mode: the launcher becomes a search-input-like bar.
+           Same element, same click/toggle/badge logic. Mobile keeps the bubble. ===== */
+        #${config.buttonId} {
+          width: ${config.searchBarWidth}px;
+          height: 48px;
+          border-radius: 24px;
+          padding: 0 16px;
+          background: #ffffff;
+          color: #374151;
+          box-shadow: 0 8px 24px rgba(0, 0, 0, 0.14), inset 0 0 0 1.5px ${config.chatBubbleColor}55;
+          animation: none;
+          justify-content: flex-start;
+          box-sizing: border-box;
+        }
+        #${config.buttonId}:hover { transform: scale(1.02); }
+        #${config.buttonId} .cm-ring,
+        #${config.buttonId} .cm-dots,
+        #${config.buttonId} .cm-chevron,
+        #${config.buttonId}.active .cm-chevron { display: none; }
+        /* Dark spinner — the stock white one vanishes on the white bar. */
+        #${config.buttonId}.loading .cm-search { visibility: hidden; }
+        #${config.buttonId}.loading:after {
+          border-color: rgba(0, 0, 0, 0.15);
+          border-top-color: ${config.chatBubbleColor};
+        }
+        #${config.buttonId} .cm-search {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          min-width: 0;
+          width: 100%;
+        }
+        #${config.buttonId} .cm-search svg {
+          flex-shrink: 0;
+          color: ${config.chatBubbleColor};
+        }
+        #${config.buttonId} .cm-search-placeholder {
+          font: 400 14px/1.2 -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+          color: #6b7280;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+      }
+      ` : ''}
+
       @keyframes chattermate-spin { to { transform: rotate(360deg); } }
       @keyframes chattermate-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
       @keyframes chattermate-ring { 0% { transform: scale(.85); opacity: .5; } 100% { transform: scale(1.6); opacity: 0; } }
@@ -287,7 +383,7 @@ window.chattermateConfig;
            delta so the two stay together. Mobile is full-screen (media query below)
            and is unaffected. */
         bottom: ${(config.containerBottom || 100) + ((config.launcherBottom || 20) - 20)}px;
-        right: ${(config.containerRight || 20) + ((config.launcherRight || 20) - 20)}px;
+        ${side}: ${(config.containerRight || 20) + ((config.launcherRight || 20) - 20)}px;
         width: ${config.containerWidth || 384}px;
         max-width: calc(100vw - 48px);
         height: ${config.containerHeight}px;
@@ -313,6 +409,39 @@ window.chattermateConfig;
         transition: opacity 420ms cubic-bezier(0.22, 1, 0.36, 1), transform 420ms cubic-bezier(0.22, 1, 0.36, 1);
         pointer-events: auto;
       }
+
+      ${isSidebar ? `
+      /* ===== Sidebar mode: full-height drawer hugging the ${side} edge ===== */
+      #${config.containerId} {
+        top: 0;
+        bottom: auto;
+        ${side}: 0;
+        ${side === 'left' ? 'right: auto;' : 'left: auto;'}
+        width: ${config.sidebarWidth}px;
+        max-width: 100vw;
+        height: 100dvh;
+        max-height: 100dvh;
+        transform: translateX(${side === 'left' ? '-100%' : '100%'});
+        box-shadow: ${side === 'left' ? '' : '-'}12px 0 40px rgba(0, 0, 0, 0.12);
+      }
+      #${config.containerId}.active {
+        transform: translateX(0);
+      }
+      #${config.containerId} .chattermate-iframe {
+        border-radius: 0;
+      }
+      /* The drawer would otherwise paint over the launcher (later sibling, equal
+         z-index), leaving no way to close on styles without an in-panel chevron.
+         While open, slide the launcher out beside the drawer edge, one layer up. */
+      #${config.buttonId} {
+        z-index: ${config.zIndex + 1};
+        transition: transform 0.3s cubic-bezier(.34,1.3,.5,1), opacity 320ms ease,
+                    left 360ms cubic-bezier(0.22, 1, 0.36, 1), right 360ms cubic-bezier(0.22, 1, 0.36, 1);
+      }
+      #${config.buttonId}.active {
+        ${side}: ${config.sidebarWidth + 20}px;
+      }
+      ` : ''}
 
       /* Clean border around the widget container */
       /* The widget panel (inside the iframe) draws its own theme-aware border, so the
@@ -430,7 +559,7 @@ window.chattermateConfig;
           /* Respect the configured position on mobile too, so the closed launcher can
              clear a fixed bottom nav bar (the main reason to move it up). */
           bottom: ${config.launcherBottom}px !important;
-          right: ${config.launcherRight}px !important;
+          ${side}: ${config.launcherRight}px !important;
         }
 
         .ask-anything-mobile #chattermate-mobile-close.active {
@@ -469,10 +598,10 @@ window.chattermateConfig;
       /* Chat Initiation Message Styles */
       #${config.initiationMessageId} {
         position: fixed !important;
-        /* Sit above the 64px launcher (+12px gap) and align to its right edge, so it
-           never overlaps the icon regardless of the configured launcher position. */
-        bottom: ${(config.launcherBottom || 20) + 64 + 12}px !important;
-        right: ${config.launcherRight || 20}px !important;
+        /* Sit above the launcher (+12px gap) and align to its edge on the active side,
+           so it never overlaps the icon regardless of the configured position/mode. */
+        bottom: ${(config.launcherBottom || 20) + launcherHeight + 12}px !important;
+        ${side}: ${config.launcherRight || 20}px !important;
         max-width: 260px !important;
         background: white !important;
         padding: 12px 36px 12px 14px !important;
@@ -525,6 +654,14 @@ window.chattermateConfig;
         z-index: 1 !important;
       }
       @keyframes chattermate-orb-spin { to { transform: rotate(360deg); } }
+      ${side === 'left' ? `
+      /* On the left edge the orb (which protrudes 34px past the bubble) would clip
+         off-screen — mirror it to the bubble's page-facing side. */
+      .initiation-orb {
+        left: auto !important;
+        right: -34px !important;
+      }
+      ` : ''}
 
       #${config.initiationMessageId}.show {
         opacity: 1;
@@ -556,7 +693,7 @@ window.chattermateConfig;
         content: '' !important;
         position: absolute !important;
         bottom: -7px !important;
-        right: 30px !important;
+        ${side}: 30px !important;
         width: 14px !important;
         height: 14px !important;
         min-width: 14px !important;
@@ -853,6 +990,21 @@ window.chattermateConfig;
       existingStyle.remove()
     }
     document.head.appendChild(style)
+
+    // The search-bar placeholder is data, not markup — keep it in sync here since
+    // every config change funnels through updateStyles().
+    syncLauncherContent()
+  }
+
+  // Set text content on launcher children (textContent, never innerHTML — the
+  // placeholder can come from dashboard settings).
+  function syncLauncherContent() {
+    const btn = document.getElementById(config.buttonId)
+    if (!btn) return
+    const placeholder = btn.querySelector('.cm-search-placeholder')
+    if (placeholder && placeholder.textContent !== config.searchPlaceholder) {
+      placeholder.textContent = config.searchPlaceholder
+    }
   }
 
   // Get stored token - check window.chattermateToken first (set by developer),
@@ -1036,6 +1188,10 @@ window.chattermateConfig;
       <span class="cm-ring r2"></span>
       <div class="cm-dots"><span class="cm-dot"></span><span class="cm-dot"></span><span class="cm-dot"></span></div>
       <span class="cm-chevron">&#8964;</span>
+      <span class="cm-search">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"></circle><path d="M21 21l-4.35-4.35"></path></svg>
+        <span class="cm-search-placeholder"></span>
+      </span>
       <span class="cm-badge"></span>
     `
     // Safety net: reveal anyway if nothing else does within a few seconds (e.g. an
@@ -1070,6 +1226,8 @@ window.chattermateConfig;
     document.body.appendChild(mobileCloseButton)
     document.body.appendChild(mobileTopbar)
     updateBadge()
+    // The button just entered the DOM — populate its text content (search placeholder).
+    syncLauncherContent()
 
     let isOpen = false
     let iframe = null
@@ -1279,6 +1437,9 @@ window.chattermateConfig;
             iframe.srcdoc = html;
             iframe.addEventListener('load', function () {
               iframeReady = true
+              // Developer display overrides, known at load. Dashboard defaults merge
+              // later; the CUSTOMIZATION_UPDATE reply re-sends the final values.
+              iframe.contentWindow.postMessage(widgetDisplayPayload(), '*')
               if (pendingPrefill) {
                 iframe.contentWindow.postMessage({ type: 'PREFILL_MESSAGE', text: pendingPrefill }, '*')
                 pendingPrefill = null
@@ -1287,6 +1448,9 @@ window.chattermateConfig;
               emitEvent('ready')
             })
             container.appendChild(iframe)
+            // contentWindow is a stable WindowProxy from the moment the element is in
+            // the DOM — capture now so even pre-load messages pass the source check.
+            widgetFrameWindow = iframe.contentWindow
             button.classList.remove('loading')
             iframe.style.opacity = '1'
           })
@@ -1311,6 +1475,9 @@ window.chattermateConfig;
         // Listen for token + unread-count updates from iframe
         window.addEventListener('message', function(event) {
           if (!event.data || typeof event.data.type !== 'string') return
+          // Only the widget iframe may talk to the loader. Both frames can be
+          // null-origin (srcdoc), so identity of the source window is the check.
+          if (!widgetFrameWindow || event.source !== widgetFrameWindow) return
           if (event.data.type === 'UNREAD_COUNT') {
             config.unreadCount = Math.max(0, parseInt(event.data.count, 10) || 0)
             updateBadge()
@@ -1448,6 +1615,9 @@ window.chattermateConfig;
   // Add message listener for customization updates
   window.addEventListener('message', function (event) {
     if (!event.data || typeof event.data.type !== 'string') return
+    // Only the widget iframe may drive the loader (hide/restyle/close). Origin
+    // strings are useless here (srcdoc frames are null-origin) — check identity.
+    if (!widgetFrameWindow || event.source !== widgetFrameWindow) return
     // Header chevron inside the widget asks to minimize.
     if (event.data.type === 'WIDGET_MINIMIZE') {
       withController(function () { controller.close() })
@@ -1462,7 +1632,11 @@ window.chattermateConfig;
       if (customData.chat_initiation_messages && Array.isArray(customData.chat_initiation_messages)) {
         config.chatInitiationMessages = customData.chat_initiation_messages;
       }
-      
+
+      // Dashboard "Widget placement" defaults. Applied before revealButton() below,
+      // so the launcher first appears already in its final mode/position — no jump.
+      applyDashboardDisplay(customData.widget_display)
+
       // ASK_ANYTHING sits a little lower than the other styles (desktop only).
       // A per-style default, not an override: geometry the developer set via
       // init()/chattermateConfig (devOverrides) always wins.
@@ -1490,6 +1664,13 @@ window.chattermateConfig;
       updateBadge()
       // The real color is applied above, so it's now safe to show the launcher.
       revealButton()
+
+      // Tell the widget the final display geometry (developer overrides merged with
+      // dashboard defaults) so its interior sizing can adapt. Replied to the sending
+      // frame — this handler sits outside initialize() and has no iframe reference.
+      if (event.source && typeof event.source.postMessage === 'function') {
+        event.source.postMessage(widgetDisplayPayload(), '*')
+      }
     }
   })
 
@@ -1541,7 +1722,7 @@ window.chattermateConfig;
     if (typeof options.launcher === 'boolean') {
       setDevConfig('launcher', options.launcher)
     }
-    if (['floating', 'sidebar-left', 'sidebar-right', 'search-bar'].indexOf(options.displayMode) !== -1) {
+    if (DISPLAY_MODES.indexOf(options.displayMode) !== -1) {
       setDevConfig('displayMode', options.displayMode)
     }
     if (isNumber(options.width)) {
