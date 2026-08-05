@@ -192,6 +192,62 @@ const selectChatStyle = (value: ChatStyle) => {
     emit('preview', { ...customization.value })
 }
 
+// ---- Widget placement (stored in customization_metadata.widget_display) ----
+// The embed loader reads these as site-wide defaults; options set in the install
+// snippet (window.chattermateConfig / ChatterMate.init) override them per page.
+const displayModeOptions = [
+    { value: 'floating', label: 'Floating bubble', description: 'Classic corner launcher opening a chat window.' },
+    { value: 'sidebar-right', label: 'Right drawer', description: 'Full-height panel sliding in from the right edge.' },
+    { value: 'sidebar-left', label: 'Left drawer', description: 'Full-height panel sliding in from the left edge.' },
+    { value: 'search-bar', label: 'Search bar', description: 'A search-style bar that opens the chat on desktop.' },
+]
+
+// Numeric bounds per field — must mirror WidgetDisplayConfig (backend schema),
+// which rejects values outside these ranges.
+const PLACEMENT_BOUNDS: Record<string, [number, number]> = {
+    width: [280, 800],
+    height: [400, 900],
+    sidebar_width: [320, 640],
+    offset_bottom: [0, 200],
+    offset_side: [0, 200],
+}
+
+const widgetDisplay = computed<Record<string, any>>(() =>
+    (customization.value.customization_metadata as Record<string, any> | undefined)?.widget_display ?? {})
+
+const activeDisplayMode = computed(() => widgetDisplay.value.mode ?? 'floating')
+const isSidebarMode = computed(() =>
+    activeDisplayMode.value === 'sidebar-left' || activeDisplayMode.value === 'sidebar-right')
+
+// Reassigns metadata wholesale (never mutates in place) so the deep watcher and
+// save round-trip always see a fresh object; unset values are removed entirely,
+// letting the loader fall back to its defaults.
+const setDisplay = (key: string, value: unknown) => {
+    const meta = { ...((customization.value.customization_metadata as Record<string, any>) ?? {}) }
+    const display = { ...(meta.widget_display ?? {}) }
+    if (value === null || value === undefined || value === '') {
+        delete display[key]
+    } else {
+        display[key] = value
+    }
+    meta.widget_display = display
+    customization.value.customization_metadata = meta
+}
+
+// Clamp on change (not on input — clamping mid-typing fights the user).
+const setDisplayNumber = (key: string, event: Event) => {
+    const [min, max] = PLACEMENT_BOUNDS[key]
+    const input = event.target as HTMLInputElement
+    const parsed = Number(input.value)
+    if (!input.value || Number.isNaN(parsed)) {
+        setDisplay(key, null)
+        return
+    }
+    const clamped = Math.min(max, Math.max(min, Math.round(parsed)))
+    setDisplay(key, clamped)
+    input.value = String(clamped)
+}
+
 // Brand color swatch presets (design grid)
 const accentSwatchColors = ['#C9F24E', '#9D8CFF', '#5FE3D6', '#FF8A73', '#6EA8FF', '#F34611']
 
@@ -581,6 +637,91 @@ const isSectionExpanded = (sectionId: string) => {
                     <span class="citations-toggle-text">
                         <span class="citations-toggle-title">Show AI disclaimer</span>
                         <span class="citations-toggle-desc">Adds “{{ AI_DISCLAIMER_TEXT }}” to the widget footer. Hidden automatically once a human agent takes over.</span>
+                    </span>
+                </label>
+            </div>
+
+            <!-- Widget placement Section -->
+            <div class="form-section">
+                <h3 class="section-heading">Widget placement</h3>
+                <p class="section-subtext">How the widget sits on your site — preview it there. Options set in the embed snippet override these.</p>
+
+                <div class="chat-style-grid">
+                    <button
+                        v-for="option in displayModeOptions"
+                        :key="option.value"
+                        type="button"
+                        class="chat-style-card"
+                        :class="{ 'active': activeDisplayMode === option.value }"
+                        @click="setDisplay('mode', option.value)"
+                    >
+                        <div class="chat-style-thumb placement-thumb">
+                            <span class="placement-shape" :class="`placement-shape-${option.value}`"></span>
+                        </div>
+                        <div class="chat-style-title">
+                            <span>{{ option.label }}</span>
+                            <span v-if="activeDisplayMode === option.value" class="chat-style-check">✓</span>
+                        </div>
+                        <div class="chat-style-desc">{{ option.description }}</div>
+                    </button>
+                </div>
+
+                <div v-if="!isSidebarMode" class="placement-side-row">
+                    <span class="placement-label">Side</span>
+                    <div class="placement-side-chips">
+                        <button type="button" class="font-chip" :class="{ 'active': (widgetDisplay.side ?? 'right') === 'left' }"
+                            @click="setDisplay('side', 'left')">Left</button>
+                        <button type="button" class="font-chip" :class="{ 'active': (widgetDisplay.side ?? 'right') === 'right' }"
+                            @click="setDisplay('side', 'right')">Right</button>
+                    </div>
+                </div>
+
+                <div class="placement-fields">
+                    <label v-if="activeDisplayMode === 'floating'" class="placement-field">
+                        <span>Window width (px)</span>
+                        <input type="number" class="text-input" :value="widgetDisplay.width" placeholder="400"
+                            :min="PLACEMENT_BOUNDS.width[0]" :max="PLACEMENT_BOUNDS.width[1]"
+                            @change="setDisplayNumber('width', $event)">
+                    </label>
+                    <label v-if="activeDisplayMode === 'floating'" class="placement-field">
+                        <span>Window height (px)</span>
+                        <input type="number" class="text-input" :value="widgetDisplay.height" placeholder="560"
+                            :min="PLACEMENT_BOUNDS.height[0]" :max="PLACEMENT_BOUNDS.height[1]"
+                            @change="setDisplayNumber('height', $event)">
+                    </label>
+                    <label v-if="isSidebarMode" class="placement-field">
+                        <span>Drawer width (px)</span>
+                        <input type="number" class="text-input" :value="widgetDisplay.sidebar_width" placeholder="420"
+                            :min="PLACEMENT_BOUNDS.sidebar_width[0]" :max="PLACEMENT_BOUNDS.sidebar_width[1]"
+                            @change="setDisplayNumber('sidebar_width', $event)">
+                    </label>
+                    <label v-if="activeDisplayMode === 'search-bar'" class="placement-field placement-field-wide">
+                        <span>Search bar text</span>
+                        <input type="text" class="text-input" maxlength="80" :value="widgetDisplay.search_placeholder"
+                            placeholder="Ask anything..."
+                            @change="setDisplay('search_placeholder', ($event.target as HTMLInputElement).value)">
+                    </label>
+                    <label class="placement-field">
+                        <span>Bottom offset (px)</span>
+                        <input type="number" class="text-input" :value="widgetDisplay.offset_bottom" placeholder="20"
+                            :min="PLACEMENT_BOUNDS.offset_bottom[0]" :max="PLACEMENT_BOUNDS.offset_bottom[1]"
+                            @change="setDisplayNumber('offset_bottom', $event)">
+                    </label>
+                    <label class="placement-field">
+                        <span>Side offset (px)</span>
+                        <input type="number" class="text-input" :value="widgetDisplay.offset_side" placeholder="20"
+                            :min="PLACEMENT_BOUNDS.offset_side[0]" :max="PLACEMENT_BOUNDS.offset_side[1]"
+                            @change="setDisplayNumber('offset_side', $event)">
+                    </label>
+                </div>
+
+                <label class="citations-toggle">
+                    <input type="checkbox" :checked="widgetDisplay.launcher === false"
+                        @change="setDisplay('launcher', ($event.target as HTMLInputElement).checked ? false : null)">
+                    <span class="citations-toggle-track"><span class="citations-toggle-thumb"></span></span>
+                    <span class="citations-toggle-text">
+                        <span class="citations-toggle-title">Hide launcher — I'll use my own button</span>
+                        <span class="citations-toggle-desc">Open the chat from any element with <code>data-chattermate-open</code>, or call <code>ChatterMate.open()</code>.</span>
                     </span>
                 </label>
             </div>
@@ -1022,6 +1163,100 @@ const isSectionExpanded = (sectionId: string) => {
 .chat-style-thumb .thumb-bubble.user {
     width: 46%;
     align-self: flex-end;
+}
+
+/* Widget placement: mini viewport illustrations per display mode */
+.placement-thumb {
+    padding: 0;
+}
+.placement-shape {
+    position: absolute;
+    inset: 0;
+}
+.placement-shape::before,
+.placement-shape::after {
+    content: '';
+    position: absolute;
+    background: var(--accent-ink);
+    opacity: 0.8;
+    border-radius: 4px;
+}
+.placement-shape-floating::before {
+    right: 10px;
+    bottom: 18px;
+    width: 26px;
+    height: 32px;
+}
+.placement-shape-floating::after {
+    right: 10px;
+    bottom: 6px;
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+}
+.placement-shape-sidebar-right::before {
+    top: 5px;
+    bottom: 5px;
+    right: 5px;
+    width: 30%;
+}
+.placement-shape-sidebar-left::before {
+    top: 5px;
+    bottom: 5px;
+    left: 5px;
+    width: 30%;
+}
+.placement-shape-search-bar::before {
+    left: 15%;
+    right: 15%;
+    bottom: 8px;
+    height: 11px;
+    border-radius: 999px;
+}
+
+.placement-side-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-top: 16px;
+}
+.placement-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--muted);
+}
+.placement-side-chips {
+    display: flex;
+    gap: 8px;
+}
+
+.placement-fields {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+    margin-top: 16px;
+}
+.placement-field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+.placement-field > span {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--muted);
+}
+.placement-field-wide {
+    grid-column: 1 / -1;
+}
+
+.citations-toggle-desc code {
+    background: var(--o06);
+    padding: 1px 5px;
+    border-radius: 4px;
+    font-family: var(--font-mono);
+    font-size: 0.9em;
+    color: var(--accent-ink);
 }
 
 .chat-style-group-label {
