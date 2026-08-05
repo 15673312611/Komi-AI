@@ -374,6 +374,9 @@
         <pre><code>
 &lt;script&gt;
     window.chattermateId = 'YOUR_WIDGET_ID';
+    // Required for local testing — without it the widget uses the API URL baked
+    // into the build (the cloud API for a production build).
+    window.chattermateBaseUrl = 'http://localhost:8000/api/v1';
 &lt;/script&gt;
 &lt;script src="http://localhost:5173/webclient/chattermate.min.js"&gt;&lt;/script&gt;
         </code></pre>
@@ -401,6 +404,7 @@ const { data } = await response.json();
 &lt;script&gt;
     window.chattermateId = 'YOUR_WIDGET_ID';
     window.chattermateToken = 'TOKEN_FROM_SERVER';
+    window.chattermateBaseUrl = 'http://localhost:8000/api/v1';
 &lt;/script&gt;
 &lt;script src="http://localhost:5173/webclient/chattermate.min.js"&gt;&lt;/script&gt;
         </code></pre>
@@ -411,6 +415,15 @@ const { data } = await response.json();
         // Constants for localStorage keys
         const WIDGET_ID_KEY = 'chattermate_widget_id';
         const WIDGET_INITIALIZED_KEY = 'chattermate_initialized';
+
+        // Where the widget talks to. WITHOUT this the loader falls back to the URL
+        // baked in at build time — which for a :prod build is the cloud API, so a
+        // local test would silently chat with api.chattermate.chat.
+        // Override in the console: localStorage.setItem('chattermate_api_base', '...')
+        const CM_API_BASE = localStorage.getItem('chattermate_api_base') || 'http://localhost:8000/api/v1';
+        // Served by server.js from frontend/public/webclient — always the current build.
+        // Point at http://localhost:5173/webclient/chattermate.min.js to use the dev server.
+        const CM_LOADER_URL = localStorage.getItem('chattermate_loader_url') || '/chattermate.min.js';
         
         // Load saved widget ID and initialize on page load
         document.addEventListener('DOMContentLoaded', function() {
@@ -469,19 +482,20 @@ const { data } = await response.json();
         function performWidgetInitialization(widgetId) {
             // Set the widget ID
             window.chattermateId = widgetId;
-            
+            window.chattermateBaseUrl = CM_API_BASE;
+
             // Remove existing script if any
             const existingScript = document.getElementById('chattermate-script');
             if (existingScript) {
                 existingScript.remove();
             }
-            
+
             // Wait a moment for cleanup
             setTimeout(() => {
                 // Create and add new script
                 const script = document.createElement('script');
                 script.id = 'chattermate-script';
-                script.src = 'http://localhost:5173/webclient/chattermate.min.js';
+                script.src = CM_LOADER_URL;
                 script.onload = function() {
                     // Initialize the widget once script loads
                     if (window.ChatterMate) {
@@ -646,7 +660,7 @@ const { data } = await response.json();
 
             try {
                 // Call the generate-token endpoint
-                const response = await fetch('http://localhost:8000/api/v1/generate-token', {
+                const response = await fetch(`${CM_API_BASE}/generate-token`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -703,6 +717,7 @@ const { data } = await response.json();
             // Set widget configuration - widget loader checks window.chattermateToken first
             window.chattermateId = widgetId;
             window.chattermateToken = token;
+            window.chattermateBaseUrl = CM_API_BASE;
 
             // Remove existing script if any
             const existingScript = document.getElementById('chattermate-script');
@@ -730,7 +745,7 @@ const { data } = await response.json();
                 // Create and add new script
                 const script = document.createElement('script');
                 script.id = 'chattermate-script';
-                script.src = 'http://localhost:5173/webclient/chattermate.min.js';
+                script.src = CM_LOADER_URL;
 
                 script.onload = function() {
                     if (window.ChatterMate) {

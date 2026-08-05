@@ -69,3 +69,6 @@ config/
 .env.*.bak*
 .env.prod.bak*
 frontend/.env.*.bak*
+
+# Stale loader copies — server.js serves the current build from frontend/public/webclient
+chattermate-test/chattermate.min.js
