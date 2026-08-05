@@ -793,3 +793,40 @@ def test_teammates_route_is_not_shadowed_by_the_user_id_route(inbox_agent_client
 
     assert response.status_code == 200
     assert isinstance(response.json(), list)
+
+
+def test_avatar_redirects_to_a_freshly_signed_url(client: TestClient, test_user: User, db: Session):
+    """The point of the endpoint: a URL signed now, not at login.
+
+    The dashboard used to render the link held in the cached user_info blob,
+    which is written once at login. S3 presigned URLs expire an hour later, so
+    every session outlived its own avatar and only a re-login fixed it.
+    """
+    test_user.profile_pic = "/uploads/user/org/user/profile.png"
+    db.commit()
+
+    response = client.get("/api/v1/users/me/avatar", follow_redirects=False)
+
+    assert response.status_code == 307
+    # Local storage is served under the API prefix; the bare stored path 404s.
+    assert response.headers["location"] == "/api/v1/uploads/user/org/user/profile.png"
+    # The redirect must not be cached, or the browser keeps replaying a
+    # signature that has since expired — the bug all over again.
+    assert response.headers["cache-control"] == "no-store"
+
+
+def test_avatar_is_404_without_a_picture(client: TestClient, test_user: User, db: Session):
+    test_user.profile_pic = None
+    db.commit()
+
+    assert client.get("/api/v1/users/me/avatar").status_code == 404
+
+
+def test_avatar_route_is_not_shadowed_by_the_user_id_route(client: TestClient, test_user: User, db: Session):
+    """Declared above GET /{user_id}, or "me" parses as a user id."""
+    test_user.profile_pic = "/uploads/user/org/user/profile.png"
+    db.commit()
+
+    response = client.get("/api/v1/users/me/avatar", follow_redirects=False)
+
+    assert response.status_code == 307

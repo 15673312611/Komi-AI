@@ -34,8 +34,7 @@ import { notificationService } from '@/services/notification'
 import { useRoute, useRouter } from 'vue-router'
 import { updateUserStatus } from '@/services/users'
 import { useEnterpriseFeatures } from '@/composables/useEnterpriseFeatures'
-import { isAbsoluteUrl } from '@/utils/avatars'
-import { resolveUploadUrl } from '@/config/api'
+import { myAvatarUrl } from '@/config/api'
 import { useBreakpoint } from '@/composables/useBreakpoint'
 
 const props = defineProps<{
@@ -92,17 +91,11 @@ const isInTrial = computed(() => subscriptionStore.value.isInTrial)
 const trialDaysLeft = computed(() => subscriptionStore.value.trialDaysLeft)
 
 const userAvatarSrc = computed(() => {
-  if (currentUser.value?.profile_pic) {
-    // Absolute S3/CDN URL — use it directly
-    if (isAbsoluteUrl(currentUser.value.profile_pic)) {
-      return currentUser.value.profile_pic
-    }
-    // Local storage: resolve against the runtime API origin, cache-busted so a
-    // freshly uploaded picture replaces the one the browser already cached.
-    const timestamp = new Date().getTime()
-    return `${resolveUploadUrl(currentUser.value.profile_pic)}?t=${timestamp}`
-  }
-  return userAvatar
+  if (!currentUser.value?.profile_pic) return userAvatar
+  // Never the stored URL: the copy we hold was signed at login and expires an
+  // hour later. Ask the API, which signs on the spot. Cache-busted so a freshly
+  // uploaded picture replaces the one the browser already cached.
+  return myAvatarUrl(new Date().getTime())
 })
 
 const toggleOnlineStatus = async () => {

@@ -41,6 +41,23 @@ export function resolveUploadUrl(stored?: string | null): string {
   return buildUploadUrl(stored, getApiUrl())
 }
 
+/**
+ * The logged-in user's own avatar, signed when the browser asks for it.
+ *
+ * Not resolveUploadUrl(user.profile_pic): for S3 storage that value is a
+ * presigned URL, and the copy the dashboard holds comes from the `user_info`
+ * blob written at login and never rewritten. The signature dies an hour later
+ * and the avatar stays broken until the next login. This path re-signs per
+ * request, so it cannot go stale.
+ *
+ * Other people's avatars need no equivalent — those arrive on API responses,
+ * which sign afresh every time.
+ */
+export function myAvatarUrl(cacheBuster?: string | number): string {
+  const base = `${getApiUrl().replace(/\/$/, '')}/users/me/avatar`
+  return cacheBuster ? `${base}?t=${cacheBuster}` : base
+}
+
 export function getWidgetUrl(): string {
   return window.APP_CONFIG?.WIDGET_URL || import.meta.env.VITE_WIDGET_URL || 'http://localhost:8000'
 }
