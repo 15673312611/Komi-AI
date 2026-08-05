@@ -2,6 +2,19 @@
 
 This is a test project for the ChatterMate chat widget integration.
 
+## UI options gallery
+
+`ui-options.html` has one card per widget placement/behaviour (floating left/right,
+custom size and offsets, sidebar drawers, search-bar trigger, hidden launcher + own
+button, custom z-index, dashboard defaults, page-overrides-beat-dashboard, mobile).
+Each opens `ui-test.html` with that configuration plus buttons for the whole JS API
+(`open/close/toggle/isOpen`, `open({message})`, `hide/showLauncher`, `setPosition`,
+`data-chattermate-open`, `trigger` selector) and an event log.
+
+Use it in **Stub** mode (fake widget, no backend needed) or **Real** mode (set your
+widget ID + API URL on the gallery page). The Loader URL setting controls where
+`chattermate.min.js` comes from — the frontend dev server by default.
+
 ## Setup
 
 1. Install dependencies:

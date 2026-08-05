@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ChatterMate UI test</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: system-ui; margin: 0; padding: 24px; background: #f7f7f5; color: #1c1c1e; }
+  h1 { margin: 0 0 2px; font-size: 20px; }
+  .hint { color: #666; font-size: 13px; margin-bottom: 16px; }
+  .controls button { margin: 3px; padding: 8px 14px; border: 1px solid #ccc; border-radius: 8px; background: #fff; cursor: pointer; }
+  .controls button:hover { border-color: #f34611; }
+  #log { margin-top: 14px; font: 12px/1.6 monospace; background: #fff; border: 1px solid #ddd; border-radius: 8px; padding: 10px; height: 170px; overflow: auto; white-space: pre-wrap; }
+  .overlay { position: fixed; top: 30%; right: 40px; width: 220px; padding: 18px; background: rgba(110, 70, 220, 0.92); color: #fff; border-radius: 12px; z-index: 100; font-size: 13px; }
+  .tall { height: 1400px; background: linear-gradient(#eee, #ddd); margin-top: 24px; border-radius: 12px; padding: 16px; color: #999; }
+  a { color: #f34611; }
+</style>
+</head>
+<body>
+<h1 id="title">ChatterMate UI test</h1>
+<p class="hint"><a href="ui-options.html">← all scenarios</a> · <span id="mode-label"></span></p>
+
+<div class="controls">
+  <button onclick="ChatterMate.open()">open()</button>
+  <button onclick="ChatterMate.close()">close()</button>
+  <button onclick="ChatterMate.toggle()">toggle()</button>
+  <button onclick="log('isOpen: ' + ChatterMate.isOpen())">isOpen()</button>
+  <button onclick="ChatterMate.open({ message: 'Tell me about pricing' })">open({message})</button>
+  <button onclick="ChatterMate.hideLauncher()">hideLauncher()</button>
+  <button onclick="ChatterMate.showLauncher()">showLauncher()</button>
+  <button onclick="ChatterMate.setPosition({ side: 'left', bottom: 60, offset: 40 })">setPosition(left, 60, 40)</button>
+  <button onclick="ChatterMate.setPosition({ bottom: 20, right: 20 })">setPosition(legacy {bottom,right})</button>
+  <button data-chattermate-open>data-chattermate-open</button>
+  <button id="my-trigger">#my-trigger (trigger option)</button>
+</div>
+<div id="log"></div>
+<div class="overlay" id="z-overlay" hidden>Fixed overlay at z-index 100 — with the z-index card, the widget stays UNDER this box.</div>
+<div class="tall">Scroll filler — check the widget stays fixed while scrolling.</div>
+
+<script>
+  const params = new URLSearchParams(location.search)
+  const settings = JSON.parse(localStorage.getItem('cm-test-settings') || '{}')
+  const mode = settings.mode || 'stub'
+  document.getElementById('title').textContent = params.get('title') || 'ChatterMate UI test'
+  document.getElementById('mode-label').textContent = 'mode: ' + mode
+
+  function log(msg) {
+    const el = document.getElementById('log')
+    el.textContent += msg + '\n'
+    el.scrollTop = el.scrollHeight
+    console.log('[harness]', msg)
+  }
+
+  if (params.get('config') && JSON.parse(params.get('config')).zIndex) {
+    document.getElementById('z-overlay').hidden = false
+  }
+
+  if (mode === 'stub') {
+    // Fake widget served instead of the real /widgets/{id}/data. It runs inside the
+    // loader's srcdoc iframe, so its messages pass the loader's source checks —
+    // including dashboard widget_display defaults for scenario 10/11.
+    const dashboardDisplay = params.get('dashboard') || 'undefined'
+    const fakeWidgetHtml = `<!DOCTYPE html><html><head><style>
+        body { margin:0; font-family:system-ui; background:#123; color:#fff; display:flex; flex-direction:column; height:100vh; }
+        #head { padding:10px; background:#0a1522; display:flex; justify-content:space-between; align-items:center; }
+        #head button { border:none; border-radius:6px; padding:4px 10px; cursor:pointer; }
+        #body { flex:1; padding:12px; font-size:13px; } #input { padding:12px; background:#0a1522; font-size:13px; }
+      </style></head><body>
+      <div id="head"><span>FAKE WIDGET</span><button onclick="parent.postMessage({type:'WIDGET_MINIMIZE'},'*')">minimize</button></div>
+      <div id="body">waiting for WIDGET_DISPLAY…</div>
+      <div id="input">input: <span id="prefill">(empty)</span></div>
+      <scr` + `ipt>
+        window.parent.postMessage({ type: 'CUSTOMIZATION_UPDATE', data: {
+          chat_bubble_color: '#3366FF',
+          chat_style: 'CHATBOT',
+          chat_initiation_messages: ['Hi from the fake widget!'],
+          widget_display: ${dashboardDisplay}
+        }}, '*')
+        window.parent.postMessage({ type: 'UNREAD_COUNT', count: 3 }, '*')
+        window.addEventListener('message', function (e) {
+          if (!e.data) return
+          if (e.data.type === 'PREFILL_MESSAGE') document.getElementById('prefill').textContent = e.data.text
+          if (e.data.type === 'WIDGET_DISPLAY') document.getElementById('body').textContent = 'WIDGET_DISPLAY: ' + JSON.stringify(e.data)
+        })
+      </scr` + `ipt></body></html>`
+
+    const realFetch = window.fetch
+    window.fetch = function (url) {
+      if (String(url).includes('/widgets/')) {
+        log('fetch stubbed: ' + url)
+        return Promise.resolve(new Response(fakeWidgetHtml, { status: 200, headers: { 'Content-Type': 'text/html' } }))
+      }
+      return realFetch.apply(this, arguments)
+    }
+    window.chattermateId = 'stub-widget-id'
+    window.chattermateBaseUrl = 'http://localhost:9/api/v1' // never hit — fetch is stubbed
+  } else {
+    window.chattermateId = settings.widgetId || ''
+    window.chattermateBaseUrl = settings.baseUrl || 'http://localhost:8000/api/v1'
+    if (!window.chattermateId) log('⚠ set a Widget ID on the gallery page for real mode')
+  }
+
+  if (params.get('config')) {
+    window.chattermateConfig = JSON.parse(params.get('config'))
+    log('chattermateConfig: ' + params.get('config'))
+  }
+
+  // Load the loader from the configured URL (frontend dev server by default).
+  const loaderUrl = settings.loaderUrl || 'http://localhost:5173/webclient/chattermate.min.js'
+  const s = document.createElement('script')
+  s.src = loaderUrl
+  s.onload = function () {
+    ;['ready', 'open', 'close'].forEach(function (ev) {
+      ChatterMate.on(ev, function () { log('event: ' + ev) })
+    })
+    ChatterMate.on('unread', function (count) { log('event: unread ' + count) })
+  }
+  s.onerror = function () { log('⚠ failed to load loader from ' + loaderUrl + ' — check the Loader URL setting') }
+  document.head.appendChild(s)
+</script>
+</body>
+</html>

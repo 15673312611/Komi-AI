@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ChatterMate UI options gallery</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: system-ui; margin: 0; padding: 32px; background: #f7f7f5; color: #1c1c1e; }
+  h1 { margin: 0 0 4px; }
+  .hint { color: #666; margin-bottom: 20px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
+  a.card { display: block; background: #fff; border: 1px solid #e2e2df; border-radius: 12px; padding: 16px; text-decoration: none; color: inherit; }
+  a.card:hover { border-color: #f34611; }
+  .card h3 { margin: 0 0 6px; font-size: 15px; }
+  .card p { margin: 0; font-size: 13px; color: #666; line-height: 1.5; }
+  code { background: #eee; padding: 1px 5px; border-radius: 4px; font-size: 12px; }
+  .settings { background: #fff; border: 1px solid #e2e2df; border-radius: 12px; padding: 16px; margin-bottom: 24px; display: flex; gap: 12px; flex-wrap: wrap; align-items: end; }
+  .settings label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: #666; }
+  .settings input, .settings select { padding: 6px 10px; border: 1px solid #ccc; border-radius: 8px; font-size: 13px; min-width: 230px; }
+  .settings button { padding: 8px 16px; border: none; border-radius: 8px; background: #f34611; color: #fff; cursor: pointer; }
+</style>
+</head>
+<body>
+<h1>ChatterMate UI options gallery</h1>
+<p class="hint">
+  One card per placement/behaviour. <strong>Stub</strong> mode fakes the widget (no backend
+  needed — good for checking the loader UI alone). <strong>Real</strong> mode loads your
+  actual widget: fill in the widget ID and API URL below, and make sure the loader URL
+  serves a build with the new options.
+</p>
+
+<div class="settings">
+  <label>Mode
+    <select id="mode">
+      <option value="stub">Stub (no backend)</option>
+      <option value="real">Real backend</option>
+    </select>
+  </label>
+  <label>Loader URL
+    <input id="loaderUrl" placeholder="http://localhost:5173/webclient/chattermate.min.js">
+  </label>
+  <label>Widget ID (real mode)
+    <input id="widgetId" placeholder="widget uuid">
+  </label>
+  <label>API base URL (real mode)
+    <input id="baseUrl" placeholder="http://localhost:8000/api/v1">
+  </label>
+  <button onclick="saveSettings()">Save</button>
+</div>
+
+<div class="grid">
+  <a class="card" data-config="">
+    <h3>1. Default (zero config)</h3>
+    <p>Legacy behaviour — floating bubble, bottom right. The regression baseline.</p>
+  </a>
+  <a class="card" data-config='{"position":{"side":"left"}}'>
+    <h3>2. Floating, left side</h3>
+    <p>Bubble and window hugging the bottom-left corner.</p>
+  </a>
+  <a class="card" data-config='{"width":520,"height":700}'>
+    <h3>3. Floating, custom size</h3>
+    <p>520 × 700 window instead of the 400 × 560 default.</p>
+  </a>
+  <a class="card" data-config='{"position":{"bottom":90,"offset":24}}'>
+    <h3>4. Custom offsets</h3>
+    <p>Launcher lifted 90px — e.g. to clear a fixed bottom nav bar.</p>
+  </a>
+  <a class="card" data-config='{"displayMode":"sidebar-right","sidebarWidth":460}'>
+    <h3>5. Sidebar drawer, right</h3>
+    <p>Full-height panel sliding in from the right edge, 460px wide.</p>
+  </a>
+  <a class="card" data-config='{"displayMode":"sidebar-left"}'>
+    <h3>6. Sidebar drawer, left</h3>
+    <p>Full-height panel from the left edge, default width.</p>
+  </a>
+  <a class="card" data-config='{"displayMode":"search-bar","searchBar":{"placeholder":"Ask our AI anything...","width":380}}'>
+    <h3>7. Search bar trigger</h3>
+    <p>The launcher becomes a search-style bar (desktop; bubble on mobile).</p>
+  </a>
+  <a class="card" data-config='{"launcher":false,"trigger":"#my-trigger"}'>
+    <h3>8. Hidden launcher + own button</h3>
+    <p>No built-in launcher. Open via the page’s buttons, the <code>trigger</code> selector, <code>data-chattermate-open</code>, or the JS API.</p>
+  </a>
+  <a class="card" data-config='{"zIndex":50}'>
+    <h3>9. Custom z-index</h3>
+    <p>Widget at z-index 50 — the page’s fixed overlay (z-index 100) must cover it.</p>
+  </a>
+  <a class="card" data-dashboard='{"mode":"sidebar-right","sidebar_width":420,"offset_bottom":30,"offset_side":30}'>
+    <h3>10. Dashboard defaults (stub only)</h3>
+    <p>No page config; the fake widget delivers <code>widget_display</code> as saved in the dashboard’s Widget placement section.</p>
+  </a>
+  <a class="card" data-config='{"width":520}' data-dashboard='{"mode":"floating","width":320,"height":800,"side":"left"}'>
+    <h3>11. Page config beats dashboard (stub only)</h3>
+    <p>Dashboard says 320-wide, left; the page sets width 520. Expect 520 wide, left side, 800 tall.</p>
+  </a>
+  <a class="card" data-config='{"displayMode":"sidebar-right"}'>
+    <h3>12. Mobile check</h3>
+    <p>Open any card with device emulation / a narrow window: fullscreen chat must win in every mode.</p>
+  </a>
+</div>
+
+<script>
+  const S_KEY = 'cm-test-settings'
+  const saved = JSON.parse(localStorage.getItem(S_KEY) || '{}')
+  document.getElementById('mode').value = saved.mode || 'stub'
+  document.getElementById('loaderUrl').value = saved.loaderUrl || 'http://localhost:5173/webclient/chattermate.min.js'
+  document.getElementById('widgetId').value = saved.widgetId || ''
+  document.getElementById('baseUrl').value = saved.baseUrl || 'http://localhost:8000/api/v1'
+
+  function saveSettings() {
+    localStorage.setItem(S_KEY, JSON.stringify({
+      mode: document.getElementById('mode').value,
+      loaderUrl: document.getElementById('loaderUrl').value.trim(),
+      widgetId: document.getElementById('widgetId').value.trim(),
+      baseUrl: document.getElementById('baseUrl').value.trim(),
+    }))
+    alert('Saved')
+  }
+
+  document.querySelectorAll('a.card').forEach(card => {
+    const q = new URLSearchParams()
+    if (card.dataset.config) q.set('config', card.dataset.config)
+    if (card.dataset.dashboard) q.set('dashboard', card.dataset.dashboard)
+    q.set('title', card.querySelector('h3').textContent)
+    card.href = 'ui-test.html?' + q.toString()
+  })
+</script>
+</body>
+</html>
