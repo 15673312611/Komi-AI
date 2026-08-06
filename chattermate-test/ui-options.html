@@ -99,8 +99,12 @@
     <h3>11. Page config beats dashboard (stub only)</h3>
     <p>Dashboard says 320-wide, left; the page sets width 520. Expect 520 wide, left side, 800 tall.</p>
   </a>
+  <a class="card" data-config='{"displayMode":"sidebar-left"}' data-style="ASK_ANYTHING">
+    <h3>12. Drawer + Ask Anything (stub only)</h3>
+    <p>Ask Anything/Aurora draw no in-panel chevron, so the launcher must stay reachable beside the drawer. Every other style hides it while open.</p>
+  </a>
   <a class="card" data-config='{"displayMode":"sidebar-right"}'>
-    <h3>12. Mobile check</h3>
+    <h3>13. Mobile check</h3>
     <p>Open any card with device emulation / a narrow window: fullscreen chat must win in every mode.</p>
   </a>
 </div>
@@ -130,6 +134,7 @@
     const q = new URLSearchParams()
     if (card.dataset.config) q.set('config', card.dataset.config)
     if (card.dataset.dashboard) q.set('dashboard', card.dataset.dashboard)
+    if (card.dataset.style) q.set('style', card.dataset.style)
     q.set('title', card.querySelector('h3').textContent)
     card.href = 'ui-test.html?' + q.toString()
   })

@@ -63,6 +63,7 @@ window.chattermateConfig;
     searchPlaceholder: 'Ask anything...',
     zIndex: 999999, // Stacking base; related layers offset from it (badge -1, mobile chrome +1/+2)
     trigger: null, // Optional CSS selector — matching elements toggle the chat on click
+    chatStyle: null, // Reported by the widget; decides whether it draws its own close
     chatInitiationMessages: [], // Will be populated from widget data
     initiationMessageId: 'chattermate-initiation',
     initiationShownKey: 'ctim_shown', // Key for tracking if initiation was shown
@@ -197,6 +198,9 @@ window.chattermateConfig;
     const side = mode === 'sidebar-left' ? 'left' : (mode === 'sidebar-right' ? 'right' : config.side)
     // The search bar is shorter than the bubble launcher; dependent offsets track it.
     const launcherHeight = mode === 'search-bar' ? 48 : 64
+    // Every chat style draws a header chevron that closes the widget, except
+    // ASK_ANYTHING and AURORA (see isAskAnythingStyle in WidgetBuilder.vue).
+    const hasInPanelClose = ['ASK_ANYTHING', 'AURORA'].indexOf(config.chatStyle) === -1
 
     const style = document.createElement('style')
     style.id = 'chattermate-styles'
@@ -430,9 +434,16 @@ window.chattermateConfig;
       #${config.containerId} .chattermate-iframe {
         border-radius: 0;
       }
-      /* The drawer would otherwise paint over the launcher (later sibling, equal
-         z-index), leaving no way to close on styles without an in-panel chevron.
-         While open, slide the launcher out beside the drawer edge, one layer up. */
+      ${hasInPanelClose ? `
+      /* The drawer's own header chevron closes it, so keeping the launcher on screen
+         would just park a duplicate button beside the panel. Hide it while open. */
+      #${config.buttonId}.active {
+        display: none;
+      }
+      ` : `
+      /* ASK_ANYTHING / AURORA draw no in-panel chevron, and the drawer would paint over
+         the launcher (later sibling, equal z-index) — leaving nothing to click. Keep it
+         reachable: slide it out beside the drawer edge, one layer up. */
       #${config.buttonId} {
         z-index: ${config.zIndex + 1};
         transition: transform 0.3s cubic-bezier(.34,1.3,.5,1), opacity 320ms ease,
@@ -441,6 +452,7 @@ window.chattermateConfig;
       #${config.buttonId}.active {
         ${side}: ${config.sidebarWidth + 20}px;
       }
+      `}
       ` : ''}
 
       /* Clean border around the widget container */
@@ -1627,7 +1639,10 @@ window.chattermateConfig;
       const customData = event.data.data;
       const newColor = customData.chat_bubble_color;
       config.chatBubbleColor = isValidHexColor(newColor) ? newColor : config.chatBubbleColor;
-      
+      if (typeof customData.chat_style === 'string') {
+        config.chatStyle = customData.chat_style;
+      }
+
       // Store chat initiation messages
       if (customData.chat_initiation_messages && Array.isArray(customData.chat_initiation_messages)) {
         config.chatInitiationMessages = customData.chat_initiation_messages;

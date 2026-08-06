@@ -94,7 +94,7 @@
       <scr` + `ipt>
         window.parent.postMessage({ type: 'CUSTOMIZATION_UPDATE', data: {
           chat_bubble_color: '#3366FF',
-          chat_style: 'CHATBOT',
+          chat_style: '${params.get('style') || 'CHATBOT'}',
           chat_initiation_messages: ['Hi from the fake widget!'],
           widget_display: ${dashboardDisplay}
         }}, '*')
