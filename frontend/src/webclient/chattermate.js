@@ -147,6 +147,8 @@ window.chattermateConfig;
       mode: palette ? 'ask-ai' : config.displayMode,
       width: size.width,
       height: size.height,
+      // So the palette's own ⌘K handler honours a site that turned the chord off.
+      hotkey: config.hotkey !== false,
     }
   }
 
@@ -1563,6 +1565,9 @@ window.chattermateConfig;
               // Developer display overrides, known at load. Dashboard defaults merge
               // later; the CUSTOMIZATION_UPDATE reply re-sends the final values.
               iframe.contentWindow.postMessage(widgetDisplayPayload(), '*')
+              // The widget is prefetched while still hidden — say so, or surfaces that
+              // focus themselves on open (the Ask AI palette) would grab focus now.
+              iframe.contentWindow.postMessage({ type: 'WIDGET_VISIBILITY', open: isOpen }, '*')
               if (pendingPrefill) {
                 iframe.contentWindow.postMessage({ type: 'PREFILL_MESSAGE', text: pendingPrefill }, '*')
                 pendingPrefill = null

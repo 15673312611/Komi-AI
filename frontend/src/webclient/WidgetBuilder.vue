@@ -19,8 +19,8 @@ limitations under the License.
 import { ref, onMounted, computed, onUnmounted, watch, nextTick } from 'vue'
 import {
     isValidEmail} from '../types/widget'
-import { marked } from 'marked'
-import { sanitizeHtml } from '../utils/sanitize'
+import { renderMarkdown } from './markdown'
+import AskAiPanel from './AskAiPanel.vue'
 import { resolveOrbStyle } from '../utils/orb'
 import { isEndChatMessage } from '../utils/endChat'
 import { AI_DISCLAIMER_TEXT, shouldShowAiDisclaimer } from '../utils/aiDisclaimer'
@@ -35,30 +35,8 @@ import { themeCssVars } from './widget-theme'
 import './widget-surface.css'
 import { useCurrency } from '../composables/useCurrency'
 import { formatDistanceToNow } from 'date-fns'
-// Add marked configuration before the props definition
-marked.setOptions({
-    renderer: new marked.Renderer(),
-    gfm: true,
-    breaks: true
-})
-
-// Configure marked renderer to add target="_blank" to links
-const renderer = new marked.Renderer();
-const linkRenderer = renderer.link;
-// @ts-ignore
-renderer.link = (href, title, text) => {
-    // @ts-ignore
-    const html = linkRenderer.call(renderer, href, title, text);
-    return html.replace(/^<a /, '<a target="_blank" rel="nofollow" ');
-};
-
-marked.use({ renderer })
-
-// Create helper function to render and sanitize markdown
-const renderMarkdown = (text: string) => {
-    const rawHtml = marked(text, { renderer }) as string
-    return sanitizeHtml(rawHtml)
-}
+// Markdown rendering + sanitisation live in ./markdown, shared with the Ask AI
+// palette so the two surfaces can't drift apart on formatting or escaping.
 
 const props = defineProps<{
     widgetId?: string | null
@@ -1248,6 +1226,12 @@ window.addEventListener('message', (event) => {
         // Parent confirmed token storage
         localStorage.setItem(TOKEN_KEY, event.data.token)
     }
+    if (event.data.type === 'WIDGET_VISIBILITY') {
+        // The loader reports open/closed. Without this the Ask AI palette would
+        // autofocus its input while the widget is still hidden — the iframe is
+        // created eagerly on page load, so focus would leave the host page.
+        hostVisible.value = !!event.data.open
+    }
     if (event.data.type === 'WIDGET_DISPLAY') {
         // The embed loader's final display geometry (developer options merged with
         // dashboard defaults) — drives the fill-the-iframe sizing below.
@@ -1255,6 +1239,7 @@ window.addEventListener('message', (event) => {
             mode: event.data.mode,
             width: event.data.width,
             height: event.data.height,
+            hotkey: event.data.hotkey,
         }
     }
     if (event.data.type === 'PREFILL_MESSAGE' && typeof event.data.text === 'string') {
@@ -1547,7 +1532,12 @@ const submitEmailGate = async () => {
 
 // Display geometry pushed by the embed loader (WIDGET_DISPLAY). Falls back to the
 // dashboard metadata for direct-iframe embeds where no loader is present.
-const parentDisplay = ref<{ mode?: string; width?: number; height?: number } | null>(null)
+const parentDisplay = ref<{ mode?: string; width?: number; height?: number; hotkey?: boolean } | null>(null)
+
+// Whether the embedder currently shows the widget. Defaults to true for direct
+// iframe embeds (dashboard preview, raw <iframe>), where nobody reports visibility;
+// the loader corrects it immediately with WIDGET_VISIBILITY on load.
+const hostVisible = ref(true)
 
 // Classic floating-window geometry — must mirror the chattermate.js config defaults
 // (displayMode/containerWidth/containerHeight); at these values the loader behaves
@@ -1631,6 +1621,39 @@ const containerStyles = computed(() => {
 const shouldShowWelcomeMessage = computed(() => {
     return isAskAnythingStyle.value && messages.value.length === 0
 })
+
+// Message kinds the palette deliberately doesn't render: they need the chat panel's
+// interactive UI (forms, rating, product cards) or its attachment rendering. Rather
+// than silently dropping them, the whole conversation falls back to the chat panel.
+const CHAT_ONLY_MESSAGE_TYPES = ['form', 'user_input', 'rating', 'product', 'shopify_output']
+
+const conversationNeedsChatPanel = computed(() =>
+    messages.value.some(m =>
+        CHAT_ONLY_MESSAGE_TYPES.includes(m.message_type)
+        || (Array.isArray(m.attachments) && m.attachments.length > 0)
+    )
+)
+
+// The Ask AI palette replaces the whole chat surface for the ask-anything styles.
+// Workflow screens and the email gate still win — they gate the conversation, and
+// the palette has nowhere to host them.
+const useAskAiPanel = computed(() =>
+    isAskAnythingStyle.value
+    && isExpanded.value
+    && !showLandingPage.value
+    && !showFullScreenForm.value
+    && !showEmailGate.value
+    && !shouldShowNewConversationOption.value
+    && !conversationNeedsChatPanel.value
+)
+
+const askAiSubtitle = computed(() =>
+    customization.value.welcome_subtitle || `Ask a question — ${agentName.value || 'the assistant'} answers from what it knows.`
+)
+
+// The embedder owns the ⌘K chord and can turn it off (loader `hotkey: false`); it
+// reports the decision alongside the display geometry.
+const askAiHotkey = computed(() => parentDisplay.value?.hotkey !== false)
 </script>
 
 <template>
@@ -1716,8 +1739,34 @@ const shouldShowWelcomeMessage = computed(() => {
             {{ errorMessage }}
         </div>
 
+        <!-- Ask AI surface (ASK_ANYTHING / AURORA): a command palette rather than a
+             chat window. Workflow screens and the email gate still take precedence —
+             they are flow-critical (see useAskAiPanel). -->
+        <AskAiPanel
+            v-if="useAskAiPanel"
+            :messages="messages"
+            :draft="newMessage"
+            :agent-name="agentName"
+            :suggestions="quickActions"
+            :welcome-title="customization.welcome_title"
+            :welcome-subtitle="askAiSubtitle"
+            :placeholder="placeholderText"
+            :input-enabled="isMessageInputEnabled"
+            :loading="loading"
+            :show-citations="showCitations"
+            :disclaimer="showAiDisclaimer ? AI_DISCLAIMER_TEXT : ''"
+            :active="hostVisible"
+            :hotkey="askAiHotkey"
+            :citation-label="citationLabel"
+            :citation-tooltip="citationTooltip"
+            @update:draft="newMessage = $event"
+            @send="sendMessage"
+            @ask="sendQuickAction"
+            @close="minimizeWidget"
+        />
+
         <!-- Welcome Message for ASK_ANYTHING Style -->
-        <div v-if="shouldShowWelcomeMessage" class="welcome-message-section" :class="{ aurora: isAuroraStyle }" :style="chatStyles">
+        <div v-else-if="shouldShowWelcomeMessage" class="welcome-message-section" :class="{ aurora: isAuroraStyle }" :style="chatStyles">
             <div class="welcome-content">
                 <div class="welcome-header">
                     <div v-if="useOrbAvatar" class="welcome-orb" :style="orbStyle"></div>
@@ -1986,7 +2035,7 @@ const shouldShowWelcomeMessage = computed(() => {
         </div>
 
         <!-- Chat Panel (Only show when landing page, full screen form, and welcome message are not active) -->
-        <div v-else-if="!shouldShowWelcomeMessage" class="chat-panel" :class="{ 'ask-anything-chat': isAskAnythingStyle }" :style="chatStyles" v-if="isExpanded">
+        <div v-else-if="!shouldShowWelcomeMessage && isExpanded && !useAskAiPanel" class="chat-panel" :class="{ 'ask-anything-chat': isAskAnythingStyle }" :style="chatStyles">
             <div v-if="!isAskAnythingStyle" class="chat-header" :style="headerBorderStyles">
                 <div class="cm-header-sheen" :style="{ background: 'linear-gradient(90deg, transparent, ' + (customization.accent_color || '#C9F24E') + ', transparent)' }"></div>
                 <div class="header-content">
