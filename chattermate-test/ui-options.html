@@ -28,9 +28,11 @@
   needed — good for checking the loader UI alone). <strong>Real</strong> mode loads your
   actual widget: fill in the widget ID and API URL below.
   <br>
-  Run this with <code>npm start</code> in <code>chattermate-test/</code> — it serves the
-  current loader build at <code>/chattermate.min.js</code>. After changing loader source,
-  rebuild with <code>cd ../frontend &amp;&amp; npm run build:webclient:prod</code>.
+  The loader is loaded from the <strong>frontend</strong> (<code>npm run dev</code> in
+  <code>frontend/</code>), the same origin the dashboard's embed snippet points at — the
+  backend does not serve it, and no copy is kept in this folder. The loader is a build
+  artifact: after changing its source run
+  <code>cd frontend &amp;&amp; npm run build:webclient:prod</code>.
 </p>
 
 <div class="settings">
@@ -40,8 +42,8 @@
       <option value="real">Real backend</option>
     </select>
   </label>
-  <label>Loader URL
-    <input id="loaderUrl" placeholder="/chattermate.min.js">
+  <label>Loader URL (served by the frontend)
+    <input id="loaderUrl" placeholder="http://localhost:5173/webclient/chattermate.min.js">
   </label>
   <label>Widget ID (real mode)
     <input id="widgetId" placeholder="widget uuid">
@@ -107,8 +109,10 @@
   const S_KEY = 'cm-test-settings'
   const saved = JSON.parse(localStorage.getItem(S_KEY) || '{}')
   document.getElementById('mode').value = saved.mode || 'stub'
-  // Same-origin by default — server.js serves the built loader, so no dev server needed.
-  document.getElementById('loaderUrl').value = saved.loaderUrl || '/chattermate.min.js'
+  // The frontend serves the loader (the backend does not). '/chattermate.min.js' is a
+  // stale saved value from an earlier version of this page — ignore it.
+  const savedLoader = saved.loaderUrl === '/chattermate.min.js' ? '' : saved.loaderUrl
+  document.getElementById('loaderUrl').value = savedLoader || 'http://localhost:5173/webclient/chattermate.min.js'
   document.getElementById('widgetId').value = saved.widgetId || ''
   document.getElementById('baseUrl').value = saved.baseUrl || 'http://localhost:8000/api/v1'
 

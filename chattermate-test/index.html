@@ -421,9 +421,12 @@ const { data } = await response.json();
         // local test would silently chat with api.chattermate.chat.
         // Override in the console: localStorage.setItem('chattermate_api_base', '...')
         const CM_API_BASE = localStorage.getItem('chattermate_api_base') || 'http://localhost:8000/api/v1';
-        // Served by server.js from frontend/public/webclient — always the current build.
-        // Point at http://localhost:5173/webclient/chattermate.min.js to use the dev server.
-        const CM_LOADER_URL = localStorage.getItem('chattermate_loader_url') || '/chattermate.min.js';
+        // The loader is served by the FRONTEND (vite in dev, the dashboard origin in
+        // production) — never copied into this folder, where it would go stale.
+        // The backend does not serve it. Rebuild after loader changes:
+        //   cd ../frontend && npm run build:webclient:prod
+        const CM_LOADER_URL = localStorage.getItem('chattermate_loader_url')
+            || 'http://localhost:5173/webclient/chattermate.min.js';
         
         // Load saved widget ID and initialize on page load
         document.addEventListener('DOMContentLoaded', function() {

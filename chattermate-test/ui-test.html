@@ -134,9 +134,12 @@
   window.chattermateConfig = scenarioConfig
   if (params.get('config')) log('chattermateConfig: ' + params.get('config'))
 
-  // Default to the same-origin loader that server.js serves from
-  // frontend/public/webclient, so `npm start` on its own is enough.
-  const loaderUrl = settings.loaderUrl || '/chattermate.min.js'
+  // The loader comes from the FRONTEND origin (vite in dev, the dashboard origin in
+  // production) — the same place the generated embed snippet points at. It is never
+  // copied into this folder, where it would go stale and test an old widget.
+  // ('/chattermate.min.js' is a stale saved setting from an earlier version.)
+  const savedLoader = settings.loaderUrl === '/chattermate.min.js' ? '' : settings.loaderUrl
+  const loaderUrl = savedLoader || 'http://localhost:5173/webclient/chattermate.min.js'
   const s = document.createElement('script')
   s.src = loaderUrl
   s.onload = function () {
@@ -153,9 +156,9 @@
   s.onerror = function () {
     showBanner(
       'Could not load the widget loader from <code>' + loaderUrl + '</code>, so every button on this page does nothing.<br>' +
-      'Serve this page with <code>npm start</code> from <code>chattermate-test/</code> — it serves the built loader at <code>/chattermate.min.js</code>. ' +
-      'Build it once with <code>cd ../frontend &amp;&amp; npm run build:webclient:prod</code>, ' +
-      'or set a different Loader URL on the <a href="ui-options.html">gallery page</a>.'
+      'Start the frontend with <code>cd ../frontend &amp;&amp; npm run dev</code> (it serves the loader), ' +
+      'and build the loader once with <code>npm run build:webclient:prod</code>. ' +
+      'Or set a different Loader URL on the <a href="ui-options.html">gallery page</a>.'
     )
   }
   document.head.appendChild(s)
