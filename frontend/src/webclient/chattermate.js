@@ -45,6 +45,7 @@ window.chattermateConfig;
   const config = {
     baseUrl: getBaseUrl(),
     containerId: 'chattermate-container',
+    backdropId: 'chattermate-backdrop',
     buttonId: 'chattermate-button',
     chatBubbleColor: '#f34611', // Default color
     loadingContainerId: 'chattermate-loading',
@@ -63,6 +64,7 @@ window.chattermateConfig;
     searchPlaceholder: 'Ask anything...',
     zIndex: 999999, // Stacking base; related layers offset from it (badge -1, mobile chrome +1/+2)
     trigger: null, // Optional CSS selector — matching elements toggle the chat on click
+    hotkey: true, // ⌘K opens the Ask AI palette; set false if the site owns that key
     chatStyle: null, // Reported by the widget; decides whether it draws its own close
     chatInitiationMessages: [], // Will be populated from widget data
     initiationMessageId: 'chattermate-initiation',
@@ -81,6 +83,30 @@ window.chattermateConfig;
   }
 
   const DISPLAY_MODES = ['floating', 'sidebar-left', 'sidebar-right', 'search-bar']
+  // Chat styles that render the Ask AI surface (centered command palette) instead of
+  // a corner chat window. Mirrors isAskAnythingStyle in WidgetBuilder.vue.
+  const ASK_AI_STYLES = ['ASK_ANYTHING', 'AURORA']
+  // Palette defaults, used only when no explicit size was configured.
+  const ASK_AI_WIDTH = 680
+  const ASK_AI_HEIGHT = 620
+
+  // Whether a size came from the developer or the dashboard, as opposed to the
+  // built-in default. The Ask AI palette has its own defaults but must still honour
+  // an explicitly configured size.
+  const sizeIsExplicit = { width: false, height: false }
+
+  function isAskAiModal() {
+    return ASK_AI_STYLES.indexOf(config.chatStyle) !== -1
+      && config.displayMode !== 'sidebar-left'
+      && config.displayMode !== 'sidebar-right'
+  }
+
+  function paletteSize() {
+    return {
+      width: sizeIsExplicit.width ? config.containerWidth : ASK_AI_WIDTH,
+      height: sizeIsExplicit.height ? config.containerHeight : ASK_AI_HEIGHT,
+    }
+  }
 
   // Dashboard "Widget placement" defaults (customization_metadata.widget_display,
   // validated server-side) arriving over CUSTOMIZATION_UPDATE. Fills only the keys
@@ -93,8 +119,14 @@ window.chattermateConfig;
     if (DISPLAY_MODES.indexOf(display.mode) !== -1) set('displayMode', display.mode)
     if (display.side === 'left' || display.side === 'right') set('side', display.side)
     if (typeof display.launcher === 'boolean') set('launcher', display.launcher)
-    if (isNumber(display.width)) set('containerWidth', Math.max(280, display.width))
-    if (isNumber(display.height)) set('containerHeight', Math.max(400, display.height))
+    if (isNumber(display.width)) {
+      set('containerWidth', Math.max(280, display.width))
+      if (!devOverrides.containerWidth) sizeIsExplicit.width = true
+    }
+    if (isNumber(display.height)) {
+      set('containerHeight', Math.max(400, display.height))
+      if (!devOverrides.containerHeight) sizeIsExplicit.height = true
+    }
     if (isNumber(display.sidebar_width)) set('sidebarWidth', Math.max(280, display.sidebar_width))
     if (typeof display.search_placeholder === 'string' && display.search_placeholder) {
       set('searchPlaceholder', display.search_placeholder.slice(0, 80))
@@ -105,12 +137,16 @@ window.chattermateConfig;
   }
 
   // Geometry the widget interior needs to adapt its own sizing (see WidgetBuilder).
+  // Reports what the container actually is, which in Ask AI mode is the palette
+  // rather than the configured floating-window size.
   function widgetDisplayPayload() {
+    const palette = isAskAiModal()
+    const size = palette ? paletteSize() : { width: config.containerWidth, height: config.containerHeight }
     return {
       type: 'WIDGET_DISPLAY',
-      mode: config.displayMode,
-      width: config.containerWidth,
-      height: config.containerHeight,
+      mode: palette ? 'ask-ai' : config.displayMode,
+      width: size.width,
+      height: size.height,
     }
   }
 
@@ -200,7 +236,12 @@ window.chattermateConfig;
     const launcherHeight = mode === 'search-bar' ? 48 : 64
     // Every chat style draws a header chevron that closes the widget, except
     // ASK_ANYTHING and AURORA (see isAskAnythingStyle in WidgetBuilder.vue).
-    const hasInPanelClose = ['ASK_ANYTHING', 'AURORA'].indexOf(config.chatStyle) === -1
+    const hasInPanelClose = ASK_AI_STYLES.indexOf(config.chatStyle) === -1
+    // Ask AI styles open as a centered command-palette overlay (⌘K), the pattern
+    // people expect from an "Ask anything" surface — not a corner chat window.
+    // Sidebar modes still win: an explicit drawer choice is more specific.
+    const askAiModal = isAskAiModal()
+    const palette = paletteSize()
 
     const style = document.createElement('style')
     style.id = 'chattermate-styles'
@@ -413,6 +454,69 @@ window.chattermateConfig;
         transition: opacity 420ms cubic-bezier(0.22, 1, 0.36, 1), transform 420ms cubic-bezier(0.22, 1, 0.36, 1);
         pointer-events: auto;
       }
+
+      /* Backdrop element: always in the DOM, so keep it out of the host page's flow
+         even when it is not in use — an unstyled div in <body> adds a phantom row to
+         a flex/grid body layout. */
+      #${config.backdropId} {
+        position: fixed;
+        inset: 0;
+        display: none;
+      }
+
+      ${askAiModal ? `
+      /* ===== Ask AI: centered command palette (⌘K), the pattern people expect from
+         an "Ask anything" surface — dimmed page, top-anchored so the eye lands on
+         the input rather than the middle of the screen. ===== */
+      #${config.containerId} {
+        top: 12vh;
+        bottom: auto;
+        left: 50%;
+        right: auto;
+        width: min(${palette.width}px, calc(100vw - 32px));
+        max-width: none;
+        /* A cross-document iframe can't size its embedder, and height:100% against an
+           auto-height parent collapses to the 150px replaced-element default — so the
+           palette needs a real height. */
+        height: min(${palette.height}px, 76vh);
+        max-height: 76vh;
+        transform: translate(-50%, -8px) scale(0.98);
+        z-index: ${config.zIndex + 1};
+      }
+      #${config.containerId}.active {
+        transform: translate(-50%, 0) scale(1);
+      }
+      #${config.containerId} .chattermate-iframe {
+        border-radius: 16px;
+      }
+      #${config.backdropId} {
+        display: block;
+        background: rgba(9, 9, 14, 0.45);
+        backdrop-filter: blur(2px);
+        z-index: ${config.zIndex};
+        opacity: 0;
+        visibility: hidden;
+        transition: opacity 220ms ease, visibility 0s linear 220ms;
+      }
+      #${config.backdropId}.active {
+        opacity: 1;
+        visibility: visible;
+        transition: opacity 220ms ease;
+      }
+      /* The palette dims the page and closes on backdrop click / Esc, so the launcher
+         would just be a stray button floating over the dim. */
+      #${config.buttonId}.active {
+        display: none;
+      }
+      @media (max-width: 768px) {
+        /* Full-screen on phones like every other mode. The main mobile block below
+           pins the edges but never resets transform — without this the centering
+           translate would shove the panel half a screen to the left. */
+        #${config.containerId},
+        #${config.containerId}.active { transform: none !important; }
+        #${config.backdropId} { display: none; }
+      }
+      ` : ''}
 
       ${isSidebar ? `
       /* ===== Sidebar mode: full-height drawer hugging the ${side} edge ===== */
@@ -1232,8 +1336,14 @@ window.chattermateConfig;
       <div style="width: 44px;"></div>
     `
 
+    // Dimmed backdrop behind the centered Ask AI palette. Always in the DOM but only
+    // visible in that mode (see updateStyles); clicking it closes, as users expect.
+    const backdrop = document.createElement('div')
+    backdrop.id = config.backdropId
+
     // Add elements to document
     document.body.appendChild(button)
+    document.body.appendChild(backdrop)
     document.body.appendChild(container)
     document.body.appendChild(mobileCloseButton)
     document.body.appendChild(mobileTopbar)
@@ -1249,6 +1359,7 @@ window.chattermateConfig;
     function toggleChat() {
       isOpen = !isOpen
       container.classList.toggle('active')
+      backdrop.classList.toggle('active', isOpen)
       button.classList.toggle('active')
       mobileCloseButton.classList.toggle('active')
       if (isOpen) {
@@ -1538,6 +1649,10 @@ window.chattermateConfig;
     // Add click event listeners
     button.addEventListener('click', toggleChat)
     mobileCloseButton.addEventListener('click', toggleChat)
+    // Clicking the dimmed page closes the Ask AI palette.
+    backdrop.addEventListener('click', function () {
+      if (isOpen) toggleChat()
+    })
 
     // Initialize mobile button visibility
     if (isMobileDevice() && !isOpen) {
@@ -1598,6 +1713,25 @@ window.chattermateConfig;
   } else {
     initialize()
   }
+
+  // Keyboard: ⌘K / Ctrl+K opens the Ask AI palette, Esc closes it — the shortcuts this
+  // pattern trains people to expect. Only bound for the Ask AI styles, so we never
+  // hijack ⌘K on a site running the ordinary chat bubble.
+  const isMac = typeof navigator !== 'undefined' && /Mac|iPod|iPhone|iPad/.test(navigator.platform || '')
+  document.addEventListener('keydown', function (e) {
+    if (!controller || !isAskAiModal()) return
+    // Accept only the platform's palette chord: Ctrl+K on macOS is the shell's
+    // kill-to-end-of-line inside text fields, and stealing it breaks typing.
+    const chord = isMac ? (e.metaKey && !e.ctrlKey) : (e.ctrlKey && !e.metaKey)
+    if (config.hotkey && chord && !e.altKey && !e.repeat && (e.key === 'k' || e.key === 'K')) {
+      e.preventDefault()
+      controller.toggle()
+      return
+    }
+    if (e.key === 'Escape' && controller.isOpen()) {
+      controller.close()
+    }
+  })
 
   // No-code custom launcher: any element matching the developer's `trigger` selector or
   // carrying data-chattermate-open toggles the chat. Delegated, so elements added after
@@ -1742,9 +1876,14 @@ window.chattermateConfig;
     }
     if (isNumber(options.width)) {
       setDevConfig('containerWidth', Math.max(280, options.width))
+      sizeIsExplicit.width = true
     }
     if (isNumber(options.height)) {
       setDevConfig('containerHeight', Math.max(400, options.height))
+      sizeIsExplicit.height = true
+    }
+    if (typeof options.hotkey === 'boolean') {
+      setDevConfig('hotkey', options.hotkey)
     }
     if (isNumber(options.sidebarWidth)) {
       setDevConfig('sidebarWidth', Math.max(280, options.sidebarWidth))
