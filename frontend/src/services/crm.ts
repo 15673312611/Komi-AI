@@ -15,6 +15,7 @@ limitations under the License.
 */
 
 import api from './api'
+import { getApiUrl } from '@/config/api'
 
 export type CrmProvider = 'hubspot' | 'pipedrive'
 
@@ -41,9 +42,13 @@ export default {
   },
 
   /** Browser-navigation URL — the install endpoint replies with a redirect
-   *  to the CRM's OAuth consent page. */
+   *  to the CRM's OAuth consent page.
+   *
+   *  Resolved at call time, like every other API URL: import.meta.env is baked
+   *  at build time, so a self-hoster's window.APP_CONFIG.API_URL never reaches
+   *  it and the browser leaves for the wrong host with no session cookie. */
   getInstallUrl(provider: CrmProvider): string {
-    return `${import.meta.env.VITE_API_URL}/crm/${provider}/install`
+    return `${getApiUrl()}/crm/${provider}/install`
   },
 
   async testConnection(provider: CrmProvider): Promise<CrmTestResult> {
