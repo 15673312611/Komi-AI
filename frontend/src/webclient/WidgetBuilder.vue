@@ -1634,11 +1634,24 @@ const conversationNeedsChatPanel = computed(() =>
     )
 )
 
-// The Ask AI palette replaces the whole chat surface for the ask-anything styles.
+// The Ask AI palette is the surface for the ask-anything styles AND for the
+// search-bar trigger whatever the style: a box labelled "Ask anything" that opens a
+// corner chat window is incoherent. The loader reports the palette as mode 'ask-ai';
+// 'search-bar' covers direct-iframe embeds, where no loader is involved.
+const isAskAiSurface = computed(() => {
+    if (isAskAnythingStyle.value) return true
+    const searchBarTrigger = resolvedDisplay.value?.mode === 'ask-ai'
+        || resolvedDisplay.value?.mode === 'search-bar'
+    // For the other chat styles the search bar alone promotes the palette — but not
+    // when the agent accepts file uploads: the palette has no attach control, and
+    // silently removing an enabled feature is worse than an odd-looking trigger.
+    return searchBarTrigger && !allowAttachments.value
+})
+
 // Workflow screens and the email gate still win — they gate the conversation, and
 // the palette has nowhere to host them.
 const useAskAiPanel = computed(() =>
-    isAskAnythingStyle.value
+    isAskAiSurface.value
     && isExpanded.value
     && !showLandingPage.value
     && !showFullScreenForm.value
@@ -1646,6 +1659,14 @@ const useAskAiPanel = computed(() =>
     && !shouldShowNewConversationOption.value
     && !conversationNeedsChatPanel.value
 )
+
+// Tell the embedder which surface is actually on screen. Without this the loader
+// keeps the palette's centred, content-hugged geometry after the widget falls back
+// to the chat panel (rating, product card, workflow form), leaving a full chat UI
+// squeezed into a box sized for a two-line answer.
+watch(useAskAiPanel, (palette) => {
+    window.parent.postMessage({ type: 'WIDGET_SURFACE', palette }, '*')
+}, { immediate: true })
 
 const askAiSubtitle = computed(() =>
     customization.value.welcome_subtitle || `Ask a question — ${agentName.value || 'the assistant'} answers from what it knows.`
@@ -1759,6 +1780,8 @@ const askAiHotkey = computed(() => parentDisplay.value?.hotkey !== false)
             :hotkey="askAiHotkey"
             :citation-label="citationLabel"
             :citation-tooltip="citationTooltip"
+            :display-text="displayText"
+            :is-streaming="isStreaming"
             @update:draft="newMessage = $event"
             @send="sendMessage"
             @ask="sendQuickAction"

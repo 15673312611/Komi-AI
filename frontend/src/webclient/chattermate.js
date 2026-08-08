@@ -65,6 +65,7 @@ window.chattermateConfig;
     zIndex: 999999, // Stacking base; related layers offset from it (badge -1, mobile chrome +1/+2)
     trigger: null, // Optional CSS selector — matching elements toggle the chat on click
     hotkey: true, // ⌘K opens the Ask AI palette; set false if the site owns that key
+    surfaceIsPalette: null, // Reported by the widget (WIDGET_SURFACE); null until then
     chatStyle: null, // Reported by the widget; decides whether it draws its own close
     chatInitiationMessages: [], // Will be populated from widget data
     initiationMessageId: 'chattermate-initiation',
@@ -88,17 +89,46 @@ window.chattermateConfig;
   const ASK_AI_STYLES = ['ASK_ANYTHING', 'AURORA']
   // Palette defaults, used only when no explicit size was configured.
   const ASK_AI_WIDTH = 680
-  const ASK_AI_HEIGHT = 620
+  const ASK_AI_HEIGHT = 620 // Ceiling: the palette grows to fit its content up to this.
+  const ASK_AI_MIN_HEIGHT = 140
 
   // Whether a size came from the developer or the dashboard, as opposed to the
   // built-in default. The Ask AI palette has its own defaults but must still honour
   // an explicitly configured size.
   const sizeIsExplicit = { width: false, height: false }
 
+  // The palette is the surface for the ask-anything styles, and for the search-bar
+  // trigger whatever the style — a box labelled "Ask anything" that opens a corner
+  // chat window is incoherent. An explicit drawer choice still wins.
+  // Last height the palette asked for, so a window resize can re-clamp it against the
+  // new 76vh ceiling instead of leaving the box at a stale size.
+  let paletteContentHeight = 0
+
   function isAskAiModal() {
-    return ASK_AI_STYLES.indexOf(config.chatStyle) !== -1
+    // The widget reports which surface it actually rendered (WIDGET_SURFACE); it
+    // falls back to the chat panel for ratings, product cards and workflow forms,
+    // and that needs the ordinary window geometry, not a hugged palette.
+    if (config.surfaceIsPalette === false) return false
+    const askSurface = ASK_AI_STYLES.indexOf(config.chatStyle) !== -1
+      || config.displayMode === 'search-bar'
+    return askSurface
       && config.displayMode !== 'sidebar-left'
       && config.displayMode !== 'sidebar-right'
+  }
+
+  // Size the container to the palette's reported content height, clamped. Called on
+  // every report and on window resize (the 76vh ceiling moves with the viewport).
+  // Clears the inline height entirely for non-palette surfaces, so a hugged height
+  // can never linger on an ordinary chat window.
+  function applyPaletteHeight() {
+    const container = document.getElementById(config.containerId)
+    if (!container) return
+    if (!isAskAiModal() || !paletteContentHeight) {
+      container.style.height = ''
+      return
+    }
+    const max = Math.min(paletteSize().height, Math.round(window.innerHeight * 0.76))
+    container.style.height = Math.max(ASK_AI_MIN_HEIGHT, Math.min(max, paletteContentHeight)) + 'px'
   }
 
   function paletteSize() {
@@ -477,16 +507,24 @@ window.chattermateConfig;
         right: auto;
         width: min(${palette.width}px, calc(100vw - 32px));
         max-width: none;
-        /* A cross-document iframe can't size its embedder, and height:100% against an
-           auto-height parent collapses to the 150px replaced-element default — so the
-           palette needs a real height. */
+        /* A cross-document iframe can't size its embedder, so this is a starting
+           height only: the palette measures its content and posts WIDGET_RESIZE,
+           which sets an inline height (clamped to this ceiling). height:100% against
+           an auto-height parent would collapse to the 150px replaced default. */
         height: min(${palette.height}px, 76vh);
         max-height: 76vh;
         transform: translate(-50%, -8px) scale(0.98);
         z-index: ${config.zIndex + 1};
+        transition: opacity 360ms cubic-bezier(0.22, 1, 0.36, 1),
+                    transform 360ms cubic-bezier(0.22, 1, 0.36, 1),
+                    height 200ms cubic-bezier(0.22, 1, 0.36, 1),
+                    visibility 0s linear 360ms;
       }
       #${config.containerId}.active {
         transform: translate(-50%, 0) scale(1);
+        transition: opacity 420ms cubic-bezier(0.22, 1, 0.36, 1),
+                    transform 420ms cubic-bezier(0.22, 1, 0.36, 1),
+                    height 200ms cubic-bezier(0.22, 1, 0.36, 1);
       }
       #${config.containerId} .chattermate-iframe {
         border-radius: 16px;
@@ -1688,6 +1726,8 @@ window.chattermateConfig;
       
       // Update styles to handle viewport changes
       updateStyles()
+      // The palette's ceiling is 76vh, which just moved.
+      applyPaletteHeight()
     })
 
     // Expose the open/close mechanics to the public API, then run anything the
@@ -1769,6 +1809,26 @@ window.chattermateConfig;
     // Only the widget iframe may drive the loader (hide/restyle/close). Origin
     // strings are useless here (srcdoc frames are null-origin) — check identity.
     if (!widgetFrameWindow || event.source !== widgetFrameWindow) return
+    // The Ask AI palette reports how tall its content is, so the box hugs a short
+    // answer instead of standing at full height with dead space underneath. Only the
+    // palette does this; every other mode keeps its configured geometry.
+    if (event.data.type === 'WIDGET_RESIZE') {
+      if (typeof event.data.height !== 'number' || !isFinite(event.data.height)) return
+      paletteContentHeight = Math.round(event.data.height)
+      applyPaletteHeight()
+      return
+    }
+    // The widget switched surface (palette ⇄ chat panel). Re-render the geometry for
+    // the new one and drop any hugged height the palette had asked for.
+    if (event.data.type === 'WIDGET_SURFACE') {
+      const palette = !!event.data.palette
+      if (config.surfaceIsPalette === palette) return
+      config.surfaceIsPalette = palette
+      if (!palette) paletteContentHeight = 0
+      updateStyles()
+      applyPaletteHeight()
+      return
+    }
     // Header chevron inside the widget asks to minimize.
     if (event.data.type === 'WIDGET_MINIMIZE') {
       withController(function () { controller.close() })

@@ -48,6 +48,9 @@ const props = defineProps<{
     hotkey: boolean
     citationLabel: (source: any) => string
     citationTooltip: (source: any) => string
+    /** Typewriter reveal, keyed by index into `messages` (see useTypewriter). */
+    displayText: (index: number, fullText: string) => string
+    isStreaming: (index: number) => boolean
 }>()
 
 const emit = defineEmits<{
@@ -59,12 +62,19 @@ const emit = defineEmits<{
 
 const inputEl = ref<HTMLInputElement | null>(null)
 const bodyEl = ref<HTMLElement | null>(null)
+const contentEl = ref<HTMLElement | null>(null)
 
 // Questions, answers and system notes. Interactive kinds (forms, ratings, product
 // cards) never reach here: WidgetBuilder falls the whole conversation back to the
 // chat panel rather than let this surface drop them.
+// The original index travels with each turn: useTypewriter keys its reveal state by
+// position in the unfiltered `messages` array.
 const RENDERABLE = ['user', 'bot', 'agent', 'system']
-const turns = computed(() => props.messages.filter(m => RENDERABLE.includes(m.message_type)))
+const turns = computed(() =>
+    props.messages
+        .map((message, index) => ({ message, index }))
+        .filter(({ message }) => RENDERABLE.includes(message.message_type))
+)
 
 const hasConversation = computed(() => turns.value.length > 0)
 
@@ -107,12 +117,38 @@ const focusInput = () => {
     nextTick(() => inputEl.value?.focus())
 }
 
-// Keep the newest answer in view as it grows. Watches total answer length, not just
-// the turn count, so a streaming reply keeps the tail visible.
-const contentLength = computed(() => turns.value.reduce((n, m) => n + (m.message?.length || 0), 0))
+// An iframe cannot size its embedder, so the palette measures its own content and
+// asks the loader for that height — that's what makes the box hug a short answer
+// instead of sitting at a fixed height with dead space under it. The loader clamps.
+let lastReportedHeight = 0
+const reportHeight = () => {
+    if (!contentEl.value) return
+    const root = contentEl.value.closest('.askai') as HTMLElement | null
+    const body = bodyEl.value
+    if (!root || !body) return
+    // Fixed chrome (ask bar + footer), then the content's natural height plus the
+    // scroll area's own padding — offsetHeight of the body is the CLAMPED height, so
+    // it can't be used for the content itself.
+    const chrome = root.offsetHeight - body.offsetHeight
+    const style = getComputedStyle(body)
+    const padding = parseFloat(style.paddingTop) + parseFloat(style.paddingBottom)
+    const height = Math.ceil(chrome + padding + contentEl.value.getBoundingClientRect().height)
+    // Ignore sub-pixel churn, which would otherwise ping-pong with the resize.
+    if (Math.abs(height - lastReportedHeight) < 3) return
+    lastReportedHeight = height
+    window.parent.postMessage({ type: 'WIDGET_RESIZE', height }, '*')
+}
+
+let contentObserver: ResizeObserver | null = null
+
+// Keep the tail in view as an answer types itself out. Measures REVEALED length, so
+// the scroll follows the typewriter rather than jumping once on arrival.
+const revealedLength = computed(() =>
+    turns.value.reduce((n, { message, index }) => n + props.displayText(index, message.message || '').length, 0)
+)
 
 watch(
-    () => [turns.value.length, contentLength.value, props.loading] as const,
+    () => [turns.value.length, revealedLength.value, props.loading] as const,
     () => nextTick(() => {
         if (bodyEl.value) bodyEl.value.scrollTop = bodyEl.value.scrollHeight
     })
@@ -127,10 +163,17 @@ watch(() => props.active, (visible) => {
 onMounted(() => {
     if (props.active) focusInput()
     window.addEventListener('keydown', onKeydown)
+    if (contentEl.value && typeof ResizeObserver !== 'undefined') {
+        contentObserver = new ResizeObserver(() => reportHeight())
+        contentObserver.observe(contentEl.value)
+    }
+    reportHeight()
 })
 
 onBeforeUnmount(() => {
     window.removeEventListener('keydown', onKeydown)
+    contentObserver?.disconnect()
+    contentObserver = null
 })
 </script>
 
@@ -161,6 +204,9 @@ onBeforeUnmount(() => {
         </div>
 
         <div ref="bodyEl" class="askai__body">
+          <!-- flow-root so child margins don't collapse out of this box: its measured
+               height is what the palette asks the loader to size itself to. -->
+          <div ref="contentEl" class="askai__content">
             <!-- Empty state. A blank panel is the one thing an answer surface must
                  never show: give people something to click. -->
             <template v-if="!hasConversation">
@@ -192,12 +238,25 @@ onBeforeUnmount(() => {
             <!-- Answers. Questions read as headings, answers as prose — a document,
                  not a back-and-forth of bubbles. -->
             <template v-else>
-                <div v-for="(message, index) in turns" :key="index" class="askai__turn" aria-live="polite">
+                <!-- Announced only once the reveal finishes: a live region on text that
+                     mutates per character makes screen readers re-read the whole answer. -->
+                <div
+                    v-for="{ message, index } in turns"
+                    :key="index"
+                    class="askai__turn"
+                    :aria-live="isStreaming(index) ? 'off' : 'polite'"
+                >
                     <p v-if="message.message_type === 'user'" class="askai__question">{{ message.message }}</p>
                     <p v-else-if="message.message_type === 'system'" class="askai__system">{{ message.message }}</p>
                     <template v-else>
-                        <div class="askai__answer" v-html="renderMarkdown(message.message || '')"></div>
-                        <div v-if="showCitations && message.sources && message.sources.length" class="askai__sources">
+                        <!-- Revealed progressively while streaming, so an answer types
+                             itself out here exactly as it does in the chat panel. -->
+                        <div
+                            class="askai__answer"
+                            :class="{ 'askai__answer--streaming': isStreaming(index) }"
+                            v-html="renderMarkdown(isStreaming(index) ? displayText(index, message.message || '') : (message.message || ''))"
+                        ></div>
+                        <div v-if="showCitations && !isStreaming(index) && message.sources && message.sources.length" class="askai__sources">
                             <span class="askai__label">Sources</span>
                             <span
                                 v-for="(source, sourceIndex) in message.sources"
@@ -213,6 +272,7 @@ onBeforeUnmount(() => {
                     <span class="askai__thinking-text">{{ showCitations ? 'Searching the knowledge base' : 'Thinking' }}</span>
                 </div>
             </template>
+          </div>
         </div>
 
         <div class="askai__foot">
@@ -291,8 +351,13 @@ onBeforeUnmount(() => {
     flex: 1;
     min-height: 0;
     overflow-y: auto;
+    /* Reserve the scrollbar gutter: without it, the bar appearing mid-answer narrows
+       the text, re-wraps it taller, and the auto-grow measurement oscillates. */
+    scrollbar-gutter: stable;
     padding: 18px 20px 22px;
 }
+
+.askai__content { display: flow-root; }
 
 .askai__intro { margin-bottom: 18px; }
 
@@ -365,6 +430,23 @@ onBeforeUnmount(() => {
     overflow-wrap: break-word;
 }
 
+/* Blinking caret rides the end of the last rendered block while text reveals. */
+.askai__answer--streaming :deep(> :last-child)::after {
+    content: '';
+    display: inline-block;
+    width: 6px;
+    height: 1em;
+    margin-left: 2px;
+    vertical-align: -0.15em;
+    background: var(--cm-accent, currentColor);
+    animation: askai-blink 1s steps(1) infinite;
+}
+
+@keyframes askai-blink {
+    0%, 50% { opacity: 1; }
+    51%, 100% { opacity: 0; }
+}
+
 .askai__answer :deep(p) { margin: 0 0 10px; }
 .askai__answer :deep(p:last-child) { margin-bottom: 0; }
 .askai__answer :deep(ul),
@@ -384,6 +466,9 @@ onBeforeUnmount(() => {
     overflow-x: auto;
 }
 .askai__answer :deep(pre code) { background: none; padding: 0; }
+/* Wide tables scroll inside the answer instead of forcing a horizontal scrollbar on
+   the whole body (which the height measurement doesn't account for). */
+.askai__answer :deep(table) { display: block; max-width: 100%; overflow-x: auto; }
 
 .askai__sources {
     display: flex;
@@ -437,6 +522,7 @@ onBeforeUnmount(() => {
 @media (prefers-reduced-motion: reduce) {
     .askai__dot { animation: none; }
     .askai__suggestion:hover:not(:disabled) { transform: none; }
+    .askai__answer--streaming :deep(> :last-child)::after { display: none; }
 }
 
 .askai__system {
