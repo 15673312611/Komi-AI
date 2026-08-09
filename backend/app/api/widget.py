@@ -65,6 +65,14 @@ def _asset_version() -> str:
         return ""
 
 
+def _widget_html_response(html: str) -> HTMLResponse:
+    """The widget HTML embeds a conversation token and the current customization,
+    and points at a versioned bundle URL. Caching it would hand a visitor someone
+    else's token from a shared cache, and would keep pinning them to a stale widget
+    build after a release."""
+    return HTMLResponse(html, headers={"Cache-Control": "no-store"})
+
+
 def _widget_runtime_config() -> dict:
     """Runtime API/WS URLs to hand the widget iframe as ``window.APP_CONFIG``.
 
@@ -137,7 +145,7 @@ async def get_widget_ui(
                 detail="Authentication required. Token must be obtained from /api/v1/generate-token endpoint with valid API key."
             )
         # Has valid token - return widget with existing token
-        return HTMLResponse(await get_widget_html(
+        return _widget_html_response(await get_widget_html(
             widget_id=widget_id,
             agent_name=agent.display_name or agent.name,
             agent_customization=agent.customization,
@@ -150,7 +158,7 @@ async def get_widget_ui(
     # Token auth NOT required - allow anonymous access
     # If we have a valid token, use it; otherwise create a new one
     if token and customer_id:
-        return HTMLResponse(await get_widget_html(
+        return _widget_html_response(await get_widget_html(
             widget_id=widget_id,
             agent_name=agent.display_name or agent.name,
             agent_customization=agent.customization,
@@ -169,7 +177,7 @@ async def get_widget_ui(
     
     token = create_conversation_token(widget_id=widget_id, **token_extra_data)
     
-    return HTMLResponse(await get_widget_html(
+    return _widget_html_response(await get_widget_html(
         widget_id=widget_id,
         agent_name=agent.display_name or agent.name,
         agent_customization=agent.customization,
