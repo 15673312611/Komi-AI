@@ -34,7 +34,17 @@ branch_labels = None
 depends_on = None
 
 
+def _has_column() -> bool:
+    """Development databases are shared between feature branches, so the column can
+    already exist by the time this runs. Adding it twice would abort the upgrade."""
+    inspector = sa.inspect(op.get_bind())
+    return any(c['name'] == 'allow_new_chat'
+               for c in inspector.get_columns('agent_customizations'))
+
+
 def upgrade() -> None:
+    if _has_column():
+        return
     op.add_column(
         'agent_customizations',
         sa.Column('allow_new_chat', sa.Boolean(),
@@ -43,4 +53,5 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_column('agent_customizations', 'allow_new_chat')
+    if _has_column():
+        op.drop_column('agent_customizations', 'allow_new_chat')
