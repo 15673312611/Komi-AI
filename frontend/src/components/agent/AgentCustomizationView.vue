@@ -199,8 +199,15 @@ const displayModeOptions = [
     { value: 'floating', label: 'Floating bubble', description: 'Classic corner launcher opening a chat window.' },
     { value: 'sidebar-right', label: 'Right drawer', description: 'Full-height panel sliding in from the right edge.' },
     { value: 'sidebar-left', label: 'Left drawer', description: 'Full-height panel sliding in from the left edge.' },
-    { value: 'search-bar', label: 'Search bar', description: 'A search-style bar that opens the chat on desktop.' },
+    { value: 'search-bar', label: 'Search bar', description: 'An "Ask anything" bar that opens the Ask AI panel.', askAiOnly: true },
 ]
+
+// The search bar opens the Ask AI answer panel, which is what the Ask Anything and
+// Aurora designs are; offering it with a chat-bubble design would promise a surface
+// that design doesn't have.
+const ASK_AI_CHAT_STYLES = ['ASK_ANYTHING', 'AURORA']
+const isAskAiTheme = computed(() => ASK_AI_CHAT_STYLES.includes(customization.value.chat_style as string))
+const isModeAvailable = (option: { askAiOnly?: boolean }) => !option.askAiOnly || isAskAiTheme.value
 
 // Numeric bounds per field — must mirror WidgetDisplayConfig (backend schema),
 // which rejects values outside these ranges.
@@ -233,6 +240,14 @@ const setDisplay = (key: string, value: unknown) => {
     meta.widget_display = display
     customization.value.customization_metadata = meta
 }
+
+// Switching to a chat-bubble design leaves the search bar pointing at an Ask AI panel
+// that design doesn't have, so fall back to the floating launcher.
+watch(isAskAiTheme, (askAi) => {
+    if (!askAi && widgetDisplay.value.mode === 'search-bar') {
+        setDisplay('mode', null)
+    }
+})
 
 // Clamp on change (not on input — clamping mid-typing fights the user).
 const setDisplayNumber = (key: string, event: Event) => {
@@ -652,7 +667,9 @@ const isSectionExpanded = (sectionId: string) => {
                         :key="option.value"
                         type="button"
                         class="chat-style-card"
-                        :class="{ 'active': activeDisplayMode === option.value }"
+                        :class="{ 'active': activeDisplayMode === option.value, 'locked': !isModeAvailable(option) }"
+                        :disabled="!isModeAvailable(option)"
+                        :title="isModeAvailable(option) ? undefined : 'Available with the Ask Anything or Aurora design'"
                         @click="setDisplay('mode', option.value)"
                     >
                         <div class="chat-style-thumb placement-thumb">
@@ -662,7 +679,10 @@ const isSectionExpanded = (sectionId: string) => {
                             <span>{{ option.label }}</span>
                             <span v-if="activeDisplayMode === option.value" class="chat-style-check">✓</span>
                         </div>
-                        <div class="chat-style-desc">{{ option.description }}</div>
+                        <div class="chat-style-desc">
+                            {{ option.description }}
+                            <template v-if="!isModeAvailable(option)"><br>Needs the Ask Anything or Aurora design.</template>
+                        </div>
                     </button>
                 </div>
 
@@ -1212,6 +1232,11 @@ const isSectionExpanded = (sectionId: string) => {
     bottom: 8px;
     height: 11px;
     border-radius: 999px;
+}
+
+.chat-style-card.locked {
+    opacity: 0.45;
+    cursor: not-allowed;
 }
 
 .placement-side-row {
