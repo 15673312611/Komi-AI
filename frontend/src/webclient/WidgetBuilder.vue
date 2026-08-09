@@ -2143,6 +2143,9 @@ const askAiHotkey = computed(() => parentDisplay.value?.hotkey !== false)
                         </div>
                     </div>
                 </div>
+                <!-- Grouped: the header is space-between, so as separate children the
+                     two actions would drift to opposite ends of the free space. -->
+                <div class="header-actions">
                 <button
                     v-if="canStartNewChat"
                     type="button"
@@ -2173,6 +2176,7 @@ const askAiHotkey = computed(() => parentDisplay.value?.hotkey !== false)
                         <path d="M6 9l6 6 6-6"></path>
                     </svg>
                 </button>
+                </div>
             </div>
             <div v-else class="ask-anything-top" :style="headerBorderStyles">
                 <div class="ask-anything-header">
@@ -2969,6 +2973,13 @@ const askAiHotkey = computed(() => parentDisplay.value?.hotkey !== false)
 }
 
 /* Minimize (chevron) button */
+.header-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+}
+
 .header-minimize {
     width: 32px;
     height: 32px;
