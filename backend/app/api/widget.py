@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 from typing import List, Optional
 from jose import JWTError
 from datetime import datetime
+from pathlib import Path
 import json
 import time
 
@@ -41,6 +42,27 @@ from app.core.s3 import get_s3_signed_url
 
 router = APIRouter()
 logger = get_logger(__name__)
+
+
+_ASSETS_DIR = Path(__file__).resolve().parents[2] / "assets"
+
+
+def _asset_version() -> str:
+    """Cache-buster for the widget bundle URLs.
+
+    /assets/widget.js is served without a Cache-Control header and its URL never
+    changes, so browsers fall back to heuristic caching and can keep serving an old
+    bundle for hours after a release — the widget silently runs last week's code.
+    Stamping the build's mtime+size onto the URL makes a new build a new URL.
+    Recomputed per request (a stat is microseconds) so a rebuild takes effect
+    without restarting the backend.
+    """
+    try:
+        stat = (_ASSETS_DIR / "widget.js").stat()
+        return f"{int(stat.st_mtime)}-{stat.st_size}"
+    except OSError:
+        # Assets served from somewhere else (CDN, dev server) — nothing to stamp.
+        return ""
 
 
 def _widget_runtime_config() -> dict:
@@ -161,7 +183,9 @@ async def get_widget_html(widget_id: str, agent_name: str, agent_customization: 
     """Generate widget HTML with embedded data"""
     import html
     widget_url = settings.VITE_WIDGET_URL
-    
+    version = _asset_version()
+    asset_query = f"?v={version}" if version else ""
+
     # Convert AgentCustomization to dict if it's a model instance
     customization_dict = {}
     if agent_customization:
@@ -208,8 +232,8 @@ async def get_widget_html(widget_id: str, agent_name: str, agent_customization: 
                 // Declared before the widget module loads.
                 window.APP_CONFIG = {json.dumps(_widget_runtime_config())};
             </script>
-            <script type="module" crossorigin src="{widget_url}/assets/widget.js"></script>
-            <link rel="stylesheet" crossorigin href="{widget_url}/assets/widget.css">
+            <script type="module" crossorigin src="{widget_url}/assets/widget.js{asset_query}"></script>
+            <link rel="stylesheet" crossorigin href="{widget_url}/assets/widget.css{asset_query}">
             <script>
                 window.__INITIAL_DATA__ = {{
                     widgetId: "{html.escape(widget_id)}",
