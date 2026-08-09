@@ -51,6 +51,11 @@ const props = defineProps<{
     /** Typewriter reveal, keyed by index into `messages` (see useTypewriter). */
     displayText: (index: number, fullText: string) => string
     isStreaming: (index: number) => boolean
+    /** Opt-in "New chat" control (customization.allow_new_chat). */
+    canStartNewChat: boolean
+    startingNewChat: boolean
+    /** Armed = the next click confirms (ending a chat can't be undone). */
+    newChatArmed: boolean
 }>()
 
 const emit = defineEmits<{
@@ -58,6 +63,8 @@ const emit = defineEmits<{
     (e: 'send'): void
     (e: 'ask', question: string): void
     (e: 'close'): void
+    (e: 'newChat'): void
+    (e: 'cancelNewChat'): void
 }>()
 
 const inputEl = ref<HTMLInputElement | null>(null)
@@ -198,6 +205,23 @@ onBeforeUnmount(() => {
                 @input="onInput"
                 @keydown.enter.prevent="submit"
             >
+            <button
+                v-if="canStartNewChat"
+                type="button"
+                class="askai__new"
+                :class="{ 'askai__new--armed': newChatArmed }"
+                :disabled="startingNewChat"
+                :title="newChatArmed ? 'This ends the current chat — click again to confirm' : 'Start a new chat'"
+                :aria-label="newChatArmed ? 'Confirm starting a new chat' : 'Start a new chat'"
+                @click="emit('newChat')"
+                @blur="emit('cancelNewChat')"
+            >
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                    stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M12 5v14M5 12h14" />
+                </svg>
+                <span>{{ newChatArmed ? 'Confirm?' : 'New chat' }}</span>
+            </button>
             <button type="button" class="askai__close" aria-label="Close" title="Close (Esc)" @click="emit('close')">
                 <span class="askai__kbd">Esc</span>
             </button>
@@ -323,6 +347,35 @@ onBeforeUnmount(() => {
 
 .askai__input::placeholder { color: var(--cm-muted); }
 .askai__input:disabled { opacity: 0.6; }
+
+.askai__new {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    border: 1px solid var(--cm-border);
+    background: transparent;
+    border-radius: 6px;
+    padding: 3px 8px 3px 6px;
+    cursor: pointer;
+    color: var(--cm-muted);
+    font-size: 12px;
+    font-weight: 500;
+    font-family: inherit;
+    flex-shrink: 0;
+    transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.askai__new:hover:not(:disabled) {
+    color: var(--cm-text);
+    border-color: var(--cm-accent);
+}
+
+.askai__new:disabled { opacity: 0.5; cursor: default; }
+
+.askai__new--armed {
+    color: var(--cm-text);
+    border-color: var(--cm-accent);
+}
 
 .askai__close {
     border: 1px solid var(--cm-border);

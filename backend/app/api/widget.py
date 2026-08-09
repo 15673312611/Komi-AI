@@ -187,6 +187,7 @@ async def get_widget_html(widget_id: str, agent_name: str, agent_customization: 
             "show_citations": agent_customization.show_citations,
             "collect_email": agent_customization.collect_email,
             "show_ai_disclaimer": agent_customization.show_ai_disclaimer,
+            "allow_new_chat": agent_customization.allow_new_chat,
             "customization_metadata": agent_customization.customization_metadata or {}
         }
         

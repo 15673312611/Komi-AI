@@ -89,6 +89,12 @@ class TestWidgetDisplayValidation:
     def test_no_metadata_is_fine(self):
         assert CustomizationCreate().customization_metadata == {}
 
+    def test_allow_new_chat_defaults_off_and_round_trips(self):
+        """Off by default: starting a new chat closes the session, which would cut
+        off a human agent mid-handover."""
+        assert CustomizationCreate().allow_new_chat is False
+        assert CustomizationCreate(allow_new_chat=True).allow_new_chat is True
+
     def test_normalized_values_are_json_primitives(self):
         """The dict is stored in a JSON column — enum members must not leak in."""
         import json

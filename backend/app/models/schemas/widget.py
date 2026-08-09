@@ -49,6 +49,7 @@ class AgentCustomizationResponse(BaseModel):
     show_citations: Optional[bool] = None
     collect_email: Optional[bool] = None
     show_ai_disclaimer: Optional[bool] = None
+    allow_new_chat: Optional[bool] = None
     # Free-form extras (avatar_style, widget_display placement defaults, ...)
     customization_metadata: Optional[dict] = None
 

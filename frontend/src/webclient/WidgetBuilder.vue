@@ -66,6 +66,7 @@ const {
     connectionStatus,
     sendMessage: socketSendMessage,
     sendFileAttachments,
+    endChat: socketEndChat,
     loadChatHistory,
     connect,
     reconnect,
@@ -1328,6 +1329,60 @@ const startNewConversationWorkflow = async () => {
     }
 }
 
+// Opt-in "New chat" control (customization.allow_new_chat). Hidden until there is
+// something to clear, and while a human agent is on the conversation — closing the
+// session would drop the visitor out of a live handover mid-sentence.
+const canStartNewChat = computed(() =>
+    customization.value.allow_new_chat === true
+    && messages.value.length > 0
+    && !humanAgent.value?.human_agent_name
+    && !showEmailGate.value
+)
+
+const startingNewChat = ref(false)
+
+// Ending a chat closes the session, and history is scoped to the active session —
+// so the old conversation is gone for good. Ask once rather than wiping on a stray
+// click; the arm state lapses on its own so it can't sit there confusing people.
+const newChatArmed = ref(false)
+let newChatArmTimer: ReturnType<typeof setTimeout> | null = null
+
+const disarmNewChat = () => {
+    newChatArmed.value = false
+    if (newChatArmTimer) {
+        clearTimeout(newChatArmTimer)
+        newChatArmTimer = null
+    }
+}
+
+const requestNewChat = () => {
+    if (startingNewChat.value) return
+    if (!newChatArmed.value) {
+        newChatArmed.value = true
+        newChatArmTimer = setTimeout(disarmNewChat, 5000)
+        return
+    }
+    disarmNewChat()
+    handleStartNewChat()
+}
+
+// Close the session, drop the local conversation, and reconnect into a fresh one.
+const handleStartNewChat = async () => {
+    if (startingNewChat.value) return
+    startingNewChat.value = true
+    try {
+        await socketEndChat()
+        humanAgent.value = {}
+        newMessage.value = ''
+        uploadedAttachments.value = []
+        await initializeWidget()
+    } catch (error) {
+        console.error('Failed to start a new chat:', error)
+    } finally {
+        startingNewChat.value = false
+    }
+}
+
 // Handle starting a new conversation
 const handleStartNewConversation = async () => {
     shouldShowNewConversationOption.value = false
@@ -1778,6 +1833,11 @@ const askAiHotkey = computed(() => parentDisplay.value?.hotkey !== false)
             :disclaimer="showAiDisclaimer ? AI_DISCLAIMER_TEXT : ''"
             :active="hostVisible"
             :hotkey="askAiHotkey"
+            :can-start-new-chat="canStartNewChat"
+            :starting-new-chat="startingNewChat"
+            :new-chat-armed="newChatArmed"
+            @new-chat="requestNewChat"
+            @cancel-new-chat="disarmNewChat"
             :citation-label="citationLabel"
             :citation-tooltip="citationTooltip"
             :display-text="displayText"
@@ -2081,6 +2141,23 @@ const askAiHotkey = computed(() => parentDisplay.value?.hotkey !== false)
                         </div>
                     </div>
                 </div>
+                <button
+                    v-if="canStartNewChat"
+                    type="button"
+                    class="header-new-chat"
+                    :class="{ armed: newChatArmed }"
+                    :style="messageNameStyles"
+                    :disabled="startingNewChat"
+                    :title="newChatArmed ? 'This ends the current chat — click again to confirm' : 'Start a new chat'"
+                    :aria-label="newChatArmed ? 'Confirm starting a new chat' : 'Start a new chat'"
+                    @click="requestNewChat"
+                    @blur="disarmNewChat"
+                >
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M12 5v14M5 12h14"></path>
+                    </svg>
+                    <span>{{ newChatArmed ? 'End &amp; start new?' : 'New chat' }}</span>
+                </button>
                 <button
                     type="button"
                     class="header-minimize"
@@ -2910,6 +2987,37 @@ const askAiHotkey = computed(() => parentDisplay.value?.hotkey !== false)
 }
 
 /* Header Menu Styles */
+/* Sits beside the minimize chevron; labelled, because a bare "+" in a chat header
+   reads as "attach" rather than "start over". */
+.header-new-chat {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 9px;
+    border: 1px solid color-mix(in srgb, currentColor 22%, transparent);
+    border-radius: 999px;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    opacity: 0.75;
+    white-space: nowrap;
+    transition: opacity 0.15s ease, border-color 0.15s ease;
+}
+
+.header-new-chat:hover:not(:disabled) { opacity: 1; }
+.header-new-chat.armed {
+    opacity: 1;
+    border-color: currentColor;
+}
+
+.header-new-chat:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+
 .header-menu-container {
     position: relative;
     margin-left: auto;

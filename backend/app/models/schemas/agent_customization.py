@@ -128,6 +128,7 @@ class CustomizationBase(BaseModel):
     show_citations: Optional[bool] = False
     collect_email: Optional[bool] = False
     show_ai_disclaimer: Optional[bool] = True
+    allow_new_chat: Optional[bool] = False
 
 
 class CustomizationCreate(CustomizationBase):

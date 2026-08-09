@@ -118,6 +118,7 @@ export interface AgentCustomization {
   show_citations?: boolean
   collect_email?: boolean
   show_ai_disclaimer?: boolean
+  allow_new_chat?: boolean
 }
 
 export interface AgentWithCustomization extends AgentResponse {
