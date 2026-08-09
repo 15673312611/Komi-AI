@@ -1359,7 +1359,9 @@ const requestNewChat = () => {
     if (startingNewChat.value) return
     if (!newChatArmed.value) {
         newChatArmed.value = true
-        newChatArmTimer = setTimeout(disarmNewChat, 5000)
+        // Long enough to read the hint and act; short enough that a forgotten arm
+        // state doesn't turn a later stray click into a wiped conversation.
+        newChatArmTimer = setTimeout(disarmNewChat, 8000)
         return
     }
     disarmNewChat()
@@ -2153,10 +2155,11 @@ const askAiHotkey = computed(() => parentDisplay.value?.hotkey !== false)
                     @click="requestNewChat"
                     @blur="disarmNewChat"
                 >
-                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                        <path d="M12 5v14M5 12h14"></path>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M12 20h9"></path>
+                        <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"></path>
                     </svg>
-                    <span>{{ newChatArmed ? 'End &amp; start new?' : 'New chat' }}</span>
+                    <span v-if="newChatArmed" class="new-chat-hint">Click again to start a new chat</span>
                 </button>
                 <button
                     type="button"
@@ -2987,30 +2990,45 @@ const askAiHotkey = computed(() => parentDisplay.value?.hotkey !== false)
 }
 
 /* Header Menu Styles */
-/* Sits beside the minimize chevron; labelled, because a bare "+" in a chat header
-   reads as "attach" rather than "start over". */
+/* Matches the minimize chevron exactly — two header actions should read as one
+   set, not a text pill competing with the agent name. A compose glyph (not a bare
+   "+") is the widely-understood "start a new chat" mark. */
 .header-new-chat {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    padding: 4px 9px;
-    border: 1px solid color-mix(in srgb, currentColor 22%, transparent);
-    border-radius: 999px;
-    background: transparent;
+    width: 32px;
+    height: 32px;
+    border-radius: 9px;
+    border: none;
+    background: rgba(127, 127, 127, 0.12);
     color: inherit;
-    font: inherit;
-    font-size: 12px;
-    font-weight: 500;
     cursor: pointer;
-    opacity: 0.75;
-    white-space: nowrap;
-    transition: opacity 0.15s ease, border-color 0.15s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    position: relative;
+    transition: background 0.15s ease;
 }
 
-.header-new-chat:hover:not(:disabled) { opacity: 1; }
-.header-new-chat.armed {
-    opacity: 1;
-    border-color: currentColor;
+.header-new-chat:hover:not(:disabled) { background: rgba(127, 127, 127, 0.22); }
+
+/* Armed = the next click confirms. Tint the control and float the hint, rather
+   than growing the button and shoving the header around. */
+.header-new-chat.armed { background: color-mix(in srgb, currentColor 20%, transparent); }
+
+.header-new-chat .new-chat-hint {
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    padding: 4px 8px;
+    border-radius: 7px;
+    background: rgba(20, 20, 24, 0.92);
+    color: #fff;
+    font-size: 11px;
+    font-weight: 500;
+    line-height: 1.3;
+    white-space: nowrap;
+    pointer-events: none;
+    z-index: 3;
 }
 
 .header-new-chat:disabled {

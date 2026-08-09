@@ -217,10 +217,11 @@ onBeforeUnmount(() => {
                 @blur="emit('cancelNewChat')"
             >
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                    stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                    <path d="M12 5v14M5 12h14" />
+                    stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M12 20h9" />
+                    <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" />
                 </svg>
-                <span>{{ newChatArmed ? 'Confirm?' : 'New chat' }}</span>
+                <span v-if="newChatArmed" class="askai__new-hint">Click again to confirm</span>
             </button>
             <button type="button" class="askai__close" aria-label="Close" title="Close (Esc)" @click="emit('close')">
                 <span class="askai__kbd">Esc</span>
@@ -348,21 +349,39 @@ onBeforeUnmount(() => {
 .askai__input::placeholder { color: var(--cm-muted); }
 .askai__input:disabled { opacity: 0.6; }
 
+/* Icon-only, same weight as the Esc chip beside it — the bar is for asking, not a
+   place for two competing labelled buttons. */
 .askai__new {
+    position: relative;
     display: inline-flex;
     align-items: center;
-    gap: 4px;
+    justify-content: center;
+    width: 28px;
+    height: 26px;
     border: 1px solid var(--cm-border);
     background: transparent;
     border-radius: 6px;
-    padding: 3px 8px 3px 6px;
     cursor: pointer;
     color: var(--cm-muted);
-    font-size: 12px;
-    font-weight: 500;
     font-family: inherit;
     flex-shrink: 0;
     transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.askai__new-hint {
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    padding: 4px 8px;
+    border-radius: 7px;
+    background: rgba(20, 20, 24, 0.92);
+    color: #fff;
+    font-size: 11px;
+    font-weight: 500;
+    line-height: 1.3;
+    white-space: nowrap;
+    pointer-events: none;
+    z-index: 3;
 }
 
 .askai__new:hover:not(:disabled) {
