@@ -16,6 +16,7 @@
 
 - [Why ChatterMate?](#why-chattermate)
 - [Features](#features)
+- [Integrations](#integrations)
 - [ChatterMate vs. Intercom, Zendesk & Chatbase](#chattermate-vs-intercom-zendesk--chatbase)
 - [Demo](#demo)
 - [Quick Start](#quick-start)
@@ -140,6 +141,59 @@ access, so the limits are enforced in code, not by prompting:
 | 🎨 **Custom Theming** | Fully customizable chat widget to match your brand |
 | 🔐 **Role-Based Access Control** | Granular permissions for team members |
 | 🌐 **Open Source & Self-Hosted** | Full control over your data with self-hosting option |
+
+### Integrations
+
+**All of these are free and included** — every adapter ships in the
+open-source codebase, and self-hosting unlocks the lot.
+
+What some of them need is **your own credentials**, because the integration
+talks to your account on someone else's platform:
+
+- **You create the app** — a developer app registered once per ChatterMate
+  install, with its keys in the backend `.env`.
+- **You paste a token** — no app to create; you generate a token or API key on
+  the provider's side and enter it in the ChatterMate UI when connecting.
+
+Both are marked in the tables below.
+
+**Messaging channels** — one shared inbox for all of them, with the same AI
+answers, human handoff, and workflows as the web widget:
+
+| Channel | Setup | Notes |
+|---------|-------|-------|
+| 💬 **WhatsApp** | Your Meta app | WhatsApp Business Cloud API — templates, media, and 24-hour session handling |
+| 💬 **Facebook Messenger** | Your Meta app | Meta Messenger Platform, connected per Page |
+| 📷 **Instagram** | Your Meta app | Instagram Direct Messages via the Meta Graph API |
+| 🔷 **Slack** | Your Slack app | Your Slack workspace as an internal support channel |
+| ✈️ **Telegram** | Paste a token | Bot token from BotFather — no app registration |
+| 🟢 **LINE** | Paste a token | LINE Messaging API channel credentials |
+| 📱 **SMS** | Paste a token | Your **Twilio**, **Vonage**, **Plivo**, or **MessageBird** account keys |
+| 📧 **Email** | Paste a token | Your mailbox credentials; inbound email becomes a conversation and replies go back over email |
+| 🌐 **Web widget** | Nothing | The embeddable widget, plus **Shopify** and **WordPress** surfaces |
+
+**CRM** — push captured leads and contacts out to your sales stack:
+
+| Integration | Setup | Notes |
+|-------------|-------|-------|
+| 🟠 **HubSpot** | Your HubSpot app | Contacts and leads pushed from chat, OAuth connected |
+| 🟩 **Pipedrive** | Your Pipedrive app | Persons and leads pushed from chat, OAuth connected |
+
+Synced by the `crm_sync` worker — see [Background processors](#background-processors).
+
+**Tickets, data and tooling**
+
+| Integration | Setup | Notes |
+|-------------|-------|-------|
+| 🔗 **Jira** | Your Atlassian app | Create and track Jira issues from chat (OAuth 2.0); native tickets can escalate to Jira |
+| 🛍️ **Shopify** | Your Shopify app | Order, shipping, and product answers from live store data |
+| 🧰 **MCP servers** | Paste a token | Any MCP server as an agent tool — Grafana, Elasticsearch, Sentry, CloudWatch, and others |
+| 🗄️ **SQL connectors** | Paste a token | Read-only, guardrailed **PostgreSQL** and **MySQL** access for AI ticket investigation |
+| 🪝 **Webhooks** | Nothing | Outbound ticket webhooks to drive your own automations |
+
+> Adding a channel means implementing one adapter in `backend/app/channels/`
+> against the shared `ChannelAdapter` base — the inbox, AI, and handoff come for
+> free. CRM adapters follow the same shape in `backend/app/crm/`.
 
 ---
 
