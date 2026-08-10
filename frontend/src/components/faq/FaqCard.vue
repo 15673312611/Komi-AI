@@ -29,6 +29,7 @@ const props = defineProps<{
   /** Per-article SEO drafts. Optional so callers that don't expose the SEO
    *  section (and tests) can leave them out — they default to empty. */
   draftSlug?: string
+  draftUrlPath?: string
   draftMetaTitle?: string
   draftMetaDescription?: string
   /** Topic (category) draft plus the org's existing topics for autocomplete.
@@ -52,6 +53,7 @@ const emit = defineEmits<{
   'update:draftAnswer': [value: string]
   'update:draftCategory': [value: string]
   'update:draftSlug': [value: string]
+  'update:draftUrlPath': [value: string]
   'update:draftMetaTitle': [value: string]
   'update:draftMetaDescription': [value: string]
 }>()
@@ -121,10 +123,12 @@ function answerPreview(md: string): string {
       </label>
       <FaqSeoFields
         :slug="draftSlug"
+        :url-path="draftUrlPath"
         :meta-title="draftMetaTitle"
         :meta-description="draftMetaDescription"
         :question="draftQuestion"
         @update:slug="$emit('update:draftSlug', $event)"
+        @update:url-path="$emit('update:draftUrlPath', $event)"
         @update:meta-title="$emit('update:draftMetaTitle', $event)"
         @update:meta-description="$emit('update:draftMetaDescription', $event)"
       />

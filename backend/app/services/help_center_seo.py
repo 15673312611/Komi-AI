@@ -94,6 +94,27 @@ def category_url(site: str, category: str) -> str:
     return f"{site}/?topic={quote(category)}"
 
 
+def article_path(faq: FAQ) -> str:
+    """The root-relative path an article is served at, percent-DECODED.
+
+    An article migrated in with "preserve original URLs" keeps the path it had
+    on the old help center; everything else lives at /a/{slug}. Exactly one of
+    the two is canonical — /a/{slug} 301s to the preserved path when there is
+    one — so this is the single answer to "where does this article live?" and
+    every URL the site emits derives from it."""
+    return faq.url_path or f"/a/{faq.slug}"
+
+
+def article_href(faq: FAQ, base_path: str = "") -> str:
+    """What a page renders in href=: the serving prefix plus the ENCODED path."""
+    return f"{base_path}{quote(article_path(faq), safe='/')}"
+
+
+def article_url(site: str, faq: FAQ) -> str:
+    """The article's ABSOLUTE URL, for canonical/og:url/sitemap/JSON-LD."""
+    return f"{site}{quote(article_path(faq), safe='/')}"
+
+
 def breadcrumbs(
     row: HelpCenterSettings, faq: FAQ, base_path: str, site: str
 ) -> List[dict]:
@@ -107,7 +128,7 @@ def breadcrumbs(
             "href": f"{base_path}/?topic={quote(faq.category)}",
             "url": category_url(site, faq.category),
         },
-        {"label": faq.question, "href": None, "url": f"{site}/a/{faq.slug}"},
+        {"label": faq.question, "href": None, "url": article_url(site, faq)},
     ]
 
 
@@ -201,7 +222,7 @@ def article_json_ld(
     TechArticle (not FAQPage) is what a single how-to/help article is: Google
     dropped FAQ rich results, while BreadcrumbList still renders in search.
     """
-    page_url = f"{site}/a/{faq.slug}"
+    page_url = article_url(site, faq)
     description = article_description(faq)
     article: dict = {
         "@type": "TechArticle",

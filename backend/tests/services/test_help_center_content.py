@@ -74,6 +74,23 @@ def test_base_path_prefixes_internal_links_only():
     assert 'href="/a/x"' in root and 'href="/help/' not in root
 
 
+def test_link_paths_resolve_cross_links_to_preserved_paths():
+    """Bodies STORE /a/{slug} so links survive a path edit; the article's real
+    served path is substituted at render time, avoiding a 301 hop."""
+    md = "[moved](/a/x) [stayed](/a/y) [home](/)"
+    link_paths = {"x": "/hc/en-us/articles/1"}
+
+    html = render_article_html(md, link_paths=link_paths)
+    assert 'href="/hc/en-us/articles/1"' in html
+    assert 'href="/a/y"' in html          # no preserved path — unchanged
+    assert 'href="/"' in html
+
+    # The serving prefix still applies on top, in path mode.
+    prefixed = render_article_html(md, base_path="/help/acme", link_paths=link_paths)
+    assert 'href="/help/acme/hc/en-us/articles/1"' in prefixed
+    assert 'href="/help/acme/a/y"' in prefixed
+
+
 def test_to_plain_text_strips_markdown_and_html():
     plain = to_plain_text(RICH)
     assert "##" not in plain and "**" not in plain

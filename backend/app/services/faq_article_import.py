@@ -35,7 +35,7 @@ from app.core.logger import get_logger
 from app.knowledge.main_content import select_main_node
 from app.knowledge.sitemap_parser import _registrable_domain
 from app.knowledge.url_safety import safe_get
-from app.models.faq import FAQ, FAQStatus
+from app.models.faq import FAQ, FAQ_SOURCE_URL_MAX_LENGTH, FAQStatus
 from app.models.faq_generation_job import FAQGenerationJob, FAQJobStage
 from app.models.schemas.faq import MAX_ANSWER_LENGTH, MAX_QUESTION_LENGTH
 from app.repositories.faq import FAQRepository
@@ -47,6 +47,7 @@ from app.services.help_center_images import (
     MAX_FAQ_IMAGE_BYTES,
     store_article_image,
 )
+from app.services.help_center_settings import assign_faq_url_paths
 
 logger = get_logger(__name__)
 
@@ -530,6 +531,10 @@ async def run_article_import_job(db, job: FAQGenerationJob) -> int:
                     status=FAQStatus.DRAFT,
                     knowledge_id=None,
                     source_label=source_label,
+                    # Provenance on every import, whether or not the original
+                    # URLs are being preserved — so a later "apply preserved
+                    # paths" pass is a pure data migration.
+                    source_url=article.url[:FAQ_SOURCE_URL_MAX_LENGTH],
                     generation_job_id=job.id,
                     created_by=job.user_id,
                 )
@@ -540,6 +545,12 @@ async def run_article_import_job(db, job: FAQGenerationJob) -> int:
 
     if not rows:
         return 0
+    if job.preserve_source_urls:
+        # Before the insert, so the per-org unique index can never reject the
+        # batch. Rows that can't keep their path just fall back to /a/{slug} —
+        # one unusable URL must not cost the org the whole import.
+        applied = assign_faq_url_paths(db, rows, row_sources)
+        logger.info(f"Article import job {job.id}: preserved {applied}/{len(rows)} original URLs")
     created = insert_draft_rows(db, job, rows)  # assigns each row a unique slug in place
     _remap_imported_links(db, rows, row_sources)
     return created

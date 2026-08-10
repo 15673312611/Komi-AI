@@ -344,3 +344,103 @@ def test_remap_cleans_breadcrumb_separator_residue():
     out = _remap_source_links(md, {"help.x.co"}, {})
     assert "›" not in out
     assert out.lstrip().startswith("Real content.")
+
+
+# ---------- preserving the source help center's URLs ----------
+
+def _import_job(db, org_id, **kw):
+    job = FAQGenerationJob(
+        organization_id=org_id,
+        job_type=FAQJobType.IMPORT_ARTICLES.value,
+        source_url="https://help.example.com/articles",
+        **kw,
+    )
+    db.add(job)
+    db.commit()
+    db.refresh(job)
+    return job
+
+
+async def _run_import(db, job, articles):
+    discovered = [(url, "Billing") for url in articles]
+    with patch.object(faq_article_import, "discover_article_links", return_value=discovered), \
+         patch.object(faq_article_import, "fetch_article", side_effect=lambda c, url, category: articles[url]):
+        return await run_article_import_job(db, job)
+
+
+def _article(url, title):
+    return faq_article_import.Article(
+        url=url, title=title, markdown="Body.", category_hint="Billing",
+    )
+
+
+@pytest.mark.asyncio
+async def test_article_import_preserves_original_urls_when_enabled(db, test_organization):
+    """The migrated article is served at the exact path it had on the old help
+    center, so the org keeps the URL it already ranks for."""
+    job = _import_job(db, test_organization.id, preserve_source_urls=True)
+    url = "https://help.example.com/hc/en-us/articles/360012-reset?utm=x"
+    articles = {url: _article(url, "How billing works")}
+
+    assert await _run_import(db, job, articles) == 1
+
+    row = db.query(FAQ).filter(FAQ.question == "How billing works").one()
+    assert row.url_path == "/hc/en-us/articles/360012-reset"   # query string dropped
+    assert row.source_url == url
+    assert row.slug  # still assigned — /a/{slug} stays the alias that 301s
+
+
+@pytest.mark.asyncio
+async def test_article_import_records_source_url_but_no_path_when_disabled(db, test_organization):
+    """Provenance is always captured, so preserved paths can be applied later."""
+    job = _import_job(db, test_organization.id)
+    url = "https://help.example.com/hc/en-us/articles/360012-reset"
+    articles = {url: _article(url, "How billing works")}
+
+    assert await _run_import(db, job, articles) == 1
+
+    row = db.query(FAQ).filter(FAQ.question == "How billing works").one()
+    assert row.url_path is None
+    assert row.source_url == url
+
+
+@pytest.mark.asyncio
+async def test_article_import_falls_back_to_the_slug_on_an_unusable_path(db, test_organization):
+    """One URL that would shadow a real route must not cost the org the import."""
+    job = _import_job(db, test_organization.id, preserve_source_urls=True)
+    reserved = "https://help.example.com/ask"
+    good = "https://help.example.com/hc/articles/2"
+    articles = {reserved: _article(reserved, "Reserved"), good: _article(good, "Fine")}
+
+    assert await _run_import(db, job, articles) == 2
+
+    assert db.query(FAQ).filter(FAQ.question == "Reserved").one().url_path is None
+    assert db.query(FAQ).filter(FAQ.question == "Fine").one().url_path == "/hc/articles/2"
+
+
+@pytest.mark.asyncio
+async def test_article_import_still_stores_cross_links_as_slug_paths(db, test_organization):
+    """Bodies must keep /a/{slug}: it's the only form the render-time prefixer
+    can handle in path mode, and it survives a later path edit."""
+    from app.models.help_center import HelpCenterSettings
+
+    db.add(HelpCenterSettings(
+        organization_id=test_organization.id, slug="acme", enabled=True, brand_color="#4338CA",
+    ))
+    job = _import_job(db, test_organization.id, preserve_source_urls=True)
+    one = "https://help.example.com/hc/articles/1"
+    two = "https://help.example.com/hc/articles/2"
+    articles = {
+        one: _article(one, "First"),
+        two: faq_article_import.Article(
+            url=two, title="Second", markdown=f"See [first]({one}).", category_hint="Billing",
+        ),
+    }
+
+    assert await _run_import(db, job, articles) == 2
+
+    first = db.query(FAQ).filter(FAQ.question == "First").one()
+    second = db.query(FAQ).filter(FAQ.question == "Second").one()
+    assert first.url_path == "/hc/articles/1"
+    assert f"(/a/{first.slug})" in second.answer
+    assert "/hc/articles/1" not in second.answer

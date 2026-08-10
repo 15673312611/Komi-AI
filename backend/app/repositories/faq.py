@@ -103,6 +103,28 @@ class FAQRepository:
             .first()
         )
 
+    def url_path_exists(
+        self, organization_id: UUID, url_path: str, exclude_id: Optional[UUID] = None
+    ) -> bool:
+        """Whether another FAQ in the org is already served at this preserved
+        path. `exclude_id` skips one row so re-saving an article doesn't collide
+        with itself."""
+        query = self._org_query(organization_id).filter(FAQ.url_path == url_path)
+        if exclude_id is not None:
+            query = query.filter(FAQ.id != exclude_id)
+        return self.db.query(query.exists()).scalar()
+
+    def get_published_by_url_path(self, organization_id: UUID, url_path: str) -> Optional[FAQ]:
+        """A single published article by its preserved original path — the
+        lookup for any public URL no other route claimed. Case-sensitive on
+        purpose: the point of the feature is to serve the exact URL the org
+        already ranks for."""
+        return (
+            self._org_query(organization_id)
+            .filter(FAQ.url_path == url_path, FAQ.status == FAQStatus.PUBLISHED)
+            .first()
+        )
+
     def get_published_related(
         self, organization_id: UUID, category: str, exclude_id: UUID, limit: int = 4
     ) -> List[FAQ]:

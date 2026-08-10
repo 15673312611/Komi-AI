@@ -25,6 +25,7 @@ this is the ONLY place org content is ever trusted as HTML.
 """
 
 import re
+from typing import Mapping, Optional
 
 import markdown as _markdown
 import nh3
@@ -60,14 +61,22 @@ _WHITESPACE_RE = re.compile(r"\s+")
 _INTERNAL_HREF_RE = re.compile(r'(href=")(/a/[^"]*|/)(")')
 
 
-def render_article_html(text: str, base_path: str = "") -> str:
+def render_article_html(
+    text: str, base_path: str = "", link_paths: Optional[Mapping[str, str]] = None
+) -> str:
     """Markdown -> sanitized HTML for the public article body. Safe to render
     with Jinja's `| safe` because nh3 strips every tag/attr/scheme off-allowlist
     and rewrites link rel to neutralise tab-nabbing.
 
     `base_path` is the serving prefix ("" at a domain root, "/help/{slug}" in path
     mode) prepended to root-relative intra-help-center links so cross-article links
-    resolve under whichever mode/domain serves the page."""
+    resolve under whichever mode/domain serves the page.
+
+    `link_paths` maps slug -> the path that article is actually served at, for
+    the articles whose original URL was preserved on a help-center migration.
+    Cross-article links stay STORED as /a/{slug} (stable when a path is later
+    edited, and the only form the regex above can prefix) and are resolved here,
+    so a link lands directly on the preserved URL instead of via its 301."""
     if not text or not text.strip():
         return ""
     raw = _markdown.markdown(text, extensions=_MD_EXTENSIONS, output_format="html")
@@ -78,9 +87,20 @@ def render_article_html(text: str, base_path: str = "") -> str:
         url_schemes=_URL_SCHEMES,
         link_rel="noopener noreferrer nofollow",
     )
-    if base_path:
-        html = _INTERNAL_HREF_RE.sub(lambda m: f"{m.group(1)}{base_path}{m.group(2)}{m.group(3)}", html)
+    if base_path or link_paths:
+        html = _INTERNAL_HREF_RE.sub(
+            lambda m: f"{m.group(1)}{base_path}{_resolve_internal_href(m.group(2), link_paths)}{m.group(3)}",
+            html,
+        )
     return html
+
+
+def _resolve_internal_href(href: str, link_paths: Optional[Mapping[str, str]]) -> str:
+    """A stored /a/{slug} link swapped for that article's preserved path, if it
+    has one. Unknown slugs (and the "/" home link) pass straight through."""
+    if not link_paths or not href.startswith("/a/"):
+        return href
+    return link_paths.get(href[len("/a/"):], href)
 
 
 def to_plain_text(text: str) -> str:

@@ -43,7 +43,12 @@ from app.services.help_center_images import (
     MAX_FAQ_IMAGE_BYTES,
     store_article_image,
 )
-from app.services.help_center_settings import generate_faq_slug, resolve_faq_slug
+from app.services.help_center_settings import (
+    generate_faq_slug,
+    normalize_url_path,
+    resolve_faq_slug,
+    resolve_faq_url_path,
+)
 
 router = APIRouter()
 
@@ -109,12 +114,34 @@ async def create_faq(
             if payload.slug
             else generate_faq_slug(db, org_id, payload.question)
         ),
+        url_path=_resolve_url_path(db, org_id, payload.url_path),
         meta_title=payload.meta_title,
         meta_description=payload.meta_description,
         source_label="Added manually",
         created_by=current_user.id,
     )
     return FAQResponse.model_validate(FAQRepository(db).create(faq))
+
+
+def _resolve_url_path(
+    db: Session, org_id: UUID, requested: Optional[str], exclude_id: Optional[UUID] = None
+) -> Optional[str]:
+    """Validate a hand-typed preserved URL path, or raise. None passes through
+    (no path requested / cleared). Unlike the slug this is never auto-corrected:
+    an altered path is no longer the URL the org migrated in, so a bad one is
+    surfaced instead of silently changed."""
+    if not requested:
+        return None
+    if normalize_url_path(requested) is None:
+        raise HTTPException(
+            status_code=400,
+            detail="That isn't a usable URL path — it can't be empty, or start with a "
+                   "reserved prefix like /a/, /ask or /api.",
+        )
+    resolved = resolve_faq_url_path(db, org_id, requested, exclude_id=exclude_id)
+    if resolved is None:
+        raise HTTPException(status_code=409, detail="Another article already uses that URL path.")
+    return resolved
 
 
 @router.post("/faqs/image")
@@ -153,11 +180,20 @@ async def update_faq(
     # The slug is never taken verbatim from the client — normalize and dedupe it
     # (excluding this row, so re-saving an unchanged slug isn't a self-collision).
     requested_slug = updates.pop("slug", None)
+    # Note the asymmetry with the slug: a blank slug is a no-op (an article must
+    # always have one), but a blank url_path CLEARS it, moving the article back
+    # to /a/{slug} — so this branches on presence, not truthiness.
+    has_url_path = "url_path" in updates
+    requested_url_path = updates.pop("url_path", None)
     for field, value in updates.items():
         setattr(faq, field, value)
     if requested_slug:
         faq.slug = resolve_faq_slug(
             db, current_user.organization_id, requested_slug, exclude_id=faq.id
+        )
+    if has_url_path:
+        faq.url_path = _resolve_url_path(
+            db, current_user.organization_id, requested_url_path, exclude_id=faq.id
         )
     # Backfill a slug for legacy/generated FAQs the first time they're edited;
     # otherwise keep it stable so published article URLs never change on their own.

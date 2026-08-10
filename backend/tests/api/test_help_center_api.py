@@ -309,6 +309,33 @@ def test_import_enqueues_with_source_url(client, test_ai_config):
     assert r.json()["job_type"] == "import_url"
 
 
+def test_import_articles_carries_the_preserve_urls_opt_in(client, db, test_ai_config):
+    """The migration toggle has to reach the worker, or imported articles quietly
+    lose the URLs the org already ranks for."""
+    from app.models.faq_generation_job import FAQGenerationJob
+
+    with patch("app.api.help_center.generation.resolves_to_blocked_host", return_value=False):
+        r = client.post(
+            f"{BASE}/import",
+            json={"url": "support.example.com/help", "mode": "articles", "preserve_urls": True},
+        )
+
+    assert r.status_code == 202
+    assert r.json()["job_type"] == "import_articles"
+    job = db.query(FAQGenerationJob).filter(FAQGenerationJob.id == r.json()["id"]).one()
+    assert job.preserve_source_urls is True
+
+
+def test_import_defaults_to_not_preserving_urls(client, db, test_ai_config):
+    from app.models.faq_generation_job import FAQGenerationJob
+
+    with patch("app.api.help_center.generation.resolves_to_blocked_host", return_value=False):
+        r = client.post(f"{BASE}/import", json={"url": "support.example.com/help", "mode": "articles"})
+
+    job = db.query(FAQGenerationJob).filter(FAQGenerationJob.id == r.json()["id"]).one()
+    assert job.preserve_source_urls is False
+
+
 def test_job_by_id_cross_org_404(client):
     assert client.get(f"{BASE}/jobs/999999").status_code == 404
 
@@ -348,3 +375,55 @@ def test_cloud_pro_plan_allowed(client, test_ai_config):
     with p1, p2, p3:
         assert client.post(f"{BASE}/faqs", json={"question": "Q?", "answer": "A."}).status_code == 201
         assert client.get(f"{BASE}/settings").json()["plan_allowed"] is True
+
+
+# ---------- per-article preserved URL path ----------
+
+def test_create_faq_with_a_preserved_url_path(client, db, test_organization):
+    r = client.post(f"{BASE}/faqs", json={
+        "question": "How do I reset my password?", "answer": "Use the link.",
+        "url_path": "https://help.acme.com/hc/en-us/articles/360012-reset?utm=x",
+    })
+    assert r.status_code == 201
+    assert r.json()["url_path"] == "/hc/en-us/articles/360012-reset"
+
+
+def test_update_faq_sets_then_clears_the_url_path(client, db, test_organization):
+    faq = _create_faq(db, test_organization.id)
+
+    r = client.put(f"{BASE}/faqs/{faq.id}", json={"url_path": "/hc/articles/1"})
+    assert r.status_code == 200
+    assert r.json()["url_path"] == "/hc/articles/1"
+
+    # Blank CLEARS it (unlike the slug, where blank is a no-op) — back to /a/{slug}.
+    r = client.put(f"{BASE}/faqs/{faq.id}", json={"url_path": ""})
+    assert r.status_code == 200
+    assert r.json()["url_path"] is None
+    assert r.json()["slug"]
+
+
+def test_update_faq_keeps_its_own_url_path_on_resave(client, db, test_organization):
+    faq = _create_faq(db, test_organization.id, url_path="/hc/articles/1")
+
+    r = client.put(f"{BASE}/faqs/{faq.id}", json={"url_path": "/hc/articles/1"})
+
+    assert r.status_code == 200
+    assert r.json()["url_path"] == "/hc/articles/1"
+
+
+def test_update_faq_rejects_a_url_path_another_article_owns(client, db, test_organization):
+    _create_faq(db, test_organization.id, question="Taken", url_path="/hc/articles/1")
+    faq = _create_faq(db, test_organization.id, question="Other")
+
+    r = client.put(f"{BASE}/faqs/{faq.id}", json={"url_path": "/hc/articles/1"})
+
+    assert r.status_code == 409
+
+
+@pytest.mark.parametrize("bad", ["/a/x", "/ask", "/api/v1/uploads/x", "/sitemap.xml", "/"])
+def test_update_faq_rejects_url_paths_that_would_shadow_a_route(
+    client, db, test_organization, bad
+):
+    faq = _create_faq(db, test_organization.id)
+
+    assert client.put(f"{BASE}/faqs/{faq.id}", json={"url_path": bad}).status_code == 400

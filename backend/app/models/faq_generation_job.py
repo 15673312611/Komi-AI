@@ -90,6 +90,12 @@ class FAQGenerationJob(Base):
     source_url = Column(String, nullable=True)
     # IMPORT_PDF: the original client filename, used for source_label.
     source_file_name = Column(String(255), nullable=True)
+    # IMPORT_ARTICLES: keep every imported article at the URL path it already
+    # has on the source help center (FAQ.url_path), so migrating in doesn't
+    # move — and cost the org — the URLs it already ranks for.
+    preserve_source_urls = Column(
+        Boolean, nullable=False, default=False, server_default=expression.false()
+    )
     # LLM calls attempted by this job (retries included) — the usage unit for
     # hosted-model metering. `metered` is stamped at enqueue time from the
     # org's AI config so the period sum never depends on later config changes.

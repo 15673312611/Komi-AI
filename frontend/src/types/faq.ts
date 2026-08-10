@@ -22,6 +22,11 @@ export interface FaqItem {
   answer: string
   category: string
   slug?: string | null
+  /** The URL path this article is served at, carried over from a help center
+   *  the org migrated from. Null means it lives at /a/{slug}. */
+  url_path?: string | null
+  /** Where an imported article was fetched from. Provenance only. */
+  source_url?: string | null
   /** Per-article SEO overrides. Null means the public page derives them from
    *  the question and answer. */
   meta_title?: string | null
@@ -37,7 +42,7 @@ export interface FaqItem {
 
 /** Editable per-article SEO fields. Blank strings are sent as-is and cleared
  *  server-side, restoring the derived defaults. */
-export type FaqSeoFields = Pick<FaqItem, 'slug' | 'meta_title' | 'meta_description'>
+export type FaqSeoFields = Pick<FaqItem, 'slug' | 'url_path' | 'meta_title' | 'meta_description'>
 
 export interface FaqPagination {
   total: number
