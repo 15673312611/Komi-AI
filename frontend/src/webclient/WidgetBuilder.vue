@@ -19,8 +19,8 @@ limitations under the License.
 import { ref, onMounted, computed, onUnmounted, watch, nextTick } from 'vue'
 import {
     isValidEmail} from '../types/widget'
-import { marked } from 'marked'
-import { sanitizeHtml } from '../utils/sanitize'
+import { renderMarkdown } from './markdown'
+import AskAiPanel from './AskAiPanel.vue'
 import { resolveOrbStyle } from '../utils/orb'
 import { isEndChatMessage } from '../utils/endChat'
 import { AI_DISCLAIMER_TEXT, shouldShowAiDisclaimer } from '../utils/aiDisclaimer'
@@ -35,30 +35,8 @@ import { themeCssVars } from './widget-theme'
 import './widget-surface.css'
 import { useCurrency } from '../composables/useCurrency'
 import { formatDistanceToNow } from 'date-fns'
-// Add marked configuration before the props definition
-marked.setOptions({
-    renderer: new marked.Renderer(),
-    gfm: true,
-    breaks: true
-})
-
-// Configure marked renderer to add target="_blank" to links
-const renderer = new marked.Renderer();
-const linkRenderer = renderer.link;
-// @ts-ignore
-renderer.link = (href, title, text) => {
-    // @ts-ignore
-    const html = linkRenderer.call(renderer, href, title, text);
-    return html.replace(/^<a /, '<a target="_blank" rel="nofollow" ');
-};
-
-marked.use({ renderer })
-
-// Create helper function to render and sanitize markdown
-const renderMarkdown = (text: string) => {
-    const rawHtml = marked(text, { renderer }) as string
-    return sanitizeHtml(rawHtml)
-}
+// Markdown rendering + sanitisation live in ./markdown, shared with the Ask AI
+// palette so the two surfaces can't drift apart on formatting or escaping.
 
 const props = defineProps<{
     widgetId?: string | null
@@ -88,6 +66,7 @@ const {
     connectionStatus,
     sendMessage: socketSendMessage,
     sendFileAttachments,
+    endChat: socketEndChat,
     loadChatHistory,
     connect,
     reconnect,
@@ -1230,22 +1209,57 @@ const initializeWidget = async () => {
     }
 }
 
+// Parent-window messages. Registered synchronously during setup — NOT inside
+// setupEventListeners(), which onMounted only reaches after initializeWidget()'s
+// awaits; the embed loader posts WIDGET_DISPLAY/PREFILL_MESSAGE on iframe load,
+// which would race that gap and be dropped.
+// (The handler bodies run on later macrotasks, so refs declared further down —
+// parentDisplay — are initialized by the time they're touched.)
+window.addEventListener('message', (event) => {
+    // Only the embedding page (the loader, or the dashboard preview) may drive the
+    // widget; hostile sibling frames can reach this window via top.frames[i].
+    if (event.source !== window.parent) return
+    if (!event.data || typeof event.data.type !== 'string') return
+    if (event.data.type === 'SCROLL_TO_BOTTOM') {
+        scrollToBottom()
+    }
+    if (event.data.type === 'TOKEN_RECEIVED') {
+        // Parent confirmed token storage
+        localStorage.setItem(TOKEN_KEY, event.data.token)
+    }
+    if (event.data.type === 'WIDGET_VISIBILITY') {
+        // The loader reports open/closed. Without this the Ask AI palette would
+        // autofocus its input while the widget is still hidden — the iframe is
+        // created eagerly on page load, so focus would leave the host page.
+        hostVisible.value = !!event.data.open
+    }
+    if (event.data.type === 'WIDGET_DISPLAY') {
+        // The embed loader's final display geometry (developer options merged with
+        // dashboard defaults) — drives the fill-the-iframe sizing below.
+        parentDisplay.value = {
+            mode: event.data.mode,
+            width: event.data.width,
+            height: event.data.height,
+            hotkey: event.data.hotkey,
+        }
+    }
+    if (event.data.type === 'PREFILL_MESSAGE' && typeof event.data.text === 'string') {
+        // Prefill (never auto-send) the chat input, e.g. ChatterMate.open({ message }).
+        newMessage.value = event.data.text.slice(0, 2000)
+        nextTick(() => {
+            const input = document.querySelector<HTMLInputElement>(
+                '.message-input input, .welcome-message-field'
+            )
+            input?.focus()
+        })
+    }
+})
+
 // Setup event listeners and callbacks
 const setupEventListeners = () => {
     // Register takeover callback
     onTakeover(async () => {
         await checkAuthorization()
-    })
-
-    // Listen for scroll message from parent
-    window.addEventListener('message', (event) => {
-        if (event.data.type === 'SCROLL_TO_BOTTOM') {
-            scrollToBottom()
-        }
-        if (event.data.type === 'TOKEN_RECEIVED') {
-            // Parent confirmed token storage
-            localStorage.setItem(TOKEN_KEY, event.data.token)
-        }
     })
 
     // Register workflow state callback
@@ -1312,6 +1326,62 @@ const startNewConversationWorkflow = async () => {
     } catch (error) {
         console.error('Failed to start new conversation:', error)
         throw error
+    }
+}
+
+// Opt-in "New chat" control (customization.allow_new_chat). Hidden until there is
+// something to clear, and while a human agent is on the conversation — closing the
+// session would drop the visitor out of a live handover mid-sentence.
+const canStartNewChat = computed(() =>
+    customization.value.allow_new_chat === true
+    && messages.value.length > 0
+    && !humanAgent.value?.human_agent_name
+    && !showEmailGate.value
+)
+
+const startingNewChat = ref(false)
+
+// Ending a chat closes the session, and history is scoped to the active session —
+// so the old conversation is gone for good. Ask once rather than wiping on a stray
+// click; the arm state lapses on its own so it can't sit there confusing people.
+const newChatArmed = ref(false)
+let newChatArmTimer: ReturnType<typeof setTimeout> | null = null
+
+const disarmNewChat = () => {
+    newChatArmed.value = false
+    if (newChatArmTimer) {
+        clearTimeout(newChatArmTimer)
+        newChatArmTimer = null
+    }
+}
+
+const requestNewChat = () => {
+    if (startingNewChat.value) return
+    if (!newChatArmed.value) {
+        newChatArmed.value = true
+        // Long enough to read the hint and act; short enough that a forgotten arm
+        // state doesn't turn a later stray click into a wiped conversation.
+        newChatArmTimer = setTimeout(disarmNewChat, 8000)
+        return
+    }
+    disarmNewChat()
+    handleStartNewChat()
+}
+
+// Close the session, drop the local conversation, and reconnect into a fresh one.
+const handleStartNewChat = async () => {
+    if (startingNewChat.value) return
+    startingNewChat.value = true
+    try {
+        await socketEndChat()
+        humanAgent.value = {}
+        newMessage.value = ''
+        uploadedAttachments.value = []
+        await initializeWidget()
+    } catch (error) {
+        console.error('Failed to start a new chat:', error)
+    } finally {
+        startingNewChat.value = false
     }
 }
 
@@ -1517,6 +1587,38 @@ const submitEmailGate = async () => {
     }
 }
 
+// Display geometry pushed by the embed loader (WIDGET_DISPLAY). Falls back to the
+// dashboard metadata for direct-iframe embeds where no loader is present.
+const parentDisplay = ref<{ mode?: string; width?: number; height?: number; hotkey?: boolean } | null>(null)
+
+// Whether the embedder currently shows the widget. Defaults to true for direct
+// iframe embeds (dashboard preview, raw <iframe>), where nobody reports visibility;
+// the loader corrects it immediately with WIDGET_VISIBILITY on load.
+const hostVisible = ref(true)
+
+// Classic floating-window geometry — must mirror the chattermate.js config defaults
+// (displayMode/containerWidth/containerHeight); at these values the loader behaves
+// exactly as before display modes existed.
+const CLASSIC_DISPLAY = { mode: 'floating', width: 400, height: 560 }
+
+const resolvedDisplay = computed<Record<string, any> | null>(() =>
+    parentDisplay.value
+    || (customization.value.customization_metadata as Record<string, any> | undefined)?.widget_display
+    || null
+)
+
+const hasCustomDisplay = computed(() => {
+    const display = resolvedDisplay.value
+    if (!display) return false
+    // Anything beyond the classic floating window means the host container has
+    // custom geometry the interior must fill rather than fight.
+    return (
+        (typeof display.mode === 'string' && display.mode !== CLASSIC_DISPLAY.mode) ||
+        (typeof display.width === 'number' && display.width !== CLASSIC_DISPLAY.width) ||
+        (typeof display.height === 'number' && display.height !== CLASSIC_DISPLAY.height)
+    )
+})
+
 const containerStyles = computed(() => {
     // Always fill the embed iframe exactly. chattermate.js sizes the iframe itself
     // (fixed size on desktop, full-screen on mobile), so 100%/100% here guarantees the
@@ -1527,6 +1629,14 @@ const containerStyles = computed(() => {
         width: '100%',
         height: '100%',
         borderRadius: 'var(--radius-lg)'
+    }
+
+    // Sidebar / custom-size embeds: the loader drives the geometry — fill it.
+    // The fixed interior sizes below would fight a 100dvh drawer or a 520px window.
+    if (hasCustomDisplay.value) {
+        const mode = resolvedDisplay.value?.mode
+        const isSidebar = mode === 'sidebar-left' || mode === 'sidebar-right'
+        return isSidebar ? { ...baseStyles, borderRadius: '0' } : baseStyles
     }
 
     if (isAskAnythingStyle.value) {
@@ -1568,6 +1678,60 @@ const containerStyles = computed(() => {
 const shouldShowWelcomeMessage = computed(() => {
     return isAskAnythingStyle.value && messages.value.length === 0
 })
+
+// Message kinds the palette deliberately doesn't render: they need the chat panel's
+// interactive UI (forms, rating, product cards) or its attachment rendering. Rather
+// than silently dropping them, the whole conversation falls back to the chat panel.
+const CHAT_ONLY_MESSAGE_TYPES = ['form', 'user_input', 'rating', 'product', 'shopify_output']
+
+const conversationNeedsChatPanel = computed(() =>
+    messages.value.some(m =>
+        CHAT_ONLY_MESSAGE_TYPES.includes(m.message_type)
+        || (Array.isArray(m.attachments) && m.attachments.length > 0)
+    )
+)
+
+// The Ask AI palette is the surface for the ask-anything styles AND for the
+// search-bar trigger whatever the style: a box labelled "Ask anything" that opens a
+// corner chat window is incoherent. The loader reports the palette as mode 'ask-ai';
+// 'search-bar' covers direct-iframe embeds, where no loader is involved.
+const isAskAiSurface = computed(() => {
+    if (isAskAnythingStyle.value) return true
+    const searchBarTrigger = resolvedDisplay.value?.mode === 'ask-ai'
+        || resolvedDisplay.value?.mode === 'search-bar'
+    // For the other chat styles the search bar alone promotes the palette — but not
+    // when the agent accepts file uploads: the palette has no attach control, and
+    // silently removing an enabled feature is worse than an odd-looking trigger.
+    return searchBarTrigger && !allowAttachments.value
+})
+
+// Workflow screens and the email gate still win — they gate the conversation, and
+// the palette has nowhere to host them.
+const useAskAiPanel = computed(() =>
+    isAskAiSurface.value
+    && isExpanded.value
+    && !showLandingPage.value
+    && !showFullScreenForm.value
+    && !showEmailGate.value
+    && !shouldShowNewConversationOption.value
+    && !conversationNeedsChatPanel.value
+)
+
+// Tell the embedder which surface is actually on screen. Without this the loader
+// keeps the palette's centred, content-hugged geometry after the widget falls back
+// to the chat panel (rating, product card, workflow form), leaving a full chat UI
+// squeezed into a box sized for a two-line answer.
+watch(useAskAiPanel, (palette) => {
+    window.parent.postMessage({ type: 'WIDGET_SURFACE', palette }, '*')
+}, { immediate: true })
+
+const askAiSubtitle = computed(() =>
+    customization.value.welcome_subtitle || `Ask a question — ${agentName.value || 'the assistant'} answers from what it knows.`
+)
+
+// The embedder owns the ⌘K chord and can turn it off (loader `hotkey: false`); it
+// reports the decision alongside the display geometry.
+const askAiHotkey = computed(() => parentDisplay.value?.hotkey !== false)
 </script>
 
 <template>
@@ -1653,8 +1817,41 @@ const shouldShowWelcomeMessage = computed(() => {
             {{ errorMessage }}
         </div>
 
+        <!-- Ask AI surface (ASK_ANYTHING / AURORA): a command palette rather than a
+             chat window. Workflow screens and the email gate still take precedence —
+             they are flow-critical (see useAskAiPanel). -->
+        <AskAiPanel
+            v-if="useAskAiPanel"
+            :messages="messages"
+            :draft="newMessage"
+            :agent-name="agentName"
+            :suggestions="quickActions"
+            :welcome-title="customization.welcome_title"
+            :welcome-subtitle="askAiSubtitle"
+            :placeholder="placeholderText"
+            :input-enabled="isMessageInputEnabled"
+            :loading="loading"
+            :show-citations="showCitations"
+            :disclaimer="showAiDisclaimer ? AI_DISCLAIMER_TEXT : ''"
+            :active="hostVisible"
+            :hotkey="askAiHotkey"
+            :can-start-new-chat="canStartNewChat"
+            :starting-new-chat="startingNewChat"
+            :new-chat-armed="newChatArmed"
+            @new-chat="requestNewChat"
+            @cancel-new-chat="disarmNewChat"
+            :citation-label="citationLabel"
+            :citation-tooltip="citationTooltip"
+            :display-text="displayText"
+            :is-streaming="isStreaming"
+            @update:draft="newMessage = $event"
+            @send="sendMessage"
+            @ask="sendQuickAction"
+            @close="minimizeWidget"
+        />
+
         <!-- Welcome Message for ASK_ANYTHING Style -->
-        <div v-if="shouldShowWelcomeMessage" class="welcome-message-section" :class="{ aurora: isAuroraStyle }" :style="chatStyles">
+        <div v-else-if="shouldShowWelcomeMessage" class="welcome-message-section" :class="{ aurora: isAuroraStyle }" :style="chatStyles">
             <div class="welcome-content">
                 <div class="welcome-header">
                     <div v-if="useOrbAvatar" class="welcome-orb" :style="orbStyle"></div>
@@ -1923,7 +2120,7 @@ const shouldShowWelcomeMessage = computed(() => {
         </div>
 
         <!-- Chat Panel (Only show when landing page, full screen form, and welcome message are not active) -->
-        <div v-else-if="!shouldShowWelcomeMessage" class="chat-panel" :class="{ 'ask-anything-chat': isAskAnythingStyle }" :style="chatStyles" v-if="isExpanded">
+        <div v-else-if="!shouldShowWelcomeMessage && isExpanded && !useAskAiPanel" class="chat-panel" :class="{ 'ask-anything-chat': isAskAnythingStyle }" :style="chatStyles">
             <div v-if="!isAskAnythingStyle" class="chat-header" :style="headerBorderStyles">
                 <div class="cm-header-sheen" :style="{ background: 'linear-gradient(90deg, transparent, ' + (customization.accent_color || '#C9F24E') + ', transparent)' }"></div>
                 <div class="header-content">
@@ -1946,6 +2143,27 @@ const shouldShowWelcomeMessage = computed(() => {
                         </div>
                     </div>
                 </div>
+                <!-- Grouped: the header is space-between, so as separate children the
+                     two actions would drift to opposite ends of the free space. -->
+                <div class="header-actions">
+                <button
+                    v-if="canStartNewChat"
+                    type="button"
+                    class="header-new-chat"
+                    :class="{ armed: newChatArmed }"
+                    :style="messageNameStyles"
+                    :disabled="startingNewChat"
+                    :title="newChatArmed ? 'This ends the current chat — click again to confirm' : 'Start a new chat'"
+                    :aria-label="newChatArmed ? 'Confirm starting a new chat' : 'Start a new chat'"
+                    @click="requestNewChat"
+                    @blur="disarmNewChat"
+                >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M12 20h9"></path>
+                        <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"></path>
+                    </svg>
+                    <span v-if="newChatArmed" class="new-chat-hint">Click again to start a new chat</span>
+                </button>
                 <button
                     type="button"
                     class="header-minimize"
@@ -1958,6 +2176,7 @@ const shouldShowWelcomeMessage = computed(() => {
                         <path d="M6 9l6 6 6-6"></path>
                     </svg>
                 </button>
+                </div>
             </div>
             <div v-else class="ask-anything-top" :style="headerBorderStyles">
                 <div class="ask-anything-header">
@@ -2754,6 +2973,13 @@ const shouldShowWelcomeMessage = computed(() => {
 }
 
 /* Minimize (chevron) button */
+.header-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+}
+
 .header-minimize {
     width: 32px;
     height: 32px;
@@ -2775,6 +3001,52 @@ const shouldShowWelcomeMessage = computed(() => {
 }
 
 /* Header Menu Styles */
+/* Matches the minimize chevron exactly — two header actions should read as one
+   set, not a text pill competing with the agent name. A compose glyph (not a bare
+   "+") is the widely-understood "start a new chat" mark. */
+.header-new-chat {
+    width: 32px;
+    height: 32px;
+    border-radius: 9px;
+    border: none;
+    background: rgba(127, 127, 127, 0.12);
+    color: inherit;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    position: relative;
+    transition: background 0.15s ease;
+}
+
+.header-new-chat:hover:not(:disabled) { background: rgba(127, 127, 127, 0.22); }
+
+/* Armed = the next click confirms. Tint the control and float the hint, rather
+   than growing the button and shoving the header around. */
+.header-new-chat.armed { background: color-mix(in srgb, currentColor 20%, transparent); }
+
+.header-new-chat .new-chat-hint {
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    padding: 4px 8px;
+    border-radius: 7px;
+    background: rgba(20, 20, 24, 0.92);
+    color: #fff;
+    font-size: 11px;
+    font-weight: 500;
+    line-height: 1.3;
+    white-space: nowrap;
+    pointer-events: none;
+    z-index: 3;
+}
+
+.header-new-chat:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+
 .header-menu-container {
     position: relative;
     margin-left: auto;

@@ -74,7 +74,10 @@ export function useWidgetCustomization() {
             data: {
                 chat_bubble_color: newCustomization.chat_bubble_color || '#C9F24E',
                 chat_style: newCustomization.chat_style,
-                chat_initiation_messages: newCustomization.chat_initiation_messages || []
+                chat_initiation_messages: newCustomization.chat_initiation_messages || [],
+                // Dashboard "Widget placement" defaults — the embed loader merges these
+                // under any options the installing developer set.
+                widget_display: newCustomization.customization_metadata?.widget_display
             }
         }, '*')
     }

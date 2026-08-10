@@ -409,6 +409,22 @@ def test_ai_disclaimer_toggle_round_trips(client, db, test_agent):
     ).first()
     assert stored.show_ai_disclaimer is False
 
+
+def test_allow_new_chat_round_trips(client, db, test_agent):
+    """The widget reads this from the customization payload, so a value that is
+    accepted but not returned would leave the dashboard toggle springing back off."""
+    payload = CustomizationCreate(allow_new_chat=True).model_dump()
+
+    response = client.post(f"/api/agents/{test_agent.id}/customization", json=payload)
+    assert response.status_code == 200
+    assert response.json()["allow_new_chat"] is True
+
+    db.expire_all()
+    stored = db.query(AgentCustomization).filter(
+        AgentCustomization.agent_id == test_agent.id
+    ).first()
+    assert stored.allow_new_chat is True
+
 # Tests for create_agent endpoint
 def test_create_agent_success(
     client,

@@ -983,8 +983,11 @@ async def handle_end_chat(sid, data):
             logger.error(f"No session found for sid {sid}")
             return
         
-        widget_id, org_id, customer_id, conversation_token = await authenticate_socket_conversation_token(sid, session.get('auth'))
-        
+        # The saved /widget session holds the conversation token directly; there is no
+        # 'auth' key, so passing session.get('auth') failed authentication every time
+        # and this handler could never close a session.
+        widget_id, org_id, customer_id, conversation_token = await authenticate_socket_conversation_token(sid, session)
+
         if not widget_id or not org_id:
             logger.error(f"Widget authentication failed for sid {sid}")
             await sio.emit('error', {'error': 'Authentication failed', 'type': 'auth_error'}, room=sid, namespace='/widget')
@@ -1003,19 +1006,31 @@ async def handle_end_chat(sid, data):
         try:
             # Close the session immediately
             session_repo = SessionToAgentRepository(db)
-            session_repo.close_session(
+            closed = session_repo.close_session(
                 session_id=session_id,
                 reason=reason,
                 description=description
             )
+            # close_session swallows its own errors and returns False (an invalid
+            # end-chat reason does exactly that). Confirming regardless would tell the
+            # client the chat ended while the session stayed open, and the next
+            # connect would hand back the same conversation.
+            if not closed:
+                logger.error(f"Session {session_id} was not closed (reason={reason})")
+                await sio.emit('error', {
+                    'error': 'Failed to end chat session',
+                    'type': 'end_chat_error'
+                }, to=sid, namespace='/widget')
+                return
+
             logger.info(f"Session {session_id} closed by client with reason: {reason}")
-            
+
             # Confirm to client that chat has ended
             await sio.emit('chat_ended', {
                 'session_id': session_id,
                 'message': 'Chat session closed'
             }, room=sid, namespace='/widget')
-            
+
         except Exception as close_error:
             logger.error(f"Error closing session {session_id}: {str(close_error)}")
             await sio.emit('error', {
