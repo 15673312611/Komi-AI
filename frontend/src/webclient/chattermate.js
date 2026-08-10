@@ -4,8 +4,10 @@
 window.chattermateId;
 /** @type {string} */
 window.chattermateBaseUrl;
-/** @type {{ init: (options: { baseUrl?: string, id: string }) => void }} */
+/** @type {object} Public widget API — see the assignment at the bottom of this file. */
 window.ChatterMate;
+/** @type {object|undefined} Declarative options, same shape as ChatterMate.init(options). */
+window.chattermateConfig;
 
 ;(function () {
   // Function to validate hex color code
@@ -43,6 +45,7 @@ window.ChatterMate;
   const config = {
     baseUrl: getBaseUrl(),
     containerId: 'chattermate-container',
+    backdropId: 'chattermate-backdrop',
     buttonId: 'chattermate-button',
     chatBubbleColor: '#f34611', // Default color
     loadingContainerId: 'chattermate-loading',
@@ -50,13 +53,162 @@ window.ChatterMate;
     containerBottom: 100, // Default bottom position
     containerRight: 20, // Default right position
     containerWidth: 400, // Default width
+    containerHeight: 560, // Default height
     launcherBottom: 20, // Launcher button distance from the bottom edge (configurable)
-    launcherRight: 20, // Launcher button distance from the right edge (configurable)
+    launcherRight: 20, // Launcher button distance from the active side edge (configurable)
+    side: 'right', // Which screen edge the launcher/window hug: 'right' | 'left'
+    displayMode: 'floating', // 'floating' | 'sidebar-left' | 'sidebar-right' | 'search-bar'
+    launcher: true, // false hides the built-in launcher (site uses its own trigger/API)
+    sidebarWidth: 420, // Panel width in the sidebar display modes
+    searchBarWidth: 320, // Trigger bar width in search-bar mode
+    searchPlaceholder: 'Ask anything...',
+    zIndex: 999999, // Stacking base; related layers offset from it (badge -1, mobile chrome +1/+2)
+    trigger: null, // Optional CSS selector — matching elements toggle the chat on click
+    hotkey: true, // ⌘K opens the Ask AI palette; set false if the site owns that key
+    surfaceIsPalette: null, // Reported by the widget (WIDGET_SURFACE); null until then
+    chatStyle: null, // Reported by the widget; decides whether it draws its own close
     chatInitiationMessages: [], // Will be populated from widget data
     initiationMessageId: 'chattermate-initiation',
     initiationShownKey: 'ctim_shown', // Key for tracking if initiation was shown
     unreadCount: 0, // unread agent messages (reported by the iframe) once chat opened
     hasOpened: false, // whether the visitor has opened the chat at least once
+  }
+
+  // Keys the developer set explicitly (via chattermateConfig / init / setPosition).
+  // Dashboard defaults arriving later over CUSTOMIZATION_UPDATE never override these —
+  // precedence is: developer options > dashboard settings > built-in defaults.
+  const devOverrides = {}
+  function setDevConfig(key, value) {
+    config[key] = value
+    devOverrides[key] = true
+  }
+
+  const DISPLAY_MODES = ['floating', 'sidebar-left', 'sidebar-right', 'search-bar']
+  // Chat styles that render the Ask AI surface (centered command palette) instead of
+  // a corner chat window. Mirrors isAskAnythingStyle in WidgetBuilder.vue.
+  const ASK_AI_STYLES = ['ASK_ANYTHING', 'AURORA']
+  // Palette defaults, used only when no explicit size was configured.
+  const ASK_AI_WIDTH = 680
+  const ASK_AI_HEIGHT = 620 // Ceiling: the palette grows to fit its content up to this.
+  const ASK_AI_MIN_HEIGHT = 140
+
+  // Whether a size came from the developer or the dashboard, as opposed to the
+  // built-in default. The Ask AI palette has its own defaults but must still honour
+  // an explicitly configured size.
+  const sizeIsExplicit = { width: false, height: false }
+
+  // The palette is the surface for the ask-anything styles, and for the search-bar
+  // trigger whatever the style — a box labelled "Ask anything" that opens a corner
+  // chat window is incoherent. An explicit drawer choice still wins.
+  // Last height the palette asked for, so a window resize can re-clamp it against the
+  // new 76vh ceiling instead of leaving the box at a stale size.
+  let paletteContentHeight = 0
+
+  function isAskAiModal() {
+    // The widget reports which surface it actually rendered (WIDGET_SURFACE); it
+    // falls back to the chat panel for ratings, product cards and workflow forms,
+    // and that needs the ordinary window geometry, not a hugged palette.
+    if (config.surfaceIsPalette === false) return false
+    const askSurface = ASK_AI_STYLES.indexOf(config.chatStyle) !== -1
+      || config.displayMode === 'search-bar'
+    return askSurface
+      && config.displayMode !== 'sidebar-left'
+      && config.displayMode !== 'sidebar-right'
+  }
+
+  // Size the container to the palette's reported content height, clamped. Called on
+  // every report and on window resize (the 76vh ceiling moves with the viewport).
+  // Clears the inline height entirely for non-palette surfaces, so a hugged height
+  // can never linger on an ordinary chat window.
+  function applyPaletteHeight() {
+    const container = document.getElementById(config.containerId)
+    if (!container) return
+    if (!isAskAiModal() || !paletteContentHeight) {
+      container.style.height = ''
+      return
+    }
+    const max = Math.min(paletteSize().height, Math.round(window.innerHeight * 0.76))
+    container.style.height = Math.max(ASK_AI_MIN_HEIGHT, Math.min(max, paletteContentHeight)) + 'px'
+  }
+
+  function paletteSize() {
+    return {
+      width: sizeIsExplicit.width ? config.containerWidth : ASK_AI_WIDTH,
+      height: sizeIsExplicit.height ? config.containerHeight : ASK_AI_HEIGHT,
+    }
+  }
+
+  // Dashboard "Widget placement" defaults (customization_metadata.widget_display,
+  // validated server-side) arriving over CUSTOMIZATION_UPDATE. Fills only the keys
+  // the developer didn't set. Types are re-checked because this crosses a frame.
+  function applyDashboardDisplay(display) {
+    if (!display || typeof display !== 'object') return
+    const set = function (configKey, value) {
+      if (!devOverrides[configKey]) config[configKey] = value
+    }
+    if (DISPLAY_MODES.indexOf(display.mode) !== -1) set('displayMode', display.mode)
+    if (display.side === 'left' || display.side === 'right') set('side', display.side)
+    if (typeof display.launcher === 'boolean') set('launcher', display.launcher)
+    if (isNumber(display.width)) {
+      set('containerWidth', Math.max(280, display.width))
+      if (!devOverrides.containerWidth) sizeIsExplicit.width = true
+    }
+    if (isNumber(display.height)) {
+      set('containerHeight', Math.max(400, display.height))
+      if (!devOverrides.containerHeight) sizeIsExplicit.height = true
+    }
+    if (isNumber(display.sidebar_width)) set('sidebarWidth', Math.max(280, display.sidebar_width))
+    if (typeof display.search_placeholder === 'string' && display.search_placeholder) {
+      set('searchPlaceholder', display.search_placeholder.slice(0, 80))
+    }
+    if (isNumber(display.offset_bottom)) set('launcherBottom', Math.max(0, display.offset_bottom))
+    if (isNumber(display.offset_side)) set('launcherRight', Math.max(0, display.offset_side))
+    if (isNumber(display.z_index)) set('zIndex', Math.max(1, Math.floor(display.z_index)))
+  }
+
+  // Geometry the widget interior needs to adapt its own sizing (see WidgetBuilder).
+  // Reports what the container actually is, which in Ask AI mode is the palette
+  // rather than the configured floating-window size.
+  function widgetDisplayPayload() {
+    const palette = isAskAiModal()
+    const size = palette ? paletteSize() : { width: config.containerWidth, height: config.containerHeight }
+    return {
+      type: 'WIDGET_DISPLAY',
+      mode: palette ? 'ask-ai' : config.displayMode,
+      width: size.width,
+      height: size.height,
+      // So the palette's own ⌘K handler honours a site that turned the chord off.
+      hotkey: config.hotkey !== false,
+    }
+  }
+
+  // The chat window's open/close mechanics live inside initialize() (they need the
+  // DOM elements it creates). This controller is populated there so the public API
+  // below can reach them; calls made before then are queued and flushed on init.
+  let controller = null
+  const pendingCalls = []
+  let triggerClickQueued = false
+  // The widget iframe's window, once created — message handlers accept commands
+  // only from it, so other embedded frames (ads etc.) can't drive the widget.
+  let widgetFrameWindow = null
+  function withController(fn) {
+    if (controller) {
+      fn()
+    } else {
+      pendingCalls.push(fn)
+    }
+  }
+
+  // Public event bus: 'ready' | 'open' | 'close' | 'unread'.
+  // 'ready' fires once; late subscribers are invoked immediately (see on()).
+  const listeners = {}
+  let widgetReadyFired = false
+  function emitEvent(name, payload) {
+    const cbs = listeners[name]
+    if (!cbs || !cbs.length) return
+    cbs.slice().forEach(function (cb) {
+      try { cb(payload) } catch (e) { /* a broken site listener must not break the widget */ }
+    })
   }
 
   // Pick a readable ink color (dark/light) for content sitting on a given bg.
@@ -107,6 +259,22 @@ window.ChatterMate;
 
   // Create and inject styles
   function updateStyles() {
+    const mode = config.displayMode
+    const isSidebar = mode === 'sidebar-left' || mode === 'sidebar-right'
+    // Sidebar modes pin the window to their own edge; everything else (launcher,
+    // nudge, floating window) follows the configured side.
+    const side = mode === 'sidebar-left' ? 'left' : (mode === 'sidebar-right' ? 'right' : config.side)
+    // The search bar is shorter than the bubble launcher; dependent offsets track it.
+    const launcherHeight = mode === 'search-bar' ? 48 : 64
+    // Every chat style draws a header chevron that closes the widget, except
+    // ASK_ANYTHING and AURORA (see isAskAnythingStyle in WidgetBuilder.vue).
+    const hasInPanelClose = ASK_AI_STYLES.indexOf(config.chatStyle) === -1
+    // Ask AI styles open as a centered command-palette overlay (⌘K), the pattern
+    // people expect from an "Ask anything" surface — not a corner chat window.
+    // Sidebar modes still win: an explicit drawer choice is more specific.
+    const askAiModal = isAskAiModal()
+    const palette = paletteSize()
+
     const style = document.createElement('style')
     style.id = 'chattermate-styles'
     style.textContent = `
@@ -114,7 +282,7 @@ window.ChatterMate;
       #${config.buttonId} {
         position: fixed;
         bottom: ${config.launcherBottom}px;
-        right: ${config.launcherRight}px;
+        ${side}: ${config.launcherRight}px;
         width: 64px;
         height: 64px;
         border-radius: 20px 20px 20px 6px;
@@ -122,7 +290,7 @@ window.ChatterMate;
         color: ${onColor(config.chatBubbleColor)};
         box-shadow: 0 16px 40px -8px ${config.chatBubbleColor}cc, inset 0 0 0 1px rgba(255,255,255,0.08);
         cursor: pointer;
-        z-index: 999999;
+        z-index: ${config.zIndex};
         display: flex;
         align-items: center;
         justify-content: center;
@@ -222,6 +390,57 @@ window.ChatterMate;
         animation: chattermate-spin 0.6s linear infinite;
       }
 
+      /* Search-bar trigger content: hidden unless search-bar mode (below) shows it. */
+      #${config.buttonId} .cm-search { display: none; }
+
+      ${mode === 'search-bar' ? `
+      @media (min-width: 769px) {
+        /* ===== Search-bar mode: the launcher becomes a search-input-like bar.
+           Same element, same click/toggle/badge logic. Mobile keeps the bubble. ===== */
+        #${config.buttonId} {
+          width: ${config.searchBarWidth}px;
+          height: 48px;
+          border-radius: 24px;
+          padding: 0 16px;
+          background: #ffffff;
+          color: #374151;
+          box-shadow: 0 8px 24px rgba(0, 0, 0, 0.14), inset 0 0 0 1.5px ${config.chatBubbleColor}55;
+          animation: none;
+          justify-content: flex-start;
+          box-sizing: border-box;
+        }
+        #${config.buttonId}:hover { transform: scale(1.02); }
+        #${config.buttonId} .cm-ring,
+        #${config.buttonId} .cm-dots,
+        #${config.buttonId} .cm-chevron,
+        #${config.buttonId}.active .cm-chevron { display: none; }
+        /* Dark spinner — the stock white one vanishes on the white bar. */
+        #${config.buttonId}.loading .cm-search { visibility: hidden; }
+        #${config.buttonId}.loading:after {
+          border-color: rgba(0, 0, 0, 0.15);
+          border-top-color: ${config.chatBubbleColor};
+        }
+        #${config.buttonId} .cm-search {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          min-width: 0;
+          width: 100%;
+        }
+        #${config.buttonId} .cm-search svg {
+          flex-shrink: 0;
+          color: ${config.chatBubbleColor};
+        }
+        #${config.buttonId} .cm-search-placeholder {
+          font: 400 14px/1.2 -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+          color: #6b7280;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+      }
+      ` : ''}
+
       @keyframes chattermate-spin { to { transform: rotate(360deg); } }
       @keyframes chattermate-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
       @keyframes chattermate-ring { 0% { transform: scale(.85); opacity: .5; } 100% { transform: scale(1.6); opacity: 0; } }
@@ -241,13 +460,13 @@ window.ChatterMate;
            delta so the two stay together. Mobile is full-screen (media query below)
            and is unaffected. */
         bottom: ${(config.containerBottom || 100) + ((config.launcherBottom || 20) - 20)}px;
-        right: ${(config.containerRight || 20) + ((config.launcherRight || 20) - 20)}px;
+        ${side}: ${(config.containerRight || 20) + ((config.launcherRight || 20) - 20)}px;
         width: ${config.containerWidth || 384}px;
         max-width: calc(100vw - 48px);
-        height: ${config.containerHeight || 560}px;
+        height: ${config.containerHeight}px;
         max-height: calc(100vh - 132px);
         background: transparent;
-        z-index: 999999;
+        z-index: ${config.zIndex};
         overflow: hidden;
         /* Animated open/close with slide + fade */
         opacity: 0;
@@ -267,6 +486,118 @@ window.ChatterMate;
         transition: opacity 420ms cubic-bezier(0.22, 1, 0.36, 1), transform 420ms cubic-bezier(0.22, 1, 0.36, 1);
         pointer-events: auto;
       }
+
+      /* Backdrop element: always in the DOM, so keep it out of the host page's flow
+         even when it is not in use — an unstyled div in <body> adds a phantom row to
+         a flex/grid body layout. */
+      #${config.backdropId} {
+        position: fixed;
+        inset: 0;
+        display: none;
+      }
+
+      ${askAiModal ? `
+      /* ===== Ask AI: centered command palette (⌘K), the pattern people expect from
+         an "Ask anything" surface — dimmed page, top-anchored so the eye lands on
+         the input rather than the middle of the screen. ===== */
+      #${config.containerId} {
+        top: 12vh;
+        bottom: auto;
+        left: 50%;
+        right: auto;
+        width: min(${palette.width}px, calc(100vw - 32px));
+        max-width: none;
+        /* A cross-document iframe can't size its embedder, so this is a starting
+           height only: the palette measures its content and posts WIDGET_RESIZE,
+           which sets an inline height (clamped to this ceiling). height:100% against
+           an auto-height parent would collapse to the 150px replaced default. */
+        height: min(${palette.height}px, 76vh);
+        max-height: 76vh;
+        transform: translate(-50%, -8px) scale(0.98);
+        z-index: ${config.zIndex + 1};
+        transition: opacity 360ms cubic-bezier(0.22, 1, 0.36, 1),
+                    transform 360ms cubic-bezier(0.22, 1, 0.36, 1),
+                    height 200ms cubic-bezier(0.22, 1, 0.36, 1),
+                    visibility 0s linear 360ms;
+      }
+      #${config.containerId}.active {
+        transform: translate(-50%, 0) scale(1);
+        transition: opacity 420ms cubic-bezier(0.22, 1, 0.36, 1),
+                    transform 420ms cubic-bezier(0.22, 1, 0.36, 1),
+                    height 200ms cubic-bezier(0.22, 1, 0.36, 1);
+      }
+      #${config.containerId} .chattermate-iframe {
+        border-radius: 16px;
+      }
+      #${config.backdropId} {
+        display: block;
+        background: rgba(9, 9, 14, 0.45);
+        backdrop-filter: blur(2px);
+        z-index: ${config.zIndex};
+        opacity: 0;
+        visibility: hidden;
+        transition: opacity 220ms ease, visibility 0s linear 220ms;
+      }
+      #${config.backdropId}.active {
+        opacity: 1;
+        visibility: visible;
+        transition: opacity 220ms ease;
+      }
+      /* The palette dims the page and closes on backdrop click / Esc, so the launcher
+         would just be a stray button floating over the dim. */
+      #${config.buttonId}.active {
+        display: none;
+      }
+      @media (max-width: 768px) {
+        /* Full-screen on phones like every other mode. The main mobile block below
+           pins the edges but never resets transform — without this the centering
+           translate would shove the panel half a screen to the left. */
+        #${config.containerId},
+        #${config.containerId}.active { transform: none !important; }
+        #${config.backdropId} { display: none; }
+      }
+      ` : ''}
+
+      ${isSidebar ? `
+      /* ===== Sidebar mode: full-height drawer hugging the ${side} edge ===== */
+      #${config.containerId} {
+        top: 0;
+        bottom: auto;
+        ${side}: 0;
+        ${side === 'left' ? 'right: auto;' : 'left: auto;'}
+        width: ${config.sidebarWidth}px;
+        max-width: 100vw;
+        height: 100dvh;
+        max-height: 100dvh;
+        transform: translateX(${side === 'left' ? '-100%' : '100%'});
+        box-shadow: ${side === 'left' ? '' : '-'}12px 0 40px rgba(0, 0, 0, 0.12);
+      }
+      #${config.containerId}.active {
+        transform: translateX(0);
+      }
+      #${config.containerId} .chattermate-iframe {
+        border-radius: 0;
+      }
+      ${hasInPanelClose ? `
+      /* The drawer's own header chevron closes it, so keeping the launcher on screen
+         would just park a duplicate button beside the panel. Hide it while open. */
+      #${config.buttonId}.active {
+        display: none;
+      }
+      ` : `
+      /* ASK_ANYTHING / AURORA draw no in-panel chevron, and the drawer would paint over
+         the launcher (later sibling, equal z-index) — leaving nothing to click. Keep it
+         reachable: slide it out beside the drawer edge, one layer up. */
+      #${config.buttonId} {
+        z-index: ${config.zIndex + 1};
+        transition: transform 0.3s cubic-bezier(.34,1.3,.5,1), opacity 320ms ease,
+                    left 360ms cubic-bezier(0.22, 1, 0.36, 1), right 360ms cubic-bezier(0.22, 1, 0.36, 1);
+      }
+      #${config.buttonId}.active {
+        ${side}: ${config.sidebarWidth + 20}px;
+      }
+      `}
+      ` : ''}
 
       /* Clean border around the widget container */
       /* The widget panel (inside the iframe) draws its own theme-aware border, so the
@@ -296,7 +627,7 @@ window.ChatterMate;
         align-items: center;
         justify-content: center;
         cursor: pointer;
-        z-index: 1000000;
+        z-index: ${config.zIndex + 1};
         transition: all 0.3s ease;
       }
 
@@ -310,7 +641,7 @@ window.ChatterMate;
         background: rgba(255, 255, 255, 0.95);
         backdrop-filter: blur(10px);
         border-bottom: 1px solid rgba(0, 0, 0, 0.1);
-        z-index: 999999;
+        z-index: ${config.zIndex};
         align-items: center;
         justify-content: space-between;
         padding: 0 20px;
@@ -384,7 +715,7 @@ window.ChatterMate;
           /* Respect the configured position on mobile too, so the closed launcher can
              clear a fixed bottom nav bar (the main reason to move it up). */
           bottom: ${config.launcherBottom}px !important;
-          right: ${config.launcherRight}px !important;
+          ${side}: ${config.launcherRight}px !important;
         }
 
         .ask-anything-mobile #chattermate-mobile-close.active {
@@ -403,7 +734,7 @@ window.ChatterMate;
         .ask-anything-mobile #chattermate-mobile-close.active {
           top: 15px !important;
           right: 15px !important;
-          z-index: 1000001 !important;
+          z-index: ${config.zIndex + 2} !important;
         }
 
         /* When topbar is visible, push iframe down to avoid overlap */
@@ -423,16 +754,16 @@ window.ChatterMate;
       /* Chat Initiation Message Styles */
       #${config.initiationMessageId} {
         position: fixed !important;
-        /* Sit above the 64px launcher (+12px gap) and align to its right edge, so it
-           never overlaps the icon regardless of the configured launcher position. */
-        bottom: ${(config.launcherBottom || 20) + 64 + 12}px !important;
-        right: ${config.launcherRight || 20}px !important;
+        /* Sit above the launcher (+12px gap) and align to its edge on the active side,
+           so it never overlaps the icon regardless of the configured position/mode. */
+        bottom: ${(config.launcherBottom || 20) + launcherHeight + 12}px !important;
+        ${side}: ${config.launcherRight || 20}px !important;
         max-width: 260px !important;
         background: white !important;
         padding: 12px 36px 12px 14px !important;
         border-radius: 14px !important;
         box-shadow: 0 3px 16px rgba(0, 0, 0, 0.1) !important;
-        z-index: 999998 !important;
+        z-index: ${config.zIndex - 1} !important;
         cursor: pointer !important;
         opacity: 0;
         visibility: hidden;
@@ -479,6 +810,14 @@ window.ChatterMate;
         z-index: 1 !important;
       }
       @keyframes chattermate-orb-spin { to { transform: rotate(360deg); } }
+      ${side === 'left' ? `
+      /* On the left edge the orb (which protrudes 34px past the bubble) would clip
+         off-screen — mirror it to the bubble's page-facing side. */
+      .initiation-orb {
+        left: auto !important;
+        right: -34px !important;
+      }
+      ` : ''}
 
       #${config.initiationMessageId}.show {
         opacity: 1;
@@ -510,7 +849,7 @@ window.ChatterMate;
         content: '' !important;
         position: absolute !important;
         bottom: -7px !important;
-        right: 30px !important;
+        ${side}: 30px !important;
         width: 14px !important;
         height: 14px !important;
         min-width: 14px !important;
@@ -793,6 +1132,13 @@ window.ChatterMate;
           max-width: 260px;
         }
       }
+
+      ${config.launcher ? '' : `
+      /* Launcher hidden by config — the site opens the chat with its own trigger or
+         the JS API. Last in the sheet so it also beats the mobile .mobile-closed
+         re-show (display: flex !important at equal specificity). */
+      #${config.buttonId}, #${config.buttonId}.mobile-closed { display: none !important; }
+      `}
     `
     // Remove existing style if it exists
     const existingStyle = document.getElementById('chattermate-styles')
@@ -800,6 +1146,21 @@ window.ChatterMate;
       existingStyle.remove()
     }
     document.head.appendChild(style)
+
+    // The search-bar placeholder is data, not markup — keep it in sync here since
+    // every config change funnels through updateStyles().
+    syncLauncherContent()
+  }
+
+  // Set text content on launcher children (textContent, never innerHTML — the
+  // placeholder can come from dashboard settings).
+  function syncLauncherContent() {
+    const btn = document.getElementById(config.buttonId)
+    if (!btn) return
+    const placeholder = btn.querySelector('.cm-search-placeholder')
+    if (placeholder && placeholder.textContent !== config.searchPlaceholder) {
+      placeholder.textContent = config.searchPlaceholder
+    }
   }
 
   // Get stored token - check window.chattermateToken first (set by developer),
@@ -850,6 +1211,10 @@ window.ChatterMate;
   function shouldShowInitiation() {
     // Only show on desktop
     if (isMobileDevice()) return false;
+
+    // The nudge bubble is anchored to the launcher; with the launcher hidden it
+    // would float over nothing, so skip it entirely.
+    if (!config.launcher) return false;
     
     // Check if we have messages to show
     if (!config.chatInitiationMessages || config.chatInitiationMessages.length === 0) {
@@ -979,6 +1344,10 @@ window.ChatterMate;
       <span class="cm-ring r2"></span>
       <div class="cm-dots"><span class="cm-dot"></span><span class="cm-dot"></span><span class="cm-dot"></span></div>
       <span class="cm-chevron">&#8964;</span>
+      <span class="cm-search">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"></circle><path d="M21 21l-4.35-4.35"></path></svg>
+        <span class="cm-search-placeholder"></span>
+      </span>
       <span class="cm-badge"></span>
     `
     // Safety net: reveal anyway if nothing else does within a few seconds (e.g. an
@@ -1007,12 +1376,20 @@ window.ChatterMate;
       <div style="width: 44px;"></div>
     `
 
+    // Dimmed backdrop behind the centered Ask AI palette. Always in the DOM but only
+    // visible in that mode (see updateStyles); clicking it closes, as users expect.
+    const backdrop = document.createElement('div')
+    backdrop.id = config.backdropId
+
     // Add elements to document
     document.body.appendChild(button)
+    document.body.appendChild(backdrop)
     document.body.appendChild(container)
     document.body.appendChild(mobileCloseButton)
     document.body.appendChild(mobileTopbar)
     updateBadge()
+    // The button just entered the DOM — populate its text content (search placeholder).
+    syncLauncherContent()
 
     let isOpen = false
     let iframe = null
@@ -1022,6 +1399,7 @@ window.ChatterMate;
     function toggleChat() {
       isOpen = !isOpen
       container.classList.toggle('active')
+      backdrop.classList.toggle('active', isOpen)
       button.classList.toggle('active')
       mobileCloseButton.classList.toggle('active')
       if (isOpen) {
@@ -1066,6 +1444,22 @@ window.ChatterMate;
 
       if (isOpen && iframe) {
         iframe.contentWindow.postMessage({ type: 'SCROLL_TO_BOTTOM' }, '*')
+      }
+
+      emitEvent(isOpen ? 'open' : 'close')
+    }
+
+    // Prefill (don't send) the chat input, e.g. ChatterMate.open({ message: '...' }).
+    // Queued until the iframe has loaded so an early open({message}) isn't lost.
+    let pendingPrefill = null
+    let iframeReady = false
+    function prefillMessage(text) {
+      const clean = String(text || '').slice(0, 2000)
+      if (!clean) return
+      if (iframeReady && iframe && iframe.contentWindow) {
+        iframe.contentWindow.postMessage({ type: 'PREFILL_MESSAGE', text: clean }, '*')
+      } else {
+        pendingPrefill = clean
       }
     }
 
@@ -1204,7 +1598,25 @@ window.ChatterMate;
             iframe = document.createElement('iframe')
             iframe.className = 'chattermate-iframe'
             iframe.srcdoc = html;
+            iframe.addEventListener('load', function () {
+              iframeReady = true
+              // Developer display overrides, known at load. Dashboard defaults merge
+              // later; the CUSTOMIZATION_UPDATE reply re-sends the final values.
+              iframe.contentWindow.postMessage(widgetDisplayPayload(), '*')
+              // The widget is prefetched while still hidden — say so, or surfaces that
+              // focus themselves on open (the Ask AI palette) would grab focus now.
+              iframe.contentWindow.postMessage({ type: 'WIDGET_VISIBILITY', open: isOpen }, '*')
+              if (pendingPrefill) {
+                iframe.contentWindow.postMessage({ type: 'PREFILL_MESSAGE', text: pendingPrefill }, '*')
+                pendingPrefill = null
+              }
+              widgetReadyFired = true
+              emitEvent('ready')
+            })
             container.appendChild(iframe)
+            // contentWindow is a stable WindowProxy from the moment the element is in
+            // the DOM — capture now so even pre-load messages pass the source check.
+            widgetFrameWindow = iframe.contentWindow
             button.classList.remove('loading')
             iframe.style.opacity = '1'
           })
@@ -1228,9 +1640,16 @@ window.ChatterMate;
 
         // Listen for token + unread-count updates from iframe
         window.addEventListener('message', function(event) {
+          if (!event.data || typeof event.data.type !== 'string') return
+          // Only the widget iframe may talk to the loader. Both frames can be
+          // null-origin (srcdoc), so identity of the source window is the check.
+          if (!widgetFrameWindow || event.source !== widgetFrameWindow) return
           if (event.data.type === 'UNREAD_COUNT') {
             config.unreadCount = Math.max(0, parseInt(event.data.count, 10) || 0)
             updateBadge()
+            // With a hidden launcher there's no badge — the site listens for this
+            // event to decorate its own trigger.
+            emitEvent('unread', config.unreadCount)
             return
           }
           if (event.data.type === 'TOKEN_UPDATE' && iframe) {
@@ -1273,6 +1692,10 @@ window.ChatterMate;
     // Add click event listeners
     button.addEventListener('click', toggleChat)
     mobileCloseButton.addEventListener('click', toggleChat)
+    // Clicking the dimmed page closes the Ask AI palette.
+    backdrop.addEventListener('click', function () {
+      if (isOpen) toggleChat()
+    })
 
     // Initialize mobile button visibility
     if (isMobileDevice() && !isOpen) {
@@ -1303,8 +1726,31 @@ window.ChatterMate;
       
       // Update styles to handle viewport changes
       updateStyles()
+      // The palette's ceiling is 76vh, which just moved.
+      applyPaletteHeight()
+    })
+
+    // Expose the open/close mechanics to the public API, then run anything the
+    // site called before the DOM was ready.
+    controller = {
+      isOpen: function () { return isOpen },
+      toggle: toggleChat,
+      open: function (opts) {
+        if (!isOpen) toggleChat()
+        if (opts && opts.message) prefillMessage(opts.message)
+      },
+      close: function () {
+        if (isOpen) toggleChat()
+      },
+    }
+    pendingCalls.splice(0).forEach(function (fn) {
+      try { fn() } catch (e) { /* keep the widget alive if a queued call throws */ }
     })
   }
+
+  // Declarative options: the install snippet may set window.chattermateConfig with the
+  // same shape as ChatterMate.init(options). Applied before the widget is built.
+  applyOptions(window.chattermateConfig)
 
   // Wait for DOM to be fully loaded
   if (document.readyState === 'loading') {
@@ -1313,48 +1759,116 @@ window.ChatterMate;
     initialize()
   }
 
+  // Keyboard: ⌘K / Ctrl+K opens the Ask AI palette, Esc closes it — the shortcuts this
+  // pattern trains people to expect. Only bound for the Ask AI styles, so we never
+  // hijack ⌘K on a site running the ordinary chat bubble.
+  const isMac = typeof navigator !== 'undefined' && /Mac|iPod|iPhone|iPad/.test(navigator.platform || '')
+  document.addEventListener('keydown', function (e) {
+    if (!controller || !isAskAiModal()) return
+    // Accept only the platform's palette chord: Ctrl+K on macOS is the shell's
+    // kill-to-end-of-line inside text fields, and stealing it breaks typing.
+    const chord = isMac ? (e.metaKey && !e.ctrlKey) : (e.ctrlKey && !e.metaKey)
+    if (config.hotkey && chord && !e.altKey && !e.repeat && (e.key === 'k' || e.key === 'K')) {
+      e.preventDefault()
+      controller.toggle()
+      return
+    }
+    if (e.key === 'Escape' && controller.isOpen()) {
+      controller.close()
+    }
+  })
+
+  // No-code custom launcher: any element matching the developer's `trigger` selector or
+  // carrying data-chattermate-open toggles the chat. Delegated, so elements added after
+  // page load work too.
+  document.addEventListener('click', function (e) {
+    const el = e.target
+    if (!el || !el.closest) return
+    let match = el.closest('[data-chattermate-open]')
+    if (!match && config.trigger) {
+      try {
+        match = el.closest(config.trigger)
+      } catch (err) { /* invalid selector supplied by the site — ignore */ }
+    }
+    if (!match) return
+    // Stop in-page anchors used as triggers (<a href="#">) from scrolling the page.
+    if (match.tagName === 'A') e.preventDefault()
+    if (controller) {
+      controller.toggle()
+    } else if (!triggerClickQueued) {
+      // Clicks landing before the widget is built coalesce into one "open" — replaying
+      // N raw toggles would flap the window open/closed on init.
+      triggerClickQueued = true
+      pendingCalls.push(function () { controller.open() })
+    }
+  })
+
   // Add message listener for customization updates
   window.addEventListener('message', function (event) {
-    // Header chevron inside the widget asks to minimize: reuse the launcher toggle
-    // so all close/animation/mobile logic lives in one place.
+    if (!event.data || typeof event.data.type !== 'string') return
+    // Only the widget iframe may drive the loader (hide/restyle/close). Origin
+    // strings are useless here (srcdoc frames are null-origin) — check identity.
+    if (!widgetFrameWindow || event.source !== widgetFrameWindow) return
+    // The Ask AI palette reports how tall its content is, so the box hugs a short
+    // answer instead of standing at full height with dead space underneath. Only the
+    // palette does this; every other mode keeps its configured geometry.
+    if (event.data.type === 'WIDGET_RESIZE') {
+      if (typeof event.data.height !== 'number' || !isFinite(event.data.height)) return
+      paletteContentHeight = Math.round(event.data.height)
+      applyPaletteHeight()
+      return
+    }
+    // The widget switched surface (palette ⇄ chat panel). Re-render the geometry for
+    // the new one and drop any hugged height the palette had asked for.
+    if (event.data.type === 'WIDGET_SURFACE') {
+      const palette = !!event.data.palette
+      if (config.surfaceIsPalette === palette) return
+      config.surfaceIsPalette = palette
+      if (!palette) paletteContentHeight = 0
+      updateStyles()
+      applyPaletteHeight()
+      return
+    }
+    // Header chevron inside the widget asks to minimize.
     if (event.data.type === 'WIDGET_MINIMIZE') {
-      const btn = document.getElementById(config.buttonId)
-      if (btn && btn.classList.contains('active')) {
-        btn.click()
-      }
+      withController(function () { controller.close() })
       return
     }
     if (event.data.type === 'CUSTOMIZATION_UPDATE') {
       const customData = event.data.data;
       const newColor = customData.chat_bubble_color;
       config.chatBubbleColor = isValidHexColor(newColor) ? newColor : config.chatBubbleColor;
-      
+      if (typeof customData.chat_style === 'string') {
+        config.chatStyle = customData.chat_style;
+      }
+
       // Store chat initiation messages
       if (customData.chat_initiation_messages && Array.isArray(customData.chat_initiation_messages)) {
         config.chatInitiationMessages = customData.chat_initiation_messages;
       }
-      
-      // Handle ASK_ANYTHING chat style positioning (desktop only)
+
+      // Dashboard "Widget placement" defaults. Applied before revealButton() below,
+      // so the launcher first appears already in its final mode/position — no jump.
+      applyDashboardDisplay(customData.widget_display)
+
+      // ASK_ANYTHING sits a little lower than the other styles (desktop only).
+      // A per-style default, not an override: geometry the developer set via
+      // init()/chattermateConfig (devOverrides) always wins.
       if (!isMobileDevice()) {
-        if (customData.chat_style === 'ASK_ANYTHING') {
-          // Use same width as other chat styles for consistency
-          config.containerBottom = 90;
-          config.containerRight = 20;
-          config.containerWidth = 400;
-        } else {
-          // Reset to default values for other styles
-          config.containerBottom = 100;
-          config.containerRight = 20;
-          config.containerWidth = 400;
+        if (!devOverrides.containerBottom) {
+          config.containerBottom = customData.chat_style === 'ASK_ANYTHING' ? 90 : 100;
         }
       } else {
-        // Handle mobile ASK_ANYTHING style
-        if (customData.chat_style === 'ASK_ANYTHING' && isOpen) {
+        // Handle mobile ASK_ANYTHING style. This handler is outside initialize(), so
+        // reach the open-state and topbar through the controller/DOM, not closures.
+        const chatOpen = controller ? controller.isOpen() : false
+        const topbar = document.getElementById('chattermate-mobile-topbar')
+        if (customData.chat_style === 'ASK_ANYTHING' && chatOpen) {
           document.body.classList.add('ask-anything-mobile')
-          mobileTopbar.classList.add('active')
+          if (topbar) topbar.classList.add('active')
         } else {
           document.body.classList.remove('ask-anything-mobile')
-          mobileTopbar.classList.remove('active')
+          if (topbar) topbar.classList.remove('active')
         }
       }
       // Mobile positioning is handled by CSS media queries and should not be affected
@@ -1364,43 +1878,145 @@ window.ChatterMate;
       updateBadge()
       // The real color is applied above, so it's now safe to show the launcher.
       revealButton()
+
+      // Tell the widget the final display geometry (developer overrides merged with
+      // dashboard defaults) so its interior sizing can adapt. Replied to the sending
+      // frame — this handler sits outside initialize() and has no iframe reference.
+      if (event.source && typeof event.source.postMessage === 'function') {
+        event.source.postMessage(widgetDisplayPayload(), '*')
+      }
     }
   })
 
-  // Move the launcher (and, with it, the chat window) to a custom position.
-  // Accepts { bottom, right } in pixels — distance from the bottom/right edges.
-  // Use this to lift the widget above a fixed bottom nav bar, for example.
-  // No effect on mobile, where the window is full-screen.
-  function applyPosition(position) {
-    if (!position || typeof position !== 'object') return
-    if (typeof position.bottom === 'number' && isFinite(position.bottom)) {
-      config.launcherBottom = Math.max(0, position.bottom)
-    }
-    if (typeof position.right === 'number' && isFinite(position.right)) {
-      config.launcherRight = Math.max(0, position.right)
-    }
-    // Re-inject styles so an already-rendered widget repositions immediately.
+  function isNumber(value) {
+    return typeof value === 'number' && isFinite(value)
+  }
+
+  // Re-inject styles so an already-rendered widget updates immediately; before the
+  // first render this is a no-op (initialize() injects them).
+  function refreshStylesIfRendered() {
     if (document.getElementById('chattermate-styles')) {
       updateStyles()
     }
   }
 
-  // Expose global configuration function
-  window.ChatterMate = {
-    init: function (options) {
-      if (!options || typeof options !== 'object') return
-      if (options.baseUrl) {
-        config.baseUrl = options.baseUrl
-      }
+  // Move the launcher (and, with it, the chat window) to a custom position.
+  // Accepts { side, bottom, offset } — side 'left'|'right', distances in pixels from
+  // the bottom and the chosen side edge. Legacy { bottom, right } still works
+  // (right === offset). Use this to lift the widget above a fixed bottom nav bar.
+  // No effect on mobile, where the window is full-screen.
+  function applyPosition(position, deferRefresh) {
+    if (!position || typeof position !== 'object') return
+    if (position.side === 'left' || position.side === 'right') {
+      setDevConfig('side', position.side)
+    }
+    if (isNumber(position.bottom)) {
+      setDevConfig('launcherBottom', Math.max(0, position.bottom))
+    }
+    const offset = isNumber(position.offset) ? position.offset : position.right
+    if (isNumber(offset)) {
+      setDevConfig('launcherRight', Math.max(0, offset))
+    }
+    // applyOptions refreshes once for the whole batch; skip the extra rebuild here.
+    if (!deferRefresh) refreshStylesIfRendered()
+  }
+
+  // Apply developer options — shared by ChatterMate.init(options) and the declarative
+  // window.chattermateConfig. Every recognized key counts as a developer override, so
+  // dashboard defaults arriving later never fight it. Loose sanity clamps only; the
+  // page owner is configuring their own page.
+  function applyOptions(options) {
+    if (!options || typeof options !== 'object') return
+    if (options.baseUrl) {
+      config.baseUrl = options.baseUrl
+    }
+    if (options.id) {
       window.chattermateId = options.id
-      // Optional custom placement, e.g. init({ id, position: { bottom: 100, right: 24 } })
-      if (options.position) {
-        applyPosition(options.position)
+    }
+    if (typeof options.launcher === 'boolean') {
+      setDevConfig('launcher', options.launcher)
+    }
+    if (DISPLAY_MODES.indexOf(options.displayMode) !== -1) {
+      setDevConfig('displayMode', options.displayMode)
+    }
+    if (isNumber(options.width)) {
+      setDevConfig('containerWidth', Math.max(280, options.width))
+      sizeIsExplicit.width = true
+    }
+    if (isNumber(options.height)) {
+      setDevConfig('containerHeight', Math.max(400, options.height))
+      sizeIsExplicit.height = true
+    }
+    if (typeof options.hotkey === 'boolean') {
+      setDevConfig('hotkey', options.hotkey)
+    }
+    if (isNumber(options.sidebarWidth)) {
+      setDevConfig('sidebarWidth', Math.max(280, options.sidebarWidth))
+    }
+    if (isNumber(options.zIndex)) {
+      setDevConfig('zIndex', Math.max(1, Math.floor(options.zIndex)))
+    }
+    if (typeof options.trigger === 'string' && options.trigger) {
+      setDevConfig('trigger', options.trigger)
+    }
+    if (options.searchBar && typeof options.searchBar === 'object') {
+      if (typeof options.searchBar.placeholder === 'string' && options.searchBar.placeholder) {
+        setDevConfig('searchPlaceholder', options.searchBar.placeholder.slice(0, 80))
       }
-    },
+      if (isNumber(options.searchBar.width)) {
+        setDevConfig('searchBarWidth', Math.max(160, options.searchBar.width))
+      }
+    }
+    if (options.position) {
+      applyPosition(options.position, true)
+    }
+    refreshStylesIfRendered()
+  }
+
+  function setLauncherVisible(visible) {
+    setDevConfig('launcher', !!visible)
+    refreshStylesIfRendered()
+  }
+
+  // Public widget API. Open/close/toggle work from any point after the script loads;
+  // calls that land before the DOM is ready are queued and run on init.
+  window.ChatterMate = {
+    // Configure, e.g. init({ id, launcher: false, position: { side: 'left', bottom: 24, offset: 24 } })
+    init: applyOptions,
     // Runtime reposition, e.g. ChatterMate.setPosition({ bottom: 100, right: 24 })
-    setPosition: function (position) {
-      applyPosition(position)
+    // Wrapped so stray extra arguments never hit applyPosition's internal param.
+    setPosition: function (position) { applyPosition(position) },
+    // open() accepts an optional { message } to prefill (not send) the chat input.
+    open: function (opts) {
+      withController(function () { controller.open(opts) })
+    },
+    close: function () {
+      withController(function () { controller.close() })
+    },
+    toggle: function () {
+      withController(function () { controller.toggle() })
+    },
+    isOpen: function () {
+      return controller ? controller.isOpen() : false
+    },
+    showLauncher: function () { setLauncherVisible(true) },
+    hideLauncher: function () { setLauncherVisible(false) },
+    // Events: 'ready' (widget loaded), 'open', 'close', 'unread' (count payload).
+    on: function (event, cb) {
+      if (typeof event !== 'string' || typeof cb !== 'function') return
+      // 'ready' already happened — call straight away so consent-gated / lazy site
+      // code doesn't miss it. It fires only once, so there's nothing to register.
+      if (event === 'ready' && widgetReadyFired) {
+        try { cb() } catch (e) { /* site listener error */ }
+        return
+      }
+      ;(listeners[event] = listeners[event] || []).push(cb)
+    },
+    off: function (event, cb) {
+      const cbs = listeners[event]
+      if (!cbs) return
+      const i = cbs.indexOf(cb)
+      if (i !== -1) cbs.splice(i, 1)
     },
   }
 })()

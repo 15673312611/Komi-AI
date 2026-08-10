@@ -45,6 +45,37 @@ class WidgetPosition(str, enum.Enum):
     FIXED = "FIXED"
 
 
+class WidgetDisplayMode(str, enum.Enum):
+    FLOATING = "floating"
+    SIDEBAR_LEFT = "sidebar-left"
+    SIDEBAR_RIGHT = "sidebar-right"
+    SEARCH_BAR = "search-bar"
+
+
+class WidgetDisplaySide(str, enum.Enum):
+    LEFT = "left"
+    RIGHT = "right"
+
+
+class WidgetDisplayConfig(BaseModel):
+    """Dashboard "Widget placement" defaults, stored in customization_metadata.
+
+    The embed loader (chattermate.js) merges these under any options the
+    installing developer set on the page. Bounds keep saved values renderable
+    on any reasonable screen; the loader clamps again client-side.
+    """
+    mode: Optional[WidgetDisplayMode] = None
+    side: Optional[WidgetDisplaySide] = None
+    launcher: Optional[bool] = None
+    width: Optional[int] = Field(default=None, ge=280, le=800)
+    height: Optional[int] = Field(default=None, ge=400, le=900)
+    sidebar_width: Optional[int] = Field(default=None, ge=320, le=640)
+    search_placeholder: Optional[str] = Field(default=None, max_length=80)
+    offset_bottom: Optional[int] = Field(default=None, ge=0, le=200)
+    offset_side: Optional[int] = Field(default=None, ge=0, le=200)
+    z_index: Optional[int] = Field(default=None, ge=1, le=2147483647)
+
+
 # Predefined chat initiation messages
 DEFAULT_CHAT_INITIATIONS = [
     "👋 Hi! Need help? Ask me anything!",
@@ -97,6 +128,7 @@ class CustomizationBase(BaseModel):
     show_citations: Optional[bool] = False
     collect_email: Optional[bool] = False
     show_ai_disclaimer: Optional[bool] = True
+    allow_new_chat: Optional[bool] = False
 
 
 class CustomizationCreate(CustomizationBase):
@@ -106,6 +138,24 @@ class CustomizationCreate(CustomizationBase):
     welcome_subtitle: Optional[str] = Field(default=None, max_length=250)
     welcome_message: Optional[str] = Field(default=None, max_length=500)
     chat_initiation_messages: Optional[List[InitiationMessage]] = None
+
+    @field_validator('customization_metadata')
+    @classmethod
+    def _validate_widget_display(cls, v: Optional[Dict]) -> Optional[Dict]:
+        """Validate and normalize the structured widget_display key on write.
+
+        The rest of customization_metadata stays free-form (avatar_style etc.);
+        widget_display is consumed by the embed loader on customer pages, so bad
+        values must be rejected here. Unknown keys inside it are dropped and
+        unset keys aren't stored. An explicit null clears the settings.
+        """
+        if not v or v.get('widget_display') is None:
+            return v
+        validated = WidgetDisplayConfig.model_validate(v['widget_display'])
+        # mode='json' turns enums into plain strings — the dict goes straight into
+        # a JSON column, so it must hold JSON primitives, not enum members.
+        v['widget_display'] = validated.model_dump(mode='json', exclude_none=True)
+        return v
 
 
 class CustomizationResponse(CustomizationBase):

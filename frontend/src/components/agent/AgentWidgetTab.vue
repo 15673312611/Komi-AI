@@ -16,6 +16,7 @@ limitations under the License.
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import { toast } from 'vue-sonner'
 import type { Agent } from '@/types/agent'
 import { buildWidgetEmbed } from '@/utils/widgetEmbed'
 
@@ -70,6 +71,40 @@ const copyBackendCode = () => {
 const isAskAnythingStyle = computed(() => {
   return props.agent?.customization?.chat_style === 'ASK_ANYTHING'
 })
+
+// Per-page overrides + JS control examples. Placement defaults live in the
+// Customization tab; these snippets are for developers who need more.
+const configExampleCode = `<script>
+  window.chattermateConfig = {
+    displayMode: 'sidebar-right', // 'floating' | 'sidebar-left' | 'sidebar-right' | 'search-bar'
+    position: { side: 'right', bottom: 20, offset: 20 },
+    width: 400,                   // floating window size
+    height: 560,
+    launcher: false,              // hide the built-in launcher
+    trigger: '#my-chat-button',   // your own element opens the chat
+    zIndex: 999999
+  };
+<\/script>`
+
+const jsApiExampleCode = `// From your own code:
+ChatterMate.open();                  // open({ message: 'Hi!' }) prefills the input
+ChatterMate.close();
+ChatterMate.toggle();
+ChatterMate.on('unread', (count) => { /* badge your own button */ });
+ChatterMate.on('ready', () => { /* widget loaded */ });
+
+// Or with no JavaScript at all:
+<button data-chattermate-open>Chat with us</button>`
+
+const copyText = (text: string) => {
+  if (!navigator.clipboard) {
+    toast.error('Clipboard unavailable — copy the snippet manually')
+    return
+  }
+  navigator.clipboard.writeText(text)
+    .then(() => toast.success('Copied to clipboard'))
+    .catch(() => toast.error('Copy failed — copy the snippet manually'))
+}
 
 // Generate iframe URL
 const iframeUrl = computed(() => {
@@ -217,6 +252,38 @@ const { data } = await response.json();
               </div>
             </div>
           </template>
+        </div>
+      </div>
+
+      <!-- Per-page overrides + JS API -->
+      <div class="widget-info">
+        <h4 class="widget-section-title">Customize &amp; control (optional)</h4>
+        <div class="widget-code-section">
+          <p class="code-description">
+            Placement, size and launcher visibility are set in the <strong>Customization</strong> tab.
+            To override them on a specific page, set <code>window.chattermateConfig</code> before the loader script:
+          </p>
+          <div class="code-block">
+            <pre><code>{{ configExampleCode }}</code></pre>
+            <button class="copy-button" @click="copyText(configExampleCode)" title="Copy to clipboard">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M8 4V16C8 17.1046 8.89543 18 10 18H18C19.1046 18 20 17.1046 20 16V7.41421C20 6.88378 19.7893 6.37507 19.4142 6L16 2.58579C15.6249 2.21071 15.1162 2 14.5858 2H10C8.89543 2 8 2.89543 8 4Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                <path d="M16 18V20C16 21.1046 15.1046 22 14 22H6C4.89543 22 4 21.1046 4 20V8C4 6.89543 4.89543 6 6 6H8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+              </svg>
+            </button>
+          </div>
+          <p class="code-description">
+            Open, close and react to the widget from your own button:
+          </p>
+          <div class="code-block">
+            <pre><code>{{ jsApiExampleCode }}</code></pre>
+            <button class="copy-button" @click="copyText(jsApiExampleCode)" title="Copy to clipboard">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M8 4V16C8 17.1046 8.89543 18 10 18H18C19.1046 18 20 17.1046 20 16V7.41421C20 6.88378 19.7893 6.37507 19.4142 6L16 2.58579C15.6249 2.21071 15.1162 2 14.5858 2H10C8.89543 2 8 2.89543 8 4Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                <path d="M16 18V20C16 21.1046 15.1046 22 14 22H6C4.89543 22 4 21.1046 4 20V8C4 6.89543 4.89543 6 6 6H8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+              </svg>
+            </button>
+          </div>
         </div>
       </div>
 

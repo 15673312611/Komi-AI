@@ -80,6 +80,10 @@ class AgentCustomization(Base):
     # the honest disclosure is the one users expect, and it is only ever hidden
     # once a human agent takes the conversation over, where it would be untrue.
     show_ai_disclaimer = Column(Boolean, default=True, nullable=False, server_default="true")
+    # Lets a visitor abandon the current conversation and start a clean one. Off by
+    # default: it closes the session, so a human agent mid-handover would lose the
+    # thread — operators opt in when that trade is right for them.
+    allow_new_chat = Column(Boolean, default=False, nullable=False, server_default="false")
 
     # Relationship
     agent = relationship("Agent", back_populates="customization")

@@ -538,6 +538,51 @@ export function useWidgetSocket() {
     }
     
 
+    /**
+     * Close the current session server-side and reset local conversation state.
+     *
+     * History is scoped to the ACTIVE session (see get_chat_history), so closing it
+     * is what makes the next conversation genuinely new rather than a reload of the
+     * old one. Resolves when the server confirms, or after a short grace period so a
+     * dropped confirmation can't leave the visitor staring at a dead button.
+     */
+    const resetConversationState = () => {
+        messages.value = []
+        hasStartedChat.value = false
+        currentSessionId.value = ''
+        // A reply in flight never lands once the session closes, so the typing
+        // indicator would spin forever over an empty chat.
+        loading.value = false
+        currentForm.value = null
+    }
+
+    // Must be a member of EndChatReasonType (backend/app/models/session_to_agent.py):
+    // the column is an enum, and an unknown value makes close_session roll back and
+    // silently leave the session open.
+    const endChat = (reason = 'CUSTOMER_REQUEST'): Promise<void> => {
+        return new Promise((resolve) => {
+            if (!socket || !socket.connected) {
+                // Nothing to close server-side from here; still clear locally so the
+                // control does something visible rather than appearing broken.
+                resetConversationState()
+                resolve()
+                return
+            }
+            let settled = false
+            const finish = () => {
+                if (settled) return
+                settled = true
+                clearTimeout(timer)
+                socket?.off('chat_ended', finish)
+                resetConversationState()
+                resolve()
+            }
+            const timer = setTimeout(finish, 3000)
+            socket.on('chat_ended', finish)
+            socket.emit('end_chat', { reason })
+        })
+    }
+
     // Chat history functions
     const loadChatHistory = async () => {
         if (!socket) return
@@ -572,6 +617,7 @@ export function useWidgetSocket() {
         hasStartedChat,
         connectionStatus,
         sendMessage,
+        endChat,
         loadChatHistory,
         connect,
         reconnect,
