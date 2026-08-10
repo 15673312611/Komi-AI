@@ -332,6 +332,59 @@ uvicorn app.main:app --reload --port 8000
 python -m app.workers.run_knowledge_processor
 ```
 
+### Background processors
+
+The API server only enqueues long-running jobs — a separate worker process
+executes them. If no worker is running, jobs sit at `pending` forever and the
+UI shows a progress bar that never advances.
+
+| Worker | Command | Handles |
+|---|---|---|
+| Knowledge + FAQ | `python -m app.workers.run_knowledge_processor` | Knowledge ingestion (crawl, PDF, sitemap) **and** FAQ jobs |
+| Ticket investigator | `python -m app.workers.ticket_investigator` | AI ticket investigation + ticket lifecycle |
+| CRM sync | `python -m app.workers.crm_sync` | Lead push to HubSpot / Pipedrive |
+
+Run each from the `backend/` directory with the virtualenv active.
+
+**FAQ / Help Center processor.** FAQ generation and import jobs (Generate FAQs,
+"Migrate an existing help center", PDF import) are drained by the *knowledge
+worker* — there is no separate FAQ container. Both knowledge entrypoints pick
+up the FAQ queue, so either one is enough:
+
+```bash
+# Recommended for local dev — knowledge and FAQ in one loop
+python -m app.workers.run_knowledge_processor
+
+# What Docker runs: knowledge and FAQ as independent asyncio tasks, so a long
+# FAQ generation never blocks knowledge ingestion
+python -m app.workers.knowledge_processor
+
+# FAQ queue only — useful when debugging generation/import in isolation
+python -m app.workers.faq_processor
+```
+
+Polls every 60s. On startup it fails any job left stuck in `processing` by a
+previous crash, so a killed worker doesn't strand a job forever.
+
+**Ticket investigator.** Runs two loops in one process — investigation runs
+(polled every 15s) and ticket lifecycle/SLA sweeps (every 5 min):
+
+```bash
+python -m app.workers.ticket_investigator
+```
+
+Needs Redis (`REDIS_URL`) to push live `ticket_update` frames to dashboard
+clients; without it the frontend falls back to polling. Orphaned runs are
+reaped on startup.
+
+**Under Docker**, these already run as services — `docker compose up` starts
+them alongside the API:
+
+```bash
+docker compose logs -f knowledge_processor   # knowledge + FAQ jobs
+docker compose logs -f ticket_investigator
+```
+
 **Frontend**
 ```bash
 # Development
