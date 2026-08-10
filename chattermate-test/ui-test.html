@@ -139,7 +139,9 @@
   // copied into this folder, where it would go stale and test an old widget.
   // ('/chattermate.min.js' is a stale saved setting from an earlier version.)
   const savedLoader = settings.loaderUrl === '/chattermate.min.js' ? '' : settings.loaderUrl
-  const loaderUrl = savedLoader || 'http://localhost:5173/webclient/chattermate.min.js'
+  // Scheme follows the page — a hardcoded http:// would be blocked as mixed content
+  // if this harness is ever served over https.
+  const loaderUrl = savedLoader || `${location.protocol}//localhost:5173/webclient/chattermate.min.js`
   const s = document.createElement('script')
   s.src = loaderUrl
   s.onload = function () {

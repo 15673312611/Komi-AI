@@ -425,8 +425,11 @@ const { data } = await response.json();
         // production) — never copied into this folder, where it would go stale.
         // The backend does not serve it. Rebuild after loader changes:
         //   cd ../frontend && npm run build:webclient:prod
+        // Follow the page's own scheme rather than hardcoding http://: served over
+        // https this page would otherwise pull executable code over an unencrypted
+        // connection, which the browser blocks as mixed content anyway.
         const CM_LOADER_URL = localStorage.getItem('chattermate_loader_url')
-            || 'http://localhost:5173/webclient/chattermate.min.js';
+            || `${window.location.protocol}//localhost:5173/webclient/chattermate.min.js`;
         
         // Load saved widget ID and initialize on page load
         document.addEventListener('DOMContentLoaded', function() {

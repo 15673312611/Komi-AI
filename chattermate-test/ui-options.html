@@ -120,7 +120,8 @@
   // The frontend serves the loader (the backend does not). '/chattermate.min.js' is a
   // stale saved value from an earlier version of this page — ignore it.
   const savedLoader = saved.loaderUrl === '/chattermate.min.js' ? '' : saved.loaderUrl
-  document.getElementById('loaderUrl').value = savedLoader || 'http://localhost:5173/webclient/chattermate.min.js'
+  document.getElementById('loaderUrl').value = savedLoader
+    || `${location.protocol}//localhost:5173/webclient/chattermate.min.js`
   document.getElementById('widgetId').value = saved.widgetId || ''
   document.getElementById('baseUrl').value = saved.baseUrl || 'http://localhost:8000/api/v1'
 
