@@ -23,8 +23,10 @@ from app.core.config import settings
 from app.services.help_center_seo import (
     absolute_asset_url,
     article_description,
+    article_href,
     article_json_ld,
     article_title,
+    article_url,
     asset_origin,
     breadcrumbs,
     index_json_ld,
@@ -51,6 +53,7 @@ def _faq(**kw):
         "answer": "Click **Settings**.",
         "category": "Getting started",
         "slug": "how-do-i-sign-up",
+        "url_path": None,
         "meta_title": None,
         "meta_description": None,
         "created_at": datetime(2026, 1, 2, tzinfo=timezone.utc),
@@ -185,3 +188,46 @@ def test_index_graph_keeps_faqpage_and_drops_mainentity_when_empty():
     empty = _graph(index_json_ld(_row(), [], site, None))
     # An empty mainEntity is invalid FAQPage markup — omit the key entirely.
     assert "mainEntity" not in empty["FAQPage"]
+
+
+# ---------- preserved original article URLs ----------
+
+def test_article_url_defaults_to_the_slug_path():
+    assert article_url("https://help.acme.com", _faq()) == "https://help.acme.com/a/how-do-i-sign-up"
+
+
+def test_article_url_prefers_a_preserved_path():
+    """A migrated article advertises the URL it already ranks for, not /a/{slug}."""
+    faq = _faq(url_path="/hc/en-us/articles/360012-reset")
+    assert article_url("https://help.acme.com", faq) == (
+        "https://help.acme.com/hc/en-us/articles/360012-reset"
+    )
+
+
+def test_article_url_percent_encodes_but_keeps_separators():
+    """Paths are STORED decoded, so every emitted URL has to re-encode them."""
+    faq = _faq(url_path="/hc/en-us/articles/café brûlée")
+    assert article_url("https://help.acme.com", faq) == (
+        "https://help.acme.com/hc/en-us/articles/caf%C3%A9%20br%C3%BBl%C3%A9e"
+    )
+
+
+def test_article_href_prefixes_the_base_path():
+    faq = _faq(url_path="/hc/articles/1")
+    assert article_href(faq) == "/hc/articles/1"
+    assert article_href(faq, "/help/acme") == "/help/acme/hc/articles/1"
+
+
+def test_breadcrumbs_and_json_ld_follow_the_preserved_url():
+    """The whole SEO surface has to agree on one canonical article URL."""
+    row, faq = _row(), _faq(url_path="/hc/articles/1")
+    site = "https://help.acme.com"
+    crumbs = breadcrumbs(row, faq, "", site)
+    assert crumbs[-1]["url"] == f"{site}/hc/articles/1"
+
+    graph = article_json_ld(row, faq, site, crumbs, None, None)
+    page = next(n for n in graph["@graph"] if n["@type"] == "WebPage")
+    article = next(n for n in graph["@graph"] if n["@type"] == "TechArticle")
+    assert page["url"] == f"{site}/hc/articles/1"
+    assert page["@id"] == f"{site}/hc/articles/1#webpage"
+    assert article["@id"] == f"{site}/hc/articles/1#article"

@@ -26,6 +26,7 @@ from app.models.faq import (
     FAQ_META_DESCRIPTION_MAX_LENGTH,
     FAQ_META_TITLE_MAX_LENGTH,
     FAQ_SLUG_MAX_LENGTH,
+    FAQ_URL_PATH_MAX_LENGTH,
     FAQStatus,
 )
 from app.models.schemas.pagination import Pagination
@@ -49,12 +50,17 @@ class SeoFields(BaseModel):
     are too long are rejected rather than silently truncated).
     """
     slug: Optional[str] = Field(default=None, max_length=FAQ_SLUG_MAX_LENGTH)
+    # A URL path carried over from a help center the org migrated from, so the
+    # article stays reachable at the URL it already ranks for. Accepts a full
+    # URL or a bare path; normalized and checked server-side (normalize_url_path
+    # / resolve_faq_url_path). Blank clears it, restoring /a/{slug}.
+    url_path: Optional[str] = Field(default=None, max_length=FAQ_URL_PATH_MAX_LENGTH)
     meta_title: Optional[str] = Field(default=None, max_length=FAQ_META_TITLE_MAX_LENGTH)
     meta_description: Optional[str] = Field(
         default=None, max_length=FAQ_META_DESCRIPTION_MAX_LENGTH
     )
 
-    @field_validator("slug", "meta_title", "meta_description")
+    @field_validator("slug", "url_path", "meta_title", "meta_description")
     @classmethod
     def _blank_to_none(cls, v: Optional[str]) -> Optional[str]:
         if v is None:
@@ -108,6 +114,8 @@ class FAQResponse(BaseModel):
     answer: str
     category: str
     slug: Optional[str] = None
+    url_path: Optional[str] = None
+    source_url: Optional[str] = None
     meta_title: Optional[str] = None
     meta_description: Optional[str] = None
     status: FAQStatus
@@ -167,6 +175,10 @@ class ImportRequest(BaseModel):
     # articles = crawl the page's linked articles and import each as-is
     #            (HTML -> Markdown, images re-hosted, no LLM).
     mode: Literal["qa", "articles"] = "qa"
+    # articles mode only: serve each imported article at the URL path it already
+    # has on the source help center, so the org's search rankings and inbound
+    # links survive the migration. Ignored for qa.
+    preserve_urls: bool = False
 
     @field_validator("url")
     @classmethod

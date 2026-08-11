@@ -63,6 +63,7 @@ const {
   draftAnswer,
   draftCategory,
   draftSlug,
+  draftUrlPath,
   draftMetaTitle,
   draftMetaDescription,
   isSaving,
@@ -134,10 +135,10 @@ async function onPickSources(knowledgeIds: number[]) {
   }
 }
 
-async function onImportSubmit(url: string, mode: FaqImportMode) {
+async function onImportSubmit(url: string, mode: FaqImportMode, preserveUrls: boolean) {
   importSubmitting.value = true
   try {
-    const ok = await submitImport(url, mode)
+    const ok = await submitImport(url, mode, preserveUrls)
     if (ok) importOpen.value = false
   } finally {
     importSubmitting.value = false
@@ -338,6 +339,7 @@ onUnmounted(stopPolling)
               v-model:draft-answer="draftAnswer"
               v-model:draft-category="draftCategory"
               v-model:draft-slug="draftSlug"
+              v-model:draft-url-path="draftUrlPath"
               v-model:draft-meta-title="draftMetaTitle"
               v-model:draft-meta-description="draftMetaDescription"
               @save="saveEdit"
@@ -401,12 +403,14 @@ onUnmounted(stopPolling)
                 :draft-answer="draftAnswer"
                 :draft-category="draftCategory"
                 :draft-slug="draftSlug"
+                :draft-url-path="draftUrlPath"
                 :draft-meta-title="draftMetaTitle"
                 :draft-meta-description="draftMetaDescription"
                 @update:draft-question="draftQuestion = $event"
                 @update:draft-answer="draftAnswer = $event"
                 @update:draft-category="draftCategory = $event"
                 @update:draft-slug="draftSlug = $event"
+                @update:draft-url-path="draftUrlPath = $event"
                 @update:draft-meta-title="draftMetaTitle = $event"
                 @update:draft-meta-description="draftMetaDescription = $event"
                 @toggle-select="toggleSelect(faq.id)"

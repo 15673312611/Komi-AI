@@ -16,7 +16,6 @@ limitations under the License.
 
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any, List
-import os
 import requests
 from urllib.parse import urlencode
 
@@ -31,9 +30,9 @@ class JiraService:
     """Service for handling Jira OAuth 2.0 flow and API interactions."""
     
     def __init__(self):
-        self.client_id = os.getenv("JIRA_CLIENT_ID")
-        self.client_secret = os.getenv("JIRA_CLIENT_SECRET")
-        self.redirect_uri = os.getenv("JIRA_REDIRECT_URI")
+        self.client_id = settings.JIRA_CLIENT_ID
+        self.client_secret = settings.JIRA_CLIENT_SECRET
+        self.redirect_uri = settings.JIRA_REDIRECT_URI
         self.auth_url = "https://auth.atlassian.com/authorize"
         self.token_url = "https://auth.atlassian.com/oauth/token"
         self.scope = "read:jira-work write:jira-work read:jira-user offline_access"

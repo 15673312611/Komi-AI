@@ -13,9 +13,10 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 
-Per-article SEO overrides inside the FAQ editor: URL slug, meta title and meta
-description. Collapsed by default — every field is optional, and leaving one
-empty keeps the value the public page derives from the question and answer.
+Per-article SEO overrides inside the FAQ editor: URL slug, the preserved URL
+path for a migrated article, meta title and meta description. Collapsed by
+default — every field is optional, and leaving one empty keeps the value the
+public page derives from the question and answer.
 -->
 
 <script setup lang="ts">
@@ -24,16 +25,18 @@ import { computed, ref } from 'vue'
 const props = withDefaults(
   defineProps<{
     slug?: string
+    urlPath?: string
     metaTitle?: string
     metaDescription?: string
     /** Shown as the placeholder for the title, so the derived default is visible. */
     question?: string
   }>(),
-  { slug: '', metaTitle: '', metaDescription: '', question: '' },
+  { slug: '', urlPath: '', metaTitle: '', metaDescription: '', question: '' },
 )
 
 const emit = defineEmits<{
   'update:slug': [value: string]
+  'update:urlPath': [value: string]
   'update:metaTitle': [value: string]
   'update:metaDescription': [value: string]
 }>()
@@ -43,6 +46,7 @@ const emit = defineEmits<{
 // stop the user typing past the limit. The "recommended" numbers are softer:
 // where search engines start truncating the tag in results.
 const MAX_SLUG = 80
+const MAX_URL_PATH = 400
 const MAX_TITLE = 120
 const MAX_DESCRIPTION = 300
 const RECOMMENDED_TITLE = 60
@@ -53,7 +57,7 @@ const RECOMMENDED_DESCRIPTION = 160
 // the user can still fold it away. The editor mounts fresh per article, which
 // is what makes the initial value correct.
 const hasValues = computed(
-  () => Boolean(props.metaTitle.trim() || props.metaDescription.trim()),
+  () => Boolean(props.urlPath.trim() || props.metaTitle.trim() || props.metaDescription.trim()),
 )
 const expanded = ref(hasValues.value)
 
@@ -102,6 +106,23 @@ function onInput(event: Event): string {
         </span>
         <span class="seo__hint">
           Changing this breaks existing links to the article. Spaces and symbols become hyphens.
+        </span>
+      </label>
+
+      <label class="seo__field">
+        <span class="seo__label">Custom URL path</span>
+        <input
+          type="text"
+          class="seo__input seo__input--path"
+          :maxlength="MAX_URL_PATH"
+          placeholder="/hc/en-us/articles/360012-reset-password"
+          :value="urlPath"
+          @input="emit('update:urlPath', onInput($event))"
+        />
+        <span class="seo__hint">
+          Serve this article at a URL it already has on another help center, so its
+          search ranking and inbound links survive the move. Paste the old URL or path.
+          Leave empty to use the slug above.
         </span>
       </label>
 
@@ -257,6 +278,13 @@ function onInput(event: Event): string {
   border: none;
   border-radius: 0;
   padding-left: 0;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+}
+
+/* A URL, so it reads in the same monospace as the slug — but it keeps the
+   standard input shell, since it has no "/a/" prefix to sit behind. */
+.seo__input--path {
   font-family: var(--font-mono);
   font-size: 12.5px;
 }

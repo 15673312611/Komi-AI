@@ -152,9 +152,17 @@ export const faqService = {
     }
   },
 
-  async importFaq(url: string, mode: FaqImportMode = 'qa'): Promise<FaqGenerationJob> {
+  async importFaq(
+    url: string,
+    mode: FaqImportMode = 'qa',
+    preserveUrls = false,
+  ): Promise<FaqGenerationJob> {
     try {
-      const response = await api.post('/help-center/import', { url, mode })
+      const response = await api.post('/help-center/import', {
+        url,
+        mode,
+        preserve_urls: preserveUrls,
+      })
       return response.data
     } catch (error: any) {
       throw errorMessage(error, 'Failed to start import')

@@ -91,6 +91,13 @@ class Settings(BaseSettings):
     SLACK_CLIENT_SECRET: str = os.getenv("SLACK_CLIENT_SECRET", "")
     SLACK_SIGNING_SECRET: str = os.getenv("SLACK_SIGNING_SECRET", "")
 
+    # Jira. Unlike the others the redirect URI IS configured, because it must
+    # match the callback registered on the Atlassian app exactly. Self-hosters
+    # supply their own OAuth app creds.
+    JIRA_CLIENT_ID: str = os.getenv("JIRA_CLIENT_ID", "")
+    JIRA_CLIENT_SECRET: str = os.getenv("JIRA_CLIENT_SECRET", "")
+    JIRA_REDIRECT_URI: str = os.getenv("JIRA_REDIRECT_URI", "")
+
     # CRM lead push (HubSpot / Pipedrive). OAuth redirect URIs are derived from
     # BACKEND_URL, not configured. Self-hosters supply their own OAuth app creds.
     HUBSPOT_CLIENT_ID: str = os.getenv("HUBSPOT_CLIENT_ID", "")

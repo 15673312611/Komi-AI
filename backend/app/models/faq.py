@@ -30,6 +30,8 @@ DEFAULT_FAQ_CATEGORY = "General"
 FAQ_SLUG_MAX_LENGTH = 80
 FAQ_META_TITLE_MAX_LENGTH = 120
 FAQ_META_DESCRIPTION_MAX_LENGTH = 300
+FAQ_URL_PATH_MAX_LENGTH = 400
+FAQ_SOURCE_URL_MAX_LENGTH = 2048
 
 
 class FAQStatus(str, enum.Enum):
@@ -62,6 +64,19 @@ class FAQ(Base):
     # on edits — but editable by hand for SEO (app.api.help_center.faqs).
     # Unique per org (see ix_faqs_org_slug); NULL until assigned.
     slug = Column(String(FAQ_SLUG_MAX_LENGTH), nullable=True)
+    # The original URL path of an article migrated in from another help center.
+    # When set, the article is SERVED at this exact path and /a/{slug} 301s to
+    # it, so the org keeps the URLs it already ranks for instead of losing that
+    # SEO to a migration. Root-relative, no trailing slash, and percent-DECODED
+    # because that is the form the ASGI scope hands us to match against (every
+    # emitted URL re-encodes it — see help_center_seo.article_url).
+    # Unique per org (see ix_faqs_org_url_path); NULL means "served at /a/{slug}",
+    # which is every article that wasn't migrated.
+    url_path = Column(String(FAQ_URL_PATH_MAX_LENGTH), nullable=True)
+    # Where an imported article was fetched from, post-redirect. Provenance only
+    # — never routed on — and kept even when url_path had to be dropped, so the
+    # original URL is still recoverable.
+    source_url = Column(String(FAQ_SOURCE_URL_MAX_LENGTH), nullable=True)
     # Per-article SEO overrides for the public page's <title> and meta
     # description. NULL means "derive from the content": the question and an
     # excerpt of the answer (see app.api.help_center_public). Lengths mirror
@@ -98,4 +113,7 @@ class FAQ(Base):
         # Serves the public /a/{slug} lookup and enforces per-org uniqueness.
         # Multiple NULL slugs coexist (Postgres treats NULLs as distinct).
         Index("ix_faqs_org_slug", "organization_id", "slug", unique=True),
+        # Serves the preserved-path lookup made for any URL no other public
+        # route claimed, and enforces per-org uniqueness. NULLs coexist.
+        Index("ix_faqs_org_url_path", "organization_id", "url_path", unique=True),
     )

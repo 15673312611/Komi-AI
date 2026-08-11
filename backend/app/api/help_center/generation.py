@@ -206,6 +206,7 @@ async def start_import(
         job = _enqueue(
             db, current_user, FAQJobType.IMPORT_ARTICLES,
             requires_llm=False, source_url=payload.url,
+            preserve_source_urls=payload.preserve_urls,
         )
     else:
         job = _enqueue(db, current_user, FAQJobType.IMPORT_URL, source_url=payload.url)

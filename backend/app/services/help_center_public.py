@@ -118,6 +118,14 @@ def get_published_article(db: Session, row: HelpCenterSettings, slug: str) -> Op
     return FAQRepository(db).get_published_by_slug(row.organization_id, slug)
 
 
+def get_published_article_by_path(
+    db: Session, row: HelpCenterSettings, url_path: str
+) -> Optional[FAQ]:
+    """A single published FAQ by its preserved original path — the lookup for a
+    URL the org carried over from the help center it migrated from."""
+    return FAQRepository(db).get_published_by_url_path(row.organization_id, url_path)
+
+
 def related_articles(db: Session, row: HelpCenterSettings, faq: FAQ, limit: int = 4) -> List[FAQ]:
     """Other published FAQs in the same category — the article's related list."""
     return FAQRepository(db).get_published_related(

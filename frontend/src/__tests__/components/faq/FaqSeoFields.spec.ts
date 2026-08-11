@@ -21,6 +21,10 @@ import FaqSeoFields from '../../../components/faq/FaqSeoFields.vue'
 
 const createWrapper = (props = {}) => mount(FaqSeoFields, { props })
 
+// The meta-title input is the only plain .seo__input without a modifier class.
+const titleInput = (wrapper: ReturnType<typeof createWrapper>) =>
+  wrapper.findAll('input.seo__input').filter((i) => !i.classes().some((c) => c.includes('--')))[0]
+
 describe('FaqSeoFields', () => {
   it('stays collapsed until opened when nothing is customised', async () => {
     const wrapper = createWrapper()
@@ -52,15 +56,26 @@ describe('FaqSeoFields', () => {
 
   it('emits updates for each field', async () => {
     const wrapper = createWrapper({ metaTitle: 'x' })
-    const [slug, title] = wrapper.findAll('input')
 
-    await slug.setValue('custom-slug')
-    await title.setValue('New title')
+    await wrapper.find('.seo__input--slug').setValue('custom-slug')
+    await wrapper.find('.seo__input--path').setValue('/hc/articles/1')
+    await titleInput(wrapper).setValue('New title')
     await wrapper.find('textarea').setValue('New description')
 
     expect(wrapper.emitted('update:slug')?.[0]).toEqual(['custom-slug'])
+    expect(wrapper.emitted('update:urlPath')?.[0]).toEqual(['/hc/articles/1'])
     expect(wrapper.emitted('update:metaTitle')?.at(-1)).toEqual(['New title'])
     expect(wrapper.emitted('update:metaDescription')?.[0]).toEqual(['New description'])
+  })
+
+  it('treats a preserved URL path as a customisation', () => {
+    // A migrated article's URL must not be hidden behind a collapsed panel.
+    const wrapper = createWrapper({ urlPath: '/hc/en-us/articles/360012-reset' })
+    expect(wrapper.find('.seo__fields').exists()).toBe(true)
+    expect(wrapper.find('.seo__badge').exists()).toBe(true)
+    expect((wrapper.find('.seo__input--path').element as HTMLInputElement).value).toBe(
+      '/hc/en-us/articles/360012-reset',
+    )
   })
 
   it('flags a title past the length search engines truncate at', () => {
@@ -70,7 +85,6 @@ describe('FaqSeoFields', () => {
 
   it('shows the question as the title placeholder so the default is visible', () => {
     const wrapper = createWrapper({ metaTitle: 'x', question: 'How do I sign up?' })
-    const title = wrapper.findAll('input')[1]
-    expect(title.attributes('placeholder')).toBe('How do I sign up?')
+    expect(titleInput(wrapper).attributes('placeholder')).toBe('How do I sign up?')
   })
 })

@@ -19,8 +19,11 @@ Jinja2 HTML for SEO (landing list + per-article pages); the only JSON endpoint
 is the rate-limited "Ask AI".
 """
 
+from html import escape
+from urllib.parse import quote
+
 from fastapi import Depends, FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse, PlainTextResponse, Response
+from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field
@@ -46,6 +49,7 @@ from app.services.help_center_public import (
     category_colors,
     contrast_ink,
     get_published_article,
+    get_published_article_by_path,
     normalize_host,
     published_faq_groups,
     related_articles,
@@ -55,8 +59,11 @@ from app.services.help_center_public import (
 from app.services.help_center_seo import (
     absolute_asset_url,
     article_description,
+    article_href,
     article_json_ld,
+    article_path,
     article_title,
+    article_url,
     breadcrumbs,
     index_description,
     index_json_ld,
@@ -177,10 +184,12 @@ def _card_view(faq: FAQ) -> dict:
     """List-card view model: question links to the article, with a plain-text
     preview and read time computed from the Markdown answer. Search fields are
     split so the client can rank title hits above body hits, and the body is
-    plain text (raw Markdown would make URLs/syntax searchable noise)."""
+    plain text (raw Markdown would make URLs/syntax searchable noise).
+
+    `href` is base_path-less; the template adds the serving prefix."""
     return {
         "question": faq.question,
-        "slug": faq.slug,
+        "href": article_href(faq),
         "preview": excerpt(faq.answer),
         "read_time": read_time_label(faq.answer),
         "search_title": faq.question.lower(),
@@ -223,7 +232,24 @@ async def article(slug: str, request: Request, db: Session = Depends(get_db)):
     faq = get_published_article(db, row, slug)
     if not faq:
         raise HTTPException(status_code=404, detail="Article not found")
+    if faq.url_path:
+        # The article kept its original URL from a help-center migration, so
+        # that is the canonical one and this is the alias. Cache-Control bounds
+        # how long a browser pins the redirect: without it a 301 is cached
+        # effectively forever, stranding return visitors if the path is cleared.
+        return RedirectResponse(
+            f"{_base_path(request)}{faq.url_path}",
+            status_code=301,
+            headers={"Cache-Control": PAGE_CACHE_CONTROL},
+        )
+    return await _render_article(faq, row, request, db)
 
+
+async def _render_article(
+    faq: FAQ, row: HelpCenterSettings, request: Request, db: Session
+) -> Response:
+    """Render one article page. Shared by /a/{slug} and the preserved-path
+    route below, which reach the same FAQ by different URLs."""
     # All published categories (unfiltered) drive the sidebar + stable colors.
     all_groups = published_faq_groups(db, row)
     colors = category_colors([category for category, _faqs in all_groups])
@@ -240,19 +266,33 @@ async def article(slug: str, request: Request, db: Session = Depends(get_db)):
     related = [
         {
             "question": rel.question,
-            "slug": rel.slug,
+            "href": article_href(rel),
             "read_time": read_time_label(rel.answer),
             "color": colors.get(rel.category, default_color),
         }
         for rel in related_articles(db, row, faq)
     ]
     base_path = _base_path(request)
+    # Cross-article links are stored as /a/{slug}; point the ones whose target
+    # kept an original URL straight at it, so a reader never takes the 301 hop.
+    # Built from all_groups, which is already loaded above — no extra query.
+    link_paths = {
+        other.slug: quote(article_path(other), safe="/")
+        for _category, faqs in all_groups
+        for other in faqs
+        if other.slug and other.url_path
+    }
     article_view = {
         "question": faq.question,
         "category": faq.category,
         "color": default_color,
         "read_time": read_time_label(faq.answer),
-        "body_html": render_article_html(faq.answer, base_path),
+        "body_html": render_article_html(faq.answer, base_path, link_paths),
+        # Feedback always posts to the slug route, whatever URL the page itself
+        # is served at — location.pathname would miss on a preserved path. None
+        # for a slug-less legacy row reached by its preserved path: there's no
+        # route to post to, so the widget is dropped rather than rendered broken.
+        "feedback_url": f"{base_path}/a/{quote(faq.slug)}/feedback" if faq.slug else None,
         "related": related,
     }
     site = site_url(row)
@@ -267,7 +307,7 @@ async def article(slug: str, request: Request, db: Session = Depends(get_db)):
         "topics": topics,
         "title": article_title(row, faq),
         "description": article_description(faq),
-        "canonical_url": f"{site}/a/{faq.slug}",
+        "canonical_url": article_url(site, faq),
         "og_type": "article",
         "json_ld": article_json_ld(
             row, faq, site, crumbs, social["seo_logo_url"], social["og_image"]
@@ -320,8 +360,8 @@ async def sitemap(request: Request, db: Session = Depends(get_db)):
     urls = [f"  <url><loc>{base}/</loc></url>"]
     for _category, faqs in groups:
         for faq in faqs:
-            if faq.slug:
-                urls.append(f"  <url><loc>{base}/a/{faq.slug}</loc></url>")
+            if faq.slug or faq.url_path:
+                urls.append(f"  <url><loc>{escape(article_url(base, faq))}</loc></url>")
     xml = (
         '<?xml version="1.0" encoding="UTF-8"?>\n'
         '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
@@ -341,3 +381,34 @@ async def robots(request: Request, db: Session = Depends(get_db)):
 async def healthz():
     """Liveness for the SSL-provisioning probe; host-level only, no org data."""
     return {"status": "ok"}
+
+
+# KEEP THIS LAST. Starlette serves the first route that fully matches, so every
+# route above — and the uploads mount — still wins; moving this up would shadow
+# all of them. It only sees URLs nothing else claimed: articles that kept their
+# original path through a help-center migration, plus the trailing-slash forms
+# Starlette's redirect_slashes used to handle (that fallback only fires when
+# NOTHING matched, and a catch-all always matches).
+@public_app.get("/{full_path:path}", response_class=HTMLResponse)
+async def preserved_article(full_path: str, request: Request, db: Session = Depends(get_db)):
+    # Already percent-decoded by the ASGI server, which is why url_path is
+    # stored decoded too.
+    raw = f"/{full_path}"
+    path = raw.rstrip("/") or "/"
+    row = _resolve_or_404(request, db)
+    base_path = _base_path(request)
+
+    faq = get_published_article_by_path(db, row, path) if path != "/" else None
+    if faq is None and path.startswith("/a/"):
+        # "/a/{slug}/" — keep the trailing-slash redirect we'd otherwise lose.
+        faq = get_published_article(db, row, path[len("/a/"):])
+        if faq:
+            return RedirectResponse(f"{base_path}{article_path(faq)}", status_code=301)
+    if faq is None:
+        raise HTTPException(status_code=404, detail="Article not found")
+    if raw != path:  # trailing slash on a preserved path — canonicalise it
+        # article_path(faq), not `path`: identical here (the row was found BY
+        # path), but the Location is then built purely from stored, validated
+        # data instead of from the request — nothing user-supplied reaches it.
+        return RedirectResponse(f"{base_path}{article_path(faq)}", status_code=301)
+    return await _render_article(faq, row, request, db)

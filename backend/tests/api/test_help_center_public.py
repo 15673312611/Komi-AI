@@ -70,10 +70,11 @@ def help_center(db, test_organization):
     return row
 
 
-def _publish_faq(db, org_id, question="How do I sign up?", answer="Use your <b>email</b>.", category="Getting started"):
+def _publish_faq(db, org_id, question="How do I sign up?", answer="Use your <b>email</b>.",
+                 category="Getting started", slug=None, url_path=None):
     return FAQRepository(db).create(FAQ(
         organization_id=org_id, question=question, answer=answer,
-        category=category, status=FAQStatus.PUBLISHED,
+        category=category, status=FAQStatus.PUBLISHED, slug=slug, url_path=url_path,
     ))
 
 
@@ -491,3 +492,176 @@ def test_article_feedback_records_and_dedupes(client, db, test_organization, hel
 def test_article_feedback_unknown_slug_404(client, db, test_organization, help_center):
     r = client.post("/a/does-not-exist/feedback", json={"helpful": True}, headers={"host": HOST})
     assert r.status_code == 404
+
+
+# ---------- preserved original article URLs (help-center migration) ----------
+
+# The kind of URL an org arrives with from Zendesk/Intercom.
+MIGRATED_PATH = "/hc/en-us/articles/360012-reset-password"
+
+
+def _migrated_faq(db, org_id, **kw):
+    kw.setdefault("question", "How do I reset my password?")
+    kw.setdefault("slug", "how-do-i-reset-my-password")
+    kw.setdefault("url_path", MIGRATED_PATH)
+    return _publish_faq(db, org_id, **kw)
+
+
+def test_preserved_path_serves_the_article(client, db, test_organization, help_center):
+    """The whole point: the URL the org already ranks for keeps working."""
+    faq = _migrated_faq(db, test_organization.id)
+
+    r = client.get(MIGRATED_PATH, headers={"host": HOST})
+
+    assert r.status_code == 200
+    assert faq.question in r.text
+
+
+def test_slug_url_redirects_to_the_preserved_path(client, db, test_organization, help_center):
+    """One canonical URL per article — /a/{slug} is only an alias."""
+    faq = _migrated_faq(db, test_organization.id)
+
+    r = client.get(f"/a/{faq.slug}", headers={"host": HOST}, follow_redirects=False)
+
+    assert r.status_code == 301
+    assert r.headers["location"] == MIGRATED_PATH
+    # Bounded, so clearing the path later doesn't strand browsers on a dead 301.
+    assert r.headers["cache-control"] == "public, max-age=60"
+
+
+def test_preserved_path_drives_canonical_and_json_ld(
+    client, db, test_organization, help_center, subdomain_mode
+):
+    _migrated_faq(db, test_organization.id)
+
+    r = client.get(MIGRATED_PATH, headers={"host": HOST})
+
+    expected = f"https://test-org.chattermate.help{MIGRATED_PATH}"
+    assert f'<link rel="canonical" href="{expected}">' in r.text
+    assert f'<meta property="og:url" content="{expected}">' in r.text
+    graph = json.loads(re.search(
+        r'<script type="application/ld\+json">(.*?)</script>', r.text, re.S
+    ).group(1))["@graph"]
+    page = next(n for n in graph if n["@type"] == "WebPage")
+    assert page["url"] == expected
+    crumbs = next(n for n in graph if n["@type"] == "BreadcrumbList")
+    assert crumbs["itemListElement"][-1]["item"] == expected
+
+
+def test_sitemap_lists_the_preserved_path(client, db, test_organization, help_center, subdomain_mode):
+    _migrated_faq(db, test_organization.id)
+
+    r = client.get("/sitemap.xml", headers={"host": HOST})
+
+    assert f"<loc>https://test-org.chattermate.help{MIGRATED_PATH}</loc>" in r.text
+    assert "/a/how-do-i-reset-my-password" not in r.text
+
+
+def test_index_and_related_cards_link_to_the_preserved_path(
+    client, db, test_organization, help_center
+):
+    _migrated_faq(db, test_organization.id)
+    other = _publish_faq(
+        db, test_organization.id, question="How do I sign up?", slug="how-do-i-sign-up",
+    )
+
+    index = client.get("/", headers={"host": HOST})
+    assert f'href="{MIGRATED_PATH}"' in index.text
+
+    # Same-category related list on the other article points at it too.
+    article = client.get(f"/a/{other.slug}", headers={"host": HOST})
+    assert f'href="{MIGRATED_PATH}"' in article.text
+
+
+def test_cross_article_body_links_resolve_to_the_preserved_path(
+    client, db, test_organization, help_center
+):
+    """Bodies STORE /a/{slug}; the reader should still land on the preserved URL
+    directly rather than bouncing through the 301."""
+    _migrated_faq(db, test_organization.id)
+    _publish_faq(
+        db, test_organization.id, question="Billing", slug="billing",
+        answer="See [resetting](/a/how-do-i-reset-my-password) and [home](/).",
+    )
+
+    r = client.get("/a/billing", headers={"host": HOST})
+
+    assert f'href="{MIGRATED_PATH}"' in r.text
+    assert 'href="/a/how-do-i-reset-my-password"' not in r.text
+
+
+def test_feedback_posts_to_the_slug_route_from_a_preserved_path_page(
+    client, db, test_organization, help_center
+):
+    """location.pathname would POST to a path with no route (a 405, not a 404)."""
+    faq = _migrated_faq(db, test_organization.id)
+
+    page = client.get(MIGRATED_PATH, headers={"host": HOST})
+    assert f'data-feedback-url="/a/{faq.slug}/feedback"' in page.text
+
+    r = client.post(f"/a/{faq.slug}/feedback", json={"helpful": True}, headers={"host": HOST})
+    assert r.status_code == 200
+    assert faq.helpful_yes == 1
+
+
+def test_preserved_path_trailing_slash_redirects(client, db, test_organization, help_center):
+    _migrated_faq(db, test_organization.id)
+
+    r = client.get(f"{MIGRATED_PATH}/", headers={"host": HOST}, follow_redirects=False)
+
+    assert r.status_code == 301
+    assert r.headers["location"] == MIGRATED_PATH
+
+
+def test_slug_trailing_slash_still_redirects(client, db, test_organization, help_center):
+    """Regression guard: a catch-all matches everything, so Starlette's own
+    redirect_slashes fallback never fires again and we must do it ourselves."""
+    faq = _publish_faq(db, test_organization.id, slug="how-do-i-sign-up")
+
+    r = client.get(f"/a/{faq.slug}/", headers={"host": HOST}, follow_redirects=False)
+
+    assert r.status_code == 301
+    assert r.headers["location"] == f"/a/{faq.slug}"
+
+
+def test_unknown_path_404s(client, db, test_organization, help_center):
+    _migrated_faq(db, test_organization.id)
+
+    assert client.get("/hc/en-us/articles/nope", headers={"host": HOST}).status_code == 404
+
+
+def test_reserved_routes_win_over_a_preserved_path(client, db, test_organization, help_center):
+    """Belt and braces on route ordering: even a path forced past the normaliser
+    straight into the DB must not shadow a real route."""
+    _publish_faq(
+        db, test_organization.id, slug="sneaky", url_path="/sitemap.xml",
+    )
+
+    r = client.get("/sitemap.xml", headers={"host": HOST})
+
+    assert r.status_code == 200
+    assert "<urlset" in r.text
+
+
+def test_path_dispatch_serves_the_preserved_path(path_client, db, test_organization, help_center):
+    """Under /help/{slug} the preserved path hangs off the base path, and every
+    rendered link keeps the prefix."""
+    _migrated_faq(db, test_organization.id)
+    _publish_faq(db, test_organization.id, question="Billing", slug="billing")
+
+    r = path_client.get(f"/help/test-org{MIGRATED_PATH}")
+    assert r.status_code == 200
+
+    index = path_client.get("/help/test-org/")
+    assert f'href="/help/test-org{MIGRATED_PATH}"' in index.text
+
+
+def test_path_dispatch_slug_url_redirects_with_the_base_path(
+    path_client, db, test_organization, help_center
+):
+    faq = _migrated_faq(db, test_organization.id)
+
+    r = path_client.get(f"/help/test-org/a/{faq.slug}", follow_redirects=False)
+
+    assert r.status_code == 301
+    assert r.headers["location"] == f"/help/test-org{MIGRATED_PATH}"

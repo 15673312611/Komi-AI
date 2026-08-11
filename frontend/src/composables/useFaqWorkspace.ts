@@ -106,6 +106,7 @@ export function useFaqWorkspace(organizationId: () => string | undefined) {
   // Per-article SEO overrides. Empty means "derive it" — the server normalizes
   // a hand-typed slug and treats blanks as cleared, so no client-side slugify.
   const draftSlug = ref('')
+  const draftUrlPath = ref('')
   const draftMetaTitle = ref('')
   const draftMetaDescription = ref('')
   const isSaving = ref(false)
@@ -315,9 +316,13 @@ export function useFaqWorkspace(organizationId: () => string | undefined) {
     }
   }
 
-  async function submitImport(url: string, mode: FaqImportMode = 'qa'): Promise<boolean> {
+  async function submitImport(
+    url: string,
+    mode: FaqImportMode = 'qa',
+    preserveUrls = false,
+  ): Promise<boolean> {
     try {
-      job.value = await faqService.importFaq(url, mode)
+      job.value = await faqService.importFaq(url, mode, preserveUrls)
       toast.success('Import started — drafts will appear when it finishes')
       return true
     } catch (error: any) {
@@ -351,6 +356,7 @@ export function useFaqWorkspace(organizationId: () => string | undefined) {
 
   function setSeoDraft(faq: FaqItem | null): void {
     draftSlug.value = faq?.slug || ''
+    draftUrlPath.value = faq?.url_path || ''
     draftMetaTitle.value = faq?.meta_title || ''
     draftMetaDescription.value = faq?.meta_description || ''
   }
@@ -394,6 +400,7 @@ export function useFaqWorkspace(organizationId: () => string | undefined) {
     // keeping whatever is already assigned).
     const seo = {
       slug: draftSlug.value.trim(),
+      url_path: draftUrlPath.value.trim(),
       meta_title: draftMetaTitle.value.trim(),
       meta_description: draftMetaDescription.value.trim(),
     }
@@ -467,6 +474,7 @@ export function useFaqWorkspace(organizationId: () => string | undefined) {
     draftAnswer,
     draftCategory,
     draftSlug,
+    draftUrlPath,
     draftMetaTitle,
     draftMetaDescription,
     isSaving,

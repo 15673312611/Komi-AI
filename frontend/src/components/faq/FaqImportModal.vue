@@ -28,13 +28,15 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   close: []
-  submit: [url: string, mode: FaqImportMode]
+  submit: [url: string, mode: FaqImportMode, preserveUrls: boolean]
   'submit-pdf': [file: File]
 }>()
 
 const url = ref('')
 const mode = ref<FaqImportMode>('qa')
 const pdfFile = ref<File | null>(null)
+// Article mode only: keep every imported article at the URL it already has.
+const preserveUrls = ref(true)
 
 const MODES: { value: FaqImportMode; title: string; description: string }[] = [
   {
@@ -61,9 +63,16 @@ watch(
       url.value = ''
       mode.value = 'qa'
       pdfFile.value = null
+      preserveUrls.value = true
     }
   },
 )
+
+// The option only exists for article mode; reset it on every mode change so
+// switching away and back can't carry a stale choice into the next import.
+watch(mode, () => {
+  preserveUrls.value = true
+})
 
 const canSubmit = computed(() => {
   if (props.submitting) return false
@@ -109,7 +118,7 @@ function submit() {
     return
   }
   const cleaned = url.value.trim().replace(/^https?:\/\//i, '')
-  emit('submit', `https://${cleaned}`, mode.value)
+  emit('submit', `https://${cleaned}`, mode.value, mode.value === 'articles' && preserveUrls.value)
 }
 </script>
 
@@ -170,6 +179,18 @@ function submit() {
           </span>
         </label>
       </template>
+      <label v-if="mode === 'articles'" class="preserve">
+        <input v-model="preserveUrls" class="preserve__box" type="checkbox" />
+        <span class="preserve__text">
+          <span class="preserve__title">Keep the original article URLs</span>
+          <span class="preserve__desc">
+            Each article stays at the URL path it has today, so search rankings and
+            existing links survive the move. Point your old domain here and nothing
+            changes for visitors.
+          </span>
+        </span>
+      </label>
+
       <div class="import-hint">
         <FaqOrb :size="34" />
         <div>{{ hint }}</div>
@@ -356,6 +377,45 @@ function submit() {
 .pdf-drop__meta {
   font-size: 12px;
   color: var(--muted);
+}
+
+.preserve {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  padding: 13px 14px;
+  margin-bottom: 16px;
+  background: var(--o03);
+  border: 1px solid var(--o12);
+  border-radius: 12px;
+  cursor: pointer;
+}
+
+.preserve__box {
+  flex-shrink: 0;
+  width: 15px;
+  height: 15px;
+  margin-top: 1px;
+  accent-color: var(--c-purple);
+  cursor: pointer;
+}
+
+.preserve__text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.preserve__title {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text2);
+}
+
+.preserve__desc {
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.45;
 }
 
 .import-hint {

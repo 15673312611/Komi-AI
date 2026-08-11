@@ -144,7 +144,7 @@ Ask-AI fetch). Card previews/read-times are computed server-side.
           </div>
           <div class="hc-list">
             {% for faq in faqs %}
-            <a class="hc-card" href="{{ base_path }}/a/{{ faq.slug }}" data-category="{{ category }}"
+            <a class="hc-card" href="{{ base_path }}{{ faq.href }}" data-category="{{ category }}"
                data-title="{{ faq.search_title }}" data-search="{{ faq.search_text }}"
                style="--ic: {{ colors[category] }};">
               <span class="hc-card-main">

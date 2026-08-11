@@ -19,7 +19,8 @@ auto-default for AI search.
 """
 
 import re
-from typing import Optional
+from typing import Iterable, Optional, Sequence
+from urllib.parse import unquote, urlsplit
 from uuid import UUID
 
 from sqlalchemy.orm import Session
@@ -27,15 +28,27 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.logger import get_logger
 from app.models.agent import Agent
-from app.models.faq import FAQ_SLUG_MAX_LENGTH
+from app.models.faq import FAQ, FAQ_SLUG_MAX_LENGTH, FAQ_URL_PATH_MAX_LENGTH
 from app.models.help_center import HelpCenterSettings
 from app.models.knowledge_to_agent import KnowledgeToAgent
+from app.repositories.faq import FAQRepository
 from app.repositories.help_center import HelpCenterRepository
 
 logger = get_logger(__name__)
 
 SLUG_MAX_LENGTH = 63
 _SLUG_CLEAN_RE = re.compile(r"[^a-z0-9]+")
+
+# First path segments the public help center already owns (app.api
+# help_center_public routes, its uploads/images mounts, the /help/{slug}
+# dispatch prefix, and /.well-known, which ACME needs for TLS issuance). A
+# preserved path may never start with one of these or it would shadow the real
+# route. Matching on the FIRST SEGMENT rather than a string prefix keeps
+# "/apix/..." usable while still rejecting "/api/...".
+FAQ_RESERVED_FIRST_SEGMENTS = frozenset(
+    {"a", "ask", "api", "help", "healthz", "robots.txt", "sitemap.xml", ".well-known", "static", "uploads"}
+)
+_CONTROL_CHARS_RE = re.compile(r"[\x00-\x1f\x7f]")
 
 
 def slugify_org_name(name: str) -> str:
@@ -62,8 +75,6 @@ def _dedupe_slug(base: str, is_taken) -> str:
 def generate_faq_slug(db: Session, organization_id: UUID, question: str) -> str:
     """A per-org-unique URL slug from an FAQ question. Collisions get -2, -3, …
     Assigned once at creation and kept stable afterwards so article URLs persist."""
-    from app.repositories.faq import FAQRepository
-
     repo = FAQRepository(db)
     return _dedupe_slug(_faq_base_slug(question), lambda c: repo.slug_exists(organization_id, c))
 
@@ -75,8 +86,6 @@ def resolve_faq_slug(
     (lowercase, a-z0-9 and single hyphens, length-capped) and made unique within
     the org. `exclude_id` is the FAQ being edited, so keeping its own slug is a
     no-op rather than a collision that appends -2."""
-    from app.repositories.faq import FAQRepository
-
     repo = FAQRepository(db)
     return _dedupe_slug(
         _faq_base_slug(requested),
@@ -88,8 +97,6 @@ def assign_faq_slugs(db: Session, faqs) -> None:
     """Give every FAQ in a batch a unique slug in place, deduping against both the
     DB and the other rows in the same batch. Rows that already have a slug are
     left untouched (and reserved so batch-mates don't collide with them)."""
-    from app.repositories.faq import FAQRepository
-
     repo = FAQRepository(db)
     taken: set = set()
     for faq in faqs:
@@ -102,6 +109,80 @@ def assign_faq_slugs(db: Session, faqs) -> None:
         )
         faq.slug = slug
         taken.add(slug)
+
+
+def normalize_url_path(raw: Optional[str]) -> Optional[str]:
+    """A full URL or hand-typed path reduced to the root-relative path an article
+    can be served at — or None when it can't be used at all, in which case the
+    caller falls back to /a/{slug}.
+
+    Returned percent-DECODED, because that is the form the ASGI scope hands the
+    router to match against; every emitted URL re-encodes it (see
+    help_center_seo.article_url). Getting that direction backwards silently 404s
+    every non-ASCII path."""
+    if not raw:
+        return None
+    candidate = raw.strip()
+    if "://" in candidate or candidate.startswith("//"):
+        candidate = urlsplit(candidate).path  # drop scheme/host/port
+    candidate = candidate.split("#", 1)[0].split("?", 1)[0]  # drop fragment/query
+    candidate = unquote(candidate)
+    if _CONTROL_CHARS_RE.search(candidate):
+        return None
+    if not candidate.startswith("/"):
+        candidate = f"/{candidate}"
+    candidate = re.sub(r"/{2,}", "/", candidate).rstrip("/")
+    if len(candidate) > FAQ_URL_PATH_MAX_LENGTH:
+        return None
+    segments = candidate.split("/")[1:]
+    if not segments or not segments[0]:
+        return None  # "" or "/" — that's the index, not an article
+    if "." in segments or ".." in segments:
+        return None  # no traversal, and nothing that normalises to another path
+    if segments[0].lower() in FAQ_RESERVED_FIRST_SEGMENTS:
+        return None
+    return candidate
+
+
+def resolve_faq_url_path(
+    db: Session, organization_id: UUID, requested: str, exclude_id: Optional[UUID] = None
+) -> Optional[str]:
+    """A validated preserved path that is free within the org, else None.
+
+    Deliberately does NOT dedupe with -2/-3 the way slugs do: a mangled path is
+    no longer the URL the org already ranks for, so silently altering it would
+    defeat the whole point. The caller decides what to do instead — fall back to
+    /a/{slug} on import, or reject the edit in the admin API."""
+    path = normalize_url_path(requested)
+    if path is None:
+        return None
+    repo = FAQRepository(db)
+    return None if repo.url_path_exists(organization_id, path, exclude_id=exclude_id) else path
+
+
+def assign_faq_url_paths(db: Session, faqs: Sequence[FAQ], sources: Iterable[str]) -> int:
+    """Give each FAQ in a batch its source URL's path, in place, deduping against
+    both the DB and the other rows in the batch. Returns how many were applied.
+
+    Rows whose path is unusable or taken keep url_path=None and are served at
+    /a/{slug} — a partial result still imports every article, which beats
+    failing the whole job over one bad URL.
+
+    MUST run before the batch insert, so the unique index can never reject it."""
+    repo = FAQRepository(db)
+    taken: set = set()
+    applied = 0
+    for faq, source in zip(faqs, sources):
+        path = normalize_url_path(source)
+        if path is None:
+            continue
+        if path in taken or repo.url_path_exists(faq.organization_id, path):
+            logger.warning(f"Preserved URL path already taken, using the slug instead: {path}")
+            continue
+        faq.url_path = path
+        taken.add(path)
+        applied += 1
+    return applied
 
 
 def generate_unique_slug(db: Session, name: str) -> str:
