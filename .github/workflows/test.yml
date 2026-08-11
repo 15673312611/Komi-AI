@@ -6,6 +6,12 @@ on:
   push:
     branches: [ main ]
 
+# Both jobs only check out code and run tests. Declaring this at the top level
+# makes every job's GITHUB_TOKEN read-only, so a compromised action or
+# dependency can't use it to write to the repo.
+permissions:
+  contents: read
+
 jobs:
   backend-test:
     name: Run Backend Tests

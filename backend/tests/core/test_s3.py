@@ -25,6 +25,7 @@ from app.core.s3 import (
     delete_file_from_s3,
     get_s3_client,
     get_s3_signed_url,
+    is_s3_url,
     strip_s3_signature,
     upload_file_to_s3,
 )
@@ -300,4 +301,43 @@ async def test_delete_file_from_s3_exception():
         
         result = await delete_file_from_s3(test_s3_url)
         
-        assert result is False 
+        assert result is False
+
+# ---------- is_s3_url ----------
+
+@pytest.mark.parametrize("url", [
+    # Every shape AWS serves, including the regional virtual-hosted form
+    # url_for_s3_key produces and a dotted bucket name.
+    "https://s3.amazonaws.com/bucket/key.pdf",
+    "https://s3.us-east-1.amazonaws.com/bucket/key.pdf",
+    "https://s3-us-west-2.amazonaws.com/bucket/key.pdf",
+    "https://bucket.s3.amazonaws.com/key.pdf",
+    "https://bucket.s3.us-east-1.amazonaws.com/key.pdf",
+    "https://my.bucket.s3.us-east-1.amazonaws.com/key.pdf",
+    "https://BUCKET.S3.AMAZONAWS.COM/key.pdf",
+])
+def test_is_s3_url_accepts_every_s3_endpoint_shape(url):
+    assert is_s3_url(url) is True
+
+
+@pytest.mark.parametrize("url", [
+    None, "",
+    # The whole point: an attacker-supplied URL can carry the string anywhere
+    # outside the host, and a substring check would call these ours.
+    "https://evil.com/s3.amazonaws.com/key.pdf",
+    "https://evil.com/?x=s3.amazonaws.com",
+    "https://evil.com/#s3.amazonaws.com",
+    "https://s3.amazonaws.com.attacker.com/key.pdf",
+    "https://foos3.amazonaws.com/key.pdf",
+    "https://notamazonaws.com/key.pdf",
+    "https://example.com/file.pdf",
+])
+def test_is_s3_url_rejects_lookalikes(url):
+    assert is_s3_url(url) is False
+
+
+def test_is_s3_url_matches_what_url_for_s3_key_produces():
+    """Round-trip guard: whatever we generate must be recognised as ours."""
+    from app.core.s3 import url_for_s3_key
+
+    assert is_s3_url(url_for_s3_key("some/key.pdf")) is True
