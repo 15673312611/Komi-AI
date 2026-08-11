@@ -407,5 +407,8 @@ async def preserved_article(full_path: str, request: Request, db: Session = Depe
     if faq is None:
         raise HTTPException(status_code=404, detail="Article not found")
     if raw != path:  # trailing slash on a preserved path — canonicalise it
-        return RedirectResponse(f"{base_path}{path}", status_code=301)
+        # article_path(faq), not `path`: identical here (the row was found BY
+        # path), but the Location is then built purely from stored, validated
+        # data instead of from the request — nothing user-supplied reaches it.
+        return RedirectResponse(f"{base_path}{article_path(faq)}", status_code=301)
     return await _render_article(faq, row, request, db)
