@@ -17,6 +17,31 @@ limitations under the License.
 from typing import Optional, Dict, Any
 from app.repositories.customer import CustomerRepository
 
+# Where a handoff email goes when the customer row can't take it — another
+# customer in the org already owns that address (the (email, organization_id)
+# unique constraint), or it is a channel identity key. meta_data renders as a
+# label/value list in the inbox customer panel, so an agent still sees the
+# address and can follow up. Dropping it is how a visitor asks to be contacted
+# and then never is.
+CONTACT_EMAIL_META_KEY = "contact_email_provided"
+
+
+def retain_unstored_email(customer_repo, customer_id, submitted_email: str, update_result: dict) -> bool:
+    """Keep a submitted handoff email that ``update_contact`` could not apply.
+
+    Returns True when it was retained on meta_data. No-op when the address did
+    land on the customer, when it is already their stored address, or when
+    nothing was submitted — so a normal capture writes no metadata.
+    """
+    if not submitted_email or update_result.get('email_updated'):
+        return False
+    stored = (update_result.get('email') or '').lower()
+    if submitted_email.lower() == stored:
+        return False
+    return customer_repo.update_meta_data(
+        customer_id, {CONTACT_EMAIL_META_KEY: submitted_email}
+    ) is not None
+
 
 def build_handoff_contact_form(
     customer,

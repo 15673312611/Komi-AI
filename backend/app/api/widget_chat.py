@@ -45,6 +45,7 @@ from app.models.session_to_agent import SessionStatus
 from app.agents.transfer_agent import get_agent_availability_response
 from app.repositories.agent import AgentRepository
 from app.services.chat_notifications import notify_new_chat
+from app.services.contact_capture import retain_unstored_email
 from app.services.lead_capture import record_lead_from_response
 from app.services.message_delivery import deliver_to_customer
 from app.repositories.rating import RatingRepository
@@ -1955,12 +1956,23 @@ async def handle_contact_info(sid, data):
         customer_repo = CustomerRepository(db)
         result = customer_repo.update_contact(customer_id, email=email or None, full_name=name or None)
 
-        # Confirm back to the visitor as a bot message
-        if result.get('email_updated') or result.get('name_updated'):
+        # The customer row can refuse the address — another customer in the org
+        # already owns it (a visitor returning anonymously, or a shared team
+        # inbox), or it is a channel identity key. Keep it on meta_data so the
+        # agent can still follow up; otherwise the visitor asked to be contacted
+        # and nothing anywhere records how.
+        email_retained = retain_unstored_email(customer_repo, customer_id, email, result)
+
+        # Confirm back to the visitor as a bot message. Retaining counts: from
+        # where they sit they gave us a good address either way, and silence
+        # after submitting the form reads as the form having failed.
+        if result.get('email_updated') or result.get('name_updated') or email_retained:
             confirm = "Thanks — a teammate will follow up"
             updated_email = result.get('email') or ''
-            if updated_email and not CustomerRepository.is_placeholder_email(updated_email):
+            if result.get('email_updated') and updated_email and not CustomerRepository.is_placeholder_email(updated_email):
                 confirm += f" at {updated_email}"
+            elif email_retained:
+                confirm += f" at {email}"
             confirm += "."
             await sio.emit('chat_response', {
                 'message': confirm,
