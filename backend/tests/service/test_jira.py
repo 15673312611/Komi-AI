@@ -15,23 +15,25 @@ limitations under the License.
 """
 
 import pytest
-import os
 from datetime import datetime, timedelta
 from unittest.mock import patch, MagicMock, AsyncMock
+from app.core.config import settings
 from app.services.jira import JiraService
 from app.models.jira import JiraToken
 from app.core.exceptions import JiraAuthError
 
 
 @pytest.fixture
-def jira_service():
-    """Create a JiraService instance for testing."""
-    with patch.dict(os.environ, {
-        "JIRA_CLIENT_ID": "test_client_id",
-        "JIRA_CLIENT_SECRET": "test_client_secret",
-        "JIRA_REDIRECT_URI": "https://example.com/callback"
-    }):
-        return JiraService()
+def jira_service(monkeypatch):
+    """Create a JiraService instance for testing.
+
+    Patches `settings`, not os.environ: the credentials are read from the
+    settings singleton, which is populated once at import, so setting the env
+    var after that point would never reach the service."""
+    monkeypatch.setattr(settings, "JIRA_CLIENT_ID", "test_client_id")
+    monkeypatch.setattr(settings, "JIRA_CLIENT_SECRET", "test_client_secret")
+    monkeypatch.setattr(settings, "JIRA_REDIRECT_URI", "https://example.com/callback")
+    return JiraService()
 
 
 @pytest.fixture

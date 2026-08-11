@@ -16,6 +16,7 @@ limitations under the License.
 
 from typing import Optional, Dict, Any, List
 from agno.tools import Toolkit
+from app.core.config import settings
 from app.core.logger import get_logger
 from app.services.jira import JiraService
 from app.repositories.session_to_agent import SessionToAgentRepository
@@ -151,10 +152,8 @@ class JiraTools(Toolkit):
             if not is_valid:
                 # Implement synchronous token refresh
                 try:
-                    # Get client credentials from environment
-                    import os
-                    client_id = os.getenv("JIRA_CLIENT_ID")
-                    client_secret = os.getenv("JIRA_CLIENT_SECRET")
+                    client_id = settings.JIRA_CLIENT_ID
+                    client_secret = settings.JIRA_CLIENT_SECRET
                     
                     if not client_id or not client_secret:
                         return json.dumps({
@@ -518,10 +517,8 @@ class JiraTools(Toolkit):
             if not is_valid:
                 # Implement synchronous token refresh
                 try:
-                    # Get client credentials from environment
-                    import os
-                    client_id = os.getenv("JIRA_CLIENT_ID")
-                    client_secret = os.getenv("JIRA_CLIENT_SECRET")
+                    client_id = settings.JIRA_CLIENT_ID
+                    client_secret = settings.JIRA_CLIENT_SECRET
                     
                     if not client_id or not client_secret:
                         return json.dumps({
