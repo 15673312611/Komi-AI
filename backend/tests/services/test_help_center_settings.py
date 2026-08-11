@@ -153,6 +153,10 @@ def test_normalize_url_path_accepts(raw, expected):
     "/uploads/x", "/static/x", "/ASK",
     # Traversal / non-canonical.
     "/hc/../etc/passwd", "/hc/./articles",
+    # Percent-encoded forms of all of the above: unquote runs BEFORE the segment
+    # checks, so encoding must not smuggle a traversal or a reserved prefix past
+    # them. Getting that order wrong is the classic hole in a path normaliser.
+    "/hc/%2e%2e/etc/passwd", "/%61sk", "/%41SK", "/hc/articles/1%00",
     # Control characters (header/log injection).
     "/hc/articles\n/x",
 ])
