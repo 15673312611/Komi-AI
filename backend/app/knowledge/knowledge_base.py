@@ -25,7 +25,7 @@ from app.knowledge.enhanced_website_reader import EnhancedWebsiteReader
 from app.knowledge.sitemap_reader import SitemapReader
 from app.knowledge.enhanced_pdf_kb import EnhancedPDFKnowledgeBase
 from app.knowledge.enhanced_pdf_url_kb import EnhancedPDFUrlKnowledgeBase
-from app.core.s3 import delete_file_from_s3
+from app.core.s3 import delete_file_from_s3, is_s3_url
 from app.models.knowledge import Knowledge, SourceType
 from app.models.knowledge_to_agent import KnowledgeToAgent
 from app.models.knowledge_queue import ProcessingStage, QueueStatus
@@ -152,7 +152,7 @@ class KnowledgeManager:
                         parsed_url = urlparse(url)
                         
                         # Parse filename from URL, handling S3 URLs specially
-                        if "s3.amazonaws.com" in url:
+                        if is_s3_url(url):
                             # Extract the actual filename from S3 URL path
                             path_parts = parsed_url.path.split('/')
                             # Get the last part of the path and decode URL encoded characters
@@ -198,7 +198,7 @@ class KnowledgeManager:
                         await self.add_pdf_files([temp_path], filename=filename)
                         
                         # Delete the S3 URL from storage if it's an S3 URL
-                        if "s3.amazonaws.com" in url:
+                        if is_s3_url(url):
                             try:
                                 # Delete the file from S3 using the centralized utility function
                                 success = await delete_file_from_s3(url)

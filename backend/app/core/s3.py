@@ -18,6 +18,7 @@ limitations under the License.
 S3 Storage Utilities
 """
 import asyncio
+import re
 from functools import lru_cache, partial
 import boto3
 from app.core.config import settings
@@ -51,6 +52,29 @@ def strip_s3_signature(url: Optional[str]) -> Optional[str]:
     if not url or 'amazonaws.com' not in url:
         return url
     return urlunparse(urlparse(url)._replace(query='', fragment=''))
+
+
+# Matches an S3 endpoint in the HOST position, in every shape AWS serves: the
+# global endpoint, regional ones (dot or legacy dash), and the virtual-hosted
+# forms that put the bucket in front, including dotted bucket names. Anchored at
+# both ends so "evil.com/s3.amazonaws.com/x" and "s3.amazonaws.com.attacker.com"
+# do not match, and neither does "foos3.amazonaws.com".
+_S3_HOST_RE = re.compile(r"(^|\.)s3([.-][a-z0-9-]+)?\.amazonaws\.com$", re.IGNORECASE)
+
+
+def is_s3_url(url: Optional[str]) -> bool:
+    """True when this URL's HOST is an S3 endpoint.
+
+    Checks the parsed hostname, never a substring of the whole URL: any
+    attacker-supplied URL can carry "s3.amazonaws.com" in its path, and treating
+    that as one of ours is how a delete or a key extraction ends up pointed
+    somewhere it shouldn't be. A substring test is also INCOMPLETE — it misses
+    the regional virtual-hosted form url_for_s3_key actually produces
+    (bucket.s3.<region>.amazonaws.com), which contains no "s3.amazonaws.com".
+    """
+    if not url:
+        return False
+    return bool(_S3_HOST_RE.search(urlparse(url).hostname or ""))
 
 
 def url_for_s3_key(s3_key: str) -> str:
