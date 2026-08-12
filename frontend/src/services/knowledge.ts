@@ -60,6 +60,7 @@ export const knowledgeService = {
     agentId?: string,
     onProgress?: (progress: number) => void,
     maxLinks?: number,
+    crawlScope?: string,
   ): Promise<KnowledgeUploadResponse> {
     try {
       let completed = 0
@@ -68,8 +69,11 @@ export const knowledgeService = {
         agent_id: agentId,
         pdf_urls: urls.filter((url) => url.toLowerCase().endsWith('.pdf')),
         websites: urls.filter((url) => !url.toLowerCase().endsWith('.pdf')),
-        // Optional crawl-scope cap for websites (e.g. 1 = "this page only").
+        // Optional page cap for websites (e.g. 1 = "this page only").
         ...(maxLinks ? { max_links: maxLinks } : {}),
+        // How far link-following may go: 'path' | 'host' | 'domain'.
+        // Omitted means the backend default (the URL's own host).
+        ...(crawlScope ? { crawl_scope: crawlScope } : {}),
       })
       if (onProgress) {
         const interval = setInterval(() => {

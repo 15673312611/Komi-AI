@@ -30,6 +30,7 @@ from app.core.config import settings
 from app.models.knowledge_queue import ProcessingStage, QueueStatus
 from pydantic import model_validator
 
+from app.knowledge.crawl_scope import DEFAULT_CRAWL_SCOPE
 from app.knowledge.enhanced_website_reader import (
     EnhancedWebsiteReader,
     BotProtectionError,
@@ -55,6 +56,7 @@ class EnhancedWebsiteKnowledgeBase(AgentKnowledge):
     max_workers: int = settings.KB_MAX_WORKERS
     batch_size: int = settings.KB_BATCH_SIZE
     optimize_on: Optional[int] = settings.KB_OPTIMIZE_ON
+    crawl_scope: str = DEFAULT_CRAWL_SCOPE
     
     # These are not part of the model schema, but added as instance attributes
     _queue_item = None
@@ -92,6 +94,7 @@ class EnhancedWebsiteKnowledgeBase(AgentKnowledge):
                 timeout=self.timeout,
                 max_retries=self.max_retries,
                 max_workers=self.max_workers,
+                crawl_scope=self.crawl_scope,
                 verify_ssl=False  # Disable SSL verification to handle self-signed/invalid certificates
             )
         else:

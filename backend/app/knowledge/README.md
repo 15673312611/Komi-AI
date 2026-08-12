@@ -105,6 +105,20 @@ The `EnhancedWebsiteReader` and `EnhancedWebsiteKnowledgeBase` classes offer sev
 - **timeout**: HTTP request timeout in seconds (default: 30)
 - **max_retries**: Maximum number of retry attempts for failed requests (default: 3)
 - **max_workers**: Number of parallel workers for crawling and embedding (default: 10)
+- **crawl_scope**: How far link-following may wander from the starting URL (default: `host`)
+  - `host` — pages on the starting URL's own host only (`www.` and the bare host count as one host)
+  - `path` — that host, restricted to the starting URL's path prefix (e.g. only `/hc/…`)
+  - `domain` — every host on the registrable domain, so a `help.example.com` crawl also
+    walks `www.example.com`, `example.com/blog/…` and other subdomains
+  Only `http`/`https` links are ever followed — `mailto:`, `tel:` and friends are not pages.
+
+Content stored by earlier, wider crawls is cleaned up in two steps:
+
+- Pages that were never pages (mangled `https://mailto:a@example.com/…` URLs) are deleted
+  automatically by the `purge_mangled_crawl_pages_001` migration.
+- Real pages that are simply outside the new scope (a marketing site pulled in from a
+  help-center seed) are left alone; `scripts/prune_offsite_pages.py` reports them per
+  source and deletes them only with `--apply`.
 - **batch_size**: Size of document batches for database operations (default: 20)
 - **blacklist_tags**: HTML tags to remove before content extraction (scripts, styles, etc.)
 - **common_content_tags**: HTML tags likely to contain main content

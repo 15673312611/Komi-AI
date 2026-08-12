@@ -20,6 +20,7 @@ from agno.vectordb.pgvector import PgVector, SearchType
 from app.knowledge.optimized_pgvector import OptimizedPgVector
 from app.core.config import settings
 from app.core.logger import get_logger
+from app.knowledge.crawl_scope import DEFAULT_CRAWL_SCOPE
 from app.knowledge.enhanced_website_kb import EnhancedWebsiteKnowledgeBase
 from app.knowledge.enhanced_website_reader import EnhancedWebsiteReader
 from app.knowledge.sitemap_reader import SitemapReader
@@ -447,8 +448,11 @@ class KnowledgeManager:
                         ProcessingStage.CRAWLING
                     )
                     
-                    max_links = queue_item.queue_metadata.get(
-                        'max_links', settings.KB_MAX_LINKS) if queue_item.queue_metadata else settings.KB_MAX_LINKS
+                    metadata = queue_item.queue_metadata or {}
+                    max_links = metadata.get('max_links', settings.KB_MAX_LINKS)
+                    # How far link-following may wander from the seed URL; older
+                    # queue items carry no scope and get the default (seed host).
+                    crawl_scope = metadata.get('crawl_scope') or DEFAULT_CRAWL_SCOPE
 
                     # Use EnhancedWebsiteReader for all website crawling
                     logger.info(f"Using EnhancedWebsiteReader for queue item: {queue_item.source}")
@@ -459,13 +463,15 @@ class KnowledgeManager:
                         timeout=settings.KB_TIMEOUT,
                         max_retries=settings.KB_MAX_RETRIES,
                         max_workers=settings.KB_MAX_WORKERS,
+                        crawl_scope=crawl_scope,
                         verify_ssl=False  # Disable SSL verification to support websites with invalid/self-signed certificates
                     )
-                    
+
                     # Process the website - pass queue item and repo for URL tracking
                     knowledge_base = EnhancedWebsiteKnowledgeBase(
                         urls=[queue_item.source],
                         max_links=max_links,
+                        crawl_scope=crawl_scope,
                         vector_db=self.vector_db,
                         reader=reader
                     )
