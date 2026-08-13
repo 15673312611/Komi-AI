@@ -39,6 +39,7 @@ class AgentBase(BaseModel):
     is_active: bool = True
     is_default: bool = False
     transfer_to_human: bool = False
+    ai_replies_enabled: bool = True
     ask_for_rating: bool = False
     handoff_collect_email: bool = True
     handoff_collect_name: bool = True
@@ -78,6 +79,7 @@ class AgentUpdate(BaseModel):
     instructions: Optional[List[str]] = None
     is_active: Optional[bool] = None
     transfer_to_human: Optional[bool] = None
+    ai_replies_enabled: Optional[bool] = None
     ask_for_rating: Optional[bool] = None
     handoff_collect_email: Optional[bool] = None
     handoff_collect_name: Optional[bool] = None
@@ -130,6 +132,7 @@ class AgentResponse(BaseModel):
     organization_id: UUID
     knowledge: List[AgentKnowledge] = []
     transfer_to_human: bool = False
+    ai_replies_enabled: bool = True
     ask_for_rating: bool = False
     handoff_collect_email: bool = True
     handoff_collect_name: bool = True

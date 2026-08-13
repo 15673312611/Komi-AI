@@ -26,7 +26,8 @@ import { permissionChecks } from '@/utils/permissions'
 import { canRequestRating, endChatMessage as endChatMessageFor } from '@/utils/endChat'
 import { getInitials } from '@/utils/text'
 import type { Teammate } from '@/services/users'
-import { canTakeOverChat } from '@/utils/chatState'
+import { canTakeOverChat, chatAssignee, chatHandler } from '@/utils/chatState'
+import { routeChatToHuman } from '@/utils/chatActions'
 
 const canViewTickets = permissionChecks.canViewTickets()
 
@@ -69,13 +70,33 @@ const canTakeOver = computed(
   () => canTakeOverChat(props.chatInfo) && permissionChecks.canTakeOverChats()
 )
 
+// Only worth offering while the AI still has it: once a chat is queued or
+// claimed there is no AI left to stop.
+const canRouteToHuman = computed(
+  () => chatHandler(props.chatInfo, currentUserId).kind === 'ai'
+    && permissionChecks.canTakeOverChats()
+)
+
 const canEndChat = computed(() => {
   if (!props.chatInfo) return false
   return (
-    props.chatInfo.status !== 'closed' && 
+    props.chatInfo.status !== 'closed' &&
     props.chatInfo.user_id === currentUserId
   )
 })
+
+const handleRouteToHuman = async () => {
+  if (!props.chatInfo) return
+  try {
+    actionLoading.value = true
+    const updated = await routeChatToHuman(props.chatInfo.session_id)
+    if (!updated) return
+    emit('chatUpdated', updated)
+    emit('refresh')
+  } finally {
+    actionLoading.value = false
+  }
+}
 
 const handleTakeover = async () => {
   if (!props.chatInfo) return
@@ -187,15 +208,12 @@ const cancelEndChat = () => {
   showEndChatConfirm.value = false
 }
 
-// Helper function to get user name by ID
-const getUserNameById = (userId: string | null): string => {
-  if (!userId) {
-    // If no user_id, use agent name from chat detail or fallback to 'AI Agent'
-    return props.chatInfo?.agent?.name || 'AI Agent'
-  }
-  const user = props.users.find(u => u.id === userId)
-  return user?.full_name || 'Assigned teammate'
-}
+// Who holds the chat, sharing chatAssignee with the inbox badge and the chat
+// pane so all three agree. Only the unassigned wording is panel-specific: it
+// names the AI agent rather than saying a flat "AI".
+const assignedTo = computed(
+  () => chatAssignee(props.chatInfo, currentUserId) || props.chatInfo?.agent?.name || 'AI Agent'
+)
 
 // Helper function to format date
 const formatDate = (dateString: string): string => {
@@ -299,7 +317,7 @@ const confirmReassign = async () => {
         <h4>Assignment</h4>
         <div class="info-item">
           <span class="label">Assigned to:</span>
-          <span class="value">{{ getUserNameById(chatInfo.user_id) }}</span>
+          <span class="value">{{ assignedTo }}</span>
         </div>
       </div>
       
@@ -345,7 +363,18 @@ const confirmReassign = async () => {
             </svg>
             {{ actionLoading ? 'Taking over...' : 'Take Over Chat' }}
           </button>
-          
+
+          <!-- Stops the AI without making the chat yours. -->
+          <button
+            v-if="canRouteToHuman"
+            class="action-btn"
+            :disabled="actionLoading"
+            @click="handleRouteToHuman"
+          >
+            <font-awesome-icon icon="fa-solid fa-user-group" />
+            Hand to My Team
+          </button>
+
           <button 
             v-if="canEndChat"
             class="action-btn end-chat-btn"

@@ -54,6 +54,12 @@ export const chatService = {
     return response.data
   },
 
+  /** Stop the AI on this chat and queue it for the team, without claiming it. */
+  async routeToHuman(sessionId: string): Promise<ChatDetail> {
+    const response = await api.post(`/sessions/${sessionId}/route-to-human`)
+    return response.data as ChatDetail
+  },
+
   async reassignChat(sessionId: string, toUserId: string) {
     const response = await api.post(`/sessions/${sessionId}/reassign`, null, { params: { to_user_id: toUserId } })
     return response.data as ChatDetail

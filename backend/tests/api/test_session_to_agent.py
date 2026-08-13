@@ -719,3 +719,158 @@ def test_reassign_chat_no_permission(client_with_error_mock, db, regular_user,
         app.dependency_overrides[get_current_user] = lambda: user_with_manage_chats_permission
 
     assert response.status_code == status.HTTP_403_FORBIDDEN
+
+
+def _route_to_human(client, session):
+    return client.post(f"/api/v1/session-to-agent/{session.session_id}/route-to-human")
+
+
+def test_route_to_human_queues_the_chat_without_claiming_it(
+    client_with_error_mock, db, user_with_manage_chats_permission, create_chat_session
+):
+    """The AI stops answering, but the chat stays claimable by anyone."""
+    from unittest.mock import AsyncMock
+    session = create_chat_session()
+
+    with patch('app.services.human_routing.notify_chat_event', new=AsyncMock()) as mock_notify:
+        response = _route_to_human(client_with_error_mock, session)
+
+    assert response.status_code == status.HTTP_200_OK
+    db.refresh(session)
+    assert session.status == SessionStatus.TRANSFERRED
+    # Not claimed: every backend guard reads "a human has this" off user_id.
+    assert session.user_id is None
+    assert mock_notify.called
+
+
+def test_route_to_human_is_idempotent(
+    client_with_error_mock, db, user_with_manage_chats_permission, create_chat_session
+):
+    """A second click must not re-notify the team."""
+    from unittest.mock import AsyncMock
+    session = create_chat_session()
+
+    with patch('app.services.human_routing.notify_chat_event', new=AsyncMock()):
+        assert _route_to_human(client_with_error_mock, session).status_code == status.HTTP_200_OK
+
+    with patch('app.services.human_routing.notify_chat_event', new=AsyncMock()) as mock_notify:
+        response = _route_to_human(client_with_error_mock, session)
+
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    assert not mock_notify.called
+
+
+def test_route_to_human_refuses_a_chat_a_human_holds(
+    client_with_error_mock, db, user_with_manage_chats_permission, create_chat_session
+):
+    """Someone is already on it — there is no AI to stop."""
+    session = _assigned_session(db, create_chat_session, user_with_manage_chats_permission)
+
+    response = _route_to_human(client_with_error_mock, session)
+
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    db.refresh(session)
+    assert session.user_id == user_with_manage_chats_permission.id
+
+
+def test_route_to_human_refuses_a_closed_chat(
+    client_with_error_mock, db, user_with_manage_chats_permission, create_chat_session
+):
+    session = create_chat_session()
+    session.status = SessionStatus.CLOSED
+    db.commit()
+
+    response = _route_to_human(client_with_error_mock, session)
+
+    assert response.status_code == status.HTTP_400_BAD_REQUEST
+    db.refresh(session)
+    assert session.status == SessionStatus.CLOSED
+
+
+def test_route_to_human_no_permission(
+    client_with_error_mock, db, regular_user, user_with_manage_chats_permission,
+    create_chat_session
+):
+    session = create_chat_session()
+
+    async def override_get_current_user():
+        return regular_user
+
+    app.dependency_overrides[get_current_user] = override_get_current_user
+    try:
+        response = _route_to_human(client_with_error_mock, session)
+    finally:
+        app.dependency_overrides[get_current_user] = lambda: user_with_manage_chats_permission
+
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+    db.refresh(session)
+    assert session.status == SessionStatus.OPEN
+
+
+def test_route_to_human_other_org_session(
+    client_with_error_mock, db, other_org_user, user_with_manage_chats_permission,
+    create_chat_session
+):
+    """A guessable session id must not let an outsider touch the chat."""
+    session = create_chat_session()
+
+    async def override_get_current_user():
+        return other_org_user
+
+    app.dependency_overrides[get_current_user] = override_get_current_user
+    try:
+        response = _route_to_human(client_with_error_mock, session)
+    finally:
+        app.dependency_overrides[get_current_user] = lambda: user_with_manage_chats_permission
+
+    assert response.status_code == status.HTTP_404_NOT_FOUND
+    db.refresh(session)
+    assert session.status == SessionStatus.OPEN
+
+
+def test_takeover_notifies_a_channel_customer_but_not_the_widget(
+    client_with_error_mock, db, user_with_manage_chats_permission, create_chat_session
+):
+    """The widget shows handover in its own UI; only channels need telling.
+
+    Both cases share one helper now, so this pins the skip in place.
+    """
+    from unittest.mock import AsyncMock
+    from app.services.message_delivery import DeliveryResult
+
+    web_session = create_chat_session()
+    channel_session = create_chat_session()
+    channel_session.channel = 'telegram'
+    db.commit()
+
+    with patch('app.services.human_routing.deliver_to_customer',
+               new=AsyncMock(return_value=DeliveryResult(ok=True))) as mock_deliver:
+        client_with_error_mock.post(
+            f"/api/v1/session-to-agent/{web_session.session_id}/takeover")
+        assert not mock_deliver.called
+
+        client_with_error_mock.post(
+            f"/api/v1/session-to-agent/{channel_session.session_id}/takeover")
+        assert mock_deliver.called
+
+
+def test_route_to_human_tells_a_channel_customer_someone_is_coming(
+    client_with_error_mock, db, user_with_manage_chats_permission, create_chat_session
+):
+    """Queued is not the same as connected — the holding line says so."""
+    from unittest.mock import AsyncMock
+    from app.services.human_routing import QUEUED_FOR_HUMAN_NOTICE
+    from app.services.message_delivery import DeliveryResult
+
+    session = create_chat_session()
+    session.channel = 'telegram'
+    db.commit()
+
+    with patch('app.services.human_routing.notify_chat_event', new=AsyncMock()), \
+         patch('app.services.human_routing.deliver_to_customer',
+               new=AsyncMock(return_value=DeliveryResult(ok=True))) as mock_deliver:
+        response = _route_to_human(client_with_error_mock, session)
+
+    assert response.status_code == status.HTTP_200_OK
+    assert mock_deliver.called
+    assert mock_deliver.call_args.args[2]['message'] == QUEUED_FOR_HUMAN_NOTICE

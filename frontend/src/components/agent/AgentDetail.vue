@@ -751,6 +751,7 @@ const handleSaveAgentFromTab = async (data: any) => {
             guardrail_prompt: data.guardrailPrompt,
             guardrail_enabled: data.guardrailEnabled,
             transfer_to_human: data.transferToHuman,
+            ai_replies_enabled: data.aiRepliesEnabled,
             ask_for_rating: data.askForRating,
             handoff_collect_email: data.handoffCollectEmail,
             handoff_collect_name: data.handoffCollectName
@@ -1077,6 +1078,7 @@ onMounted(async () => {
                                 :guardrail-prompt="agentData.guardrail_prompt"
                                 :guardrail-enabled="agentData.guardrail_enabled ?? true"
                                 :transfer-to-human="agentData.transfer_to_human"
+                                :ai-replies-enabled="agentData.ai_replies_enabled ?? true"
                                 :ask-for-rating="agentData.ask_for_rating"
                                 :handoff-collect-email="agentData.handoff_collect_email"
                                 :handoff-collect-name="agentData.handoff_collect_name"

@@ -113,6 +113,10 @@ class Agent(Base):
     organization_id = Column(UUID(as_uuid=True), ForeignKey("organizations.id"))
     is_default = Column(Boolean, default=False)
     transfer_to_human = Column(Boolean, default=False, nullable=False)
+    # Off means the AI never answers on this agent: every chat is queued for the
+    # team from the customer's first message. Distinct from transfer_to_human,
+    # which only lets the AI hand over when it decides to.
+    ai_replies_enabled = Column(Boolean, default=True, nullable=False, server_default="true")
     ask_for_rating = Column(Boolean, default=True, nullable=True)
     # On human handoff, optionally collect the visitor's contact details
     handoff_collect_email = Column(Boolean, default=True, nullable=False)

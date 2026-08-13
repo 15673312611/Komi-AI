@@ -32,7 +32,10 @@ class CustomerInfo(BaseModel):
 class AgentInfo(BaseModel):
     id: UUID
     name: str
-    display_name: Optional[str]    
+    display_name: Optional[str]
+    # False means this agent never answers with AI, so an unclaimed chat of its
+    # is waiting for a person rather than being handled.
+    ai_replies_enabled: bool = True
 
 class TransferReasonType(str, Enum):
     UNABLE_TO_ANSWER = "UNABLE_TO_ANSWER"
@@ -172,6 +175,10 @@ class ChatOverviewResponse(BaseModel):
     status: SessionStatus
     channel: str = 'web'
     group_id: Optional[UUID]
+    # The human agent handling the chat, if one has taken it over. None means
+    # the AI still has it — the inbox needs this to label the row.
+    user_id: Optional[UUID] = None
+    user_name: Optional[str] = None
     session_id: UUID
 
 class ChatDetailResponse(BaseModel):

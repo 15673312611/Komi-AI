@@ -46,6 +46,11 @@ from app.agents.transfer_agent import get_agent_availability_response
 from app.repositories.agent import AgentRepository
 from app.services.chat_notifications import notify_new_chat
 from app.services.contact_capture import retain_unstored_email
+from app.services.human_routing import (
+    HUMAN_ONLY_ACK,
+    QUEUED_FOR_HUMAN_NOTICE,
+    notify_customer,
+)
 from app.services.lead_capture import record_lead_from_response
 from app.services.message_delivery import deliver_to_customer
 from app.repositories.rating import RatingRepository
@@ -269,6 +274,9 @@ async def widget_connect(sid, environ, auth):
             'overall_limit_per_ip': overall_limit_per_ip,
             'requests_per_sec': requests_per_sec,
             'message_limit_reached': message_limit_reached,
+            # Cached like use_workflow: read once per connection so the
+            # human-only check costs no query per message.
+            'ai_replies_enabled': agent.ai_replies_enabled if agent else True,
             'use_workflow': agent.use_workflow if agent else False,
             'active_workflow_id': agent.active_workflow_id if agent else None,
             'source': source,
@@ -461,11 +469,21 @@ async def handle_widget_chat(sid, data):
         # The session opens when the widget connects, so the chat only really
         # starts on the customer's first message — notify there, not on connect,
         # or merely opening the chat window would ping the team.
-        if not ChatRepository(db).has_customer_messages(session_id):
+        is_first_customer_message = not ChatRepository(db).has_customer_messages(session_id)
+        if is_first_customer_message:
             await notify_new_chat(db, active_session)
 
+        # A human-only agent answers nothing: no model, no workflow, and no
+        # transfer either — the chat was never with the AI, so there is nothing
+        # to hand over. Every automated branch below is gated on this, leaving
+        # the message to fall through to the plain store-and-relay at the end,
+        # exactly like a chat a human already holds. notify_new_chat above has
+        # already told the team it is waiting.
+        # Older sessions predate the cached flag, so default to answering.
+        ai_replies_enabled = session.get('ai_replies_enabled', True)
+
         # Check if agent uses workflow and no human agent has taken over
-        if active_session.workflow_id and active_session.user_id is None:
+        if ai_replies_enabled and active_session.workflow_id and active_session.user_id is None:
             # Handle workflow chat using the dedicated service
             workflow_chat_service = WorkflowChatService(db)
             response = await workflow_chat_service.handle_workflow_chat(
@@ -496,7 +514,7 @@ async def handle_widget_chat(sid, data):
                     'request_rating': response.request_rating
                 }, room=session_id, namespace='/widget')
                 return
-        elif active_session.status == SessionStatus.OPEN and active_session.user_id is None: # open and user has not taken over
+        elif ai_replies_enabled and active_session.status == SessionStatus.OPEN and active_session.user_id is None: # open and user has not taken over
             logger.debug(f"Initializing chat agent for model {session['ai_config'].model_type}")
             # Initialize chat agent with async factory method for MCP tools support
             chat_agent = await ChatAgent.create_async(
@@ -551,16 +569,24 @@ async def handle_widget_chat(sid, data):
             chat_history = await chat_repo.get_session_history(session_id)
             jira_repo = JiraRepository(db)
             agent_data = jira_repo.get_agent_with_jira_config(session['agent_id']) if session['agent_id'] else None
-            availability_response = await get_agent_availability_response(
-                agent=agent_data,
-                customer_id=customer_id,
-                chat_history=chat_history,
-                db=db,
-                api_key=decrypt_api_key(session['ai_config'].encrypted_api_key),
-                model_name=session['ai_config'].model_name,
-                model_type=session['ai_config'].model_type,
-                session_id=session_id
-            )
+            if agent_data is not None and getattr(agent_data, 'groups', None):
+                availability_response = await get_agent_availability_response(
+                    agent=agent_data,
+                    customer_id=customer_id,
+                    chat_history=chat_history,
+                    db=db,
+                    api_key=decrypt_api_key(session['ai_config'].encrypted_api_key),
+                    model_name=session['ai_config'].model_name,
+                    model_type=session['ai_config'].model_type,
+                    session_id=session_id
+                )
+            else:
+                # No group queue configured. The availability agent apologises
+                # that it is "unable to transfer the chat", which is untrue
+                # here — the chat is queued and shows in the inbox as waiting.
+                # Only reachable now that a chat can be queued without a group:
+                # human-only agents, and Hand to my team.
+                availability_response = {"message": QUEUED_FOR_HUMAN_NOTICE}
 
                 # Create ChatResponse object
             response_content = ChatResponse(
@@ -747,6 +773,14 @@ async def handle_widget_chat(sid, data):
                 'timestamp': timestamp,
                 'attachments': attachments_data if attachments_data else None
             }, room=session_id, namespace='/agent')    
+
+            # Nothing is going to answer this on its own, so acknowledge once —
+            # otherwise the visitor sends into what looks like a dead widget.
+            # Only on the opening message: after that the thread is visibly a
+            # conversation with people in it.
+            if is_first_customer_message and not ai_replies_enabled:
+                await notify_customer(db, active_session, HUMAN_ONLY_ACK,
+                                      channels_only=False)
 
             return # don't do anything if the session is closed or the user has already taken over
         

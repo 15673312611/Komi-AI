@@ -246,6 +246,66 @@ def test_get_recent_chats_with_view_all(
     assert chats[0]["session_id"] == str(test_chat_session.session_id)
     assert chats[0]["agent"]["id"] == str(test_chat_session.agent_id)
 
+def test_get_recent_chats_includes_human_handler(
+    client,
+    db,
+    test_user,
+    test_chat_session,
+    test_chat_messages
+):
+    """A chat a human holds reports that human, so the inbox can label the row."""
+    response = client.get("/api/chats/recent")
+    assert response.status_code == 200
+    chats = response.json()
+    # Three messages must still collapse into one row: the handler columns are
+    # functionally dependent on the session, so grouping cannot multiply rows.
+    assert len(chats) == 1
+    assert chats[0]["user_id"] == str(test_user.id)
+    assert chats[0]["user_name"] == test_user.full_name
+
+
+def test_get_recent_chats_ai_handled_has_no_handler(
+    client,
+    db,
+    test_user,
+    test_chat_session,
+    test_chat_messages
+):
+    """No assignee means the AI still has it — both handler fields stay null."""
+    test_chat_session.user_id = None
+    db.commit()
+
+    response = client.get("/api/chats/recent")
+    assert response.status_code == 200
+    chats = response.json()
+    assert len(chats) == 1
+    assert chats[0]["user_id"] is None
+    assert chats[0]["user_name"] is None
+
+
+def test_get_recent_chats_reports_a_human_only_agent(
+    client,
+    db,
+    test_user,
+    test_agent,
+    test_chat_session,
+    test_chat_messages
+):
+    """The row needs the agent's flag to say "waiting" rather than "AI"."""
+    response = client.get("/api/chats/recent")
+    assert response.status_code == 200
+    assert response.json()[0]["agent"]["ai_replies_enabled"] is True
+
+    test_agent.ai_replies_enabled = False
+    db.commit()
+
+    response = client.get("/api/chats/recent")
+    assert response.status_code == 200
+    chats = response.json()
+    assert len(chats) == 1
+    assert chats[0]["agent"]["ai_replies_enabled"] is False
+
+
 def test_get_recent_chats_with_view_assigned(
     client,
     db,

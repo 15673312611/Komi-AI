@@ -28,6 +28,7 @@ from app.core.security import encrypt_api_key
 from uuid import UUID, uuid4
 from tests.conftest import engine, TestingSessionLocal, create_tables, Base
 from app.models.session_to_agent import SessionStatus, SessionToAgent
+from app.repositories.chat import ChatRepository
 from app.models.workflow import Workflow
 from app.models.workflow_node import WorkflowNode, NodeType
 from app.models.workflow_connection import WorkflowConnection
@@ -338,6 +339,94 @@ async def test_widget_chat_message(db, test_widget, test_ai_config, test_custome
     kwargs = call_args[1]
     assert kwargs['room'] == str(session_id), f"Expected room={session_id} but got {kwargs['room']}"
     assert kwargs['namespace'] == '/widget', f"Expected namespace='/widget' but got {kwargs['namespace']}"
+
+@pytest.mark.asyncio
+async def test_human_only_agent_waits_instead_of_answering(
+    db, test_widget, test_ai_config, test_customer, mock_sio, monkeypatch
+):
+    """AI switched off: no model, and no transfer flow either.
+
+    The chat was never with the AI, so there is nothing to hand over. It just
+    waits in the inbox — no "I'm transferring you" line and no handoff contact
+    form. notify_new_chat has already told the team it is there.
+    """
+    from app.api import widget_chat
+    from app.services import message_delivery
+    from app.services.human_routing import HUMAN_ONLY_ACK
+
+    monkeypatch.setattr(widget_chat, "sio", mock_sio)
+    monkeypatch.setattr(message_delivery, "sio", mock_sio)
+    monkeypatch.setattr(widget_chat, "get_db", lambda: iter([db]))
+
+    session_id = uuid4()
+    conversation_token = "test_token"
+    monkeypatch.setattr(
+        widget_chat,
+        "authenticate_socket_conversation_token",
+        AsyncMock(return_value=(str(test_widget.id), str(test_widget.organization_id),
+                                str(test_customer.id), conversation_token))
+    )
+
+    from app.repositories.session_to_agent import SessionToAgentRepository
+    SessionToAgentRepository(db).create_session(
+        session_id=session_id,
+        agent_id=test_widget.agent_id,
+        customer_id=test_customer.id,
+        organization_id=test_widget.organization_id
+    )
+
+    mock_sio.get_session.return_value = {
+        "widget_id": str(test_widget.id),
+        "org_id": str(test_widget.organization_id),
+        "agent_id": str(test_widget.agent_id),
+        "customer_id": str(test_customer.id),
+        "session_id": str(session_id),
+        "ai_config": test_ai_config,
+        "conversation_token": conversation_token,
+        # What widget_connect caches for a human-only agent
+        "ai_replies_enabled": False,
+    }
+    mock_sio.get_environ.return_value = {}
+
+    mock_session = MagicMock()
+    mock_session.session_id = session_id
+    mock_session.status = SessionStatus.OPEN
+    mock_session.user_id = None
+    mock_session.group_id = None
+    mock_session.workflow_id = None
+    mock_session.channel = 'web'
+    mock_session.agent_id = test_widget.agent_id
+    mock_session.organization_id = test_widget.organization_id
+    mock_session.customer_id = test_customer.id
+    monkeypatch.setattr(
+        SessionToAgentRepository,
+        "get_active_customer_session",
+        lambda self, customer_id, agent_id=None: mock_session
+    )
+
+    with patch("app.api.widget_chat.ChatAgent.create_async", AsyncMock()) as create_async, \
+         patch("app.api.widget_chat.get_agent_availability_response", AsyncMock()) as availability:
+        await widget_chat.handle_widget_chat("test_sid", {"message": "hello"})
+        create_async.assert_not_awaited()
+        # No transfer flow: this is what produced the "transferring you to a
+        # qualified agent" line and the contact form.
+        availability.assert_not_awaited()
+
+    # Still a plain open chat nobody has picked up — not "transferred".
+    stored = SessionToAgentRepository(db).get_session(str(session_id))
+    assert stored.status == SessionStatus.OPEN
+    assert stored.user_id is None
+
+    # Their message reaches the dashboard so someone can pick it up...
+    events = [c[0][0] for c in mock_sio.emit.call_args_list]
+    assert 'chat_reply' in events
+
+    # ...and they get one plain acknowledgement rather than an endless typing
+    # indicator over an empty thread.
+    messages = await ChatRepository(db).get_session_history(str(session_id))
+    assert [m.message_type for m in messages] == ['user', 'bot']
+    assert messages[1].message == HUMAN_ONLY_ACK
+
 
 @pytest.mark.asyncio
 async def test_widget_chat_history(db, test_widget, test_customer, mock_sio, monkeypatch):

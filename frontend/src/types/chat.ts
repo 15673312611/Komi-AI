@@ -70,12 +70,17 @@ export interface Conversation {
     id: string
     name: string
     display_name: string | null
+    /** False when this agent never answers with AI — its chats wait for a person. */
+    ai_replies_enabled?: boolean
   }
   last_message: string
   updated_at: string
   message_count: number
   session_id: string
   user_id: string | null
+  /** Human agent holding the chat; absent while the AI still has it. */
+  user_name?: string | null
+  group_id?: string | null
   status: 'open' | 'closed' | 'transferred'
   channel?: string
   attributes?: {
@@ -100,6 +105,8 @@ export interface ChatDetail {
     id: string
     name: string
     display_name: string | null
+    /** False when this agent never answers with AI — its chats wait for a person. */
+    ai_replies_enabled?: boolean
   }
   session_id: string
   messages: Message[]

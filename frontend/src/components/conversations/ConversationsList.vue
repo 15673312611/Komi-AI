@@ -18,8 +18,11 @@ limitations under the License.
 import type { Conversation, ChatDetail } from '@/types/chat'
 import ConversationChat from '@/components/conversations/ConversationChat.vue'
 import ChannelBadge from '@/components/common/ChannelBadge.vue'
+import HandlerBadge from '@/components/conversations/HandlerBadge.vue'
 import { useConversationsList } from '@/composables/useConversationsList'
 import { useBreakpoint } from '@/composables/useBreakpoint'
+import { chatHandler } from '@/utils/chatState'
+import { userService } from '@/services/user'
 import { ref, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 
 const props = defineProps<{
@@ -47,6 +50,14 @@ const emit = defineEmits<{
 }>()
 
 const { isMobile } = useBreakpoint()
+const currentUserId = userService.getUserId()
+
+// The preview used to be prefixed with the AI agent's name unconditionally,
+// which read as "the bot said this" even on a chat a colleague had taken over.
+const previewPrefix = (conv: Conversation) => {
+  const handler = chatHandler(conv, currentUserId)
+  return handler.kind === 'human' ? handler.label : conv.agent.name
+}
 
 const {
   selectedChat,
@@ -273,7 +284,7 @@ onBeforeUnmount(() => {
             <span class="timestamp">{{ conv.timeAgo }}</span>
           </div>
           <div class="conversation-preview">
-            <span class="agent-name">{{ conv.agent.name }}:</span>
+            <span class="agent-name">{{ previewPrefix(conv) }}:</span>
             <!-- Product message preview -->
             <template v-if="conv.message_type === 'product' && conv.shopify_output?.products?.length">
               <p class="last-message product-preview">
@@ -290,8 +301,11 @@ onBeforeUnmount(() => {
             </div>
           </div>
           <div class="message-count">{{ conv.message_count }} messages</div>
-          <div class="conversation-status" :class="conv.status">
-            {{ conv.status }}
+          <div class="conversation-footer">
+            <div class="conversation-status" :class="conv.status">
+              {{ conv.status }}
+            </div>
+            <HandlerBadge :chat="conv" :current-user-id="currentUserId" />
           </div>
         </div>
         
@@ -447,6 +461,16 @@ onBeforeUnmount(() => {
   border-radius: 3px;
 }
 
+/* Status and handler sit on one line and wrap together on a narrow row. */
+.conversation-footer {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+  min-width: 0;
+}
+
 .conversation-status {
   font-size: 10px;
   font-family: var(--font-mono);
@@ -454,7 +478,6 @@ onBeforeUnmount(() => {
   padding: 2px 7px;
   border-radius: var(--radius-full);
   text-transform: uppercase;
-  margin-top: 4px;
   display: inline-block;
   font-weight: 600;
 }

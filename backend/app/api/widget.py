@@ -152,7 +152,8 @@ async def get_widget_ui(
             customer_id=customer_id,
             initial_token=token,
             agent_workflow=bool(agent.use_workflow and agent.active_workflow_id),
-            allow_attachments=agent.allow_attachments
+            allow_attachments=agent.allow_attachments,
+            ai_replies_enabled=agent.ai_replies_enabled
         ))
     
     # Token auth NOT required - allow anonymous access
@@ -165,7 +166,8 @@ async def get_widget_ui(
             customer_id=customer_id,
             initial_token=token,
             agent_workflow=bool(agent.use_workflow and agent.active_workflow_id),
-            allow_attachments=agent.allow_attachments
+            allow_attachments=agent.allow_attachments,
+            ai_replies_enabled=agent.ai_replies_enabled
         ))
 
     # No valid token - create new one for anonymous access
@@ -184,10 +186,11 @@ async def get_widget_ui(
         customer_id=customer_id,
         initial_token=token,
         agent_workflow=bool(agent.use_workflow and agent.active_workflow_id),
-        allow_attachments=agent.allow_attachments
+        allow_attachments=agent.allow_attachments,
+        ai_replies_enabled=agent.ai_replies_enabled
     ))
 
-async def get_widget_html(widget_id: str, agent_name: str, agent_customization: dict, customer_id: Optional[str] = None, initial_token: Optional[str] = None, agent_workflow: bool = False, allow_attachments: bool = False) -> str:
+async def get_widget_html(widget_id: str, agent_name: str, agent_customization: dict, customer_id: Optional[str] = None, initial_token: Optional[str] = None, agent_workflow: bool = False, allow_attachments: bool = False, ai_replies_enabled: bool = True) -> str:
     """Generate widget HTML with embedded data"""
     import html
     widget_url = settings.VITE_WIDGET_URL
@@ -218,7 +221,9 @@ async def get_widget_html(widget_id: str, agent_name: str, agent_customization: 
             "quick_actions": agent_customization.quick_actions or [],
             "show_citations": agent_customization.show_citations,
             "collect_email": agent_customization.collect_email,
-            "show_ai_disclaimer": agent_customization.show_ai_disclaimer,
+            # A human-only agent never produces an AI reply, so disclosing one
+            # would be untrue — same reason the widget hides it after takeover.
+            "show_ai_disclaimer": agent_customization.show_ai_disclaimer and ai_replies_enabled,
             "allow_new_chat": agent_customization.allow_new_chat,
             "customization_metadata": agent_customization.customization_metadata or {}
         }
@@ -251,7 +256,8 @@ async def get_widget_html(widget_id: str, agent_name: str, agent_customization: 
                     initialToken: "{html.escape(initial_token or '')}",
                     customer: {{}},
                     workflow: {str(agent_workflow).lower()},
-                    allowAttachments: {str(allow_attachments).lower()}
+                    allowAttachments: {str(allow_attachments).lower()},
+                    aiRepliesEnabled: {str(ai_replies_enabled).lower()}
                 }};
             </script>
         </head>

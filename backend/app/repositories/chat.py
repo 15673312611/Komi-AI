@@ -347,9 +347,15 @@ class ChatRepository:
             Agent.id.label('agent_id'),
             Agent.name.label('agent_name'),
             Agent.display_name.label('agent_display_name'),
+            Agent.ai_replies_enabled.label('agent_ai_replies_enabled'),
             SessionToAgent.status.label('status'),
             SessionToAgent.channel.label('channel'),
             SessionToAgent.group_id.label('group_id'),
+            # Who is handling the chat. Without these the list cannot tell an
+            # AI-handled conversation from one a human has taken over — the
+            # detail view has always known, the overview never did.
+            SessionToAgent.user_id.label('user_id'),
+            User.full_name.label('user_name'),
             func.max(ChatHistory.created_at).label('updated_at'),
             func.count(ChatHistory.id).label('message_count'),
             SessionToAgent.session_id.label('session_id')
@@ -425,9 +431,12 @@ class ChatRepository:
             Agent.id,
             Agent.name,
             Agent.display_name,
+            Agent.ai_replies_enabled,
             SessionToAgent.status,
             SessionToAgent.channel,
             SessionToAgent.group_id,
+            SessionToAgent.user_id,
+            User.full_name,
             SessionToAgent.session_id
         ).order_by(
             # Create a custom ordering to prioritize transferred conversations
@@ -454,7 +463,8 @@ class ChatRepository:
             'agent': {
                 'id': r.agent_id,
                 'name': r.agent_name,
-                'display_name': r.agent_display_name
+                'display_name': r.agent_display_name,
+                'ai_replies_enabled': r.agent_ai_replies_enabled
             },
             'last_message': last_messages.get(r.session_id),
             'updated_at': r.updated_at,
@@ -462,6 +472,8 @@ class ChatRepository:
             'status': r.status,
             'channel': r.channel,
             'group_id': str(r.group_id) if r.group_id else None,
+            'user_id': r.user_id,
+            'user_name': r.user_name,
             'session_id': r.session_id
         } for r in results]
 
@@ -524,6 +536,7 @@ class ChatRepository:
                 Agent.id.label('agent_id'),
                 Agent.name.label('agent_name'),
                 Agent.display_name.label('agent_display_name'),
+                Agent.ai_replies_enabled.label('agent_ai_replies_enabled'),
                 SessionToAgent.status.label('status'),
                 SessionToAgent.channel.label('channel'),
                 SessionToAgent.group_id.label('group_id'),
@@ -553,6 +566,7 @@ class ChatRepository:
                 Agent.id,
                 Agent.name,
                 Agent.display_name,
+                Agent.ai_replies_enabled,
                 SessionToAgent.status,
                 SessionToAgent.channel,
                 SessionToAgent.group_id,
@@ -606,7 +620,8 @@ class ChatRepository:
             'agent': {
                 'id': result.agent_id,
                 'name': result.agent_name,
-                'display_name': result.agent_display_name
+                'display_name': result.agent_display_name,
+                'ai_replies_enabled': result.agent_ai_replies_enabled
             },
             'status': result.status,
             'channel': result.channel,

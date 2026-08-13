@@ -43,6 +43,10 @@ const props = defineProps({
     type: Boolean,
     required: true
   },
+  aiRepliesEnabled: {
+    type: Boolean,
+    default: true
+  },
   askForRating: {
     type: Boolean,
     required: true
@@ -131,6 +135,7 @@ const isGuardrailDefault = computed(() => {
   return !text || text === defaultGuardrailPrompt.value.trim()
 })
 const localTransferToHuman = ref(props.transferToHuman)
+const localAiRepliesEnabled = ref(props.aiRepliesEnabled)
 const localAskForRating = ref(props.askForRating)
 const localHandoffCollectEmail = ref(props.handoffCollectEmail)
 const localHandoffCollectName = ref(props.handoffCollectName)
@@ -163,6 +168,10 @@ watch(() => props.instructions, (newValue) => {
 
 watch(() => props.transferToHuman, (newValue) => {
   localTransferToHuman.value = newValue
+})
+
+watch(() => props.aiRepliesEnabled, (newValue) => {
+  localAiRepliesEnabled.value = newValue
 })
 
 watch(() => props.askForRating, (newValue) => {
@@ -240,6 +249,7 @@ const handleSave = () => {
     guardrailPrompt: isGuardrailDefault.value ? null : localGuardrailPrompt.value.trim(),
     guardrailEnabled: localGuardrailEnabled.value,
     transferToHuman: localTransferToHuman.value,
+    aiRepliesEnabled: localAiRepliesEnabled.value,
     askForRating: localAskForRating.value,
     handoffCollectEmail: localHandoffCollectEmail.value,
     handoffCollectName: localHandoffCollectName.value,
@@ -344,12 +354,31 @@ const handleSave = () => {
     <!-- Transfer and Rating Section -->
     <section class="detail-section">
       <div class="transfer-section">
-        <!-- Transfer toggle -->
+        <!-- Whether the AI answers at all. Off makes every other automated
+             setting below moot, so they are hidden rather than left to
+             contradict it. -->
         <div class="transfer-toggle">
+          <div class="toggle-header">
+            <h4 class="section-title">Let AI Answer</h4>
+            <label class="switch">
+              <input type="checkbox"
+                v-model="localAiRepliesEnabled"
+                :disabled="!isEditing"
+              >
+              <span class="slider"></span>
+            </label>
+          </div>
+          <p class="helper-text">
+            Turn this off to send every chat straight to your team. The AI won't reply.
+          </p>
+        </div>
+
+        <!-- Transfer toggle -->
+        <div v-if="localAiRepliesEnabled" class="transfer-toggle">
           <div class="toggle-header">
             <h4 class="section-title">Transfer to Human</h4>
             <label class="switch" v-tooltip="tooltipContent">
-              <input type="checkbox" 
+              <input type="checkbox"
                 v-model="localTransferToHuman"
                 :disabled="!isEditing"
               >
@@ -360,7 +389,7 @@ const handleSave = () => {
         </div>
 
         <!-- Collect contact details at handoff -->
-        <div v-if="localTransferToHuman" class="handoff-collect">
+        <div v-if="localAiRepliesEnabled && localTransferToHuman" class="handoff-collect">
           <div class="toggle-header">
             <span class="subsection-title">Ask for email at handoff</span>
             <label class="switch">
@@ -379,7 +408,9 @@ const handleSave = () => {
         </div>
 
         <!-- Group selection -->
-        <div v-if="localTransferToHuman" class="transfer-groups">
+        <!-- Also shown for a human-only agent: this is the queue its chats
+             land in, so it is the one setting that still matters. -->
+        <div v-if="localTransferToHuman || !localAiRepliesEnabled" class="transfer-groups">
           <h4 class="subsection-title">Transfer Groups</h4>
           <p v-if="userGroups.length" class="helper-text">Select groups that can handle transferred chats</p>
           

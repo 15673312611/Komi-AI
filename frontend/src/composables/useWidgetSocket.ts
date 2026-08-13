@@ -208,6 +208,11 @@ export function useWidgetSocket() {
                 human_agent_profile_pic: data.profile_picture
             }
 
+            // Whatever we were waiting on, it is not coming: the bot is out of
+            // this conversation now. Without this the typing dots spin forever
+            // above the "joined the conversation" line.
+            loading.value = false
+
             // Call the callback if registered
             if (onTakeoverCallback) {
                 onTakeoverCallback(data)
@@ -486,8 +491,11 @@ export function useWidgetSocket() {
     const sendMessage = async (newMessage: string, email: string, files: Array<{content: string, filename: string, content_type: string, size: number}> = []) => {
         if (!socket || (!newMessage.trim() && files.length === 0)) return
         
-        if(!humanAgent.value.human_agent_name) 
-           loading.value = true
+        // Only wait when a bot reply is actually coming: not once a human has
+        // joined, and not at all for an agent whose AI is switched off.
+        if (!humanAgent.value.human_agent_name && window.__INITIAL_DATA__?.aiRepliesEnabled !== false) {
+            loading.value = true
+        }
         
         // Add user message to display with temporary blob URLs for images
         const userMessage: any = {

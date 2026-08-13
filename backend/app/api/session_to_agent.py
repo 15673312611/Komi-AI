@@ -19,16 +19,17 @@ from uuid import UUID
 from app.repositories.session_to_agent import SessionToAgentRepository
 from app.repositories.chat import ChatRepository
 from app.repositories.user import UserRepository
-from app.models.schemas.chat import ChatDetailResponse
 from app.core.socketio import sio
 from fastapi import APIRouter, HTTPException, Depends, status
 from sqlalchemy.orm import Session
 from app.core.logger import get_logger
 from app.models.user import User
+from app.models.session_to_agent import SessionStatus
 from app.core.auth import CHAT_MANAGE_PERMISSIONS, get_current_user, has_any_permission
 from app.database import get_db
 from app.services.chat_notifications import notify_chat_assigned
-from app.services.message_delivery import deliver_to_customer
+from app.services.human_routing import notify_customer, route_session_to_human
+from app.models.schemas.chat import ChatDetailResponse, TransferReasonType
 
 
 logger = get_logger(__name__)
@@ -50,30 +51,57 @@ def _is_uuid(value: str) -> bool:
 
 
 async def _notify_customer_of_handover(db: Session, session, user: User) -> None:
-    """Tell a channel customer a human joined, and record it in the thread.
-    Best-effort: a failed notice must never fail the takeover itself."""
-    if getattr(session, 'channel', None) in (None, 'web'):
-        return
-    try:
-        ChatRepository(db).create_message({
-            'message': HANDOVER_NOTICE,
-            'message_type': 'agent',
-            'session_id': str(session.session_id),
-            'organization_id': str(session.organization_id),
-            'agent_id': str(session.agent_id) if session.agent_id else None,
-            'customer_id': str(session.customer_id) if session.customer_id else None,
-            'user_id': str(user.id),
-            'attributes': {'channel': session.channel, 'handover_notice': True},
-        })
-        result = await deliver_to_customer(db, session, {
-            'message': HANDOVER_NOTICE,
-            'type': 'chat_response',
-        })
-        if not result.ok:
-            logger.warning(
-                f"Handover notice not delivered on {session.channel}: {result.reason}")
-    except Exception as e:
-        logger.error(f"Failed sending handover notice: {str(e)}")
+    """Tell a channel customer a human joined, and record it in the thread."""
+    await notify_customer(db, session, HANDOVER_NOTICE, user_id=str(user.id))
+
+
+async def _load_manageable_session(db: Session, session_id: str, current_user: User):
+    """The session, if this user may act on it — or the right HTTPException.
+
+    Shared by every action that changes who handles a chat, so they cannot
+    drift apart: the permission grant, the organization scope and the
+    visibility check are one sequence, checked in one place.
+    """
+    # manage_all_chats, not "manage_chats" — the latter is not a real
+    # permission and never matched. has_any_permission also honours the
+    # super_admin bypass the previous hand-rolled set check ignored.
+    if not has_any_permission(current_user, CHAT_MANAGE_PERMISSIONS):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not enough permissions"
+        )
+
+    session = SessionToAgentRepository(db).get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Chat session not found")
+
+    # A session id is guessable and was never scoped here: without this an
+    # agent could act on a conversation belonging to another organization.
+    if session.organization_id != current_user.organization_id:
+        raise HTTPException(status_code=404, detail="Chat session not found")
+
+    # Acting is limited to what the caller may actually see, so widening the
+    # inbox to the unclaimed queue can't be used to reach past it.
+    user_permissions = {p.name for p in current_user.role.permissions}
+    is_super_admin = "super_admin" in user_permissions
+    # manage_all_chats implies seeing them all — a role that may manage every
+    # chat should not need a separate view grant to act on one.
+    can_view_all = is_super_admin or bool(
+        {"view_all_chats", "manage_all_chats"} & user_permissions
+    )
+
+    if not can_view_all:
+        can_view_assigned = is_super_admin or "view_assigned_chats" in user_permissions
+        has_access = await ChatRepository(db).check_session_access(
+            session_id=session_id,
+            user_id=current_user.id if can_view_assigned else None,
+            user_groups=[str(group.id) for group in current_user.groups] if can_view_assigned else [],
+            include_unassigned=is_super_admin or "view_unassigned_chats" in user_permissions
+        )
+        if not has_access:
+            raise HTTPException(status_code=404, detail="Chat session not found")
+
+    return session
 
 
 @router.post("/{session_id}/takeover", response_model=ChatDetailResponse)
@@ -84,57 +112,9 @@ async def takeover_chat(
 ):
     """Take over a chat session"""
     try:
-        # manage_all_chats, not "manage_chats" — the latter is not a real
-        # permission and never matched. has_any_permission also honours the
-        # super_admin bypass the previous hand-rolled set check ignored.
-        if not has_any_permission(current_user, CHAT_MANAGE_PERMISSIONS):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Not enough permissions"
-            )
-
-        # Get session
+        session = await _load_manageable_session(db, session_id, current_user)
         session_repo = SessionToAgentRepository(db)
-        session = session_repo.get_session(session_id)
-
-        if not session:
-            raise HTTPException(
-                status_code=404,
-                detail="Chat session not found"
-            )
-
-        # A session id is guessable and was never scoped here: without this an
-        # agent could claim a conversation belonging to another organization.
-        if session.organization_id != current_user.organization_id:
-            raise HTTPException(
-                status_code=404,
-                detail="Chat session not found"
-            )
-
-        # Claiming is limited to what the caller may actually see, so widening
-        # the inbox to the unclaimed queue can't be used to reach past it.
         chat_repo = ChatRepository(db)
-        user_permissions = {p.name for p in current_user.role.permissions}
-        is_super_admin = "super_admin" in user_permissions
-        # manage_all_chats implies seeing them all — a role that may manage
-        # every chat should not need a separate view grant to claim one.
-        can_view_all = is_super_admin or bool(
-            {"view_all_chats", "manage_all_chats"} & user_permissions
-        )
-
-        if not can_view_all:
-            can_view_assigned = is_super_admin or "view_assigned_chats" in user_permissions
-            has_access = await chat_repo.check_session_access(
-                session_id=session_id,
-                user_id=current_user.id if can_view_assigned else None,
-                user_groups=[str(group.id) for group in current_user.groups] if can_view_assigned else [],
-                include_unassigned=is_super_admin or "view_unassigned_chats" in user_permissions
-            )
-            if not has_access:
-                raise HTTPException(
-                    status_code=404,
-                    detail="Chat session not found"
-                )
 
         # Update session
         success = session_repo.takeover_session(
@@ -173,6 +153,60 @@ async def takeover_chat(
         raise HTTPException(
             status_code=500,
             detail="Failed to take over chat"
+        )
+
+
+@router.post("/{session_id}/route-to-human", response_model=ChatDetailResponse)
+async def route_chat_to_human(
+    session_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Stop the AI answering this chat and queue it for the team.
+
+    Taking a chat over was the only way to silence the AI, which forces whoever
+    spots the problem to handle it personally. This hands it to the queue
+    instead, leaving it claimable by anyone.
+    """
+    try:
+        session = await _load_manageable_session(db, session_id, current_user)
+
+        if session.status == SessionStatus.CLOSED:
+            raise HTTPException(
+                status_code=400, detail="This chat is closed")
+        if session.user_id is not None:
+            raise HTTPException(
+                status_code=400, detail="A human is already handling this chat")
+
+        routed = await route_session_to_human(
+            db,
+            session,
+            reason=TransferReasonType.DIRECT_REQUEST.value,
+            description=f"Routed to the team by {current_user.full_name}",
+        )
+        if not routed:
+            raise HTTPException(
+                status_code=400, detail="This chat is already waiting for a human")
+
+        chat = await ChatRepository(db).get_chat_detail(
+            session_id=session_id,
+            org_id=current_user.organization_id
+        )
+        if not chat:
+            raise HTTPException(
+                status_code=500,
+                detail="Failed to get chat details after routing"
+            )
+
+        return ChatDetailResponse(**chat)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error routing chat to human: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to route chat to a human"
         )
 
 
