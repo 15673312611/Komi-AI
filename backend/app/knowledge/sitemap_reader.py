@@ -17,6 +17,7 @@ limitations under the License.
 from typing import Callable, Dict, Optional
 
 from app.core.logger import get_logger
+from app.knowledge.crawl_scope import SCOPE_DOMAIN, CrawlScope
 from app.knowledge.enhanced_website_reader import EnhancedWebsiteReader
 from app.knowledge.sitemap_parser import fetch_sitemap_urls
 
@@ -55,7 +56,11 @@ class SitemapReader(EnhancedWebsiteReader):
         self._failed_crawls = 0
         self._challenge_blocked = 0
 
-        primary_domain = self._get_primary_domain(url)
+        # A sitemap index legitimately lists pages on sibling hosts
+        # (help.example.com from example.com/sitemap.xml), so the pages it names
+        # are taken at registrable-domain scope — matching the parser's own
+        # cross-domain filter. Only <a href> following is host-scoped.
+        scope = CrawlScope.for_seed(url, SCOPE_DOMAIN)
         page_urls = fetch_sitemap_urls(
             url,
             headers=self.headers,
@@ -72,5 +77,5 @@ class SitemapReader(EnhancedWebsiteReader):
 
         seeds = [(page_url, starting_depth) for page_url in page_urls]
         return self._run_crawl_queue(
-            seeds, primary_domain, on_document_callback, on_url_crawled_callback
+            seeds, scope, on_document_callback, on_url_crawled_callback
         )

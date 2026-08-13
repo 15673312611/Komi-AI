@@ -29,9 +29,13 @@ import { basePageId, groupChunksIntoPages, titleFromId } from '@/utils/knowledge
 export type ExplorerMode = 'agent' | 'org'
 export type SourceStatus = 'queued' | 'crawling' | 'synced' | 'error'
 
+// How far a website crawl may follow links from the URL it starts at.
+// 'page' indexes only that URL; the rest map to the backend's crawl scopes.
+export type CrawlScope = 'page' | 'path' | 'host' | 'domain'
+
 // What the add-source modal submits; discriminated by `type`.
 export type AddSourcePayload =
-  | { type: 'website'; url: string; followLinks: boolean }
+  | { type: 'website'; url: string; scope: CrawlScope }
   | { type: 'sitemap'; url: string }
   | { type: 'pdf'; files: File[] }
   | { type: 'text'; title: string; content: string }
@@ -536,7 +540,9 @@ export function useKnowledgeExplorer(
             [payload.url],
             linkedAgentId,
             undefined,
-            payload.followLinks ? undefined : 1,
+            // "This page only" is a one-page cap; the others are crawl scopes.
+            payload.scope === 'page' ? 1 : undefined,
+            payload.scope === 'page' ? undefined : payload.scope,
           ),
         )
         toast.success('Queued for crawling', {

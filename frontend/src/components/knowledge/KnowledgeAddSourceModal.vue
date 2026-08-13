@@ -14,8 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 -->
 <script setup lang="ts">
-import { computed, ref } from 'vue'
-import type { AddSourcePayload } from '@/composables/useKnowledgeExplorer'
+import { computed, ref, watch } from 'vue'
+import type { AddSourcePayload, CrawlScope } from '@/composables/useKnowledgeExplorer'
 
 type SourceKind = 'website' | 'sitemap' | 'pdf' | 'text'
 
@@ -33,7 +33,7 @@ const emit = defineEmits<{
 
 const kind = ref<SourceKind>('website')
 const url = ref('')
-const followLinks = ref(true)
+const scope = ref<CrawlScope>('host')
 const files = ref<File[]>([])
 const title = ref('')
 const content = ref('')
@@ -63,6 +63,58 @@ function normalizeUrl(raw: string): string {
   return v.includes('://') ? v : `https://${v}`
 }
 
+// Parsed form of what's typed so far, used to name the host/section in the
+// scope options. Null while the URL is empty or not yet valid.
+const parsedUrl = computed<URL | null>(() => {
+  if (!url.value.trim()) return null
+  try {
+    return new URL(normalizeUrl(url.value))
+  } catch {
+    return null
+  }
+})
+
+const seedHost = computed(() => parsedUrl.value?.hostname ?? '')
+// The section is the URL's own path. Empty for a homepage URL — there is no
+// section to speak of, and "pages under /" would just be "This site" again.
+const seedSection = computed(() => parsedUrl.value?.pathname.replace(/\/$/, '') ?? '')
+
+const scopes = computed<{ key: CrawlScope; title: string; sub: string }[]>(() => {
+  const host = seedHost.value
+  const section = seedSection.value
+  return [
+    { key: 'page', title: 'This page only', sub: 'Index just the URL above.' },
+    ...(section
+      ? [
+          {
+            key: 'path' as CrawlScope,
+            title: 'This section',
+            sub: `Only pages under ${section}/ on ${host}.`,
+          },
+        ]
+      : []),
+    {
+      key: 'host',
+      title: 'This site',
+      sub: host ? `Every page on ${host}.` : 'Every page on the same host.',
+    },
+    {
+      key: 'domain',
+      // No domain name in the copy on purpose: working out that
+      // paywithatoa.co.uk is one registrable domain (not 'co.uk') needs the
+      // ccTLD list the backend keeps, and a second copy of it would drift.
+      title: 'Whole domain',
+      sub: 'Also other subdomains — blog, docs, app.',
+    },
+  ]
+})
+
+// Editing the URL down to a homepage removes the section option; don't leave a
+// scope selected that is no longer on screen.
+watch(scopes, (options) => {
+  if (!options.some((option) => option.key === scope.value)) scope.value = 'host'
+})
+
 function pickFiles() {
   fileInput.value?.click()
 }
@@ -86,7 +138,7 @@ function onDrop(event: DragEvent) {
 function submit() {
   if (!canSubmit.value) return
   if (kind.value === 'website') {
-    emit('submit', { type: 'website', url: normalizeUrl(url.value), followLinks: followLinks.value })
+    emit('submit', { type: 'website', url: normalizeUrl(url.value), scope: scope.value })
   } else if (kind.value === 'sitemap') {
     emit('submit', { type: 'sitemap', url: normalizeUrl(url.value) })
   } else if (kind.value === 'pdf') {
@@ -133,23 +185,18 @@ function submit() {
             placeholder="https://docs.yourcompany.com/help" @keyup.enter="submit" />
           <label class="field-label">CRAWL SCOPE</label>
           <div class="scope">
-            <button type="button" class="scope__opt" :class="{ 'scope__opt--active': !followLinks }"
-              @click="followLinks = false">
-              <span class="radio" :class="{ 'radio--on': !followLinks }"></span>
+            <button v-for="opt in scopes" :key="opt.key" type="button" class="scope__opt"
+              :class="{ 'scope__opt--active': scope === opt.key }" @click="scope = opt.key">
+              <span class="radio" :class="{ 'radio--on': scope === opt.key }"></span>
               <span>
-                <span class="scope__title">This page only</span>
-                <span class="scope__sub">Index just the URL above.</span>
-              </span>
-            </button>
-            <button type="button" class="scope__opt" :class="{ 'scope__opt--active': followLinks }"
-              @click="followLinks = true">
-              <span class="radio" :class="{ 'radio--on': followLinks }"></span>
-              <span>
-                <span class="scope__title">Follow links on this domain</span>
-                <span class="scope__sub">Discover and queue linked pages, up to your plan limit.</span>
+                <span class="scope__title">{{ opt.title }}</span>
+                <span class="scope__sub">{{ opt.sub }}</span>
               </span>
             </button>
           </div>
+          <p v-if="scope !== 'page'" class="scope__hint">
+            Linked pages are discovered and queued, up to your plan limit.
+          </p>
         </template>
 
         <!-- sitemap -->
@@ -408,6 +455,13 @@ function submit() {
   font-size: 12px;
   color: var(--muted2);
   margin-top: 1px;
+  overflow-wrap: anywhere;
+}
+
+.scope__hint {
+  margin: 8px 2px 0;
+  font-size: 12px;
+  color: var(--muted2);
 }
 
 .drop {

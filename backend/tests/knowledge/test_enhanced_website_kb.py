@@ -18,6 +18,8 @@ import pytest
 import os
 from unittest.mock import MagicMock, patch, call, ANY
 from agno.document.base import Document
+from app.core.config import settings
+from app.knowledge.crawl_scope import DEFAULT_CRAWL_SCOPE
 from app.knowledge.enhanced_website_kb import EnhancedWebsiteKnowledgeBase
 from app.knowledge.enhanced_website_reader import EnhancedWebsiteReader
 
@@ -52,18 +54,19 @@ class TestEnhancedWebsiteKnowledgeBase:
     def test_initialization_with_defaults(self):
         """Test initialization with default values"""
         kb = EnhancedWebsiteKnowledgeBase(urls=TEST_URLS)
-        
-        # Get expected max_workers from environment (5 by default, can be overridden)
-        expected_max_workers = int(os.getenv("KB_MAX_WORKERS", "5"))
-        
+
+        # Against settings, not literals: every one of these is configurable per
+        # install (KB_MAX_DEPTH and friends), so hardcoding the defaults here
+        # fails on any machine whose .env tunes a crawl.
         assert kb.urls == TEST_URLS
         assert isinstance(kb.reader, EnhancedWebsiteReader)
-        assert kb.max_depth == 5
-        assert kb.max_links == 25
-        assert kb.min_content_length == 100
-        assert kb.timeout == 30
-        assert kb.max_retries == 3
-        assert kb.max_workers == expected_max_workers
+        assert kb.max_depth == settings.KB_MAX_DEPTH
+        assert kb.max_links == settings.KB_MAX_LINKS
+        assert kb.min_content_length == settings.KB_MIN_CONTENT_LENGTH
+        assert kb.timeout == settings.KB_TIMEOUT
+        assert kb.max_retries == settings.KB_MAX_RETRIES
+        assert kb.max_workers == settings.KB_MAX_WORKERS
+        assert kb.crawl_scope == DEFAULT_CRAWL_SCOPE
     
     def test_initialization_with_custom_params(self):
         """Test initialization with custom parameters"""

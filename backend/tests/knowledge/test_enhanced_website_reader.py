@@ -217,26 +217,84 @@ class TestEnhancedWebsiteReader(unittest.TestCase):
         # /docs and /docs/ collapse to a single canonical link.
         self.assertEqual(links, ['https://site.com/docs'])
 
-    def test_extract_links_rejects_other_registrable_domains(self):
-        """Only same-registrable-domain links are kept — a substring match like
-        'evilsite.com'.endswith('site.com') must NOT slip through (that would let
-        one plan-limited source fan out across unrelated domains)."""
+    def test_extract_links_stays_on_the_seed_host_by_default(self):
+        """Default scope is the seed's own host: a help-center crawl must not
+        wander onto the marketing site, and a lookalike domain never matches."""
         html = """
         <html><body>
           <a href="https://site.com/a">same</a>
-          <a href="https://blog.site.com/b">subdomain (same registrable)</a>
-          <a href="https://evilsite.com/c">lookalike suffix</a>
-          <a href="https://notsite.com/d">another lookalike</a>
+          <a href="https://www.site.com/b">www of the same host</a>
+          <a href="https://blog.site.com/c">subdomain (same registrable)</a>
+          <a href="https://evilsite.com/d">lookalike suffix</a>
           <a href="https://other.com/e">unrelated</a>
         </body></html>
         """
         soup = BeautifulSoup(html, 'html.parser')
         links = self.reader._extract_links(soup, 'https://site.com')
         self.assertIn('https://site.com/a', links)
+        # In scope, and stored under the seed's spelling of the host.
+        self.assertIn('https://site.com/b', links)
+        self.assertNotIn('https://www.site.com/b', links)
+        self.assertNotIn('https://blog.site.com/c', links)
+        self.assertNotIn('https://evilsite.com/d', links)
+        self.assertNotIn('https://other.com/e', links)
+
+    def test_extract_links_domain_scope_spans_subdomains(self):
+        """The opt-in 'domain' scope keeps the previous reach across subdomains,
+        still by registrable-domain equality (never a suffix match)."""
+        reader = EnhancedWebsiteReader(crawl_scope='domain')
+        html = """
+        <html><body>
+          <a href="https://blog.site.com/b">subdomain</a>
+          <a href="https://evilsite.com/c">lookalike suffix</a>
+        </body></html>
+        """
+        soup = BeautifulSoup(html, 'html.parser')
+        links = reader._extract_links(soup, 'https://site.com')
         self.assertIn('https://blog.site.com/b', links)
         self.assertNotIn('https://evilsite.com/c', links)
-        self.assertNotIn('https://notsite.com/d', links)
-        self.assertNotIn('https://other.com/e', links)
+
+    def test_extract_links_collapses_www_variants_onto_the_seed_host(self):
+        """A site that links both spellings stored the page twice — 4 of the 50
+        pages in a real paywithatoa.co.uk crawl were www/bare duplicates."""
+        html = """
+        <html><body>
+          <a href="https://www.site.com/terms">terms via www</a>
+          <a href="https://site.com/terms">terms bare</a>
+          <a href="https://www.site.com/privacy">privacy via www</a>
+        </body></html>
+        """
+        soup = BeautifulSoup(html, 'html.parser')
+        links = self.reader._extract_links(soup, 'https://site.com/')
+        self.assertEqual(links, ['https://site.com/terms', 'https://site.com/privacy'])
+
+        # Seeded at the www spelling, the crawl keeps that one instead.
+        reader = EnhancedWebsiteReader()
+        links = reader._extract_links(soup, 'https://www.site.com/')
+        self.assertEqual(links, ['https://www.site.com/terms', 'https://www.site.com/privacy'])
+
+    def test_extract_links_skips_non_http_schemes(self):
+        """mailto:/tel: hrefs are contact actions, not pages. urljoin leaves them
+        untouched, and 'https://' + 'mailto:a@site.com' parses as host site.com
+        with 'mailto:a' as userinfo — so they used to be crawled as pages."""
+        html = """
+        <html><body>
+          <a href="mailto:hello@site.com">Email us</a>
+          <a href="tel:+441234567890">Call us</a>
+          <a href="javascript:void(0)">Menu</a>
+          <a href="/pricing">Pricing</a>
+        </body></html>
+        """
+        soup = BeautifulSoup(html, 'html.parser')
+        links = self.reader._extract_links(soup, 'https://site.com/help')
+        self.assertEqual(links, ['https://site.com/pricing'])
+
+    def test_normalize_url_leaves_non_http_schemes_alone(self):
+        """Prefixing 'mailto:a@site.com' with https:// produced a fetchable
+        'https://mailto:a@site.com' — the source of the mangled stored pages."""
+        self.assertEqual(self.reader._normalize_url('mailto:a@site.com'), 'mailto:a@site.com')
+        self.assertEqual(self.reader._normalize_url('site.com/x'), 'https://site.com/x')
+        self.assertEqual(self.reader._normalize_url('http://site.com'), 'http://site.com')
 
     def test_get_primary_domain_strips_port_and_www(self):
         self.assertEqual(self.reader._get_primary_domain('https://www.site.com:8443/x'), 'site.com')

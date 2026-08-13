@@ -17,6 +17,7 @@ limitations under the License.
 import random
 import re
 import time
+from copy import deepcopy
 from datetime import datetime
 from dataclasses import dataclass, field
 from typing import Dict, List, Set, Tuple, Optional, Callable
@@ -33,6 +34,13 @@ from agno.document.reader.website_reader import WebsiteReader
 from app.core.logger import get_logger
 from app.knowledge.crawl4ai_fallback import get_crawl4ai_fallback
 from app.knowledge.content_summarizer import get_content_summarizer
+from app.knowledge.crawl_scope import (
+    DEFAULT_CRAWL_SCOPE,
+    CrawlScope,
+    is_crawlable_url,
+    url_scheme,
+)
+from app.knowledge.domains import registrable_domain
 
 # Initialize logger for this module
 logger = get_logger(__name__)
@@ -92,6 +100,10 @@ class EnhancedWebsiteReader(WebsiteReader):
     max_retries: int = 3  # Maximum number of retries for failed requests
     respect_robots_txt: bool = True  # Whether to respect robots.txt
     max_workers: int = 10  # Maximum number of parallel workers for crawling
+    # How far the crawl may wander from its seed URL: 'host' (default), 'path'
+    # (seed host + seed path prefix) or 'domain' (every host on the registrable
+    # domain). See app/knowledge/crawl_scope.py.
+    crawl_scope: str = DEFAULT_CRAWL_SCOPE
     verify_ssl: bool = True  # Whether to verify SSL certificates (set to False for self-signed certs)
     
     # Track crawling statistics
@@ -105,19 +117,24 @@ class EnhancedWebsiteReader(WebsiteReader):
         """
         Normalize URL by ensuring it has a proper protocol (http:// or https://).
         If no protocol is present, https:// is added by default.
-        
+
+        A URL that already carries a scheme is returned untouched — including a
+        non-HTTP one such as ``mailto:``. Prefixing those produced
+        ``https://mailto:a@example.com``, which parses as host ``example.com``
+        with ``mailto:a`` as userinfo and so was crawled as a real page.
+
         :param url: The URL to normalize.
         :return: The normalized URL with protocol.
         """
         if not url:
             return url
-        
+
         url = url.strip()
-        
+
         # Check if URL already has a protocol
-        if url.startswith(('http://', 'https://')):
+        if url_scheme(url):
             return url
-        
+
         # Add https:// by default if no protocol is present
         logger.debug(f"URL '{url}' is missing protocol, adding 'https://'")
         return f"https://{url}"
@@ -185,8 +202,6 @@ class EnhancedWebsiteReader(WebsiteReader):
         # Delegate to the shared registrable-domain helper (ccTLD-aware,
         # port/userinfo stripped via hostname) so every same-domain check in
         # the codebase agrees.
-        from app.knowledge.domains import registrable_domain
-
         parsed_url = urlparse(self._normalize_url(url))
         return registrable_domain(parsed_url.hostname or parsed_url.netloc or "")
     
@@ -409,7 +424,6 @@ class EnhancedWebsiteReader(WebsiteReader):
         
         if include_links:
             # Create a deep copy to avoid modifying the original
-            from copy import deepcopy
             element_copy = deepcopy(element)
             
             # Find all links and append their URLs to the text
@@ -517,13 +531,13 @@ class EnhancedWebsiteReader(WebsiteReader):
         # If no good parent found, just concatenate the good paragraphs
         return " ".join([self._get_clean_text(p, include_links=True, base_url=self._current_url) for p in good_paragraphs])
 
-    def _process_url(self, url_info: Tuple[str, int], primary_domain: str) -> Optional[Tuple[str, str, List[str]]]:
+    def _process_url(self, url_info: Tuple[str, int], scope: CrawlScope) -> Optional[Tuple[str, str, List[str]]]:
         """
         Process a single URL - fetch content and extract links.
         This is used for parallel processing of URLs.
-        
+
         :param url_info: Tuple of (URL, depth)
-        :param primary_domain: Primary domain to filter links
+        :param scope: Crawl boundary the URL must fall inside
         :return: Tuple of (URL, content, new_links) or None if failed
         """
         current_url, current_depth = url_info
@@ -535,10 +549,10 @@ class EnhancedWebsiteReader(WebsiteReader):
         if current_url in self._visited:
             return None
 
-        # Same registrable domain only (equality, not a loose suffix match) —
-        # the per-URL guard that also protects sitemap-seeded crawls.
-        if self._get_primary_domain(current_url) != primary_domain:
-            logger.debug(f"Skipping cross-domain URL {current_url} (root domain {primary_domain})")
+        # In-scope http(s) URLs only — the per-URL guard that also protects
+        # sitemap-seeded crawls and anything left over in an older queue.
+        if not scope.allows(current_url):
+            logger.debug(f"Skipping out-of-scope URL {current_url} ({scope.describe()})")
             return None
 
         if current_depth > self.max_depth:
@@ -750,7 +764,7 @@ class EnhancedWebsiteReader(WebsiteReader):
                 
                 # Extract new links if not at max depth
                 if current_depth < self.max_depth:
-                    links = self._extract_links(soup, current_url)
+                    links = self._extract_links(soup, current_url, scope)
                     
                     next_depth = current_depth + 1
                     new_links = [(link, next_depth) for link in links 
@@ -819,7 +833,7 @@ class EnhancedWebsiteReader(WebsiteReader):
                         
                         # Extract links if we got content
                         if current_depth < self.max_depth and soup:
-                            links = self._extract_links(soup, current_url)
+                            links = self._extract_links(soup, current_url, scope)
                             next_depth = current_depth + 1
                             new_links = [(link, next_depth) for link in links 
                                         if link not in self._visited]
@@ -839,7 +853,7 @@ class EnhancedWebsiteReader(WebsiteReader):
                             
                             # Extract links
                             if current_depth < self.max_depth:
-                                links = self._extract_links(soup, current_url)
+                                links = self._extract_links(soup, current_url, scope)
                                 next_depth = current_depth + 1
                                 new_links = [(link, next_depth) for link in links 
                                             if link not in self._visited]
@@ -893,14 +907,16 @@ class EnhancedWebsiteReader(WebsiteReader):
         crawl_start_time = time.time()
         logger.info(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Starting parallel crawl of {url} with max_depth={self.max_depth}, max_links={self.max_links}, and max_workers={self.max_workers}")
         
-        primary_domain = self._get_primary_domain(url)
+        # Bound the crawl to the seed's own host by default — see crawl_scope.py.
+        scope = CrawlScope.for_seed(url, self.crawl_scope)
+        logger.info(f"Crawl scope for {url}: {scope.describe()}")
 
         # Add starting URL with its depth to the queue
         urls_to_process = [(url, starting_depth)]
         logger.info(f"Added starting URL to crawl queue: {url} (depth: {starting_depth})")
 
         crawler_result = self._run_crawl_queue(
-            urls_to_process, primary_domain, on_document_callback, on_url_crawled_callback
+            urls_to_process, scope, on_document_callback, on_url_crawled_callback
         )
 
         # Log crawling summary
@@ -915,7 +931,7 @@ class EnhancedWebsiteReader(WebsiteReader):
     def _run_crawl_queue(
         self,
         urls_to_process: List[Tuple[str, int]],
-        primary_domain: str,
+        scope: CrawlScope,
         on_document_callback: Optional[Callable[[str, str], None]] = None,
         on_url_crawled_callback: Optional[Callable[[str], None]] = None,
     ) -> Dict[str, str]:
@@ -937,7 +953,7 @@ class EnhancedWebsiteReader(WebsiteReader):
 
                 # Submit all URLs in the current batch for parallel processing
                 future_to_url = {
-                    executor.submit(self._process_url, url_info, primary_domain): url_info[0]
+                    executor.submit(self._process_url, url_info, scope): url_info[0]
                     for url_info in current_batch
                 }
 
@@ -977,18 +993,23 @@ class EnhancedWebsiteReader(WebsiteReader):
 
         return crawler_result
 
-    def _extract_links(self, soup: BeautifulSoup, base_url: str) -> List[str]:
+    def _extract_links(
+        self, soup: BeautifulSoup, base_url: str, scope: Optional[CrawlScope] = None
+    ) -> List[str]:
         """
         Extract links from a BeautifulSoup object.
-        
+
         :param soup: The BeautifulSoup object.
         :param base_url: The base URL to resolve relative URLs.
+        :param scope: Crawl boundary links must fall inside; defaults to this
+            reader's configured scope seeded at ``base_url``.
         :return: A list of absolute URLs.
         """
         links = []
         seen = set()
-        primary_domain = self._get_primary_domain(base_url)
-        base_canonical = self._canonical_url(base_url)
+        if scope is None:
+            scope = CrawlScope.for_seed(base_url, self.crawl_scope)
+        base_canonical = scope.canonical(self._canonical_url(base_url))
 
         all_links = soup.find_all("a", href=True)
 
@@ -997,6 +1018,11 @@ class EnhancedWebsiteReader(WebsiteReader):
                 continue
 
             href_str = str(link["href"])
+            # Drop mailto:/tel:/sms:/javascript:/data: hrefs before urljoin —
+            # it passes them through untouched, and they are not pages.
+            if not is_crawlable_url(href_str):
+                continue
+
             full_url = urljoin(base_url, href_str)
 
             if not isinstance(full_url, str):
@@ -1006,9 +1032,10 @@ class EnhancedWebsiteReader(WebsiteReader):
             if "?" in full_url:
                 continue
 
-            # Canonicalize (drop #fragment / trailing slash) so page variants
-            # collapse to a single link and don't get crawled/stored twice.
-            full_url = self._canonical_url(full_url)
+            # Canonicalize (drop #fragment / trailing slash, put the seed's own
+            # www/bare spelling on the host) so page variants collapse to a
+            # single link and don't get crawled/stored twice.
+            full_url = scope.canonical(self._canonical_url(full_url))
 
             # Filter out unwanted URLs
             parsed_url = urlparse(full_url)
@@ -1017,14 +1044,8 @@ class EnhancedWebsiteReader(WebsiteReader):
             if full_url == base_canonical or full_url in seen:
                 continue
 
-            # Same REGISTRABLE domain only (equality, not suffix): a substring
-            # match like 'evilexample.com'.endswith('example.com') would let a
-            # crawl fan out across unrelated domains — a way to pull many
-            # domains' content under one plan-limited knowledge source.
-            is_same_domain = self._get_primary_domain(full_url) == primary_domain
-
             if (
-                is_same_domain
+                scope.allows(full_url)
                 and not any(parsed_url.path.endswith(ext) for ext in [
                     ".pdf", ".jpg", ".png", ".gif", ".zip", ".mp3", ".mp4", ".exe", ".dll"
                 ])

@@ -30,6 +30,7 @@ from app.models.agent import Agent
 from app.models.knowledge import Knowledge
 from app.repositories.knowledge import KnowledgeRepository
 from app.knowledge import page_editor
+from app.knowledge.crawl_scope import CRAWL_SCOPES
 from app.repositories.knowledge_to_agent import KnowledgeToAgentRepository
 from app.repositories.agent import AgentRepository
 from app.models.knowledge_queue import KnowledgeQueue, QueueStatus
@@ -81,15 +82,25 @@ class UrlsRequest(BaseModel):
     websites: List[str] = []
     sitemaps: List[str] = []
     agent_id: Optional[str] = None
-    # Optional crawl-scope cap for websites (e.g. 1 = "this page only"). Always
+    # Optional cap on pages per website source (e.g. 1 = "this page only"). Always
     # clamped to the plan's max_sub_pages server-side; None uses the plan limit.
     max_links: Optional[int] = None
+    # How far link-following may wander from the seed URL: 'path' | 'host' |
+    # 'domain'. None uses the default (the seed's own host).
+    crawl_scope: Optional[str] = None
 
     @field_validator('max_links')
     @classmethod
     def validate_max_links(cls, v):
         if v is not None and v < 1:
             raise ValueError('max_links must be at least 1')
+        return v
+
+    @field_validator('crawl_scope')
+    @classmethod
+    def validate_crawl_scope(cls, v):
+        if v is not None and v not in CRAWL_SCOPES:
+            raise ValueError(f"crawl_scope must be one of {', '.join(CRAWL_SCOPES)}")
         return v
 
 
@@ -465,8 +476,8 @@ async def add_urls(
         queued_items = []
 
         # Per-source sub-page cap: the plan limit, optionally narrowed by the
-        # request's crawl scope (e.g. "this page only" -> max_links=1), never
-        # allowed to exceed the plan limit.
+        # request (e.g. "this page only" -> max_links=1), never allowed to
+        # exceed the plan limit.
         plan_sub_pages = resolve_plan_max_links(subscription)
         website_max_links = (
             min(request.max_links, plan_sub_pages) if request.max_links else plan_sub_pages
@@ -505,7 +516,11 @@ async def add_urls(
                 source_type='website',
                 source=url,
                 status=QueueStatus.PENDING,
-                queue_metadata={"max_links": website_max_links}
+                queue_metadata={
+                    "max_links": website_max_links,
+                    # Omitted (None) means the crawler's default: the seed's host.
+                    "crawl_scope": request.crawl_scope,
+                }
             )
             queued_items.append(queue_repo.create(queue_item))
 

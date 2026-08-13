@@ -269,6 +269,40 @@ def test_add_website_honors_kb_max_links(client: TestClient, test_organization, 
         assert item.queue_metadata.get("max_links") == 200
 
 
+def test_add_website_records_crawl_scope(client: TestClient, test_organization, db):
+    """The chosen crawl scope reaches the crawler via the queue item; omitting it
+    leaves the crawler's default (the seed's own host) in charge."""
+    response = client.post("/api/v1/knowledge/add/urls", json={
+        "org_id": str(test_organization.id),
+        "websites": ["https://help.example.com/hc/en"],
+        "crawl_scope": "path",
+    })
+    assert response.status_code == 200
+    item = db.query(KnowledgeQueue).filter(
+        KnowledgeQueue.source == "https://help.example.com/hc/en"
+    ).first()
+    assert item.queue_metadata.get("crawl_scope") == "path"
+
+    response = client.post("/api/v1/knowledge/add/urls", json={
+        "org_id": str(test_organization.id),
+        "websites": ["https://help.example.com/other"],
+    })
+    assert response.status_code == 200
+    item = db.query(KnowledgeQueue).filter(
+        KnowledgeQueue.source == "https://help.example.com/other"
+    ).first()
+    assert item.queue_metadata.get("crawl_scope") is None
+
+
+def test_add_website_rejects_unknown_crawl_scope(client: TestClient, test_organization):
+    response = client.post("/api/v1/knowledge/add/urls", json={
+        "org_id": str(test_organization.id),
+        "websites": ["https://example.com"],
+        "crawl_scope": "everything",
+    })
+    assert response.status_code == 422
+
+
 def test_link_knowledge_to_agent(client: TestClient, test_knowledge, test_agent):
     """Test linking knowledge to an agent"""
     response = client.post(
