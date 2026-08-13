@@ -69,6 +69,33 @@ def test_host_scope_treats_www_as_the_same_host():
     assert not scope.allows("https://blog.site.com/post")
 
 
+def test_canonical_puts_links_on_the_seeds_host_spelling():
+    """example.com/terms and www.example.com/terms are one page; storing both
+    spends two of the source's sub-page slots on the same text."""
+    bare = CrawlScope.for_seed("https://site.com/")
+    assert bare.canonical("https://www.site.com/terms") == "https://site.com/terms"
+    assert bare.canonical("https://site.com/terms") == "https://site.com/terms"
+
+    # Toward the SEED, not blindly www-stripped: a site may serve only the www
+    # form, and the seed is the spelling the crawl already fetched.
+    www = CrawlScope.for_seed("https://www.site.com/")
+    assert www.canonical("https://site.com/terms") == "https://www.site.com/terms"
+
+    # Port and path survive the rewrite.
+    assert bare.canonical("https://www.site.com:8443/a/b") == "https://site.com:8443/a/b"
+
+
+def test_canonical_leaves_other_hosts_alone():
+    scope = CrawlScope.for_seed("https://site.com/", SCOPE_DOMAIN)
+    # A real subdomain is a different site, even under domain scope.
+    assert scope.canonical("https://blog.site.com/post") == "https://blog.site.com/post"
+    assert scope.canonical("https://other.com/a") == "https://other.com/a"
+    # Nothing to rewrite, nothing to crash on.
+    assert scope.canonical("mailto:hi@site.com") == "mailto:hi@site.com"
+    assert scope.canonical("https://[bad") == "https://[bad"
+    assert scope.canonical("") == ""
+
+
 def test_domain_scope_keeps_the_previous_reach():
     scope = CrawlScope.for_seed("https://help.site.com/hc/en", SCOPE_DOMAIN)
     assert scope.allows("https://www.site.com/all-integrations")

@@ -1009,7 +1009,7 @@ class EnhancedWebsiteReader(WebsiteReader):
         seen = set()
         if scope is None:
             scope = CrawlScope.for_seed(base_url, self.crawl_scope)
-        base_canonical = self._canonical_url(base_url)
+        base_canonical = scope.canonical(self._canonical_url(base_url))
 
         all_links = soup.find_all("a", href=True)
 
@@ -1032,9 +1032,10 @@ class EnhancedWebsiteReader(WebsiteReader):
             if "?" in full_url:
                 continue
 
-            # Canonicalize (drop #fragment / trailing slash) so page variants
-            # collapse to a single link and don't get crawled/stored twice.
-            full_url = self._canonical_url(full_url)
+            # Canonicalize (drop #fragment / trailing slash, put the seed's own
+            # www/bare spelling on the host) so page variants collapse to a
+            # single link and don't get crawled/stored twice.
+            full_url = scope.canonical(self._canonical_url(full_url))
 
             # Filter out unwanted URLs
             parsed_url = urlparse(full_url)

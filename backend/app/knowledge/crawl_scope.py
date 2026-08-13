@@ -36,7 +36,7 @@ that stored 247 pages of which only ~102 were help articles:
 
 from dataclasses import dataclass
 from typing import Optional
-from urllib.parse import ParseResult, urlparse
+from urllib.parse import ParseResult, urlparse, urlunparse
 
 from app.knowledge.domains import registrable_domain
 
@@ -104,6 +104,7 @@ class CrawlScope:
     mode: str
     domain: str
     host: str
+    seed_host: str
     path_prefix: str
 
     @classmethod
@@ -113,13 +114,37 @@ class CrawlScope:
         if mode not in CRAWL_SCOPES:
             mode = DEFAULT_CRAWL_SCOPE
         parsed = _parsed(seed_url)
-        host = (parsed.hostname or "") if parsed else ""
+        host = ((parsed.hostname or "") if parsed else "").lower()
         return cls(
             mode=mode,
             domain=registrable_domain(host),
             host=_host_key(host),
+            seed_host=host,
             path_prefix=((parsed.path or "") if parsed else "").rstrip("/"),
         )
+
+    def canonical(self, url: str) -> str:
+        """Put an in-scope URL on the seed's own spelling of the host.
+
+        ``example.com/terms`` and ``www.example.com/terms`` are one page, but
+        they are two page ids — so a site that links both ways stores the page
+        twice, burning two of the source's sub-page slots and feeding retrieval
+        and FAQ generation the same text twice.
+
+        Rewrites toward the SEED's host rather than always stripping ``www.``:
+        plenty of sites serve only one of the two, and the seed is the form the
+        user gave us and the crawl already fetched. Only the seed host's own
+        variant is touched — a genuine subdomain under ``domain`` scope is left
+        as it is.
+        """
+        parsed = _parsed(url)
+        if parsed is None or not parsed.hostname:
+            return url
+        host = parsed.hostname.lower()
+        if host == self.seed_host or _host_key(host) != self.host:
+            return url
+        netloc = f"{self.seed_host}:{parsed.port}" if parsed.port else self.seed_host
+        return urlunparse(parsed._replace(netloc=netloc))
 
     def allows(self, url: str) -> bool:
         """True if ``url`` may be fetched and stored as part of this crawl."""

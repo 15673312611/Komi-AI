@@ -232,7 +232,9 @@ class TestEnhancedWebsiteReader(unittest.TestCase):
         soup = BeautifulSoup(html, 'html.parser')
         links = self.reader._extract_links(soup, 'https://site.com')
         self.assertIn('https://site.com/a', links)
-        self.assertIn('https://www.site.com/b', links)
+        # In scope, and stored under the seed's spelling of the host.
+        self.assertIn('https://site.com/b', links)
+        self.assertNotIn('https://www.site.com/b', links)
         self.assertNotIn('https://blog.site.com/c', links)
         self.assertNotIn('https://evilsite.com/d', links)
         self.assertNotIn('https://other.com/e', links)
@@ -251,6 +253,25 @@ class TestEnhancedWebsiteReader(unittest.TestCase):
         links = reader._extract_links(soup, 'https://site.com')
         self.assertIn('https://blog.site.com/b', links)
         self.assertNotIn('https://evilsite.com/c', links)
+
+    def test_extract_links_collapses_www_variants_onto_the_seed_host(self):
+        """A site that links both spellings stored the page twice — 4 of the 50
+        pages in a real paywithatoa.co.uk crawl were www/bare duplicates."""
+        html = """
+        <html><body>
+          <a href="https://www.site.com/terms">terms via www</a>
+          <a href="https://site.com/terms">terms bare</a>
+          <a href="https://www.site.com/privacy">privacy via www</a>
+        </body></html>
+        """
+        soup = BeautifulSoup(html, 'html.parser')
+        links = self.reader._extract_links(soup, 'https://site.com/')
+        self.assertEqual(links, ['https://site.com/terms', 'https://site.com/privacy'])
+
+        # Seeded at the www spelling, the crawl keeps that one instead.
+        reader = EnhancedWebsiteReader()
+        links = reader._extract_links(soup, 'https://www.site.com/')
+        self.assertEqual(links, ['https://www.site.com/terms', 'https://www.site.com/privacy'])
 
     def test_extract_links_skips_non_http_schemes(self):
         """mailto:/tel: hrefs are contact actions, not pages. urljoin leaves them
