@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 -->
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import type { AddSourcePayload, CrawlScope } from '@/composables/useKnowledgeExplorer'
 
 type SourceKind = 'website' | 'sitemap' | 'pdf' | 'text'
@@ -74,26 +74,46 @@ const parsedUrl = computed<URL | null>(() => {
   }
 })
 
-const seedHost = computed(() => parsedUrl.value?.hostname ?? 'this host')
-const seedSection = computed(() => {
-  const path = parsedUrl.value?.pathname.replace(/\/$/, '') ?? ''
-  return path || '/'
+const seedHost = computed(() => parsedUrl.value?.hostname ?? '')
+// The section is the URL's own path. Empty for a homepage URL — there is no
+// section to speak of, and "pages under /" would just be "This site" again.
+const seedSection = computed(() => parsedUrl.value?.pathname.replace(/\/$/, '') ?? '')
+
+const scopes = computed<{ key: CrawlScope; title: string; sub: string }[]>(() => {
+  const host = seedHost.value
+  const section = seedSection.value
+  return [
+    { key: 'page', title: 'This page only', sub: 'Index just the URL above.' },
+    ...(section
+      ? [
+          {
+            key: 'path' as CrawlScope,
+            title: 'This section',
+            sub: `Only pages under ${section}/ on ${host}.`,
+          },
+        ]
+      : []),
+    {
+      key: 'host',
+      title: 'This site',
+      sub: host ? `Every page on ${host}.` : 'Every page on the same host.',
+    },
+    {
+      key: 'domain',
+      // No domain name in the copy on purpose: working out that
+      // paywithatoa.co.uk is one registrable domain (not 'co.uk') needs the
+      // ccTLD list the backend keeps, and a second copy of it would drift.
+      title: 'Whole domain',
+      sub: 'Also other subdomains — blog, docs, app.',
+    },
+  ]
 })
 
-const scopes = computed<{ key: CrawlScope; title: string; sub: string }[]>(() => [
-  { key: 'page', title: 'This page only', sub: 'Index just the URL above.' },
-  {
-    key: 'path',
-    title: 'This section',
-    sub: `Pages under ${seedSection.value} on ${seedHost.value}.`,
-  },
-  { key: 'host', title: 'This site', sub: `Pages on ${seedHost.value} only.` },
-  {
-    key: 'domain',
-    title: 'Whole domain',
-    sub: 'Also other subdomains — blog, docs, marketing pages.',
-  },
-])
+// Editing the URL down to a homepage removes the section option; don't leave a
+// scope selected that is no longer on screen.
+watch(scopes, (options) => {
+  if (!options.some((option) => option.key === scope.value)) scope.value = 'host'
+})
 
 function pickFiles() {
   fileInput.value?.click()
