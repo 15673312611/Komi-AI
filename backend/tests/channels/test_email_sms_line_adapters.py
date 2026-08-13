@@ -42,6 +42,43 @@ class TestEmailAdapter:
         assert m.profile["subject"] == "Order issue"
         assert m.profile["inbound_message_id"] == "<abc123@mail.example.com>"
 
+    def test_threading_headers_from_raw_headers(self):
+        # Providers that forward the raw header block (dict or string) — the
+        # threading headers are pulled back out for ticket-reply matching.
+        string_headers = get_adapter("email").parse_inbound({
+            "from": "ada@example.com", "text": "still broken",
+            "headers": ("Message-ID: <r@mail>\n"
+                        "In-Reply-To: <ticket-1.a@acme.com>\n"
+                        "References: <ticket-1.root@acme.com> <ticket-1.a@acme.com>"),
+        })[0]
+        assert string_headers.profile["in_reply_to"] == "<ticket-1.a@acme.com>"
+        assert string_headers.profile["references"] == (
+            "<ticket-1.root@acme.com> <ticket-1.a@acme.com>")
+
+        dict_headers = get_adapter("email").parse_inbound({
+            "from": "ada@example.com", "text": "still broken",
+            "headers": {"In-Reply-To": "<ticket-2.a@acme.com>", "References": "<ticket-2.root@acme.com>"},
+        })[0]
+        assert dict_headers.profile["in_reply_to"] == "<ticket-2.a@acme.com>"
+        assert dict_headers.profile["references"] == "<ticket-2.root@acme.com>"
+
+    def test_threading_headers_from_flattened_payload(self):
+        # A provider that promotes headers to lowercased top-level fields.
+        m = get_adapter("email").parse_inbound({
+            "from": "ada@example.com", "text": "still broken",
+            "in-reply-to": "<ticket-3.a@acme.com>",
+            "references": "<ticket-3.root@acme.com> <ticket-3.a@acme.com>",
+        })[0]
+        assert m.profile["in_reply_to"] == "<ticket-3.a@acme.com>"
+        assert m.profile["references"] == "<ticket-3.root@acme.com> <ticket-3.a@acme.com>"
+
+    def test_threading_headers_absent_default_to_empty(self):
+        m = get_adapter("email").parse_inbound({
+            "from": "ada@example.com", "text": "hi", "subject": "New question",
+        })[0]
+        assert m.profile["in_reply_to"] == ""
+        assert m.profile["references"] == ""
+
     def test_parse_brevo_style(self):
         payload = {
             "From": {"Address": "Ada@Example.com", "Name": "Ada"},

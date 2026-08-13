@@ -225,15 +225,11 @@ class EmailAdapter(ChannelAdapter):
 
     @classmethod
     def _threading_header(cls, payload: dict, name: str) -> str:
-        """In-Reply-To/References, whether the provider passes the raw headers
-        through or promotes them to its own top-level field."""
-        flat = name.replace("-", "")
-        for key in (name, name.lower(), flat, flat.lower(),
-                    name.replace("-", "_").lower()):
-            value = payload.get(key)
-            if value:
-                return str(value)
-        return cls._header(payload, name) or ""
+        """In-Reply-To/References, read from the raw headers the provider
+        forwards (dict or string, both handled by _header). Also accepts a
+        top-level lowercased field for providers that flatten headers onto the
+        payload."""
+        return payload.get(name.lower()) or cls._header(payload, name) or ""
 
     @staticmethod
     def _header(payload: dict, name: str) -> Optional[str]:
