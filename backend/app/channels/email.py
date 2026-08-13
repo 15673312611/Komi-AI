@@ -161,7 +161,11 @@ class EmailAdapter(ChannelAdapter):
                 f"{sender_email}:{hashlib.sha256(text.encode()).hexdigest()[:32]}",
             text=text,
             profile={"name": sender_name or None, "email": sender_email,
-                     "subject": subject, "inbound_message_id": message_id},
+                     "subject": subject, "inbound_message_id": message_id,
+                     # Threading headers, kept raw — ticket reply matching
+                     # reads the Message-IDs we minted back out of them.
+                     "in_reply_to": self._threading_header(payload, "In-Reply-To"),
+                     "references": self._threading_header(payload, "References")},
         )]
 
     def conversation_state(self, inbound: InboundMessage) -> dict:
@@ -218,6 +222,14 @@ class EmailAdapter(ChannelAdapter):
         if "x-auto-response-suppress:" in lowered:
             return True
         return False
+
+    @classmethod
+    def _threading_header(cls, payload: dict, name: str) -> str:
+        """In-Reply-To/References, read from the raw headers the provider
+        forwards (dict or string, both handled by _header). Also accepts a
+        top-level lowercased field for providers that flatten headers onto the
+        payload."""
+        return payload.get(name.lower()) or cls._header(payload, name) or ""
 
     @staticmethod
     def _header(payload: dict, name: str) -> Optional[str]:

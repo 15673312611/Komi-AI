@@ -78,6 +78,13 @@ function avatarText(activity: TicketActivity): string {
             >
               sent to customer
             </span>
+            <span
+              v-if="activity.activity_type === 'customer_replied'
+                && activity.activity_metadata?.channel === 'email'"
+              class="visible-tag"
+            >
+              replied by email
+            </span>
             <span class="time">{{ timeAgo(activity.created_at) }}</span>
           </div>
           <div class="item-text" :class="{ muted: activity.actor_type === 'system' }">

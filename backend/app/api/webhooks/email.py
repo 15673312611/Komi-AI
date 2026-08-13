@@ -27,6 +27,7 @@ from app.database import get_db
 from app.models.channels import ChannelType
 from app.repositories.channels import ChannelAccountRepository
 from app.services.channel_chat import process_channel_message
+from app.services.ticket_email_reply import find_ticket_for_reply, record_ticket_email_reply
 
 router = APIRouter()
 logger = get_logger(__name__)
@@ -64,6 +65,13 @@ async def email_webhook(
             continue
         if is_duplicate_message(ChannelType.EMAIL.value,
                                 f"{account.id}:{inbound.external_message_id}"):
+            continue
+        # A reply to a ticket notification belongs on the ticket, not in a
+        # chat session — the customer is answering the support team.
+        ticket = find_ticket_for_reply(db, account.organization_id, inbound.profile)
+        if ticket is not None:
+            background_tasks.add_task(
+                record_ticket_email_reply, account.organization_id, ticket.id, inbound)
             continue
         background_tasks.add_task(process_channel_message, account.id, inbound)
 

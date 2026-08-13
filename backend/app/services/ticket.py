@@ -877,7 +877,51 @@ class TicketService:
             to_email,
             subject=f"[{ticket.display_number}] {ticket.title}",
             body=message,
+            ticket_id=ticket.id,
+            in_reply_to=self.last_customer_email_message_id(ticket),
         )
+
+    def last_customer_email_message_id(self, ticket: Ticket) -> Optional[str]:
+        """Message-ID of the customer's most recent emailed reply, so the next
+        notification threads under it in their client."""
+        for activity in reversed(self.activity_repo.list_for_ticket(ticket.id)):
+            if activity.activity_type != TicketActivityType.CUSTOMER_REPLIED.value:
+                continue
+            message_id = (activity.activity_metadata or {}).get("email_message_id")
+            if message_id:
+                return message_id
+        return None
+
+    def record_customer_email_reply(
+        self, ticket: Ticket, body: str, from_email: str, message_id: Optional[str] = None
+    ) -> TicketActivity:
+        """Append a customer's emailed reply to the ticket feed, reopening it
+        when the reply lands on a resolution the customer never confirmed.
+
+        Customer-visible (is_internal=False): it is the customer's own words,
+        and the agent-facing feed is where the team reads them."""
+        activity = self._add_activity(
+            ticket,
+            TicketActivityType.CUSTOMER_REPLIED,
+            actor_type=TicketActorType.CUSTOMER,
+            body=body,
+            is_internal=False,
+            metadata={
+                "channel": "email",
+                "from": from_email,
+                "email_message_id": message_id,
+            },
+        )
+        current = TicketStatus(str(ticket.status))
+        if current == TicketStatus.RESOLVED_PENDING_CONFIRMATION and (
+            TicketStatus.REOPENED in TICKET_STATUS_TRANSITIONS.get(current, set())
+        ):
+            self.reopen(
+                ticket,
+                reason="Customer replied by email before confirming the resolution",
+                actor_type=TicketActorType.CUSTOMER,
+            )
+        return activity
 
     def _primary_session(self, ticket: Ticket) -> Optional[SessionToAgent]:
         session_ids = self.repo.get_session_ids(ticket.id)
