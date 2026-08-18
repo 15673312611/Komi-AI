@@ -24,7 +24,5 @@ interface Window {
         initialToken?: string;
         workflow?: boolean;
         allowAttachments?: boolean;
-        /** False when the agent never answers with AI, so no bot reply is coming. */
-        aiRepliesEnabled?: boolean;
     };
 } 

@@ -37,6 +37,29 @@ export function useWidgetSocket() {
     const currentForm = ref<any>(null)
     const currentSessionId = ref<string>('')
 
+    // The typing indicator is driven solely by the server's `bot_typing`
+    // event. The widget never guesses: a reply it optimistically waited for is
+    // exactly how the dots ended up spinning forever whenever nothing was
+    // going to answer (AI switched off, a human handling it, a queued chat).
+    let botTypingTimeout: ReturnType<typeof setTimeout> | null = null
+
+    /** Last resort: a backend that dies mid-reply must not strand the dots. */
+    const BOT_TYPING_TIMEOUT_MS = 60_000
+
+    const stopBotTyping = () => {
+        loading.value = false
+        if (botTypingTimeout) {
+            clearTimeout(botTypingTimeout)
+            botTypingTimeout = null
+        }
+    }
+
+    const startBotTyping = () => {
+        loading.value = true
+        if (botTypingTimeout) clearTimeout(botTypingTimeout)
+        botTypingTimeout = setTimeout(stopBotTyping, BOT_TYPING_TIMEOUT_MS)
+    }
+
     let socket: Socket | null = null
     let onTakeoverCallback: ((data: { session_id: string, user_name: string }) => void) | null = null
     let onWorkflowStateCallback: ((data: any) => void) | null = null
@@ -95,8 +118,15 @@ export function useWidgetSocket() {
             retryCount.value = 0
         })
 
+        // A reply is actually being produced now.
+        socket.on('bot_typing', () => {
+            startBotTyping()
+        })
+
         socket.on('disconnect', () => {
-          
+            // Nothing can arrive to clear it while we are disconnected.
+            stopBotTyping()
+
             if (connectionStatus.value === 'connected') {
                 console.log('Socket disconnected, setting connection status to connecting')
                 connectionStatus.value = 'connecting'
@@ -113,7 +143,7 @@ export function useWidgetSocket() {
         })
 
         socket.on('chat_response', (data) => {
-            loading.value = false // Stop loading indicator first
+            stopBotTyping() // the reply we were waiting for has arrived
             
             // Capture session_id from response for file attachments
             if (data.session_id) {
@@ -211,7 +241,7 @@ export function useWidgetSocket() {
             // Whatever we were waiting on, it is not coming: the bot is out of
             // this conversation now. Without this the typing dots spin forever
             // above the "joined the conversation" line.
-            loading.value = false
+            stopBotTyping()
 
             // Call the callback if registered
             if (onTakeoverCallback) {
@@ -297,7 +327,7 @@ export function useWidgetSocket() {
 
     // Socket event handlers
     const handleError = (error: any) => {
-        loading.value = false
+        stopBotTyping()
         errorMessage.value = getErrorMessage(error as SocketError)
         showError.value = true
         
@@ -371,7 +401,7 @@ export function useWidgetSocket() {
     // Form display handler
     const handleDisplayForm = (data: { form_data: any, session_id: string }) => {
         console.log('Form display handler in composable:', data)
-        loading.value = false
+        stopBotTyping()
         currentForm.value = data.form_data
         console.log('Set currentForm in handleDisplayForm:', currentForm.value)
         
@@ -491,12 +521,6 @@ export function useWidgetSocket() {
     const sendMessage = async (newMessage: string, email: string, files: Array<{content: string, filename: string, content_type: string, size: number}> = []) => {
         if (!socket || (!newMessage.trim() && files.length === 0)) return
         
-        // Only wait when a bot reply is actually coming: not once a human has
-        // joined, and not at all for an agent whose AI is switched off.
-        if (!humanAgent.value.human_agent_name && window.__INITIAL_DATA__?.aiRepliesEnabled !== false) {
-            loading.value = true
-        }
-        
         // Add user message to display with temporary blob URLs for images
         const userMessage: any = {
             message: newMessage,
@@ -560,7 +584,7 @@ export function useWidgetSocket() {
         currentSessionId.value = ''
         // A reply in flight never lands once the session closes, so the typing
         // indicator would spin forever over an empty chat.
-        loading.value = false
+        stopBotTyping()
         currentForm.value = null
     }
 

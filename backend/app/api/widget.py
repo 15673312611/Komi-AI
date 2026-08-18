@@ -256,8 +256,7 @@ async def get_widget_html(widget_id: str, agent_name: str, agent_customization: 
                     initialToken: "{html.escape(initial_token or '')}",
                     customer: {{}},
                     workflow: {str(agent_workflow).lower()},
-                    allowAttachments: {str(allow_attachments).lower()},
-                    aiRepliesEnabled: {str(ai_replies_enabled).lower()}
+                    allowAttachments: {str(allow_attachments).lower()}
                 }};
             </script>
         </head>

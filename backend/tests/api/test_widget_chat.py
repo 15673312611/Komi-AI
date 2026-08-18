@@ -340,6 +340,12 @@ async def test_widget_chat_message(db, test_widget, test_ai_config, test_custome
     assert kwargs['room'] == str(session_id), f"Expected room={session_id} but got {kwargs['room']}"
     assert kwargs['namespace'] == '/widget', f"Expected namespace='/widget' but got {kwargs['namespace']}"
 
+    # The indicator is server-driven: it must be switched on before the reply,
+    # and the reply is what switches it off client-side.
+    emitted = [c[0][0] for c in mock_sio.emit.call_args_list]
+    assert 'bot_typing' in emitted
+    assert emitted.index('bot_typing') < emitted.index('chat_response')
+
 @pytest.mark.asyncio
 async def test_human_only_agent_waits_instead_of_answering(
     db, test_widget, test_ai_config, test_customer, mock_sio, monkeypatch
@@ -420,6 +426,10 @@ async def test_human_only_agent_waits_instead_of_answering(
     # Their message reaches the dashboard so someone can pick it up...
     events = [c[0][0] for c in mock_sio.emit.call_args_list]
     assert 'chat_reply' in events
+
+    # ...and the typing indicator is never started, because nothing is being
+    # produced. This is what left the dots spinning on every message.
+    assert 'bot_typing' not in events
 
     # ...and they get one plain acknowledgement rather than an endless typing
     # indicator over an empty thread.

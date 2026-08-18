@@ -73,6 +73,19 @@ from app.utils.sanitize import sanitize_message
 router = APIRouter()
 logger = get_logger(__name__)
 
+
+async def _emit_bot_typing(session_id: str) -> None:
+    """Tell the widget a reply is actually being produced.
+
+    The widget owns no opinion about this: it shows the typing indicator only
+    between this event and the reply that follows. Every path that answers
+    nothing — a human-only agent, a chat someone has taken over, a closed
+    session — simply never calls this, so the indicator cannot be left spinning
+    over a conversation nobody is answering.
+    """
+    await sio.emit('bot_typing', {'session_id': session_id},
+                   room=session_id, namespace='/widget')
+
 # Rating feedback comes from an anonymous widget visitor and is stored, shown
 # to agents and copied onto the linked ticket's activity feed — bound it.
 MAX_RATING_FEEDBACK_LENGTH = 2000
@@ -484,6 +497,7 @@ async def handle_widget_chat(sid, data):
 
         # Check if agent uses workflow and no human agent has taken over
         if ai_replies_enabled and active_session.workflow_id and active_session.user_id is None:
+            await _emit_bot_typing(session_id)
             # Handle workflow chat using the dedicated service
             workflow_chat_service = WorkflowChatService(db)
             response = await workflow_chat_service.handle_workflow_chat(
@@ -515,6 +529,7 @@ async def handle_widget_chat(sid, data):
                 }, room=session_id, namespace='/widget')
                 return
         elif ai_replies_enabled and active_session.status == SessionStatus.OPEN and active_session.user_id is None: # open and user has not taken over
+            await _emit_bot_typing(session_id)
             logger.debug(f"Initializing chat agent for model {session['ai_config'].model_type}")
             # Initialize chat agent with async factory method for MCP tools support
             chat_agent = await ChatAgent.create_async(
@@ -538,6 +553,7 @@ async def handle_widget_chat(sid, data):
             finally:
                 await chat_agent.safe_cleanup_mcp_tools()
         elif active_session.status == SessionStatus.TRANSFERRED and active_session.user_id is None: # transferred and user has not taken over
+            await _emit_bot_typing(session_id)
             logger.debug(f"Transferring chat to human for session {session_id}")
             # Get response from agent transfer ai agent
             chat_repo = ChatRepository(db)
