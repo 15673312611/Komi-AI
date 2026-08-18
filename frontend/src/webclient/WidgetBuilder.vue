@@ -24,6 +24,7 @@ import AskAiPanel from './AskAiPanel.vue'
 import { resolveOrbStyle } from '../utils/orb'
 import { isEndChatMessage } from '../utils/endChat'
 import { AI_DISCLAIMER_TEXT, shouldShowAiDisclaimer } from '../utils/aiDisclaimer'
+import { presenceLine } from '../utils/widgetPresence'
 import { widgetEnv, resolveWidgetUploadUrl } from './widget-env'
 import { useWidgetStyles } from '../composables/useWidgetStyles'
 import { useWidgetFiles } from '../composables/useWidgetFiles'
@@ -1124,6 +1125,11 @@ const acceptTypes = 'image/*,.pdf,.doc,.docx,.txt,.csv,.xlsx,.xls'
 // A human agent has claimed the conversation, so replies no longer come from the AI.
 const isHandedOverToHuman = computed(() => !!humanAgent.value?.human_agent_name)
 
+// What the header may honestly say about how soon someone replies. Server-sent
+// at load; a takeover flips it to the human wording without a round trip.
+const presence = computed(() =>
+  presenceLine(window.__INITIAL_DATA__?.presence, isHandedOverToHuman.value))
+
 const canUploadMore = computed(() => {
   // Attachments only allowed when:
   // 1. allow_attachments setting is enabled
@@ -2138,8 +2144,8 @@ const askAiHotkey = computed(() => parentDisplay.value?.hotkey !== false)
                     <div class="header-info">
                         <h3 :style="messageNameStyles">{{ humanAgent.human_agent_name || agentName }}</h3>
                         <div class="status">
-                            <span class="status-indicator online"></span>
-                            <span class="status-text cm-presence">Online · replies instantly</span>
+                            <span class="status-indicator" :class="presence.online ? 'online' : 'away'"></span>
+                            <span class="status-text cm-presence">{{ presence.text }}</span>
                         </div>
                     </div>
                 </div>
@@ -3175,6 +3181,15 @@ const askAiHotkey = computed(() => parentDisplay.value?.hotkey !== false)
     background: var(--success-color);
     box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2);
     animation: pulse-online 2s ease-in-out infinite;
+}
+
+/* Outside business hours on a human-handled agent. Muted rather than the base
+   red, which reads as something being broken — nobody is at their desk, that
+   is all. Still, no animation: there is nothing live to signal. */
+.status-indicator.away {
+    background: var(--cm-muted, #9ca3af);
+    box-shadow: 0 0 0 2px rgba(156, 163, 175, 0.2);
+    animation: none;
 }
 
 /* Presence line ("Online · replies instantly"): accent when readable on the

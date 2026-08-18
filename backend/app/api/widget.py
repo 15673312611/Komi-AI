@@ -39,6 +39,7 @@ from app.repositories.session_to_agent import SessionToAgentRepository
 from app.models.session_to_agent import SessionStatus
 from app.core.config import settings
 from app.core.s3 import get_s3_signed_url
+from app.utils.business_hours import is_within_business_hours
 
 router = APIRouter()
 logger = get_logger(__name__)
@@ -121,6 +122,14 @@ async def get_widget_ui(
     if not agent:
         raise HTTPException(status_code=404, detail="Agent not found")
 
+    # What the header may honestly claim. Only a human-handled agent needs the
+    # business-hours check: while the AI answers, it answers at 3am too.
+    presence = {
+        'mode': 'ai' if agent.ai_replies_enabled else 'human',
+        'available': True if agent.ai_replies_enabled
+                     else is_within_business_hours(agent.organization),
+    }
+
     require_token_auth = getattr(agent, 'require_token_auth', False)
     customer_id = None
     token = None
@@ -153,7 +162,8 @@ async def get_widget_ui(
             initial_token=token,
             agent_workflow=bool(agent.use_workflow and agent.active_workflow_id),
             allow_attachments=agent.allow_attachments,
-            ai_replies_enabled=agent.ai_replies_enabled
+            ai_replies_enabled=agent.ai_replies_enabled,
+            presence=presence
         ))
     
     # Token auth NOT required - allow anonymous access
@@ -167,7 +177,8 @@ async def get_widget_ui(
             initial_token=token,
             agent_workflow=bool(agent.use_workflow and agent.active_workflow_id),
             allow_attachments=agent.allow_attachments,
-            ai_replies_enabled=agent.ai_replies_enabled
+            ai_replies_enabled=agent.ai_replies_enabled,
+            presence=presence
         ))
 
     # No valid token - create new one for anonymous access
@@ -187,10 +198,12 @@ async def get_widget_ui(
         initial_token=token,
         agent_workflow=bool(agent.use_workflow and agent.active_workflow_id),
         allow_attachments=agent.allow_attachments,
-        ai_replies_enabled=agent.ai_replies_enabled
+        ai_replies_enabled=agent.ai_replies_enabled,
+        presence=presence
     ))
 
-async def get_widget_html(widget_id: str, agent_name: str, agent_customization: dict, customer_id: Optional[str] = None, initial_token: Optional[str] = None, agent_workflow: bool = False, allow_attachments: bool = False, ai_replies_enabled: bool = True) -> str:
+async def get_widget_html(widget_id: str, agent_name: str, agent_customization: dict, customer_id: Optional[str] = None, initial_token: Optional[str] = None, agent_workflow: bool = False, allow_attachments: bool = False, ai_replies_enabled: bool = True,
+                          presence: Optional[dict] = None) -> str:
     """Generate widget HTML with embedded data"""
     import html
     widget_url = settings.VITE_WIDGET_URL
@@ -256,7 +269,8 @@ async def get_widget_html(widget_id: str, agent_name: str, agent_customization: 
                     initialToken: "{html.escape(initial_token or '')}",
                     customer: {{}},
                     workflow: {str(agent_workflow).lower()},
-                    allowAttachments: {str(allow_attachments).lower()}
+                    allowAttachments: {str(allow_attachments).lower()},
+                    presence: {json.dumps(presence or {'mode': 'ai', 'available': True})}
                 }};
             </script>
         </head>

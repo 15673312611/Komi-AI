@@ -15,15 +15,14 @@ limitations under the License.
 """
 
 from typing import Dict, Any
-from datetime import datetime
 import asyncio
-import pytz
 from agno.agent import Agent
 from app.agents.guardrail_policy import INJECTION_CLAUSE, visitor_data_block
 from app.utils.agno_utils import create_model
 from app.repositories.agent import AgentRepository
 from app.repositories.customer import CustomerRepository
 from app.core.logger import get_logger
+from app.utils.business_hours import DEFAULT_BUSINESS_HOURS, is_within_business_hours
 from app.database import get_db
 from app.repositories.group import GroupRepository
 from app.tools.jira_toolkit import JiraTools
@@ -241,55 +240,13 @@ async def get_agent_availability_response(
 
     # Get organization's business hours
     org = agent.get("organization") if isinstance(agent, dict) else getattr(agent, 'organization', None)
-    
-    business_hours = org.business_hours if org and hasattr(org, 'business_hours') else {
-        'monday': {'start': '09:00', 'end': '17:00', 'enabled': True},
-        'tuesday': {'start': '09:00', 'end': '17:00', 'enabled': True},
-        'wednesday': {'start': '09:00', 'end': '17:00', 'enabled': True},
-        'thursday': {'start': '09:00', 'end': '17:00', 'enabled': True},
-        'friday': {'start': '09:00', 'end': '17:00', 'enabled': True},
-        'saturday': {'start': '09:00', 'end': '17:00', 'enabled': False},
-        'sunday': {'start': '09:00', 'end': '17:00', 'enabled': False}
-    }
 
-    # Get organization timezone
-    org_tz_name = org.timezone if org and hasattr(org, 'timezone') else 'UTC'
-    try:
-        org_tz = pytz.timezone(org_tz_name)
-    except pytz.UnknownTimeZoneError:
-        logger.warning(f"Invalid timezone {org_tz_name}, using UTC")
-        org_tz = pytz.UTC
-
-    # Get current time in organization timezone
-    current_time = datetime.now(org_tz)
-    current_day = current_time.strftime('%A').lower()
-
-    # Get today's business hours with proper fallbacks
-    today_hours = business_hours.get(current_day, {
-        'start': '09:00',
-        'end': '17:00',
-        'enabled': False
-    })
-
-    # Parse hours correctly with error handling
-    try:
-        start_hour, start_minute = map(int, today_hours.get('start', '09:00').split(':'))
-        end_hour, end_minute = map(int, today_hours.get('end', '17:00').split(':'))
-    except ValueError as e:
-        logger.error(f"Error parsing business hours: {str(e)}")
-        # Fallback to default hours
-        start_hour, start_minute = 9, 0
-        end_hour, end_minute = 17, 0
-
-    # Calculate time in minutes correctly
-    current_time_in_minutes = current_time.hour * 60 + current_time.minute
-    start_time_in_minutes = start_hour * 60 + start_minute
-    end_time_in_minutes = end_hour * 60 + end_minute
-
-    # Determine if within business hours
-    is_enabled = today_hours.get('enabled', False)
-    is_within_hours = start_time_in_minutes <= current_time_in_minutes <= end_time_in_minutes
-    is_business_hours = is_enabled and is_within_hours
+    # The raw table still feeds the prompt (it tells the visitor when we're
+    # open); the open/closed decision is shared with the widget's presence line
+    # so the visitor is never told the team is around while the AI says
+    # otherwise.
+    business_hours = getattr(org, 'business_hours', None) or DEFAULT_BUSINESS_HOURS
+    is_business_hours = is_within_business_hours(org)
 
 
     # Create transfer response agent

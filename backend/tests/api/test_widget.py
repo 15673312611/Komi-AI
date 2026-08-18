@@ -15,6 +15,7 @@ limitations under the License.
 """
 
 import pytest
+from unittest.mock import patch
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 from app.database import Base, get_db
@@ -139,6 +140,33 @@ def test_widget_ui_injects_app_config(client: TestClient, test_widget: Widget):
     assert f'"WS_URL": "{expected_ws}"' in response.text
     # APP_CONFIG must be declared before the widget module so it exists at load time.
     assert response.text.index("window.APP_CONFIG") < response.text.index("assets/widget.js")
+
+
+def test_widget_ui_presence_is_ai_when_the_ai_answers(client: TestClient, test_widget: Widget):
+    """The AI really does reply instantly, at any hour — no hours check."""
+    response = client.get(f"/api/v1/widgets/{test_widget.id}/data")
+    assert response.status_code == 200
+    assert '"mode": "ai"' in response.text
+    assert '"available": true' in response.text
+
+
+def test_widget_ui_presence_follows_business_hours_for_a_human_only_agent(
+    client: TestClient, db, test_widget: Widget, test_agent: Agent
+):
+    """A person has to reply, so the header may only claim availability while
+    the organization is actually open."""
+    test_agent.ai_replies_enabled = False
+    db.commit()
+
+    with patch('app.api.widget.is_within_business_hours', return_value=True):
+        response = client.get(f"/api/v1/widgets/{test_widget.id}/data")
+        assert '"mode": "human"' in response.text
+        assert '"available": true' in response.text
+
+    with patch('app.api.widget.is_within_business_hours', return_value=False):
+        response = client.get(f"/api/v1/widgets/{test_widget.id}/data")
+        assert '"mode": "human"' in response.text
+        assert '"available": false' in response.text
 
 
 def test_get_widget_data(client: TestClient, test_widget: Widget):
