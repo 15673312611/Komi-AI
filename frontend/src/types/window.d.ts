@@ -24,7 +24,7 @@ interface Window {
         initialToken?: string;
         workflow?: boolean;
         allowAttachments?: boolean;
-        /** How soon the header may claim someone replies. See utils/widgetPresence. */
-        presence?: { mode?: 'ai' | 'human'; available?: boolean };
+        /** How soon the header may claim someone replies. */
+        presence?: import('../utils/widgetPresence').WidgetPresence;
     };
 } 

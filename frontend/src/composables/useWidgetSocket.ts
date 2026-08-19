@@ -275,6 +275,7 @@ export function useWidgetSocket() {
             retryCount.value = 0
 
             // Cleanup existing socket if any
+            stopBotTyping()
             if (socket) {
                 socket.removeAllListeners()
                 socket.disconnect()
@@ -630,6 +631,9 @@ export function useWidgetSocket() {
     }
 
     const cleanup = () => {
+        // Before removeAllListeners, or the disconnect handler that would have
+        // done it never fires and the timer outlives the widget.
+        stopBotTyping()
         if (socket) {
             socket.removeAllListeners()
             socket.disconnect()
