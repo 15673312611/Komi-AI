@@ -72,3 +72,7 @@ frontend/.env.*.bak*
 
 # Stale loader copies — server.js serves the current build from frontend/public/webclient
 chattermate-test/chattermate.min.js
+
+# Only the :dev webclient build emits a sourcemap, and the committed loader is
+# the :prod one, which does not reference it. Keeps a stray dev artifact out.
+frontend/public/webclient/*.map
