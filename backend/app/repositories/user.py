@@ -107,45 +107,6 @@ class UserRepository:
             return True
         return False
 
-    def get_user_fcm_token(self, user_id: str) -> Optional[str]:
-        """Get user's FCM token for web notifications"""
-        try:
-            user = self.db.query(User).filter(User.id == user_id).first()
-            return user.fcm_token_web if user else None
-        except Exception as e:
-            logger.error(f"Error getting user FCM token: {str(e)}")
-            return None
-
-    def update_fcm_token(self, user_id: str, token: str) -> bool:
-        """Update user's FCM token"""
-        try:
-            user = self.db.query(User).filter(User.id == user_id).first()
-            if not user:
-                return False
-
-            user.fcm_token_web = token
-            self.db.commit()
-            return True
-        except Exception as e:
-            logger.error(f"Error updating FCM token: {str(e)}")
-            self.db.rollback()
-            return False
-
-    def clear_fcm_token(self, user_id: str) -> bool:
-        """Clear user's FCM token"""
-        try:
-            user = self.db.query(User).filter(User.id == user_id).first()
-            if not user:
-                return False
-
-            user.fcm_token_web = None
-            self.db.commit()
-            return True
-        except Exception as e:
-            logger.error(f"Error clearing FCM token: {str(e)}")
-            self.db.rollback()
-            return False
-            
     def get_first_admin_by_org(self, organization_id: UUID) -> Optional[User]:
         """Get the first admin user in an organization"""
         try:

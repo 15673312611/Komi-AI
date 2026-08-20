@@ -22,6 +22,7 @@ from unittest.mock import patch, MagicMock
 from app.database import Base, get_db
 from fastapi import FastAPI, HTTPException
 from app.models.user import User, UserGroup
+from app.models.fcm_token import FCMToken
 from app.models.organization import Organization
 from app.models.role import Role
 from app.models.permission import Permission, role_permissions
@@ -450,26 +451,61 @@ def test_delete_nonexistent_user(client: TestClient):
     response = client.delete(f"/api/v1/users/{nonexistent_id}")
     assert response.status_code == 404
 
-def test_update_fcm_token(client: TestClient, test_user: User):
-    """Test updating FCM token"""
-    token_data = {
-        "token": "test_fcm_token_123"
-    }
-    response = client.post("/api/v1/users/token/fcm-token", json=token_data)
+def test_register_fcm_token(client: TestClient, test_user: User, db: Session):
+    """Registering a token stores a row for this device"""
+    response = client.post("/api/v1/users/token/fcm-token",
+                           json={"token": "test_fcm_token_123"})
     assert response.status_code == 200
-    data = response.json()
-    assert data["message"] == "FCM token updated successfully"
+    assert response.json()["message"] == "FCM token registered successfully"
 
-def test_clear_fcm_token(client: TestClient, test_user: User, db: Session):
-    """Test clearing FCM token"""
-    # First set a token
-    test_user.fcm_token_web = "test_token"
+    tokens = db.query(FCMToken).filter(FCMToken.user_id == test_user.id).all()
+    assert [t.token for t in tokens] == ["test_fcm_token_123"]
+
+
+def test_register_fcm_token_is_idempotent(client: TestClient, test_user: User, db: Session):
+    """Re-posting the same token on every app load must not pile up rows"""
+    for _ in range(3):
+        response = client.post("/api/v1/users/token/fcm-token",
+                               json={"token": "same_token"})
+        assert response.status_code == 200
+
+    assert db.query(FCMToken).filter(FCMToken.user_id == test_user.id).count() == 1
+
+
+def test_register_fcm_token_keeps_other_devices(client: TestClient, test_user: User, db: Session):
+    """A second device adds a token instead of replacing the first"""
+    client.post("/api/v1/users/token/fcm-token", json={"token": "phone_token"})
+    client.post("/api/v1/users/token/fcm-token", json={"token": "laptop_token"})
+
+    tokens = {t.token for t in db.query(FCMToken).filter(
+        FCMToken.user_id == test_user.id).all()}
+    assert tokens == {"phone_token", "laptop_token"}
+
+
+def test_clear_fcm_token_only_removes_that_device(client: TestClient, test_user: User, db: Session):
+    """Signing out on one device must leave the user's other devices on push"""
+    db.add_all([
+        FCMToken(user_id=test_user.id, token="phone_token"),
+        FCMToken(user_id=test_user.id, token="laptop_token"),
+    ])
     db.commit()
 
-    response = client.delete("/api/v1/users/token/fcm-token")
+    response = client.request("DELETE", "/api/v1/users/token/fcm-token",
+                              json={"token": "laptop_token"})
     assert response.status_code == 200
-    data = response.json()
-    assert data["message"] == "FCM token cleared successfully" 
+    assert response.json()["message"] == "FCM token cleared successfully"
+
+    tokens = [t.token for t in db.query(FCMToken).filter(
+        FCMToken.user_id == test_user.id).all()]
+    assert tokens == ["phone_token"]
+
+
+def test_clear_unknown_fcm_token_succeeds(client: TestClient, test_user: User):
+    """Logging out twice, or after the token was pruned, is not an error"""
+    response = client.request("DELETE", "/api/v1/users/token/fcm-token",
+                              json={"token": "never_registered"})
+    assert response.status_code == 200
+
 
 @pytest.fixture
 def foreign_role(db) -> Role:

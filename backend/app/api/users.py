@@ -34,6 +34,7 @@ from app.core.security import create_access_token, create_refresh_token, validat
 from app.core.auth import INBOX_PERMISSIONS, get_current_user, require_any_permission, require_permissions
 from app.core.logger import get_logger
 from app.repositories.user import UserRepository
+from app.repositories.fcm_token import FCMTokenRepository
 from pydantic import BaseModel
 from app.models.role import Role
 from app.services.chat_scope_roles import resolve_role
@@ -785,42 +786,52 @@ class FCMTokenUpdate(BaseModel):
 
 
 @router.post("/token/fcm-token")
-async def update_fcm_token(
+async def register_fcm_token(
     token_data: FCMTokenUpdate = Body(...),
     current_user: User = Depends(get_current_user),
     db=Depends(get_db)
 ):
-    """Update user's FCM token for web notifications"""
+    """Register this browser's web-push token for the signed-in user."""
     try:
-        user_repo = UserRepository(db)
-        success = user_repo.update_fcm_token(current_user.id, token_data.token)
+        token_repo = FCMTokenRepository(db)
+        success = token_repo.register(current_user.id, token_data.token)
 
         if success:
-            return {"message": "FCM token updated successfully"}
-        return {"error": "Failed to update FCM token"}
+            return {"message": "FCM token registered successfully"}
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Failed to register FCM token"
+        )
 
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Error updating FCM token: {str(e)}")
-        return {"error": str(e)}
+        logger.error(f"Error registering FCM token: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
 
 
 @router.delete("/token/fcm-token")
-async def clear_fcm_token(
+async def unregister_fcm_token(
+    token_data: FCMTokenUpdate = Body(...),
     current_user: User = Depends(get_current_user),
     db=Depends(get_db)
 ):
-    """Clear user's FCM token"""
-    try:
-        user_repo = UserRepository(db)
-        print(current_user.id)
-        success = user_repo.clear_fcm_token(current_user.id)
+    """Drop this browser's token on logout.
 
-        if success:
-            return {"message": "FCM token cleared successfully"}
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Failed to clear FCM token"
-        )
+    The token is required: clearing every token for the account (what this used
+    to do) meant signing out on a laptop silently killed push on the user's
+    phone. A device that can no longer produce its token is cleaned up instead
+    by the dead-token pruning in send_fcm_notification.
+    """
+    try:
+        token_repo = FCMTokenRepository(db)
+        token_repo.remove(current_user.id, token_data.token)
+        # Absent rows are not an error: logging out twice, or after the token
+        # was already pruned, should still succeed.
+        return {"message": "FCM token cleared successfully"}
 
     except Exception as e:
         logger.error(f"Error clearing FCM token: {str(e)}")
