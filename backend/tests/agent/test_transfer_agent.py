@@ -375,7 +375,7 @@ async def test_get_agent_availability_response(test_agent, test_user_group, test
     with patch('app.agents.transfer_agent.CustomerRepository', return_value=mock_customer_repo), \
          patch('app.agents.transfer_agent.GroupRepository', return_value=mock_group_repo), \
          patch('app.agents.transfer_agent.TransferResponseAgent', return_value=mock_transfer_agent), \
-         patch('app.agents.transfer_agent.datetime') as mock_datetime:
+         patch('app.utils.business_hours.datetime') as mock_datetime:
         
         # Mock current time to be within business hours
         mock_now = MagicMock()
@@ -541,7 +541,7 @@ async def test_timezone_handling(test_agent):
          patch('app.agents.transfer_agent.GroupRepository', return_value=mock_group_repo), \
          patch('app.agents.transfer_agent.get_db', return_value=mock_get_db), \
          patch('app.agents.transfer_agent.TransferResponseAgent', return_value=mock_transfer_agent), \
-         patch('app.agents.transfer_agent.pytz', autospec=True) as mock_pytz:
+         patch('app.utils.business_hours.pytz', autospec=True) as mock_pytz:
         
         # Test with valid timezone
         mock_group_repo.get_group_with_users.return_value = mock_db_group

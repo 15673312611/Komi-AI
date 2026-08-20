@@ -29,6 +29,7 @@ from app.database import SessionLocal
 from app.models.ai_config import AIModelType
 from app.models.channels import ChannelAccount
 from app.models.session_to_agent import SessionStatus
+from app.repositories.agent import AgentRepository
 from app.repositories.ai_config import AIConfigRepository
 from app.repositories.chat import ChatRepository
 from app.repositories.customer import CustomerRepository
@@ -40,6 +41,7 @@ from app.repositories.channels import (
 )
 from app.repositories.session_to_agent import SessionToAgentRepository
 from app.services.chat_notifications import notify_new_chat
+from app.services.human_routing import HUMAN_ONLY_ACK, notify_customer
 from app.services.lead_capture import record_lead_from_response
 from app.services.message_delivery import DeliveryResult, deliver_to_customer
 
@@ -97,13 +99,32 @@ async def process_channel_message(account_id, inbound: InboundMessage) -> None:
                 ChannelConversationRepository(db).set_extra(
                     conversation, {**(conversation.extra or {}), **state})
 
-        # Human is handling (or transfer is pending): store + relay to the
-        # agent dashboard, never run the bot.
-        if session_record.user_id is not None or session_record.status == SessionStatus.TRANSFERRED:
+        # A human-only agent answers nothing — the chat waits in the inbox for
+        # someone to pick it up, so it takes the same path as one a human
+        # already holds. Unlike the widget there is no socket session to cache
+        # the flag on, so the lookup is skipped for the sessions that take that
+        # path regardless.
+        ai_replies_enabled = True
+        if session_record.user_id is None and session_record.status == SessionStatus.OPEN:
+            agent = AgentRepository(db).get_agent(agent_id)
+            ai_replies_enabled = agent.ai_replies_enabled if agent else True
+
+        # Human is handling (or a transfer is pending, or this agent never uses
+        # AI): store + relay to the agent dashboard, never run the bot.
+        if (session_record.user_id is not None
+                or session_record.status == SessionStatus.TRANSFERRED
+                or not ai_replies_enabled):
             stored = _store_customer_message(db, inbound, session_record, agent_id,
                                              customer_id, org_id, account)
             await _relay_to_human(session_record, inbound,
                                   created_at=getattr(stored, 'created_at', None))
+
+            # Nothing will answer this on its own, so acknowledge once — on a
+            # channel an unanswered message reads as a dead number. Only on the
+            # opening message of a brand-new conversation.
+            if is_new_session and not ai_replies_enabled:
+                await notify_customer(db, session_record, HUMAN_ONLY_ACK,
+                                      channels_only=False)
             return
 
         ai_config = AIConfigRepository(db).get_active_config(account.organization_id)

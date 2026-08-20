@@ -61,6 +61,9 @@ const {
   scrollToBottom,
   sendMessage,
   handleTakeover,
+  handleRouteToHuman,
+  isWaitingForHuman,
+  handlerCaption,
   updateChat,
   replaceChatFromProps,
   handledByAI,
@@ -215,6 +218,10 @@ watch(() => currentChat.value?.session_id, () => refreshLinkedTicket())
         <div v-if="handledByAI" class="chat-closed-status">
           <font-awesome-icon icon="fa-solid fa-lock" />
           Handled by AI
+        </div>
+        <div v-if="isWaitingForHuman" class="chat-closed-status">
+          <font-awesome-icon icon="fa-solid fa-user-clock" />
+          Waiting for a human
         </div>
         <div v-if="showTakenOverStatus" class="taken-over-status">
           <font-awesome-icon icon="fa-solid fa-user-clock" />
@@ -422,11 +429,22 @@ watch(() => currentChat.value?.session_id, () => refreshLinkedTicket())
          human, so claiming never requires opening the details panel. -->
     <footer v-if="showTakeoverButton" class="chat-input takeover-footer">
       <div class="takeover-caption">
-        {{ handledByAI ? 'This chat is being handled by AI' : 'The AI has handed this chat to a human' }}
+        {{ handlerCaption }}
       </div>
       <button class="takeover-button" :disabled="isLoading" @click="handleTakeover">
         <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 12h11m0 0l-4-4m4 4l-4 4"/><path d="M5 5v14"/></svg>
         Take over chat
+      </button>
+      <!-- Claiming it yourself was the only way to silence the AI. This queues
+           it for whoever is free instead. -->
+      <button
+        v-if="handledByAI"
+        class="hand-over-button"
+        :disabled="isLoading"
+        @click="handleRouteToHuman"
+      >
+        <font-awesome-icon icon="fa-solid fa-user-group" />
+        Hand to my team
       </button>
     </footer>
 
@@ -470,9 +488,7 @@ watch(() => currentChat.value?.session_id, () => refreshLinkedTicket())
         </div>
       </div>
       <div v-if="!canSendMessage" class="input-message">
-        {{ handledByAI ? 'This chat is being handled by AI' : 
-           isChatClosed  ? 'This chat has been closed' : 
-           'Chat is being handled by ' + chat.user_name }}
+        {{ handlerCaption }}
       </div>
     </footer>
 
@@ -584,6 +600,33 @@ watch(() => currentChat.value?.session_id, () => refreshLinkedTicket())
 }
 
 .takeover-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Secondary to "Take over chat": same shape, no fill. */
+.hand-over-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  height: 44px;
+  border: 1px solid var(--border-color);
+  border-radius: 13px;
+  background: transparent;
+  color: var(--text-color);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+  transition: background var(--transition-fast), opacity var(--transition-fast);
+}
+
+.hand-over-button:hover:not(:disabled) {
+  background: var(--o06);
+}
+
+.hand-over-button:disabled {
   opacity: 0.6;
   cursor: not-allowed;
 }

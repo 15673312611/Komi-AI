@@ -22,7 +22,8 @@ import { userService } from '@/services/user'
 import { socketService } from '@/services/socket'
 import { toast } from 'vue-sonner'
 import { canRequestRating, endChatMessage as endChatMessageFor } from '@/utils/endChat'
-import { canTakeOverChat } from '@/utils/chatState'
+import { canTakeOverChat, chatHandler } from '@/utils/chatState'
+import { routeChatToHuman } from '@/utils/chatActions'
 import { permissionChecks } from '@/utils/permissions'
 
 // Define valid chat statuses
@@ -63,32 +64,36 @@ export function useConversationChat(
     () => canTakeOverChat(chat.value) && permissionChecks.canTakeOverChats()
   )
 
-  const showTakenOverStatus = computed(() => {
-    // Show taken over status if:
-    // 1. Chat is open
-    // 2. A user has taken over
-    // 3. The user who took over is not the current user
-    return (
-      chat.value.status === 'open' && 
-      chat.value.user_id && 
-      chat.value.user_id !== currentUserId
-    )
-  })
+  // Who is answering the customer. Derived once, shared with the inbox list and
+  // the info panel through chatHandler, so the three surfaces cannot disagree.
+  const handler = computed(() => chatHandler(chat.value, currentUserId))
 
-  const handledByAI = computed(() => {
-    // Chat is handled by AI if:
-    // 1. Chat is open
-    // 2. No user has taken over
-    // 3. No group is assigned
-    return (
-      chat.value.status === 'open' && 
-      !chat.value.user_id && 
-      !chat.value.group_id
-    )
-  })
+  const handledByAI = computed(() => handler.value.kind === 'ai')
 
-  const isChatClosed = computed(() => {
-    return chat.value.status === 'closed'
+  // Nobody is answering yet: the AI queued it, or this agent never uses AI.
+  const isWaitingForHuman = computed(() => handler.value.kind === 'waiting')
+
+  const isChatClosed = computed(() => handler.value.kind === 'closed')
+
+  // A colleague holds it: we can watch, but not reply.
+  const showTakenOverStatus = computed(
+    () => handler.value.kind === 'human' && chat.value.user_id !== currentUserId
+  )
+
+  /** One sentence explaining why the composer is unavailable, per handler. */
+  const handlerCaption = computed(() => {
+    switch (handler.value.kind) {
+      case 'ai':
+        return 'This chat is being handled by AI'
+      case 'waiting':
+        // Deliberately not "the AI handed this over": with AI switched off on
+        // the agent there was never an AI in the conversation to hand it on.
+        return 'This chat is waiting for someone to pick it up'
+      case 'closed':
+        return 'This chat has been closed'
+      default:
+        return `This chat is being handled by ${handler.value.label}`
+    }
   })
 
   const canSendMessage = computed(() => {
@@ -219,6 +224,22 @@ export function useConversationChat(
         duration: 4000,
         closeButton: true
       })
+    } finally {
+      isLoading.value = false
+    }
+  }
+
+  const handleRouteToHuman = async () => {
+    try {
+      isLoading.value = true
+      const updated = await routeChatToHuman(chat.value.session_id)
+      if (!updated) return
+
+      // The endpoint returns the whole thread back, so take its state rather
+      // than guessing at a local patch.
+      chat.value = updated
+      emit('refresh')
+      emit('chatUpdated', chat.value)
     } finally {
       isLoading.value = false
     }
@@ -368,6 +389,9 @@ export function useConversationChat(
     scrollToBottom,
     sendMessage,
     handleTakeover,
+    handleRouteToHuman,
+    isWaitingForHuman,
+    handlerCaption,
     updateChat,
     replaceChatFromProps,
     handledByAI,

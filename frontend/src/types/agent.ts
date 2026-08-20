@@ -26,6 +26,8 @@ export interface Agent {
   is_active: boolean
   organization_id: string // UUID
   transfer_to_human: boolean
+  /** Off means the AI never replies: every chat goes straight to the team. */
+  ai_replies_enabled: boolean
   ask_for_rating: boolean
   handoff_collect_email: boolean
   handoff_collect_name: boolean
@@ -59,6 +61,7 @@ export interface AgentUpdate {
   instructions?: string[]
   is_active?: boolean
   transfer_to_human?: boolean
+  ai_replies_enabled?: boolean
   ask_for_rating?: boolean
   handoff_collect_email?: boolean
   handoff_collect_name?: boolean

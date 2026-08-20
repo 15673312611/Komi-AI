@@ -22,5 +22,9 @@ interface Window {
         customerId: string;
         customer: Record<string, any>;
         initialToken?: string;
+        workflow?: boolean;
+        allowAttachments?: boolean;
+        /** How soon the header may claim someone replies. */
+        presence?: import('../utils/widgetPresence').WidgetPresence;
     };
 } 

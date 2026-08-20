@@ -32,6 +32,7 @@ from app.repositories.channels import (
 from app.repositories.agent import AgentRepository
 from app.repositories.chat import ChatRepository
 from app.services import channel_chat
+from app.services.human_routing import HUMAN_ONLY_ACK
 from app.services.channel_chat import process_channel_message
 from app.services.message_delivery import DeliveryResult
 
@@ -312,6 +313,41 @@ async def test_human_handling_relays_and_skips_bot(db, routed_account, use_test_
     rooms = [call.kwargs.get("room") for call in mock_sio.emit.await_args_list]
     assert f"user_{test_user.id}" in rooms
     assert str(session.session_id) in rooms
+
+
+@pytest.mark.asyncio
+async def test_human_only_agent_never_runs_the_bot(db, routed_account, use_test_db,
+                                                   test_ai_config, test_agent, mock_sio):
+    """AI switched off on the agent: relay to the dashboard, never model.
+
+    No transfer either — the chat simply waits for someone to pick it up, so
+    the customer gets no automated reply.
+    """
+    test_agent.ai_replies_enabled = False
+    db.commit()
+
+    with patch.object(channel_chat.ChatAgent, "create_async", AsyncMock()) as create_async, \
+         patch("app.services.human_routing.deliver_to_customer",
+               AsyncMock(return_value=DeliveryResult(ok=True))) as ack:
+        await process_channel_message(routed_account.id, make_inbound("hello"))
+        create_async.assert_not_awaited()
+        # One acknowledgement so the number doesn't look dead, nothing more.
+        assert ack.await_count == 1
+        assert ack.await_args.args[2]['message'] == HUMAN_ONLY_ACK
+
+    # A follow-up message is not acknowledged again.
+    with patch.object(channel_chat.ChatAgent, "create_async", AsyncMock()), \
+         patch("app.services.human_routing.deliver_to_customer",
+               AsyncMock(return_value=DeliveryResult(ok=True))) as ack:
+        await process_channel_message(routed_account.id, make_inbound("still there?"))
+        assert not ack.called
+
+    conversation = db.query(ChannelConversation).one()
+    session = db.query(SessionToAgent).filter_by(
+        session_id=conversation.session_id).one()
+    # A plain open chat waiting in the inbox, not a transfer.
+    assert session.status == SessionStatus.OPEN
+    assert session.user_id is None
 
 
 @pytest.mark.asyncio

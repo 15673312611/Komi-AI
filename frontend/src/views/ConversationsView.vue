@@ -268,7 +268,12 @@ const handleChatUpdated = (chatDetail: ChatDetail) => {
       last_message: chatDetail.messages[chatDetail.messages.length - 1]?.message || '',
       updated_at: chatDetail.updated_at,
       message_count: chatDetail.messages.length,
-      status: chatDetail.status
+      status: chatDetail.status,
+      // Who holds the chat drives the row's handler badge. Leaving it out kept
+      // the row saying "AI" after a takeover until the next full refresh.
+      user_id: chatDetail.user_id,
+      user_name: chatDetail.user_name,
+      group_id: chatDetail.group_id
     }
     
     // Create a new array with the updated conversation
