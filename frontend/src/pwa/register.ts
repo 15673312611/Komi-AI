@@ -27,6 +27,14 @@ export const isShopifyEmbedded = (): boolean => {
 }
 
 /**
+ * How long to wait for the new worker to take control before forcing a reload.
+ * Activation is normally well under a second; this only covers a worker that
+ * fails to activate or a browser that withholds controllerchange, so the user
+ * is never stranded on the old build.
+ */
+const UPDATE_TAKEOVER_TIMEOUT_MS = 4000
+
+/**
  * Offer the new build rather than forcing it: an agent mid-reply should not
  * have the page reloaded under them. vue-sonner is imported lazily so the
  * registration path stays off the startup critical path.
@@ -34,23 +42,25 @@ export const isShopifyEmbedded = (): boolean => {
 async function promptForUpdate(reload: (reloadPage?: boolean) => Promise<void>) {
   try {
     const { toast } = await import('vue-sonner')
-    toast('A new version of ChatterMate is available', {
+    const id = toast('A new version of ChatterMate is available', {
       description: 'Reload to pick up the latest changes.',
       duration: Number.POSITIVE_INFINITY,
       action: {
         label: 'Reload',
-        onClick: async () => {
-          // reload() hands SKIP_WAITING to the waiting worker, but its own
-          // page-refresh depends on a controllerchange that doesn't fire
-          // reliably when the SW already claimed this client — verified: the
-          // new worker activated and precached the new build while the open
-          // document kept running the old CSS. Reload explicitly so the
-          // document actually picks the new assets up.
-          try {
-            await reload(true)
-          } finally {
-            window.location.reload()
-          }
+        onClick: () => {
+          // Do NOT reload here. registerSW's updateSW ignores its reloadPage
+          // argument and only posts SKIP_WAITING, without awaiting activation
+          // — it resolves within a tick. The page refresh is done by the
+          // `controlling` listener registerSW arms just before it calls us.
+          //
+          // Reloading here raced that handshake and always won: the document
+          // came back under the OLD worker with the new one still in `waiting`,
+          // so the next load re-dispatched `waiting` and the prompt returned.
+          // That is why the toast reappeared on every release and no amount of
+          // clicking Reload cleared it.
+          toast.dismiss(id)
+          void reload()
+          window.setTimeout(() => window.location.reload(), UPDATE_TAKEOVER_TIMEOUT_MS)
         },
       },
     })

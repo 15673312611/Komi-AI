@@ -17,6 +17,7 @@ limitations under the License.
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { userService } from '@/services/user'
+import { unregisterFCMToken } from '@/services/firebase'
 import { authService } from '@/services/auth'
 
 export function useAuth() {
@@ -28,8 +29,9 @@ export function useAuth() {
   const logout = async () => {
     try {
       isLoggingOut.value = true
-      // Clear FCM token first
-      await userService.clearFCMToken()
+      // Unregister this device's push token first — only this one, so the
+      // user's other signed-in devices keep receiving notifications.
+      await unregisterFCMToken()
       // Then proceed with normal logout
       await authService.logout()
       router.push('/login')

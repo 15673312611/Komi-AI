@@ -73,13 +73,16 @@ export const userService = {
     return response.data
   },
 
-  async clearFCMToken(): Promise<unknown> {
+  // Unregisters one device. The token is required: clearing every token for
+  // the account would knock the user's other signed-in devices off push.
+  async clearFCMToken(token: string): Promise<unknown> {
     try {
-      const response = await api.delete('/users/token/fcm-token')
+      const response = await api.delete('/users/token/fcm-token', { data: { token } })
       return response.data
     } catch (error) {
       console.error('Failed to clear FCM token:', error)
-      // throw error
+      // Never block logout on this — a token left behind is pruned server-side
+      // on its next failed delivery.
     }
   },
 

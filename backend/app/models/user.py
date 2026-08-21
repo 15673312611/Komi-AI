@@ -73,7 +73,6 @@ class User(Base):
     role_id = Column(Integer, ForeignKey("roles.id"), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
-    fcm_token_web = Column(String, nullable=True)
 
     # Define relationships
     organization = relationship("Organization", back_populates="users")
@@ -85,6 +84,9 @@ class User(Base):
     )
     notifications = relationship(
         "Notification", back_populates="user", cascade="all, delete-orphan")
+    # One row per signed-in browser; see app/models/fcm_token.py
+    fcm_tokens = relationship(
+        "FCMToken", back_populates="user", cascade="all, delete-orphan")
     chat_histories = relationship("ChatHistory", back_populates="user")
     
     # Add groups relationship

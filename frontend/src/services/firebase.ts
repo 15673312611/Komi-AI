@@ -65,32 +65,39 @@ export const getMessagingIfSupported = async (): Promise<Messaging | null> => {
   return getMessaging(initializeFirebase() ?? undefined)
 }
 
-// Last token synced to the backend — skips the per-page-load POST when getToken
-// returns the same value (it almost always does).
-const FCM_TOKEN_KEY = 'cm-fcm-token-synced'
-
-// Mint an FCM token against the app service worker and store it server-side.
-// Requires notification permission to already be granted.
-const registerFCMToken = async (): Promise<boolean> => {
+// The token for this browser install, or null if push can't run here (no
+// support, no service worker, permission not granted).
+const getCurrentToken = async (): Promise<string | null> => {
   const messaging = await getMessagingIfSupported()
-  if (!messaging) return false
+  if (!messaging) return null
 
   // Reuse the app service worker so Firebase never registers a second one;
   // without a registration (dev, failed install) there is nothing to bind to.
   const serviceWorkerRegistration = await getSWRegistration()
-  if (!serviceWorkerRegistration) return false
+  if (!serviceWorkerRegistration) return null
 
   const { getToken } = await import('firebase/messaging')
-  const token = await getToken(messaging, {
+  return await getToken(messaging, {
     vapidKey: getFirebaseVapidKey(),
     serviceWorkerRegistration,
   })
-  // Keyed per user so a re-login on the same browser still syncs its token
-  const synced = `${userService.getUserId()}:${token}`
-  if (localStorage.getItem(FCM_TOKEN_KEY) !== synced) {
-    await userService.updateFCMToken(token)
-    localStorage.setItem(FCM_TOKEN_KEY, synced)
-  }
+}
+
+// Mint an FCM token against the app service worker and store it server-side.
+// Requires notification permission to already be granted.
+//
+// This posts on every call rather than caching "already synced" in
+// localStorage. FCM returns the same token for the life of a browser install,
+// so a cache keyed on it never invalidates — and the server value can change
+// without the client knowing (a logout elsewhere used to clear it, and dead
+// tokens get pruned server-side). A stale cache meant the device believed it
+// was registered while the server had nothing, and push stayed dead until site
+// data was cleared. One small POST per app load is the cheaper failure mode.
+const registerFCMToken = async (): Promise<boolean> => {
+  const token = await getCurrentToken()
+  if (!token) return false
+
+  await userService.updateFCMToken(token)
   return true
 }
 
@@ -131,4 +138,48 @@ export const refreshFCMToken = async (): Promise<void> => {
   } catch (err) {
     console.error('Failed to refresh FCM token:', err)
   }
+}
+
+/**
+ * Drop this browser's token on logout — server-side and at FCM.
+ *
+ * Only this device is unregistered; other devices the user is signed in on
+ * keep working. The two steps are independent on purpose: if the token can't
+ * be read (service worker not ready), the server row can't be named, but
+ * deleteToken() must still run — otherwise a shared computer keeps rendering
+ * the signed-out account's notifications. Killing the subscription at FCM
+ * makes the next send fail as Unregistered, which prunes the row server-side.
+ *
+ * Bounded by UNREGISTER_TIMEOUT_MS so signing out is never held up by it: it
+ * waits on getSWRegistration(), which only settles after an 8s timeout when no
+ * worker is ready. Giving up early is safe — a browser with no ready worker
+ * cannot display a push anyway, and the row is pruned on its next failed send.
+ */
+const UNREGISTER_TIMEOUT_MS = 3000
+
+const unregisterThisDevice = async (): Promise<void> => {
+  try {
+    const token = await getCurrentToken()
+    if (token) await userService.clearFCMToken(token)
+  } catch (err) {
+    console.error('Failed to clear FCM token server-side:', err)
+  }
+
+  try {
+    const messaging = await getMessagingIfSupported()
+    if (!messaging) return
+    const { deleteToken } = await import('firebase/messaging')
+    await deleteToken(messaging)
+  } catch (err) {
+    console.error('Failed to delete FCM token:', err)
+  }
+}
+
+export const unregisterFCMToken = async (): Promise<void> => {
+  if (!('Notification' in window) || Notification.permission !== 'granted') return
+
+  await Promise.race([
+    unregisterThisDevice(),
+    new Promise<void>((resolve) => setTimeout(resolve, UNREGISTER_TIMEOUT_MS)),
+  ])
 }

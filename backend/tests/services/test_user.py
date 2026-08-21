@@ -17,11 +17,13 @@ limitations under the License.
 import json
 
 import pytest
-from unittest.mock import Mock, patch, AsyncMock, MagicMock
+from unittest.mock import Mock, patch
 from uuid import uuid4
 
+from firebase_admin import messaging as real_messaging
+from firebase_admin.exceptions import InvalidArgumentError, UnavailableError
+
 from app.services.user import send_fcm_notification
-from app.models.user import User
 from app.models.notification import Notification, NotificationType
 
 
@@ -32,25 +34,8 @@ def mock_db():
 
 
 @pytest.fixture
-def sample_user():
-    """Create a sample user with FCM token"""
-    user = Mock(spec=User)
-    user.id = uuid4()
-    user.email = "test@example.com"
-    user.full_name = "Test User"
-    user.fcm_token_web = "test_fcm_token_123"
-    return user
-
-
-@pytest.fixture
-def sample_user_no_token():
-    """Create a sample user without FCM token"""
-    user = Mock(spec=User)
-    user.id = uuid4()
-    user.email = "test@example.com"
-    user.full_name = "Test User"
-    user.fcm_token_web = None
-    return user
+def user_id():
+    return str(uuid4())
 
 
 @pytest.fixture
@@ -58,134 +43,192 @@ def sample_notification():
     """Create a sample notification"""
     notification = Mock(spec=Notification)
     notification.id = 1
-    notification.type = NotificationType.KNOWLEDGE_PROCESSED
+    notification.type = NotificationType.SYSTEM
     notification.title = "Test Notification"
     notification.message = "This is a test notification"
     notification.notification_metadata = {"key": "value"}
     return notification
 
 
-@pytest.mark.asyncio
-async def test_send_fcm_notification_success(mock_db, sample_user, sample_notification):
-    """Test successful FCM notification sending"""
-    # Setup mock database query
-    mock_query = Mock()
-    mock_query.filter.return_value.first.return_value = sample_user
-    mock_db.query.return_value = mock_query
-    
-    # Mock Firebase messaging
-    with patch('app.services.user.messaging') as mock_messaging:
-        mock_messaging.Message = Mock()
-        mock_messaging.Notification = Mock()
-        mock_messaging.send.return_value = "message_id_123"
-        
-        # Call the function
-        await send_fcm_notification(str(sample_user.id), sample_notification, mock_db)
-        
-        # Verify database query was called correctly
-        mock_db.query.assert_called_once_with(User)
-        mock_query.filter.assert_called_once()
-        mock_query.filter.return_value.first.assert_called_once()
-        
-        # Verify Firebase message was created correctly: data-only (a
-        # notification payload would make the web SDK show a duplicate copy)
-        mock_messaging.Message.assert_called_once()
-        mock_messaging.Notification.assert_not_called()
-        data = mock_messaging.Message.call_args[1]['data']
-        assert data['title'] == sample_notification.title
-        assert data['body'] == sample_notification.message
+def batch_response(*successes):
+    """Fake a messaging.BatchResponse with one entry per token."""
+    responses = []
+    for success in successes:
+        result = Mock()
+        result.success = success is True
+        result.exception = None if success is True else success
+        responses.append(result)
+    batch = Mock()
+    batch.responses = responses
+    batch.success_count = sum(1 for s in successes if s is True)
+    return batch
 
-        # Verify message was sent
-        mock_messaging.send.assert_called_once()
+
+@pytest.fixture
+def token_repo():
+    """Patch the repository and hand back the instance the service will use."""
+    with patch('app.services.user.FCMTokenRepository') as repo_cls:
+        repo = repo_cls.return_value
+        repo.get_tokens.return_value = ["token_a"]
+        repo.remove_tokens.return_value = 1
+        yield repo
 
 
 @pytest.mark.asyncio
-async def test_send_fcm_notification_user_not_found(mock_db, sample_notification):
-    """Test FCM notification when user doesn't exist"""
-    # Setup mock database query to return None
-    mock_query = Mock()
-    mock_query.filter.return_value.first.return_value = None
-    mock_db.query.return_value = mock_query
-    
-    # Mock Firebase messaging
+async def test_send_fcm_notification_success(mock_db, user_id, sample_notification, token_repo):
+    """A registered device gets exactly one message"""
     with patch('app.services.user.messaging') as mock_messaging:
-        # Call the function
-        await send_fcm_notification("non_existent_user_id", sample_notification, mock_db)
-        
-        # Verify database query was called
-        mock_db.query.assert_called_once_with(User)
-        
-        # Verify Firebase messaging was not called since user doesn't exist
-        mock_messaging.Message.assert_not_called()
-        mock_messaging.send.assert_not_called()
+        mock_messaging.send_each.return_value = batch_response(True)
+
+        await send_fcm_notification(user_id, sample_notification, mock_db)
+
+        mock_messaging.send_each.assert_called_once()
+        assert len(mock_messaging.send_each.call_args[0][0]) == 1
+        token_repo.remove_tokens.assert_not_called()
 
 
 @pytest.mark.asyncio
-async def test_send_fcm_notification_no_fcm_token(mock_db, sample_user_no_token, sample_notification):
-    """Test FCM notification when user has no FCM token"""
-    # Setup mock database query
-    mock_query = Mock()
-    mock_query.filter.return_value.first.return_value = sample_user_no_token
-    mock_db.query.return_value = mock_query
-    
-    # Mock Firebase messaging
+async def test_send_fcm_notification_reaches_every_device(mock_db, user_id, sample_notification, token_repo):
+    """The whole point of the per-device table: a user with three signed-in
+    browsers gets three messages, not one."""
+    token_repo.get_tokens.return_value = ["phone", "laptop", "tablet"]
+
     with patch('app.services.user.messaging') as mock_messaging:
-        # Call the function
-        await send_fcm_notification(str(sample_user_no_token.id), sample_notification, mock_db)
-        
-        # Verify database query was called
-        mock_db.query.assert_called_once_with(User)
-        
-        # Verify Firebase messaging was not called since user has no FCM token
-        mock_messaging.Message.assert_not_called()
-        mock_messaging.send.assert_not_called()
+        mock_messaging.send_each.return_value = batch_response(True, True, True)
+
+        await send_fcm_notification(user_id, sample_notification, mock_db)
+
+        messages = mock_messaging.send_each.call_args[0][0]
+        assert len(messages) == 3
+        assert [call.kwargs['token'] for call in mock_messaging.Message.call_args_list] == [
+            "phone", "laptop", "tablet"]
 
 
 @pytest.mark.asyncio
-async def test_send_fcm_notification_firebase_exception(mock_db, sample_user, sample_notification):
-    """Test FCM notification error handling when Firebase throws an exception"""
-    # Setup mock database query
-    mock_query = Mock()
-    mock_query.filter.return_value.first.return_value = sample_user
-    mock_db.query.return_value = mock_query
-    
-    # Mock Firebase messaging to raise an exception
+async def test_send_fcm_notification_chunks_beyond_the_batch_limit(
+        mock_db, user_id, sample_notification, token_repo):
+    """send_each rejects >500 messages outright.
+
+    Without chunking that raises before anything is sent, and because pruning
+    only reads per-token responses from a successful call, the account could
+    never recover.
+    """
+    token_repo.get_tokens.return_value = [f"token_{i}" for i in range(750)]
+
     with patch('app.services.user.messaging') as mock_messaging:
-        mock_messaging.Message = Mock()
-        mock_messaging.Notification = Mock()
-        mock_messaging.send.side_effect = Exception("Firebase error")
-        
-        # Mock logger to verify error logging
-        with patch('app.services.user.logger') as mock_logger:
-            # Call the function
-            await send_fcm_notification(str(sample_user.id), sample_notification, mock_db)
-            
-            # Verify error was logged
-            mock_logger.error.assert_called_once()
-            assert "Failed to send FCM notification" in str(mock_logger.error.call_args)
+        mock_messaging.send_each.side_effect = [
+            batch_response(*([True] * 500)),
+            batch_response(*([True] * 250)),
+        ]
+
+        await send_fcm_notification(user_id, sample_notification, mock_db)
+
+        assert mock_messaging.send_each.call_count == 2
+        assert [len(c[0][0]) for c in mock_messaging.send_each.call_args_list] == [500, 250]
+        token_repo.remove_tokens.assert_not_called()
 
 
 @pytest.mark.asyncio
-async def test_send_fcm_notification_message_structure(mock_db, sample_user, sample_notification):
-    """Test that FCM message is structured correctly"""
-    # Setup mock database query
-    mock_query = Mock()
-    mock_query.filter.return_value.first.return_value = sample_user
-    mock_db.query.return_value = mock_query
-    
-    # Mock Firebase messaging
+async def test_send_fcm_notification_prunes_across_chunks(
+        mock_db, user_id, sample_notification, token_repo):
+    """A dead token in a later chunk is still matched to the right token."""
+    token_repo.get_tokens.return_value = [f"token_{i}" for i in range(501)]
+
     with patch('app.services.user.messaging') as mock_messaging:
-        mock_message_instance = Mock()
-        mock_messaging.Message.return_value = mock_message_instance
-        mock_messaging.send.return_value = "message_id_123"
-        
-        # Call the function
-        await send_fcm_notification(str(sample_user.id), sample_notification, mock_db)
-        
-        # Verify message was created with correct parameters: data-only payload
-        # (title/body in data so the web SDK doesn't auto-display a duplicate),
-        # metadata as JSON (not a Python repr), session_id flattened for SW
-        # deep links, and high-urgency webpush delivery.
+        mock_messaging.send_each.side_effect = [
+            batch_response(*([True] * 500)),
+            batch_response(real_messaging.UnregisteredError("gone")),
+        ]
+
+        await send_fcm_notification(user_id, sample_notification, mock_db)
+
+        token_repo.remove_tokens.assert_called_once_with(["token_500"])
+
+
+@pytest.mark.asyncio
+async def test_send_fcm_notification_no_tokens_is_logged(mock_db, user_id, sample_notification, token_repo):
+    """A user with no registered device leaves a trace instead of failing silently"""
+    token_repo.get_tokens.return_value = []
+
+    with patch('app.services.user.messaging') as mock_messaging, \
+            patch('app.services.user.logger') as mock_logger:
+        await send_fcm_notification(user_id, sample_notification, mock_db)
+
+        mock_messaging.send_each.assert_not_called()
+        assert mock_logger.info.called
+        assert "No FCM tokens registered" in mock_logger.info.call_args[0][0]
+
+
+@pytest.mark.asyncio
+async def test_send_fcm_notification_prunes_dead_tokens(mock_db, user_id, sample_notification, token_repo):
+    """Tokens FCM reports as dead are deleted so the browser can re-register"""
+    token_repo.get_tokens.return_value = ["live", "unregistered", "wrong_project"]
+
+    with patch('app.services.user.messaging') as mock_messaging:
+        mock_messaging.send_each.return_value = batch_response(
+            True,
+            real_messaging.UnregisteredError("token no longer valid"),
+            real_messaging.SenderIdMismatchError("wrong sender"),
+        )
+
+        await send_fcm_notification(user_id, sample_notification, mock_db)
+
+        token_repo.remove_tokens.assert_called_once_with(
+            ["unregistered", "wrong_project"])
+
+
+@pytest.mark.asyncio
+async def test_send_fcm_notification_keeps_tokens_on_payload_rejection(
+        mock_db, user_id, sample_notification, token_repo):
+    """A bad message (oversized payload) is rejected for every token at once.
+
+    Pruning on that would unregister every device the user owns over a fault
+    that has nothing to do with their tokens.
+    """
+    token_repo.get_tokens.return_value = ["phone", "laptop"]
+
+    with patch('app.services.user.messaging') as mock_messaging, \
+            patch('app.services.user.logger') as mock_logger:
+        mock_messaging.send_each.return_value = batch_response(
+            InvalidArgumentError("message is too big"),
+            InvalidArgumentError("message is too big"),
+        )
+
+        await send_fcm_notification(user_id, sample_notification, mock_db)
+
+        token_repo.remove_tokens.assert_not_called()
+        assert mock_logger.error.called
+
+
+@pytest.mark.asyncio
+async def test_send_fcm_notification_keeps_tokens_on_transient_errors(
+        mock_db, user_id, sample_notification, token_repo):
+    """A network blip must not cost the user their registration"""
+    token_repo.get_tokens.return_value = ["live", "flaky"]
+
+    with patch('app.services.user.messaging') as mock_messaging, \
+            patch('app.services.user.logger') as mock_logger:
+        mock_messaging.send_each.return_value = batch_response(
+            True, UnavailableError("try again"))
+
+        await send_fcm_notification(user_id, sample_notification, mock_db)
+
+        token_repo.remove_tokens.assert_not_called()
+        assert mock_logger.error.called
+
+
+@pytest.mark.asyncio
+async def test_send_fcm_notification_message_structure(mock_db, user_id, sample_notification, token_repo):
+    """Data-only payload (title/body in data so the web SDK doesn't auto-display
+    a duplicate), metadata as JSON (not a Python repr), session_id flattened for
+    SW deep links, and high-urgency webpush delivery."""
+    sample_notification.notification_metadata = {"session_id": "abc-123"}
+
+    with patch('app.services.user.messaging') as mock_messaging:
+        mock_messaging.send_each.return_value = batch_response(True)
+
+        await send_fcm_notification(user_id, sample_notification, mock_db)
+
         mock_messaging.WebpushConfig.assert_called_once_with(
             headers={'Urgency': 'high', 'TTL': '86400'}
         )
@@ -195,119 +238,72 @@ async def test_send_fcm_notification_message_structure(mock_db, sample_user, sam
                 'body': sample_notification.message,
                 'type': sample_notification.type,
                 'notification_id': str(sample_notification.id),
-                'session_id': '',
-                'metadata': json.dumps(sample_notification.notification_metadata)
+                'session_id': 'abc-123',
+                'metadata': json.dumps({"session_id": "abc-123"})
             },
-            token=sample_user.fcm_token_web,
+            token="token_a",
             webpush=mock_messaging.WebpushConfig.return_value,
         )
 
 
 @pytest.mark.asyncio
-async def test_send_fcm_notification_with_none_metadata(mock_db, sample_user):
-    """Test FCM notification when notification metadata is None"""
-    # Create notification with None metadata
+async def test_send_fcm_notification_with_none_metadata(mock_db, user_id, token_repo):
+    """Missing metadata falls back to an empty object, not a crash"""
     notification = Mock(spec=Notification)
     notification.id = 1
     notification.type = NotificationType.SYSTEM
     notification.title = "Test Notification"
     notification.message = "This is a test notification"
     notification.notification_metadata = None
-    
-    # Setup mock database query
-    mock_query = Mock()
-    mock_query.filter.return_value.first.return_value = sample_user
-    mock_db.query.return_value = mock_query
-    
-    # Mock Firebase messaging
+
     with patch('app.services.user.messaging') as mock_messaging:
-        mock_messaging.Message = Mock()
-        mock_messaging.Notification = Mock()
-        mock_messaging.send.return_value = "message_id_123"
-        
-        # Call the function
-        await send_fcm_notification(str(sample_user.id), notification, mock_db)
-        
-        # Verify message was created with correct data (metadata should be '{}')
-        call_args = mock_messaging.Message.call_args
-        assert call_args[1]['data']['metadata'] == str({})
+        mock_messaging.send_each.return_value = batch_response(True)
+
+        await send_fcm_notification(user_id, notification, mock_db)
+
+        data = mock_messaging.Message.call_args.kwargs['data']
+        assert data['session_id'] == ''
+        assert data['metadata'] == '{}'
 
 
 @pytest.mark.asyncio
-async def test_send_fcm_notification_different_notification_types(mock_db, sample_user):
-    """Test FCM notification with different notification types"""
-    notification_types = [
-        NotificationType.KNOWLEDGE_PROCESSED,
-        NotificationType.KNOWLEDGE_FAILED,
-        NotificationType.SYSTEM,
-        NotificationType.CHAT
-    ]
-    
-    # Setup mock database query
-    mock_query = Mock()
-    mock_query.filter.return_value.first.return_value = sample_user
-    mock_db.query.return_value = mock_query
-    
-    for notification_type in notification_types:
-        # Create notification with specific type
+async def test_send_fcm_notification_different_notification_types(mock_db, user_id, token_repo):
+    """Every notification type is forwarded as-is"""
+    for notification_type in NotificationType:
         notification = Mock(spec=Notification)
         notification.id = 1
         notification.type = notification_type
-        notification.title = f"Test {notification_type.value}"
-        notification.message = f"This is a {notification_type.value} notification"
-        notification.notification_metadata = {"type": notification_type.value}
-        
-        # Mock Firebase messaging
+        notification.title = "Test"
+        notification.message = "Test message"
+        notification.notification_metadata = {}
+
         with patch('app.services.user.messaging') as mock_messaging:
-            mock_messaging.Message = Mock()
-            mock_messaging.Notification = Mock()
-            mock_messaging.send.return_value = "message_id_123"
-            
-            # Call the function
-            await send_fcm_notification(str(sample_user.id), notification, mock_db)
-            
-            # Verify message was created with correct type
-            call_args = mock_messaging.Message.call_args
-            assert call_args[1]['data']['type'] == notification_type
+            mock_messaging.send_each.return_value = batch_response(True)
+
+            await send_fcm_notification(user_id, notification, mock_db)
+
+            assert mock_messaging.Message.call_args.kwargs['data']['type'] == notification_type
 
 
 @pytest.mark.asyncio
-async def test_send_fcm_notification_database_exception(sample_notification):
-    """Test FCM notification when database query throws an exception"""
-    # Create mock database that raises an exception
-    mock_db = Mock()
-    mock_db.query.side_effect = Exception("Database connection error")
-    
-    # Mock logger to verify error logging
-    with patch('app.services.user.logger') as mock_logger:
-        # Call the function
-        await send_fcm_notification("test_user_id", sample_notification, mock_db)
-        
-        # Verify error was logged
-        mock_logger.error.assert_called_once()
-        assert "Failed to send FCM notification" in str(mock_logger.error.call_args)
+async def test_send_fcm_notification_firebase_exception(mock_db, user_id, sample_notification, token_repo):
+    """A thrown send never propagates to the caller creating the notification"""
+    with patch('app.services.user.messaging') as mock_messaging, \
+            patch('app.services.user.logger') as mock_logger:
+        mock_messaging.send_each.side_effect = Exception("Firebase error")
+
+        await send_fcm_notification(user_id, sample_notification, mock_db)
+
+        assert mock_logger.error.called
 
 
 @pytest.mark.asyncio
-async def test_send_fcm_notification_success_logging(mock_db, sample_user, sample_notification):
-    """Test that successful FCM notification sending is logged"""
-    # Setup mock database query
-    mock_query = Mock()
-    mock_query.filter.return_value.first.return_value = sample_user
-    mock_db.query.return_value = mock_query
-    
-    # Mock Firebase messaging
-    with patch('app.services.user.messaging') as mock_messaging:
-        mock_messaging.Message = Mock()
-        mock_messaging.Notification = Mock()
-        mock_messaging.send.return_value = "message_id_123"
-        
-        # Mock logger to verify success logging
-        with patch('app.services.user.logger') as mock_logger:
-            # Call the function
-            await send_fcm_notification(str(sample_user.id), sample_notification, mock_db)
-            
-            # Verify success was logged
-            mock_logger.info.assert_called_once()
-            assert "Successfully sent FCM notification" in str(mock_logger.info.call_args)
-            assert "message_id_123" in str(mock_logger.info.call_args)
+async def test_send_fcm_notification_database_exception(sample_notification, user_id):
+    """A repository failure is swallowed and logged"""
+    with patch('app.services.user.FCMTokenRepository') as repo_cls, \
+            patch('app.services.user.logger') as mock_logger:
+        repo_cls.side_effect = Exception("Database error")
+
+        await send_fcm_notification(user_id, sample_notification, Mock())
+
+        assert mock_logger.error.called
