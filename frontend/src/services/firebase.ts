@@ -149,10 +149,15 @@ export const refreshFCMToken = async (): Promise<void> => {
  * deleteToken() must still run — otherwise a shared computer keeps rendering
  * the signed-out account's notifications. Killing the subscription at FCM
  * makes the next send fail as Unregistered, which prunes the row server-side.
+ *
+ * Bounded by UNREGISTER_TIMEOUT_MS so signing out is never held up by it: it
+ * waits on getSWRegistration(), which only settles after an 8s timeout when no
+ * worker is ready. Giving up early is safe — a browser with no ready worker
+ * cannot display a push anyway, and the row is pruned on its next failed send.
  */
-export const unregisterFCMToken = async (): Promise<void> => {
-  if (!('Notification' in window) || Notification.permission !== 'granted') return
+const UNREGISTER_TIMEOUT_MS = 3000
 
+const unregisterThisDevice = async (): Promise<void> => {
   try {
     const token = await getCurrentToken()
     if (token) await userService.clearFCMToken(token)
@@ -168,4 +173,13 @@ export const unregisterFCMToken = async (): Promise<void> => {
   } catch (err) {
     console.error('Failed to delete FCM token:', err)
   }
+}
+
+export const unregisterFCMToken = async (): Promise<void> => {
+  if (!('Notification' in window) || Notification.permission !== 'granted') return
+
+  await Promise.race([
+    unregisterThisDevice(),
+    new Promise<void>((resolve) => setTimeout(resolve, UNREGISTER_TIMEOUT_MS)),
+  ])
 }

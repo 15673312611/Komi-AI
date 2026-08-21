@@ -14,6 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from uuid import UUID
 from typing import List, Sequence
@@ -39,23 +40,36 @@ class FCMTokenRepository:
         previous account's notifications.
         """
         try:
-            existing = self.db.query(FCMToken).filter(
-                FCMToken.token == token).first()
-
-            if existing:
-                if existing.user_id == user_id:
-                    return True
-                logger.info(
-                    f"Reassigning FCM token from user {existing.user_id} to {user_id}")
-                existing.user_id = user_id
-            else:
-                self.db.add(FCMToken(user_id=user_id, token=token))
-
-            self.db.commit()
-            return True
+            if self._claim(user_id, token):
+                return True
+            # Lost the insert race: the client posts on every app load, so two
+            # tabs opening together both see no row and both insert. Re-run
+            # against the row the winner committed instead of failing the
+            # request and leaving this browser unregistered for the session.
+            self.db.rollback()
+            return self._claim(user_id, token)
         except Exception as e:
             logger.error(f"Error registering FCM token: {str(e)}")
             self.db.rollback()
+            return False
+
+    def _claim(self, user_id: UUID, token: str) -> bool:
+        """Point `token` at `user_id`. False if a concurrent insert won."""
+        existing = self.db.query(FCMToken).filter(
+            FCMToken.token == token).first()
+
+        if existing:
+            if existing.user_id != user_id:
+                logger.info(
+                    f"Reassigning FCM token from user {existing.user_id} to {user_id}")
+                existing.user_id = user_id
+        else:
+            self.db.add(FCMToken(user_id=user_id, token=token))
+
+        try:
+            self.db.commit()
+            return True
+        except IntegrityError:
             return False
 
     def get_tokens(self, user_id: UUID) -> List[str]:

@@ -58,6 +58,30 @@ class TestRegister:
         repo.register(test_user.id, "laptop_token")
         assert set(repo.get_tokens(test_user.id)) == {"phone_token", "laptop_token"}
 
+    def test_survives_a_lost_insert_race(self, repo, test_user, db, monkeypatch):
+        """Two tabs post the same token at once; the loser must still succeed.
+
+        The client posts on every app load, so a concurrent duplicate insert is
+        routine — failing it would leave that browser unregistered.
+        """
+        from sqlalchemy.exc import IntegrityError
+
+        real_commit = db.commit
+        calls = {"n": 0}
+
+        def commit_once_conflicting():
+            calls["n"] += 1
+            if calls["n"] == 1:
+                # Simulate the other tab having committed the row first.
+                raise IntegrityError("duplicate", None, Exception("conflict"))
+            return real_commit()
+
+        monkeypatch.setattr(db, "commit", commit_once_conflicting)
+        assert repo.register(test_user.id, "raced_token") is True
+        monkeypatch.undo()
+
+        assert repo.get_tokens(test_user.id) == ["raced_token"]
+
     def test_reassigns_shared_browser(self, repo, test_user, other_user):
         """FCM hands the same token to a browser whichever account signs in, so
         the row moves rather than delivering to the previous owner."""

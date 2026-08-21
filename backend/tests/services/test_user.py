@@ -105,6 +105,47 @@ async def test_send_fcm_notification_reaches_every_device(mock_db, user_id, samp
 
 
 @pytest.mark.asyncio
+async def test_send_fcm_notification_chunks_beyond_the_batch_limit(
+        mock_db, user_id, sample_notification, token_repo):
+    """send_each rejects >500 messages outright.
+
+    Without chunking that raises before anything is sent, and because pruning
+    only reads per-token responses from a successful call, the account could
+    never recover.
+    """
+    token_repo.get_tokens.return_value = [f"token_{i}" for i in range(750)]
+
+    with patch('app.services.user.messaging') as mock_messaging:
+        mock_messaging.send_each.side_effect = [
+            batch_response(*([True] * 500)),
+            batch_response(*([True] * 250)),
+        ]
+
+        await send_fcm_notification(user_id, sample_notification, mock_db)
+
+        assert mock_messaging.send_each.call_count == 2
+        assert [len(c[0][0]) for c in mock_messaging.send_each.call_args_list] == [500, 250]
+        token_repo.remove_tokens.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_send_fcm_notification_prunes_across_chunks(
+        mock_db, user_id, sample_notification, token_repo):
+    """A dead token in a later chunk is still matched to the right token."""
+    token_repo.get_tokens.return_value = [f"token_{i}" for i in range(501)]
+
+    with patch('app.services.user.messaging') as mock_messaging:
+        mock_messaging.send_each.side_effect = [
+            batch_response(*([True] * 500)),
+            batch_response(real_messaging.UnregisteredError("gone")),
+        ]
+
+        await send_fcm_notification(user_id, sample_notification, mock_db)
+
+        token_repo.remove_tokens.assert_called_once_with(["token_500"])
+
+
+@pytest.mark.asyncio
 async def test_send_fcm_notification_no_tokens_is_logged(mock_db, user_id, sample_notification, token_repo):
     """A user with no registered device leaves a trace instead of failing silently"""
     token_repo.get_tokens.return_value = []

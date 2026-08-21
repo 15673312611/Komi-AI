@@ -37,6 +37,12 @@ DEAD_TOKEN_ERRORS = (
     messaging.SenderIdMismatchError,
 )
 
+# send_each rejects a longer list outright. Chunking keeps an account that has
+# somehow accumulated more devices than this from raising before a single
+# message is sent — which would also stop the dead-token pruning below from
+# ever running, leaving that user permanently without push.
+FCM_SEND_BATCH_SIZE = 500
+
 
 async def send_fcm_notification(user_id: str, notification: Notification, db):
     """Push a notification to every browser the user has signed in on."""
@@ -92,19 +98,24 @@ async def send_fcm_notification(user_id: str, notification: Notification, db):
 
         # send_each reports per-token outcomes, so one dead device does not
         # stop the others from being delivered to.
-        batch = messaging.send_each(messages)
-
         dead_tokens = []
-        for token, result in zip(tokens, batch.responses):
-            if result.success:
-                continue
-            if isinstance(result.exception, DEAD_TOKEN_ERRORS):
-                dead_tokens.append(token)
-            else:
-                logger.error(
-                    f"Failed to send FCM notification {notification.id} to a device "
-                    f"of user {user_id}: {str(result.exception)}"
-                )
+        delivered = 0
+        for start in range(0, len(messages), FCM_SEND_BATCH_SIZE):
+            chunk = messages[start:start + FCM_SEND_BATCH_SIZE]
+            batch = messaging.send_each(chunk)
+            delivered += batch.success_count
+
+            for token, result in zip(tokens[start:start + FCM_SEND_BATCH_SIZE],
+                                     batch.responses):
+                if result.success:
+                    continue
+                if isinstance(result.exception, DEAD_TOKEN_ERRORS):
+                    dead_tokens.append(token)
+                else:
+                    logger.error(
+                        f"Failed to send FCM notification {notification.id} to a device "
+                        f"of user {user_id}: {str(result.exception)}"
+                    )
 
         if dead_tokens:
             removed = token_repo.remove_tokens(dead_tokens)
@@ -112,7 +123,7 @@ async def send_fcm_notification(user_id: str, notification: Notification, db):
                 f"Pruned {removed} dead FCM token(s) for user {user_id}")
 
         logger.info(
-            f"Sent FCM notification {notification.id} to {batch.success_count}/"
+            f"Sent FCM notification {notification.id} to {delivered}/"
             f"{len(tokens)} device(s) of user {user_id}"
         )
 
