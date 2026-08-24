@@ -196,7 +196,7 @@ onMounted(async () => {
               <span
                 class="day-label"
                 :class="{ off: !formData.business_hours[day.key].enabled }"
-              >{{ day.label === 'Monday' ? '周一' : day.label === 'Tuesday' ? '周二' : day.label === 'Wednesday' ? '周三' : day.label === 'Thursday' ? '周四' : day.label === 'Friday' ? '周五' : day.label === 'Saturday' ? '周六' : day.label === 'Sunday' ? '周日' : day.label }}</span>
+              >{{ ((day as any).label === 'Monday' ? '周一' : (day as any).label === 'Tuesday' ? '周二' : (day as any).label === 'Wednesday' ? '周三' : (day as any).label === 'Thursday' ? '周四' : (day as any).label === 'Friday' ? '周五' : (day as any).label === 'Saturday' ? '周六' : (day as any).label === 'Sunday' ? '周日' : (day as any).label) }}</span>
               <select
                 class="time-select"
                 v-model="formData.business_hours[day.key].start"

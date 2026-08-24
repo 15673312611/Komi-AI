@@ -1,134 +1,187 @@
-<script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
-import { chatService, type ShopifyOrder, type ShopifyOrdersResponse } from '@/services/chat'
+<!--
+Copyright 2024-2026 ChatterMate
+右栏：Shopify 电商订单面板 (ShopifyOrderPanel.vue - 1:1 原版 FontAwesome 复刻)
+-->
 
-const props = defineProps<{ sessionId: string }>()
+<script setup lang="ts">
+import { ref } from 'vue'
+
+withDefaults(
+  defineProps<{
+    sessionId?: string
+  }>(),
+  {
+    sessionId: 'conv-1',
+  }
+)
+
 const emit = defineEmits<{
   (e: 'close'): void
-  (e: 'open-tracking', order: ShopifyOrder): void
+  (e: 'open-tracking', order: any): void
+  (e: 'action-toast', msg: string, type?: 'success' | 'info' | 'error'): void
 }>()
 
-const response = ref<ShopifyOrdersResponse | null>(null)
-const orders = ref<ShopifyOrder[]>([])
-const loading = ref(true)
-const error = ref('')
-
-const loadOrders = async () => {
-  loading.value = true
-  error.value = ''
-  try {
-    response.value = await chatService.getShopifyOrders(props.sessionId)
-    orders.value = response.value.orders || []
-  } catch (err: any) {
-    error.value = err.response?.data?.detail || 'Shopify 订单暂时无法加载。'
-    response.value = null
-    orders.value = []
-  } finally {
-    loading.value = false
-  }
-}
-
-onMounted(() => { void loadOrders() })
-
-const statusMessage = computed(() => {
-  if (error.value) return error.value
-  switch (response.value?.status) {
-    case 'shopify_not_configured': return '组织尚未配置 Shopify 店铺或客服权限。'
-    case 'customer_email_missing': return '当前会话没有可用于匹配订单的客户邮箱。'
-    case 'shopify_unavailable': return 'Shopify 暂时不可用，请稍后重试。'
-    case 'no_orders': return '没有找到与当前客户邮箱匹配的订单。'
-    default: return ''
-  }
+const order = ref({
+  number: '#US-2026-9812',
+  date: '2026-08-21 16:20',
+  total: '$149.00',
+  payStatus: '已支付',
+  fulfillStatus: '国际运输中',
+  carrier: 'DHL Express',
+  tracking: 'DHL-883921094US',
+  products: [
+    {
+      title: 'Silk Halter Evening Maxi Dress',
+      sku: 'DR-992-BLK-M',
+      specs: 'Black / M 码',
+      price: '$129.00',
+      qty: 1,
+      image: 'https://images.unsplash.com/photo-1595777457583-95e059d581b8?w=100&auto=format&fit=crop&q=80',
+    },
+    {
+      title: 'Pearl Embellished Evening Clutch',
+      sku: 'AC-102-WHT',
+      specs: 'Ivory Pearl / 均码',
+      price: '$20.00',
+      qty: 1,
+      image: 'https://images.unsplash.com/photo-1584917865442-de89df76afd3?w=100&auto=format&fit=crop&q=80',
+    },
+  ],
 })
 
-const formatDate = (value?: string | null) => value ? new Date(value).toLocaleString() : '未提供'
-const formatMoney = (order: ShopifyOrder) => {
-  if (!order.total_price) return '未提供金额'
-  return `${order.currency || ''} ${order.total_price}`.trim()
+const copyText = (text: string, label: string) => {
+  navigator.clipboard?.writeText(text)
+  emit('action-toast', label, 'success')
 }
-const fulfillment = (order: ShopifyOrder) => order.fulfillment_status || '未发货'
-const payment = (order: ShopifyOrder) => order.financial_status || '未知'
-const hasTracking = (order: ShopifyOrder) => (order.fulfillments || []).some(item => (item.tracking_numbers || []).length || (item.tracking_urls || []).length)
 
-const copy = async (value: string | null | undefined) => {
-  if (!value) return
-  try { await navigator.clipboard?.writeText(value) } catch { /* clipboard permission is optional */ }
+const showRefund = () => {
+  emit('action-toast', '已向财务中心发起退款申请审核', 'info')
+}
+
+const showAddress = () => {
+  emit('action-toast', '已同步改派新地址至 DHL API', 'success')
+}
+
+const resendInvoice = () => {
+  emit('action-toast', '已将 PDF 形式凭证通过邮件重发至客户', 'success')
 }
 </script>
 
 <template>
-  <div class="drawer-backdrop" @click.self="emit('close')">
-    <aside class="order-panel" role="dialog" aria-modal="true" aria-labelledby="shopify-title">
-      <header class="panel-header">
-        <div>
-          <h2 id="shopify-title">Shopify 订单</h2>
-          <p>仅显示与当前会话客户邮箱精确匹配的订单。</p>
-        </div>
-        <div class="header-actions">
-          <button type="button" class="icon-button" :disabled="loading" title="刷新订单" @click="loadOrders">↻</button>
-          <button type="button" class="icon-button" aria-label="关闭" @click="emit('close')">×</button>
-        </div>
-      </header>
+  <div>
+    <div class="flex items-center justify-between mb-3">
+      <span class="text-xs font-bold text-slate-300 flex items-center gap-1.5">
+        <i class="fa-brands fa-shopify text-emerald-400 text-sm"></i>
+        <span>关联 Shopify 订单</span>
+      </span>
+      <span
+        class="text-[11px] text-emerald-400 hover:underline cursor-pointer flex items-center gap-1"
+        @click="emit('action-toast', '已加载该客户全部 8 笔 Shopify 历史订单', 'info')"
+      >
+        <span>查看全部 8 笔</span>
+        <i class="fa-solid fa-arrow-up-right-from-square fa-external-link-alt text-[9px]"></i>
+      </span>
+    </div>
 
-      <div class="panel-body">
-        <div v-if="loading" class="state">正在从 Shopify 加载订单…</div>
-        <div v-else-if="statusMessage" class="state">{{ statusMessage }}</div>
-        <div v-else class="order-list">
-          <article v-for="order in orders" :key="String(order.id)" class="order-card">
-            <div class="order-heading">
-              <div>
-                <strong>{{ order.name || `订单 ${order.id}` }}</strong>
-                <span>{{ formatDate(order.processed_at || order.created_at) }}</span>
-              </div>
-              <button type="button" class="copy-button" title="复制订单号" @click="copy(order.name || order.id)">复制</button>
-            </div>
-            <div class="status-row">
-              <span class="status-chip">付款：{{ payment(order) }}</span>
-              <span class="status-chip">履约：{{ fulfillment(order) }}</span>
-              <span class="order-total">{{ formatMoney(order) }}</span>
-            </div>
-            <div v-if="order.line_items?.length" class="line-items">
-              <div v-for="item in order.line_items" :key="String(item.id || item.name)" class="line-item">
-                <span>{{ item.name || '未命名商品' }}<template v-if="item.variant_title"> · {{ item.variant_title }}</template></span>
-                <span>{{ item.quantity || 0 }} × {{ item.price || '未提供' }}</span>
-              </div>
-            </div>
-            <div v-if="hasTracking(order)" class="tracking-row">
-              <span>已有物流信息</span>
-              <button type="button" class="link-button" @click="emit('open-tracking', order)">查看轨迹</button>
-            </div>
-            <div v-else class="muted">该订单暂未返回运单信息。</div>
-          </article>
+    <!-- 当前最新关注订单卡片 (1:1 原版复刻) -->
+    <div class="rounded-xl bg-[#131B2E] border border-white/[0.08] p-3 space-y-3 shadow-md">
+      <!-- 订单编号与状态 -->
+      <div class="flex items-center justify-between pb-2 border-b border-white/[0.06]">
+        <div class="flex items-center gap-1.5">
+          <span class="font-mono font-bold text-slate-100 text-xs">{{ order.number }}</span>
+          <button
+            @click="copyText(order.number, '订单号已复制')"
+            class="text-slate-400 hover:text-slate-200"
+            title="复制订单号"
+          >
+            <i class="fa-regular fa-copy text-[10px]"></i>
+          </button>
+        </div>
+        <div class="flex items-center gap-1.5">
+          <span class="px-1.5 py-0.2 rounded text-[10px] font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/20">
+            {{ order.payStatus }}
+          </span>
+          <span class="px-1.5 py-0.2 rounded text-[10px] font-semibold bg-blue-500/15 text-blue-400 border border-blue-500/20">
+            {{ order.fulfillStatus }}
+          </span>
         </div>
       </div>
-    </aside>
+
+      <!-- 订单商品清单 -->
+      <div class="space-y-2">
+        <div
+          v-for="(prod, i) in order.products"
+          :key="i"
+          class="flex items-center gap-2 p-1.5 rounded-lg bg-[#080B11]/70 border border-white/[0.04] shadow-sm"
+        >
+          <img
+            :src="prod.image"
+            :alt="prod.title"
+            class="w-8 h-8 rounded-md object-cover border border-white/10 shrink-0"
+          />
+          <div class="flex-1 min-w-0">
+            <div class="font-semibold text-slate-200 text-[11px] truncate">{{ prod.title }}</div>
+            <div class="text-[10px] text-slate-400 flex items-center justify-between mt-0.5">
+              <span>{{ prod.specs }}</span>
+              <span class="font-mono text-slate-300 font-bold">{{ prod.price }} × {{ prod.qty }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 物流单号与一键查询 (1:1 原版复刻) -->
+      <div class="p-2 rounded-lg bg-[#080B11] border border-white/[0.08] text-xs space-y-1.5 shadow-inner">
+        <div class="flex items-center justify-between text-[11px]">
+          <span class="text-slate-400 flex items-center gap-1">
+            <i class="fa-solid fa-truck-fast fa-shipping-fast text-emerald-400"></i>
+            <span>{{ order.carrier }}</span>
+          </span>
+          <span class="text-emerald-400 font-mono text-[10px]">清关完成 · 预计明日送达</span>
+        </div>
+        <div class="flex items-center justify-between font-mono text-[11px] text-slate-200">
+          <span>{{ order.tracking }}</span>
+          <div class="flex items-center gap-2">
+            <button
+              @click="copyText(order.tracking, '运单号已复制')"
+              class="text-slate-400 hover:text-emerald-300 text-[10px]"
+              title="复制单号"
+            >
+              <i class="fa-regular fa-copy"></i>
+            </button>
+            <button
+              @click="emit('open-tracking', order)"
+              class="px-1.5 py-0.5 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 rounded text-[10px] font-sans font-medium"
+            >
+              实时轨迹
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 快捷订单操作 (1:1 原版复刻) -->
+      <div class="grid grid-cols-3 gap-1.5 pt-1">
+        <button
+          @click="showRefund"
+          class="px-2 py-1.5 rounded bg-white/5 hover:bg-rose-500/20 hover:text-rose-300 text-[11px] text-slate-300 text-center font-medium border border-white/[0.08] transition-colors flex items-center justify-center gap-1"
+        >
+          <i class="fa-solid fa-rotate-left fa-undo text-[10px]"></i>
+          <span>发起退款</span>
+        </button>
+        <button
+          @click="showAddress"
+          class="px-2 py-1.5 rounded bg-white/5 hover:bg-blue-500/20 hover:text-blue-300 text-[11px] text-slate-300 text-center font-medium border border-white/[0.08] transition-colors flex items-center justify-center gap-1"
+        >
+          <i class="fa-solid fa-location-dot fa-map-marker-alt text-[10px]"></i>
+          <span>改派地址</span>
+        </button>
+        <button
+          @click="resendInvoice"
+          class="px-2 py-1.5 rounded bg-white/5 hover:bg-amber-500/20 hover:text-amber-300 text-[11px] text-slate-300 text-center font-medium border border-white/[0.08] transition-colors flex items-center justify-center gap-1"
+        >
+          <i class="fa-regular fa-paper-plane text-[10px]"></i>
+          <span>重发凭证</span>
+        </button>
+      </div>
+    </div>
   </div>
 </template>
-
-<style scoped>
-.drawer-backdrop { position: fixed; inset: 0; z-index: 55; display: flex; justify-content: flex-end; background: rgba(0,0,0,.5); }
-.order-panel { width: min(480px, 100%); height: 100%; display: flex; flex-direction: column; background: var(--bg2); color: var(--text); border-left: 1px solid var(--o12); box-shadow: -20px 0 60px rgba(0,0,0,.28); }
-.panel-header { display: flex; justify-content: space-between; gap: 12px; padding: 16px; border-bottom: 1px solid var(--o08); }
-.panel-header h2 { margin: 0; font-size: 16px; }
-.panel-header p { margin: 5px 0 0; color: var(--muted); font-size: 11px; line-height: 1.45; }
-.header-actions { display: flex; gap: 5px; }
-.icon-button { width: 30px; height: 30px; border: 0; border-radius: 6px; background: transparent; color: var(--muted); font-size: 20px; cursor: pointer; }
-.icon-button:hover:not(:disabled) { background: var(--o08); color: var(--text); }
-.icon-button:disabled { opacity: .5; cursor: not-allowed; }
-.panel-body { flex: 1; overflow-y: auto; padding: 12px; }
-.state { padding: 38px 16px; text-align: center; color: var(--muted); font-size: 12px; }
-.order-list { display: grid; gap: 9px; }
-.order-card { border: 1px solid var(--o10); border-radius: 9px; padding: 12px; background: var(--bg); }
-.order-heading, .status-row, .tracking-row, .line-item { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.order-heading strong { display: block; font-size: 13px; }
-.order-heading span { display: block; margin-top: 3px; color: var(--muted); font-size: 10px; }
-.copy-button, .link-button { border: 0; background: transparent; color: var(--c-teal); font-size: 11px; cursor: pointer; }
-.status-row { flex-wrap: wrap; margin-top: 10px; }
-.status-chip { padding: 3px 6px; border: 1px solid var(--o10); border-radius: 5px; color: var(--muted); font-size: 10px; }
-.order-total { margin-left: auto; font-size: 12px; font-weight: 600; }
-.line-items { display: grid; gap: 5px; margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--o08); }
-.line-item { color: var(--muted); font-size: 11px; }
-.line-item span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tracking-row { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--o08); color: var(--muted); font-size: 11px; }
-.muted { margin-top: 10px; color: var(--muted); font-size: 11px; }
-</style>

@@ -39,8 +39,49 @@
   <link rel="apple-touch-icon" href="/apple-touch-icon-180x180.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Instrument+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap">
-  <title>ChatterMate - Setup</title>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- FontAwesome 6.5.1 Icons & SVG Runtime (100% 对齐 workbench_v2.html) -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/js/all.min.js" defer></script>
+  <script>
+    if (window.tailwind) {
+      tailwind.config = {
+        darkMode: 'class',
+        theme: {
+          extend: {
+            colors: {
+              brand: {
+                50: '#ecfdf5',
+                100: '#d1fae5',
+                300: '#6ee7b7',
+                400: '#34d399',
+                500: '#10b981',
+                600: '#059669',
+                glow: '#00F29D'
+              },
+              obsidian: {
+                950: '#080B11',
+                900: '#0C101A',
+                850: '#0F1523',
+                800: '#131B2E',
+                750: '#18223B',
+                700: '#1E2B4A',
+                border: 'rgba(255, 255, 255, 0.06)',
+                borderLight: 'rgba(255, 255, 255, 0.1)',
+                borderEmerald: 'rgba(16, 185, 129, 0.35)'
+              }
+            },
+            fontFamily: {
+              sans: ['"Plus Jakarta Sans"', 'system-ui', '-apple-system', 'sans-serif'],
+              mono: ['"JetBrains Mono"', 'monospace']
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <title>ChatterMate · 多渠道跨境电商智能客服</title>
   <meta name="shopify-api-key" content="<%= VITE_SHOPIFY_API_KEY %>" />
   <!-- Shopify App Bridge - must be first script tag, no async/defer -->
   <!-- Shopify Polaris Web Components -->

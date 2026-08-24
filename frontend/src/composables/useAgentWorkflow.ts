@@ -85,12 +85,18 @@ export function useAgentWorkflow(agentId: string) {
     }
   }
 
-  const updateWorkflow = async (workflowId: string, data: Partial<WorkflowCreate>) => {
+  const updateWorkflow = async (
+    workflowIdOrData: string | Partial<WorkflowCreate>,
+    maybeData?: Partial<WorkflowCreate>
+  ) => {
     try {
       workflowLoading.value = true
       workflowError.value = ''
       
-      const updatedWorkflow = await workflowService.updateWorkflow(workflowId, data)
+      const targetId = typeof workflowIdOrData === 'string' ? workflowIdOrData : (workflow.value?.id || '')
+      const targetData = typeof workflowIdOrData === 'string' ? (maybeData || {}) : workflowIdOrData
+      
+      const updatedWorkflow = await workflowService.updateWorkflow(targetId, targetData)
       workflow.value = updatedWorkflow
       
       toast.success('Workflow updated successfully', {
@@ -112,12 +118,13 @@ export function useAgentWorkflow(agentId: string) {
     }
   }
 
-  const deleteWorkflow = async (workflowId: string) => {
+  const deleteWorkflow = async (workflowId?: string) => {
     try {
       workflowLoading.value = true
       workflowError.value = ''
       
-      await workflowService.deleteWorkflow(workflowId)
+      const targetId = workflowId || workflow.value?.id || ''
+      await workflowService.deleteWorkflow(targetId)
       workflow.value = null
       
       toast.success('Workflow deleted successfully', {
@@ -148,4 +155,4 @@ export function useAgentWorkflow(agentId: string) {
     updateWorkflow,
     deleteWorkflow
   }
-} 
+}

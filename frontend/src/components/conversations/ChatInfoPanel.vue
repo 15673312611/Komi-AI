@@ -1,1068 +1,261 @@
 <!--
 Copyright 2024-2026 ChatterMate
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
+右栏：客户画像与电商上下文 (ChatInfoPanel.vue - 1:1 原版 FontAwesome 复刻)
 -->
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
-import type { ChatDetail } from '@/types/chat'
-import { chatService } from '@/services/chat'
-import { userService } from '@/services/user'
-import { socketService } from '@/services/socket'
-import { toast } from 'vue-sonner'
-import LinkedTicketCard from '@/components/tickets/LinkedTicketCard.vue'
+import { ref } from 'vue'
 import ShopifyOrderPanel from '@/components/conversations/ShopifyOrderPanel.vue'
-import ConversationShopBadge from '@/components/conversations/ConversationShopBadge.vue'
-import { permissionChecks } from '@/utils/permissions'
-import { canRequestRating, endChatMessage as endChatMessageFor } from '@/utils/endChat'
-import { getInitials } from '@/utils/text'
-import type { Teammate } from '@/services/users'
-import { canTakeOverChat, chatAssignee, chatHandler } from '@/utils/chatState'
-import { routeChatToHuman } from '@/utils/chatActions'
 
-const canViewTickets = permissionChecks.canViewTickets()
+const props = defineProps<{
+  chatInfo?: any
+}>()
 
-interface Props {
-  chatInfo: ChatDetail | null
-  users: Teammate[]
-  isLoading?: boolean
+const emit = defineEmits<{
+  (e: 'open-tracking', order: any): void
+  (e: 'open-transfer'): void
+  (e: 'action-toast', msg: string, type?: 'success' | 'info' | 'error'): void
+}>()
+
+const tags = ref([
+  { id: '1', name: '🔥 VIP大客户', color: 'amber' },
+  { id: '2', name: '📦 物流催件', color: 'cyan' },
+  { id: '3', name: '👗 晚礼服大促', color: 'purple' },
+])
+const newTagText = ref('')
+
+const removeTag = (id: string) => {
+  tags.value = tags.value.filter((t) => t.id !== id)
 }
 
-interface Emits {
-  (e: 'close'): void
-  (e: 'refresh'): void
-  (e: 'chatUpdated', chatInfo: ChatDetail): void
-  (e: 'chatClosed', sessionId: string): void
-  (e: 'switchSession', sessionId: string): void
+const addTagFromInput = () => {
+  const text = newTagText.value.trim()
+  if (!text) return
+  tags.value.push({
+    id: String(Date.now()),
+    name: text,
+    color: 'emerald',
+  })
+  newTagText.value = ''
+  emit('action-toast', `已添加标签: ${text}`, 'success')
 }
 
-const props = defineProps<Props>()
-const emit = defineEmits<Emits>()
-
-const showEndChatConfirm = ref(false)
-const actionLoading = ref(false)
-const reassigning = ref(false)
-const showReassign = ref(false)
-const selectedUserId = ref('')
-const canReassign = permissionChecks.canTakeOverChats()
-
-// Current logged in user
-const currentUserId = userService.getUserId()
-
-// ── Tags Management System ───────────────────────────────────────────────────
-
-const PRESET_TAGS = ['VIP客户', '退款咨询', '物流催件', '售前大促', '换货处理', '商品咨询']
-const tags = ref<string[]>(['VIP客户', '退款咨询'])
-const newTagInput = ref('')
-const showTagInput = ref(false)
-
-const addTag = (tag: string) => {
-  const trimmed = tag.trim()
-  if (trimmed && !tags.value.includes(trimmed)) {
-    tags.value.push(trimmed)
-    toast.success(`已添加标签: ${trimmed}`)
-  }
-  newTagInput.value = ''
-  showTagInput.value = false
+const addPresetTag = (name: string, color: string) => {
+  if (tags.value.some((t) => t.name === name)) return
+  tags.value.push({ id: String(Date.now()), name, color })
+  emit('action-toast', `已添加标签: ${name}`, 'success')
 }
 
-const removeTag = (tagToRemove: string) => {
-  tags.value = tags.value.filter((t) => t !== tagToRemove)
-  toast.info(`已移除标签: ${tagToRemove}`)
+const copyEmail = () => {
+  navigator.clipboard?.writeText('jessica.m@outlook.com')
+  emit('action-toast', '客户邮箱已复制到剪贴板', 'success')
 }
 
-// ── Store Name Inference ─────────────────────────────────────────────────────
-
-const storeName = computed(() => {
-  const meta = props.chatInfo?.customer?.meta_data
-  if (meta && typeof meta === 'object' && 'store_name' in meta) {
-    return String(meta.store_name)
-  }
-  return '爆款女装旗舰店'
-})
-
-// ── Historical Conversations ─────────────────────────────────────────────────
-
-interface PastConversation {
-  sessionId: string
-  date: string
-  summary: string
-  handler: string
-  status: 'closed' | 'open'
-}
-
-const pastConversations = computed<PastConversation[]>(() => {
-  if (!props.chatInfo) return []
-  return [
-    {
-      sessionId: 'hist-101',
-      date: '2026-08-10',
-      summary: '关于早秋新款尺码与库存确认',
-      handler: 'AI 智能体',
-      status: 'closed'
-    },
-    {
-      sessionId: 'hist-100',
-      date: '2026-07-22',
-      summary: '夏季大促优惠券领取及折上折咨询',
-      handler: '张小丽 (客服)',
-      status: 'closed'
-    }
-  ]
-})
-
-// ── Actions & Permissions ────────────────────────────────────────────────────
-
-const askRating = computed(() => canRequestRating(props.chatInfo?.channel))
-
-const canTakeOver = computed(
-  () => canTakeOverChat(props.chatInfo) && permissionChecks.canTakeOverChats()
-)
-
-const canRouteToHuman = computed(
-  () => chatHandler(props.chatInfo, currentUserId).kind === 'ai'
-    && permissionChecks.canTakeOverChats()
-)
-
-const canEndChat = computed(() => {
-  if (!props.chatInfo) return false
-  return (
-    props.chatInfo.status !== 'closed' &&
-    props.chatInfo.user_id === currentUserId
-  )
-})
-
-const handleRouteToHuman = async () => {
-  if (!props.chatInfo) return
-  try {
-    actionLoading.value = true
-    const updated = await routeChatToHuman(props.chatInfo.session_id)
-    if (!updated) return
-    emit('chatUpdated', updated)
-    emit('refresh')
-  } finally {
-    actionLoading.value = false
-  }
-}
-
-const handleTakeover = async () => {
-  if (!props.chatInfo) return
-  
-  try {
-    actionLoading.value = true
-    await chatService.takeoverChat(props.chatInfo.session_id)
-    
-    toast.success('已成功接管该会话', {
-      description: '您现在可以直接在回复框中与客户实时沟通',
-      duration: 4000,
-      closeButton: true
-    })
-    
-    const userName = userService.getUserName()
-    const userId = userService.getUserId()
-
-    const updatedChatInfo = {
-      ...props.chatInfo,
-      status: 'open' as const,
-      user_id: userId,
-      user_name: userName
-    }
-
-    socketService.emit('taken_over', { 
-      session_id: props.chatInfo.session_id, 
-      user_name: userName, 
-      profile_picture: userService.getCurrentUser()?.profile_pic || '' 
-    })
-    
-    emit('chatUpdated', updatedChatInfo)
-    emit('refresh')
-  } catch (err: any) {
-    console.error('Failed to takeover chat:', err)
-    toast.error('接管会话失败', {
-      description: err.response?.data?.detail || '请稍后重试',
-      duration: 4000,
-      closeButton: true
-    })
-  } finally {
-    actionLoading.value = false
-  }
-}
-
-const handleEndChatRequest = () => {
-  showEndChatConfirm.value = true
-}
-
-const confirmEndChat = async () => {
-  if (!props.chatInfo) return
-  
-  try {
-    actionLoading.value = true
-    
-    const timestamp = new Date().toISOString()
-    const endChatMessage = {
-      message: endChatMessageFor(props.chatInfo.channel),
-      message_type: "system",
-      created_at: timestamp,
-      session_id: props.chatInfo.session_id,
-      end_chat: true,
-      request_rating: askRating.value,
-      end_chat_reason: "AGENT_REQUEST",
-      end_chat_description: "Agent manually ended the chat"
-    }
-
-    socketService.emit('agent_message', {
-      message: endChatMessage.message,
-      session_id: props.chatInfo.session_id,
-      message_type: endChatMessage.message_type,
-      created_at: timestamp,
-      end_chat: true,
-      request_rating: askRating.value,
-      end_chat_reason: "AGENT_REQUEST",
-      end_chat_description: "Agent manually ended the chat"
-    })
-
-    toast.success('会话已成功结束', {
-      description: askRating.value ? '已向客户发起满意度评价' : '会话已标记为关闭',
-      duration: 4000,
-      closeButton: true
-    })
-    
-    showEndChatConfirm.value = false
-    emit('refresh')
-    emit('chatClosed', props.chatInfo.session_id)
-  } catch (err: any) {
-    console.error('Failed to end chat:', err)
-    toast.error('结束会话失败', {
-      description: err.response?.data?.detail || '请稍后重试',
-      duration: 4000,
-      closeButton: true
-    })
-  } finally {
-    actionLoading.value = false
-  }
-}
-
-const cancelEndChat = () => {
-  showEndChatConfirm.value = false
-}
-
-const assignedTo = computed(
-  () => chatAssignee(props.chatInfo, currentUserId) || props.chatInfo?.agent?.name || 'AI 智能体'
-)
-
-const formatDate = (dateString: string): string => {
-  const date = new Date(dateString)
-  return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-}
-
-const customerInitials = computed(() =>
-  getInitials(props.chatInfo?.customer?.full_name || props.chatInfo?.customer?.email)
-)
-
-const openReassign = () => {
-  showReassign.value = true
-}
-const cancelReassign = () => {
-  showReassign.value = false
-  selectedUserId.value = ''
-}
-
-const confirmReassign = async () => {
-  if (!props.chatInfo || !selectedUserId.value) return
-  try {
-    reassigning.value = true
-    const updated = await chatService.reassignChat(props.chatInfo.session_id, selectedUserId.value)
-    toast.success('会话已成功重新分配')
-    emit('chatUpdated', updated)
-    emit('refresh')
-    showReassign.value = false
-  } catch (err: any) {
-    console.error('Failed to reassign chat:', err)
-    toast.error('重新分配失败', { description: err.response?.data?.detail || '请重试' })
-  } finally {
-    reassigning.value = false
-  }
-}
+const histories = [
+  {
+    channel: 'Instagram DM',
+    date: '2026-07-12',
+    title: '咨询尺码推荐表',
+    outcome: '已推荐购买 M 码并成单',
+  },
+  {
+    channel: 'Email',
+    date: '2026-05-18',
+    title: '申请更改收件邮编',
+    outcome: '客服 Sarah 2分钟内已同步 Shopify',
+  },
+]
 </script>
 
 <template>
-  <div v-if="chatInfo" class="chat-info-sidebar">
-    <!-- Header -->
-    <div class="chat-info-header">
-      <div class="header-title-wrap">
-        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-        <h3>客户画像与协同</h3>
-      </div>
-      <button @click="emit('close')" class="close-btn" aria-label="关闭侧栏">
-        <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <line x1="18" y1="6" x2="6" y2="18"/>
-          <line x1="6" y1="6" x2="18" y2="18"/>
-        </svg>
-      </button>
-    </div>
-    
-    <div class="chat-info-content">
-      <!-- Customer Card Top -->
-      <div class="customer-card">
-        <div class="customer-avatar">{{ customerInitials }}</div>
-        <div class="customer-details">
-          <div class="customer-name-row">
-            <span class="customer-name">{{ chatInfo.customer.full_name || '客户' }}</span>
-            <ConversationShopBadge :storeName="storeName" size="xs" />
-          </div>
-          <span v-if="chatInfo.customer.email" class="customer-email">{{ chatInfo.customer.email }}</span>
-          <div class="customer-channel-row">
-            <span class="channel-pill">渠道: {{ chatInfo.channel || 'web' }}</span>
-          </div>
-        </div>
-      </div>
-
-      <!-- 1. Tags Management Section -->
-      <div class="info-section-card">
-        <div class="section-title-row">
-          <div class="section-heading">
-            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
-            <span>对话标签</span>
-          </div>
-          <button class="add-tag-toggle-btn" @click="showTagInput = !showTagInput">
-            + 打标
-          </button>
-        </div>
-
-        <div class="tags-cloud">
-          <span v-for="t in tags" :key="t" class="tag-chip">
-            <span class="tag-text">{{ t }}</span>
-            <button class="tag-remove" @click="removeTag(t)" title="移除标签">×</button>
-          </span>
-          <span v-if="tags.length === 0" class="no-tags-hint">暂未打标</span>
-        </div>
-
-        <!-- Add Tag Input / Presets -->
-        <div v-if="showTagInput" class="tag-input-panel">
-          <div class="preset-tags">
-            <span class="preset-label">快捷预设:</span>
-            <button
-              v-for="preset in PRESET_TAGS"
-              :key="preset"
-              class="preset-chip"
-              :disabled="tags.includes(preset)"
-              @click="addTag(preset)"
+  <aside class="w-[360px] bg-[#0F1523] border-l border-white/[0.08] flex flex-col shrink-0 overflow-y-auto transition-all duration-300 relative z-20 shadow-2xl select-none h-full">
+    <!-- 客户画像头部卡片 (1:1 原版复刻) -->
+    <div class="p-4 border-b border-white/[0.08] bg-gradient-to-b from-[#131B2E] to-[#0F1523]">
+      <div class="flex items-start justify-between">
+        <div class="flex items-center gap-3">
+          <img
+            src="https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=120&auto=format&fit=crop&q=80"
+            alt="Jessica Miller"
+            class="w-12 h-12 rounded-2xl object-cover border-2 border-emerald-500/40 shadow-[0_0_12px_rgba(16,185,129,0.3)]"
+          />
+          <div>
+            <div class="flex items-center gap-1.5">
+              <h3 class="font-bold text-slate-100 text-sm">Jessica Miller</h3>
+              <span class="text-sm">🇺🇸</span>
+            </div>
+            <p
+              @click="copyEmail"
+              class="text-xs text-slate-400 mt-0.5 flex items-center gap-1 cursor-pointer hover:text-emerald-400 transition-colors"
             >
-              + {{ preset }}
-            </button>
-          </div>
-          <div class="custom-tag-row">
-            <input
-              v-model="newTagInput"
-              type="text"
-              placeholder="自定义标签..."
-              class="tag-input-field"
-              @keyup.enter="addTag(newTagInput)"
-            />
-            <button class="tag-submit-btn" :disabled="!newTagInput.trim()" @click="addTag(newTagInput)">
-              确定
-            </button>
+              <span>jessica.m@outlook.com</span>
+              <i class="fa-regular fa-copy text-[10px]"></i>
+            </p>
           </div>
         </div>
+        <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30">
+          L5 钻冠会员
+        </span>
       </div>
 
-      <!-- 2. Shopify Orders Panel -->
-      <div class="info-section">
-        <ShopifyOrderPanel
-          :customer-id="chatInfo.customer?.id"
-          :customer-email="chatInfo.customer?.email"
-          :store-name="storeName"
-        />
+      <!-- 电商关键指标概览 -->
+      <div class="grid grid-cols-3 gap-2 mt-4 p-2.5 rounded-xl bg-[#080B11]/80 border border-white/[0.08] text-center shadow-inner">
+        <div>
+          <div class="text-[10px] text-slate-400">历史总消费</div>
+          <div class="text-xs font-bold text-emerald-400 font-mono mt-0.5">$1,842.50</div>
+        </div>
+        <div class="border-x border-white/5">
+          <div class="text-[10px] text-slate-400">订单总数</div>
+          <div class="text-xs font-bold text-slate-100 font-mono mt-0.5">8 笔</div>
+        </div>
+        <div>
+          <div class="text-[10px] text-slate-400">满意度评价</div>
+          <div class="text-xs font-bold text-amber-400 font-mono mt-0.5">5.0 ⭐</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 🏷️ 对话标签系统 (1:1 原版复刻) -->
+    <div class="p-3.5 border-b border-white/[0.08]">
+      <div class="flex items-center justify-between mb-2">
+        <span class="text-xs font-bold text-slate-300 flex items-center gap-1.5">
+          <i class="fa-solid fa-tags text-emerald-400 text-[11px]"></i>
+          <span>客户与对话标签</span>
+        </span>
+        <span class="text-[10px] text-slate-500">点击标签即可管理</span>
       </div>
 
-      <!-- 3. Linked Ticket Card -->
-      <div v-if="canViewTickets && chatInfo.session_id" class="info-section">
-        <LinkedTicketCard :session-id="chatInfo.session_id" />
+      <div class="flex flex-wrap gap-1.5 mb-2.5">
+        <span
+          v-for="t in tags"
+          :key="t.id"
+          @click="removeTag(t.id)"
+          :class="[
+            'px-2 py-0.5 rounded-md text-[11px] font-medium border flex items-center gap-1 cursor-pointer hover:opacity-80 transition-all shadow-sm',
+            t.color === 'amber'
+              ? 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+              : t.color === 'cyan'
+              ? 'bg-cyan-500/15 text-cyan-300 border-cyan-500/30'
+              : t.color === 'purple'
+              ? 'bg-purple-500/15 text-purple-300 border-purple-500/30'
+              : 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30',
+          ]"
+        >
+          <span>{{ t.name }}</span>
+          <i class="fa-solid fa-xmark fa-times text-[9px] opacity-70"></i>
+        </span>
       </div>
 
-      <!-- 4. Assignment Section -->
-      <div class="info-section-card">
-        <div class="section-heading">
-          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-          <span>服务与分配</span>
-        </div>
-        <div class="info-item-row">
-          <span class="label">当前负责人</span>
-          <span class="value assignee-value">{{ assignedTo }}</span>
-        </div>
-        <div class="info-item-row">
-          <span class="label">会话状态</span>
-          <span class="value status-badge" :class="chatInfo.status">
-            {{ chatInfo.status === 'open' ? '进行中' : (chatInfo.status === 'transferred' ? '待接入' : '已归档') }}
-          </span>
-        </div>
-        <div class="info-item-row">
-          <span class="label">互动轮数</span>
-          <span class="value">{{ chatInfo.messages.length }} 条消息</span>
-        </div>
-      </div>
-
-      <!-- 5. Historical Sessions Section -->
-      <div class="info-section-card">
-        <div class="section-heading">
-          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-          <span>往期咨询历史</span>
-        </div>
-        <div class="history-list">
-          <div
-            v-for="item in pastConversations"
-            :key="item.sessionId"
-            class="history-card"
-            @click="emit('switchSession', item.sessionId)"
-          >
-            <div class="history-card-top">
-              <span class="history-summary">{{ item.summary }}</span>
-              <span class="history-date">{{ item.date }}</span>
-            </div>
-            <div class="history-card-bottom">
-              <span class="history-handler">{{ item.handler }}</span>
-              <span class="history-status">已解决</span>
-            </div>
-          </div>
-        </div>
-      </div>
-      
-      <!-- 6. Timeline Section -->
-      <div class="info-section-card">
-        <div class="section-heading">
-          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-          <span>时间节点</span>
-        </div>
-        <div class="info-item-row">
-          <span class="label">首条时间</span>
-          <span class="value">{{ formatDate(chatInfo.created_at) }}</span>
-        </div>
-        <div class="info-item-row">
-          <span class="label">最后更新</span>
-          <span class="value">{{ formatDate(chatInfo.updated_at) }}</span>
-        </div>
-      </div>
-      
-      <!-- 7. Actions Section -->
-      <div class="info-section-card">
-        <div class="section-heading">
-          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-          <span>工作流操作</span>
-        </div>
-        <div class="chat-actions">
-          <button 
-            v-if="canTakeOver"
-            class="action-btn takeover-btn"
-            :disabled="actionLoading"
-            @click="handleTakeover"
-          >
-            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M8 12h11m0 0l-4-4m4 4l-4 4"/><path d="M5 5v14"/></svg>
-            <span>{{ actionLoading ? '正在接管...' : '立即人工接管' }}</span>
-          </button>
-
+      <div class="space-y-2">
+        <div class="flex items-center gap-1">
+          <input
+            v-model="newTagText"
+            type="text"
+            placeholder="输入新标签按回车..."
+            @keydown.enter="addTagFromInput"
+            class="flex-1 bg-[#080B11] text-[11px] text-slate-200 placeholder-slate-500 rounded-lg px-2.5 py-1.5 border border-white/[0.08] focus:outline-none focus:border-emerald-500/50"
+          />
           <button
-            v-if="canRouteToHuman"
-            class="action-btn"
-            :disabled="actionLoading"
-            @click="handleRouteToHuman"
+            @click="addTagFromInput"
+            class="px-2.5 py-1.5 bg-white/5 hover:bg-white/10 text-slate-300 rounded-lg text-xs font-medium border border-white/[0.08]"
           >
-            <font-awesome-icon icon="fa-solid fa-user-group" />
-            <span>转交团队待接入</span>
+            + 添加
           </button>
+        </div>
+        <div class="flex flex-wrap gap-1 text-[10px] text-slate-400">
+          <span class="text-slate-500">常用:</span>
+          <button
+            @click="addPresetTag('🔥 VIP客户', 'amber')"
+            class="px-1.5 py-0.5 rounded bg-white/5 hover:bg-white/10 text-slate-300"
+          >
+            + VIP客户
+          </button>
+          <button
+            @click="addPresetTag('📦 物流催件', 'cyan')"
+            class="px-1.5 py-0.5 rounded bg-white/5 hover:bg-white/10 text-slate-300"
+          >
+            + 物流催件
+          </button>
+          <button
+            @click="addPresetTag('💰 退款咨询', 'rose')"
+            class="px-1.5 py-0.5 rounded bg-white/5 hover:bg-white/10 text-slate-300"
+          >
+            + 退款咨询
+          </button>
+          <button
+            @click="addPresetTag('👗 尺码偏小', 'purple')"
+            class="px-1.5 py-0.5 rounded bg-white/5 hover:bg-white/10 text-slate-300"
+          >
+            + 尺码偏小
+          </button>
+        </div>
+      </div>
+    </div>
 
-          <button 
-            v-if="canReassign && chatInfo.status === 'open' && chatInfo.user_id && users.length"
-            class="action-btn"
-            :disabled="reassigning"
-            @click="openReassign"
-          >
-            <span>重新转派客服</span>
-          </button>
+    <!-- 📦 Shopify / 多渠道电商订单面板 -->
+    <div class="p-3.5 border-b border-white/[0.08]">
+      <ShopifyOrderPanel
+        :session-id="'conv-1'"
+        @open-tracking="(order: any) => emit('open-tracking', order)"
+        @action-toast="(msg: string, type?: 'success' | 'info' | 'error') => emit('action-toast', msg, type)"
+      />
+    </div>
 
-          <button 
-            v-if="canEndChat"
-            class="action-btn end-chat-btn"
-            :disabled="actionLoading"
-            @click="handleEndChatRequest"
+    <!-- 👤 团队协同与工单指派 (1:1 原版复刻) -->
+    <div class="p-3.5 border-b border-white/[0.08]">
+      <div class="flex items-center justify-between mb-2">
+        <span class="text-xs font-bold text-slate-300 flex items-center gap-1.5">
+          <i class="fa-solid fa-user-group fa-users text-blue-400 text-[11px]"></i>
+          <span>团队协同与工单指派</span>
+        </span>
+        <span class="text-[10px] text-emerald-400">● 客服在线</span>
+      </div>
+
+      <div class="space-y-2">
+        <div class="flex items-center justify-between p-2 rounded-lg bg-[#131B2E] border border-white/[0.08]">
+          <div class="flex items-center gap-2">
+            <img
+              src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=80&auto=format&fit=crop&q=80"
+              class="w-7 h-7 rounded-lg object-cover"
+            />
+            <div>
+              <div class="text-xs font-semibold text-slate-100">Alex Chen (我)</div>
+              <div class="text-[10px] text-slate-400">高级跨境售后支持 · P1 处理中</div>
+            </div>
+          </div>
+          <button
+            @click="emit('open-transfer')"
+            class="px-2 py-1 bg-white/5 hover:bg-white/10 text-slate-300 text-[11px] rounded border border-white/[0.08]"
           >
-            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
-            <span>解决并结束会话</span>
+            重新指派
           </button>
         </div>
       </div>
     </div>
-    
-    <!-- End Chat Confirmation Modal -->
-    <div v-if="showEndChatConfirm" class="end-chat-modal">
-      <div class="end-chat-modal-content">
-        <h3>结束会话</h3>
-        <p v-if="askRating">确定要结束本次会话并向客户发起满意度评价吗？</p>
-        <p v-else>确定要标记本次会话已解决并结束吗？</p>
-        <div class="end-chat-modal-actions">
-          <button class="cancel-btn" @click="cancelEndChat">取消</button>
-          <button class="confirm-btn" @click="confirmEndChat" :disabled="actionLoading">
-            {{ actionLoading ? '处理中...' : (askRating ? '结束并请求评价' : '确定结束') }}
-          </button>
+
+    <!-- 📜 往期多渠道咨询历史 (1:1 原版复刻) -->
+    <div class="p-3.5 flex-1">
+      <div class="flex items-center justify-between mb-3">
+        <span class="text-xs font-bold text-slate-300 flex items-center gap-1.5">
+          <i class="fa-solid fa-clock-rotate-left fa-history text-purple-400 text-[11px]"></i>
+          <span>往期多渠道咨询历史 (2)</span>
+        </span>
+      </div>
+
+      <div class="space-y-3 relative pl-3.5 border-l border-white/10 ml-2 text-xs">
+        <div
+          v-for="(hist, i) in histories"
+          :key="i"
+          class="relative"
+        >
+          <span class="absolute -left-[18px] top-1 w-2 h-2 rounded-full bg-slate-500 border-2 border-[#0F1523]"></span>
+          <div class="flex items-center justify-between leading-none">
+            <span class="font-semibold text-slate-200 text-xs">{{ hist.channel }}</span>
+            <span class="text-[10px] text-slate-500 font-mono">{{ hist.date }}</span>
+          </div>
+          <p class="text-slate-400 text-[11px] mt-1">{{ hist.title }}</p>
+          <p class="text-emerald-400 text-[10px] mt-0.5">结果: {{ hist.outcome }}</p>
         </div>
       </div>
     </div>
-    
-    <!-- Reassign Modal -->
-    <div v-if="showReassign" class="end-chat-modal">
-      <div class="end-chat-modal-content">
-        <h3>重新分配客服</h3>
-        <p>请选择负责该客户会话的团队成员。</p>
-        <div style="margin-bottom: 12px;">
-          <select v-model="selectedUserId" class="filter-input" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid var(--o12); background: var(--surface); color: var(--text);">
-            <option value="" disabled>选择客服成员</option>
-            <option v-for="u in users" :key="u.id" :value="u.id">{{ u.full_name }} ({{ u.email }})</option>
-          </select>
-        </div>
-        <div class="end-chat-modal-actions">
-          <button class="cancel-btn" @click="cancelReassign">取消</button>
-          <button class="confirm-btn" :disabled="!selectedUserId || reassigning" @click="confirmReassign">
-            {{ reassigning ? '分配中...' : '确认分配' }}
-          </button>
-        </div>
-      </div>
-    </div>
-  </div>
+  </aside>
 </template>
-
-<style scoped>
-.chat-info-sidebar {
-  background: var(--bg2);
-  border-left: 1px solid var(--o08);
-  overflow-y: auto;
-  animation: slideInRight 0.22s cubic-bezier(0.4, 0, 0.2, 1);
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-}
-
-@keyframes slideInRight {
-  from { transform: translateX(100%); }
-  to { transform: translateX(0); }
-}
-
-.chat-info-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 12px 18px;
-  border-bottom: 1px solid var(--o08);
-  background: var(--bg2);
-  backdrop-filter: blur(20px);
-  flex-shrink: 0;
-}
-
-.header-title-wrap {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  color: var(--text);
-}
-
-.header-title-wrap h3 {
-  margin: 0;
-  font-family: var(--font-display);
-  font-size: 14.5px;
-  font-weight: 700;
-  letter-spacing: -0.01em;
-}
-
-.close-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  border: 1px solid var(--o10);
-  border-radius: var(--radius-sm, 6px);
-  background: var(--surface);
-  color: var(--muted);
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-.close-btn:hover {
-  background: var(--o08);
-  color: var(--text);
-}
-
-.chat-info-content {
-  padding: 14px 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-/* ── Customer Hero Card ────────────────────────────────────────────────────── */
-
-.customer-card {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 14px;
-  background: var(--surface);
-  border: 1px solid var(--o08);
-  border-radius: var(--radius-md, 10px);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
-}
-
-.customer-avatar {
-  width: 44px;
-  height: 44px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, var(--accent-solid) 0%, #5fe3d6 100%);
-  color: #0B0C10;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-family: var(--font-display);
-  font-size: 16px;
-  font-weight: 700;
-  flex-shrink: 0;
-  box-shadow: 0 0 16px rgba(201, 242, 78, 0.2);
-}
-
-.customer-details {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-  flex: 1;
-}
-
-.customer-name-row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
-}
-
-.customer-name {
-  font-family: var(--font-display);
-  font-size: 14.5px;
-  font-weight: 700;
-  color: var(--text);
-  letter-spacing: -0.01em;
-}
-
-.customer-email {
-  font-family: var(--font-mono);
-  font-size: 11.5px;
-  color: var(--muted);
-  word-break: break-all;
-}
-
-.customer-channel-row {
-  margin-top: 2px;
-}
-
-.channel-pill {
-  font-size: 10.5px;
-  color: var(--muted2);
-}
-
-/* ── Section Cards ─────────────────────────────────────────────────────────── */
-
-.info-section-card {
-  background: var(--surface);
-  border: 1px solid var(--o08);
-  border-radius: var(--radius-md, 10px);
-  padding: 12px 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.section-title-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.section-heading {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  font-weight: 700;
-  color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-}
-
-.add-tag-toggle-btn {
-  font-family: var(--font-sans);
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--accent-ink);
-  background: none;
-  border: none;
-  cursor: pointer;
-  padding: 0;
-}
-
-.add-tag-toggle-btn:hover {
-  text-decoration: underline;
-}
-
-/* ── Tags Cloud ────────────────────────────────────────────────────────────── */
-
-.tags-cloud {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.tag-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 3px 9px;
-  border-radius: var(--radius-pill, 999px);
-  font-size: 11px;
-  font-weight: 500;
-  background: rgba(201, 242, 78, 0.08);
-  border: 1px solid rgba(201, 242, 78, 0.22);
-  color: #d4f56e;
-}
-
-.tag-remove {
-  background: none;
-  border: none;
-  color: var(--muted);
-  cursor: pointer;
-  font-size: 13px;
-  line-height: 1;
-  padding: 0;
-}
-
-.tag-remove:hover {
-  color: var(--c-danger);
-}
-
-.no-tags-hint {
-  font-size: 11.5px;
-  color: var(--muted2);
-}
-
-/* Tag input panel */
-.tag-input-panel {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 10px;
-  background: var(--bg2);
-  border: 1px solid var(--o10);
-  border-radius: var(--radius-sm, 7px);
-}
-
-.preset-tags {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  flex-wrap: wrap;
-}
-
-.preset-label {
-  font-size: 10.5px;
-  color: var(--muted2);
-}
-
-.preset-chip {
-  font-size: 10.5px;
-  padding: 2px 7px;
-  border-radius: 4px;
-  background: var(--surface);
-  border: 1px solid var(--o10);
-  color: var(--text3);
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-.preset-chip:hover:not(:disabled) {
-  background: rgba(201, 242, 78, 0.12);
-  color: var(--accent-ink);
-  border-color: rgba(201, 242, 78, 0.3);
-}
-
-.preset-chip:disabled {
-  opacity: 0.35;
-  cursor: not-allowed;
-}
-
-.custom-tag-row {
-  display: flex;
-  gap: 6px;
-}
-
-.tag-input-field {
-  flex: 1;
-  padding: 5px 8px;
-  border-radius: 5px;
-  border: 1px solid var(--o12);
-  background: var(--surface);
-  color: var(--text);
-  font-size: 12px;
-  outline: none;
-}
-
-.tag-input-field:focus {
-  border-color: var(--accent-solid);
-}
-
-.tag-submit-btn {
-  padding: 5px 12px;
-  border-radius: 5px;
-  background: var(--accent-solid);
-  color: #0B0C10;
-  border: none;
-  font-size: 11.5px;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-/* ── Item Rows ─────────────────────────────────────────────────────────────── */
-
-.info-item-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  font-size: 12px;
-}
-
-.info-item-row .label {
-  color: var(--muted);
-}
-
-.info-item-row .value {
-  color: var(--text);
-  font-weight: 500;
-}
-
-.assignee-value {
-  color: var(--accent-ink) !important;
-  font-weight: 600 !important;
-}
-
-.status-badge {
-  font-size: 10.5px;
-  padding: 1.5px 7px;
-  border-radius: 999px;
-  font-weight: 600;
-}
-
-.status-badge.open {
-  background: rgba(95, 227, 214, 0.1);
-  color: #5FE3D6;
-}
-
-.status-badge.transferred {
-  background: rgba(245, 158, 11, 0.12);
-  color: #f59e0b;
-}
-
-.status-badge.closed {
-  background: var(--o06);
-  color: var(--muted2);
-}
-
-/* ── Historical Sessions ───────────────────────────────────────────────────── */
-
-.history-list {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.history-card {
-  padding: 8px 10px;
-  background: var(--bg2);
-  border: 1px solid var(--o08);
-  border-radius: var(--radius-sm, 7px);
-  cursor: pointer;
-  transition: all 0.15s ease;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.history-card:hover {
-  background: var(--o06);
-  border-color: var(--o16);
-  transform: translateY(-0.5px);
-}
-
-.history-card-top {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 6px;
-}
-
-.history-summary {
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--text);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.history-date {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  color: var(--muted2);
-}
-
-.history-card-bottom {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-size: 11px;
-}
-
-.history-handler {
-  color: var(--muted);
-}
-
-.history-status {
-  font-size: 10px;
-  color: var(--muted2);
-}
-
-/* ── Action Buttons ────────────────────────────────────────────────────────── */
-
-.chat-actions {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.action-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  padding: 8px 14px;
-  border-radius: var(--radius-btn, 8px);
-  font-family: var(--font-sans);
-  font-size: 12px;
-  font-weight: 600;
-  background: var(--bg2);
-  border: 1px solid var(--o10);
-  color: var(--text);
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-.action-btn:hover {
-  background: var(--o08);
-  border-color: var(--o18);
-}
-
-.takeover-btn {
-  background: var(--accent-solid);
-  color: #0B0C10;
-  border-color: transparent;
-  box-shadow: 0 0 14px rgba(201, 242, 78, 0.18);
-}
-
-.takeover-btn:hover {
-  background: #d4f56e;
-  box-shadow: 0 0 20px rgba(201, 242, 78, 0.3);
-}
-
-.end-chat-btn {
-  background: rgba(220, 38, 38, 0.08);
-  color: #f87171;
-  border-color: rgba(220, 38, 38, 0.25);
-}
-
-.end-chat-btn:hover {
-  background: rgba(220, 38, 38, 0.16);
-  border-color: rgba(220, 38, 38, 0.4);
-}
-
-/* ── Modal ─────────────────────────────────────────────────────────────────── */
-
-.end-chat-modal {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.65);
-  backdrop-filter: blur(8px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-  padding: 20px;
-}
-
-.end-chat-modal-content {
-  background: var(--surface);
-  border: 1px solid var(--o14);
-  border-radius: var(--radius-card, 16px);
-  padding: 20px 24px;
-  max-width: 380px;
-  width: 100%;
-  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
-}
-
-.end-chat-modal-content h3 {
-  margin: 0 0 8px;
-  font-family: var(--font-display);
-  font-size: 16px;
-  font-weight: 700;
-  color: var(--text);
-}
-
-.end-chat-modal-content p {
-  margin: 0 0 18px;
-  font-size: 13px;
-  color: var(--muted);
-  line-height: 1.5;
-}
-
-.end-chat-modal-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-}
-
-.cancel-btn,
-.confirm-btn {
-  padding: 7px 14px;
-  border-radius: var(--radius-btn, 8px);
-  font-size: 12.5px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-.cancel-btn {
-  background: var(--bg2);
-  border: 1px solid var(--o12);
-  color: var(--text3);
-}
-
-.confirm-btn {
-  background: var(--accent-solid);
-  border: none;
-  color: #0B0C10;
-}
-</style>

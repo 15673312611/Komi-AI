@@ -1,797 +1,543 @@
 <!--
 Copyright 2024-2026 ChatterMate
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
+左栏：会话导航与 3+2 零滚动状态矩阵 (ConversationsList.vue - 1:1 原版 FontAwesome 复刻)
 -->
 
 <script setup lang="ts">
-import type { Conversation, ChatDetail } from '@/types/chat'
-import ConversationChat from '@/components/conversations/ConversationChat.vue'
-import ChannelBadge from '@/components/common/ChannelBadge.vue'
-import HandlerBadge from '@/components/conversations/HandlerBadge.vue'
-import { useConversationsList } from '@/composables/useConversationsList'
-import { useBreakpoint } from '@/composables/useBreakpoint'
-import { chatHandler } from '@/utils/chatState'
-import { userService } from '@/services/user'
-import { ref, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
+import { ref, computed } from 'vue'
 
 const props = defineProps<{
-  conversations: Conversation[]
-  loading: boolean
-  error: string
-  statusFilter: 'open' | 'closed'
-  hasMore: boolean
-  loadingMore: boolean
-  showChatInfo?: boolean
-  initialSessionId?: string | null
-  mobilePane?: 'list' | 'chat'
+  activeSessionId?: string
 }>()
 
 const emit = defineEmits<{
+  (e: 'select-session', sessionId: string): void
   (e: 'refresh'): void
-  (e: 'chatUpdated', data: ChatDetail): void
-  (e: 'chatSelected', data: ChatDetail): void
-  (e: 'clearUnread', sessionId: string): void
-  (e: 'updateFilter', status: 'open' | 'closed'): void
-  (e: 'loadMore'): void
-  (e: 'select', sessionId: string): void
-  (e: 'back'): void
-  (e: 'info'): void
+  (e: 'action-toast', msg: string, type?: 'success' | 'info' | 'error'): void
 }>()
 
-const { isMobile } = useBreakpoint()
-const currentUserId = userService.getUserId()
+const currentFilterTab = ref<'all' | 'ai' | 'mine' | 'queue' | 'closed'>('all')
+const currentStoreFilter = ref('all')
+const searchQuery = ref('')
+const showStoreDropdown = ref(false)
+const showFolderDrawer = ref(false)
+const activeId = ref(props.activeSessionId || 'conv-1')
 
-// The preview used to be prefixed with the AI agent's name unconditionally,
-// which read as "the bot said this" even on a chat a colleague had taken over.
-const previewPrefix = (conv: Conversation) => {
-  const handler = chatHandler(conv, currentUserId)
-  return handler.kind === 'human' ? handler.label : conv.agent.name
-}
-
-const {
-  selectedChat,
-  selectedId,
-  chatLoading,
-  formattedConversations,
-  loadChatDetail,
-  unreadMessages,
-  clearUnread
-} = useConversationsList(props, emit)
-
-// Enhanced loadChatDetail to also emit chat-selected event
-const loadChatDetailWithSelection = async (sessionId: string) => {
-  await loadChatDetail(sessionId)
-  // Emit the chat-selected event with the loaded chat detail
-  if (selectedChat.value) {
-    emit('chatSelected', selectedChat.value)
-  }
-}
-
-// On mobile a tap routes through the URL (?session=) so back navigation works;
-// the parent pushes the query, which flows back in via initialSessionId.
-const handleConversationClick = (sessionId: string) => {
-  if (isMobile.value) {
-    emit('select', sessionId)
-  } else {
-    loadChatDetailWithSelection(sessionId)
-  }
-}
-
-// Function to update the selected chat from parent
-const updateSelectedChat = (updatedChat: ChatDetail) => {
-  console.log('updateSelectedChat', updatedChat)
-  if (selectedChat.value && selectedChat.value.session_id === updatedChat.session_id) {
-    selectedChat.value = updatedChat
-  }
-}
-
-// Function to clear the selected chat from parent
-const clearSelectedChat = () => {
-  selectedChat.value = null
-  selectedId.value = null
-}
-
-// Expose the function to parent component
-defineExpose({
-  updateSelectedChat,
-  clearSelectedChat
-})
-
-// Intersection observer for infinite scrolling
-const listContainer = ref<HTMLElement | null>(null)
-const loadMoreTrigger = ref<HTMLElement | null>(null)
-let observer: IntersectionObserver | null = null
-
-// Scroll to top functionality
-const showScrollToTop = ref(false)
-const scrollThreshold = 300 // Show button after scrolling down 300px
-
-// Handle scroll event to show/hide scroll-to-top button
-const handleScroll = () => {
-  if (listContainer.value) {
-    showScrollToTop.value = listContainer.value.scrollTop > scrollThreshold
-  }
-}
-
-// Scroll to top function
-const scrollToTop = () => {
-  if (listContainer.value) {
-    listContainer.value.scrollTo({
-      top: 0,
-      behavior: 'smooth'
-    })
-  }
-}
-
-// Flag to track filter changes
-const filterChanged = ref(false)
-
-// Watch for filter changes to set the flag
-watch(() => props.statusFilter, () => {
-  filterChanged.value = true
-})
-
-// Watch for loading state changes to select first conversation after filter change
-watch(() => props.loading, (isLoading, prevLoading) => {
-  // Only proceed if loading has just completed (was true, now false)
-  if (prevLoading === true && isLoading === false && filterChanged.value) {
-    // Reset the flag
-    filterChanged.value = false
-
-    // When loading completes after filter change, select the first conversation if
-    // available (desktop only — on mobile the list pane stays put until a tap)
-    if (props.conversations.length > 0 && !isMobile.value) {
-      loadChatDetailWithSelection(props.conversations[0].session_id)
-    } else {
-      // If no conversations available, clear the selected chat
-      selectedChat.value = null
-      selectedId.value = null
-    }
-  }
-})
-
-// Deep-link: open a specific session directly (from analytics "Sessions Needing
-// Attention", mobile ?session= navigation, or a push notification). Fetches the
-// chat detail by id, so it works even if the session isn't in the currently
-// loaded/filtered list. Reacts to every change so in-app deep-links keep working.
-watch(
-  () => props.initialSessionId,
-  (sessionId) => {
-    if (sessionId && sessionId !== selectedId.value) {
-      loadChatDetailWithSelection(sessionId)
-    }
+// 多渠道跨境模拟会话列表
+const conversations = ref([
+  {
+    id: 'conv-1',
+    customerName: 'Jessica Miller',
+    avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100&auto=format&fit=crop&q=80',
+    email: 'jessica.m@outlook.com',
+    channel: 'whatsapp',
+    channelColor: 'bg-emerald-500 text-white',
+    storeId: 'shopify_us',
+    storeName: 'SHE-GLOW 美东站',
+    storePlatform: 'Shopify',
+    platformBadge: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30',
+    status: 'ai',
+    statusText: 'AI 处理中',
+    unreadCount: 2,
+    lastTime: '14:25',
+    lastMessage: 'Can you confirm if DHL will deliver my dress before Friday evening?',
   },
-  { immediate: true }
-)
+  {
+    id: 'conv-2',
+    customerName: 'Liam Smith',
+    avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&auto=format&fit=crop&q=80',
+    email: 'liam.tech@gmail.com',
+    channel: 'email',
+    channelColor: 'bg-blue-500 text-white',
+    storeId: 'amazon_uk',
+    storeName: 'CYBER-TECH 旗舰店',
+    storePlatform: 'Amazon',
+    platformBadge: 'bg-amber-500/15 text-amber-300 border-amber-500/30',
+    status: 'queue',
+    statusText: '排队待接入',
+    unreadCount: 1,
+    lastTime: '14:18',
+    lastMessage: 'The ANC wireless headphone has a crack on the right hinge. Requesting refund.',
+  },
+  {
+    id: 'conv-3',
+    customerName: 'Elena Rostova',
+    avatar: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=100&auto=format&fit=crop&q=80',
+    email: 'elena.r@tiktok.com',
+    channel: 'tiktok',
+    channelColor: 'bg-cyan-500 text-white',
+    storeId: 'tiktok_sea',
+    storeName: 'AURA 美妆东南亚',
+    storePlatform: 'TikTok',
+    platformBadge: 'bg-cyan-500/15 text-cyan-300 border-cyan-500/30',
+    status: 'mine',
+    statusText: '人工接管 · Alex',
+    unreadCount: 0,
+    lastTime: '13:50',
+    lastMessage: 'Is this peptide glow serum safe for sensitive acne-prone skin?',
+  },
+  {
+    id: 'conv-4',
+    customerName: 'Maximilian Weber',
+    avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&auto=format&fit=crop&q=80',
+    email: 'm.weber@berlin-design.de',
+    channel: 'telegram',
+    channelColor: 'bg-sky-500 text-white',
+    storeId: 'shopify_us',
+    storeName: 'SHE-GLOW 独立站',
+    storePlatform: 'Shopify',
+    platformBadge: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30',
+    status: 'mine',
+    statusText: '人工接管 · Sarah',
+    unreadCount: 0,
+    lastTime: '12:10',
+    lastMessage: 'We want to place an order of 500 units for our boutique store in Munich.',
+  },
+  {
+    id: 'conv-5',
+    customerName: 'Chloe Dupont',
+    avatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=100&auto=format&fit=crop&q=80',
+    email: 'chloe.dupont@paris.fr',
+    channel: 'instagram',
+    channelColor: 'bg-pink-500 text-white',
+    storeId: 'shopify_us',
+    storeName: 'SHE-GLOW 独立站',
+    storePlatform: 'Shopify',
+    platformBadge: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30',
+    status: 'ai',
+    statusText: 'AI 处理中',
+    unreadCount: 0,
+    lastTime: '11:40',
+    lastMessage: 'Merci! Le code promo VIP a bien fonctionné.',
+  },
+  {
+    id: 'conv-6',
+    customerName: 'David Tanaka',
+    avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=100&auto=format&fit=crop&q=80',
+    email: 'tanaka.d@tokyo.jp',
+    channel: 'livechat',
+    channelColor: 'bg-teal-500 text-white',
+    storeId: 'shopify_us',
+    storeName: 'SHE-GLOW 独立站',
+    storePlatform: 'Shopify',
+    platformBadge: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30',
+    status: 'closed',
+    statusText: '已解决关闭',
+    unreadCount: 0,
+    lastTime: '昨天',
+    lastMessage: 'ありがとうございます！注文が完了しました。',
+  },
+])
 
-// Setup intersection observer for infinite scrolling
-onMounted(() => {
-  setupIntersectionObserver()
-  
-  // Add scroll event listener
-  if (listContainer.value) {
-    listContainer.value.addEventListener('scroll', handleScroll)
-  }
+const stores = [
+  { id: 'all', name: '全部跨境店铺 (All Stores)', iconClass: 'fa-solid fa-store', badge: '28', color: 'text-emerald-400 bg-emerald-500/20' },
+  { id: 'shopify_us', name: 'SHE-GLOW 女装美东站 (Shopify)', iconClass: 'fa-brands fa-shopify', badge: 'Shopify', color: 'text-rose-400 bg-rose-500/20' },
+  { id: 'amazon_uk', name: 'CYBER-TECH 数码旗舰 (Amazon UK)', iconClass: 'fa-brands fa-amazon', badge: 'Amazon', color: 'text-amber-400 bg-amber-500/20' },
+  { id: 'tiktok_sea', name: 'AURA 美妆个护 (TikTok SEA)', iconClass: 'fa-brands fa-tiktok', badge: 'TikTok', color: 'text-cyan-400 bg-cyan-500/20' },
+]
+
+const selectedStoreObj = computed(() => {
+  return stores.find((s) => s.id === currentStoreFilter.value) || stores[0]
 })
 
-// Watch for changes in the loadMoreTrigger ref
-watch(loadMoreTrigger, (newValue) => {
-  if (newValue && observer) {
-    observer.observe(newValue)
-  }
-})
+const filteredConversations = computed(() => {
+  return conversations.value.filter((conv) => {
+    if (currentFilterTab.value === 'ai' && conv.status !== 'ai') return false
+    if (currentFilterTab.value === 'mine' && conv.status !== 'mine') return false
+    if (currentFilterTab.value === 'queue' && conv.status !== 'queue') return false
+    if (currentFilterTab.value === 'closed' && conv.status !== 'closed') return false
+    if (currentStoreFilter.value !== 'all' && conv.storeId !== currentStoreFilter.value) return false
 
-// Watch for changes in the listContainer ref to add scroll listener
-watch(listContainer, (newValue) => {
-  if (newValue) {
-    newValue.addEventListener('scroll', handleScroll)
-  }
-})
-
-// Setup intersection observer
-const setupIntersectionObserver = () => {
-  if (window.IntersectionObserver) {
-    // Disconnect previous observer if it exists
-    if (observer) {
-      observer.disconnect()
+    if (searchQuery.value.trim()) {
+      const q = searchQuery.value.toLowerCase()
+      const matchName = conv.customerName.toLowerCase().includes(q)
+      const matchEmail = conv.email.toLowerCase().includes(q)
+      const matchMsg = conv.lastMessage.toLowerCase().includes(q)
+      if (!matchName && !matchEmail && !matchMsg) return false
     }
-    
-    observer = new IntersectionObserver((entries) => {
-      const entry = entries[0]
-      if (entry.isIntersecting && props.hasMore && !props.loadingMore) {
-        emit('loadMore')
-      }
-    }, { threshold: 0.5 })
-    
-    if (loadMoreTrigger.value) {
-      observer.observe(loadMoreTrigger.value)
-    }
-  }
+
+    return true
+  })
+})
+
+const selectSession = (id: string) => {
+  activeId.value = id
+  const target = conversations.value.find((c) => c.id === id)
+  if (target) target.unreadCount = 0
+  emit('select-session', id)
 }
 
-// Cleanup intersection observer and event listeners
-onBeforeUnmount(() => {
-  if (observer) {
-    observer.disconnect()
-    observer = null
-  }
-  
-  // Remove scroll event listener
-  if (listContainer.value) {
-    listContainer.value.removeEventListener('scroll', handleScroll)
-  }
-})
+const selectStore = (id: string) => {
+  currentStoreFilter.value = id
+  showStoreDropdown.value = false
+  emit('action-toast', `已筛选: ${selectedStoreObj.value.name}`, 'info')
+}
 </script>
 
 <template>
-  <div class="conversations-container"
-    :class="{ 'with-chat-info': showChatInfo, 'mobile-show-chat': mobilePane === 'chat' }">
-    <!-- Sidebar with conversation list -->
-    <div class="conversations-sidebar">
-      <!-- Filter controls -->
-      <div class="filter-controls">
-        <button 
-          class="filter-btn" 
-          :class="{ active: statusFilter === 'open' }"
-          @click="emit('updateFilter', 'open')"
+  <section class="w-[340px] bg-[#0F1523] border-r border-white/[0.08] flex flex-col shrink-0 relative z-20 select-none h-full shadow-2xl">
+    <!-- 顶部标题与快速操作 (1:1 原版复刻) -->
+    <div class="p-3.5 border-b border-white/[0.08] flex items-center justify-between bg-[#0F1523]/80">
+      <div class="flex items-center gap-2">
+        <h1 class="text-sm font-bold text-slate-100 tracking-tight flex items-center gap-2">
+          <span>会话中心</span>
+          <span class="px-2 py-0.5 text-[11px] font-bold bg-emerald-500/15 text-emerald-400 rounded-full border border-emerald-500/25">
+            <span class="font-mono">28</span> 待办
+          </span>
+        </h1>
+      </div>
+      <div class="flex items-center gap-1">
+        <button
+          @click="showFolderDrawer = !showFolderDrawer"
+          class="w-7 h-7 rounded-lg text-slate-400 hover:text-emerald-400 hover:bg-white/5 flex items-center justify-center transition-colors"
+          title="展开/收起 Intercom 风格大收件箱分组"
         >
-          进行中
+          <i class="fa-solid fa-layer-group text-xs"></i>
         </button>
-        <button 
-          class="filter-btn" 
-          :class="{ active: statusFilter === 'closed' }"
-          @click="emit('updateFilter', 'closed')"
+        <button
+          @click="emit('refresh')"
+          class="w-7 h-7 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-white/5 flex items-center justify-center transition-colors"
+          title="刷新列表"
         >
-          已关闭
+          <i class="fa-solid fa-arrow-rotate-right fa-rotate text-xs"></i>
         </button>
       </div>
+    </div>
 
-      <div v-if="loading && !loadingMore" class="loading-state">
-        正在加载会话列表…
+    <!-- 搜索框 & 店铺筛选器 (1:1 原版复刻) -->
+    <div class="p-3 space-y-2 border-b border-white/[0.08] bg-[#0C101A]/60">
+      <!-- 搜索框 -->
+      <div class="relative">
+        <i class="fa-solid fa-magnifying-glass fa-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
+        <input
+          v-model="searchQuery"
+          type="text"
+          placeholder="搜索客户姓名、邮箱、消息、订单号..."
+          class="w-full bg-[#080B11] text-xs text-slate-200 placeholder-slate-500 rounded-lg pl-8 pr-8 py-2 border border-white/[0.08] focus:border-emerald-500/60 focus:outline-none focus:ring-1 focus:ring-emerald-500/30 transition-all shadow-inner"
+        />
+        <span class="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] text-slate-500 bg-white/5 px-1 py-0.5 rounded font-mono">⌘K</span>
       </div>
 
-      <div v-else-if="error" class="error-state">
-        {{ error }}
-        <button @click="emit('refresh')" class="refresh-button">重试</button>
-      </div>
-
-      <div v-else-if="conversations.length === 0" class="empty-state">
-        暂无会话记录
-      </div>
-
-      <div v-else class="conversations-list" ref="listContainer">
-        <div 
-          v-for="conv in formattedConversations" 
-          :key="conv.session_id"
-          class="conversation-item"
-          :class="{ active: selectedId === conv.session_id }"
-          @click="handleConversationClick(conv.session_id)"
+      <!-- 店铺下拉选择器 -->
+      <div class="relative">
+        <button
+          @click="showStoreDropdown = !showStoreDropdown"
+          class="w-full flex items-center justify-between px-2.5 py-1.5 bg-[#080B11]/80 hover:bg-white/[0.04] rounded-lg border border-white/[0.08] text-xs text-slate-300 transition-colors shadow-sm"
         >
-          <div class="conversation-item-header">
-            <h3>{{ conv.customer.full_name || conv.customer.email }}</h3>
-            <ChannelBadge :channel="conv.channel" />
-            <span class="timestamp">{{ conv.timeAgo }}</span>
+          <div class="flex items-center gap-2 truncate">
+            <span :class="['w-4 h-4 rounded flex items-center justify-center text-[10px] shrink-0', selectedStoreObj.color]">
+              <i :class="selectedStoreObj.iconClass"></i>
+            </span>
+            <span class="font-medium truncate text-xs">{{ selectedStoreObj.name }}</span>
           </div>
-          <div class="conversation-preview">
-            <span class="agent-name">{{ previewPrefix(conv) }}:</span>
-            <!-- Product message preview -->
-            <template v-if="conv.message_type === 'product' && conv.shopify_output?.products?.length">
-              <p class="last-message product-preview">
-                <span class="product-icon">🛍️</span>
-                分享了 {{ conv.shopify_output.products.length }} 个商品
-              </p>
-            </template>
-            <!-- Regular message preview -->
-            <template v-else>
-              <p class="last-message">{{ conv.last_message }}</p>
-            </template>
-            <div v-if="unreadMessages[conv.session_id]" class="unread-bubble">
-              {{ unreadMessages[conv.session_id] }}
-            </div>
-          </div>
-          <div class="message-count">{{ conv.message_count }} 条消息</div>
-          <div class="conversation-footer">
-            <div class="conversation-status" :class="conv.status">
-              {{ conv.status === 'open' ? '进行中' : conv.status === 'transferred' ? '已转接' : '已关闭' }}
-            </div>
-            <HandlerBadge :chat="conv" :current-user-id="currentUserId" />
-          </div>
-        </div>
-        
-        <!-- Loading more indicator -->
-        <div 
-          v-if="hasMore || loadingMore" 
-          class="load-more-trigger" 
-          ref="loadMoreTrigger"
+          <i class="fa-solid fa-chevron-down text-[10px] text-slate-400"></i>
+        </button>
+
+        <!-- 下拉菜单 -->
+        <div
+          v-if="showStoreDropdown"
+          class="absolute left-0 right-0 top-full mt-1 bg-[#131B2E] border border-white/15 rounded-xl shadow-2xl p-1.5 z-50 text-xs space-y-1 backdrop-blur-2xl animate-in fade-in zoom-in-95 duration-150"
         >
-          <div v-if="loadingMore" class="loading-more">
-            <div class="loading-spinner"></div>
-            <span>正在加载更多会话…</span>
-          </div>
-          <div v-else-if="hasMore" class="load-more-container">
-            <span class="load-more-hint">向下滚动加载更多</span>
-            <button 
-              class="load-more-button"
-              @click="emit('loadMore')"
-              :disabled="loadingMore"
-            >
-              加载更多
-            </button>
+          <div
+            v-for="st in stores"
+            :key="st.id"
+            @click="selectStore(st.id)"
+            class="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-white/5 cursor-pointer text-slate-200 transition-colors"
+          >
+            <span :class="['w-5 h-5 rounded flex items-center justify-center text-[10px] shrink-0', st.color]">
+              <i :class="st.iconClass"></i>
+            </span>
+            <span class="flex-1 font-medium truncate">{{ st.name }}</span>
+            <span class="text-[10px] text-slate-400 font-mono px-1 rounded bg-white/5">{{ st.badge }}</span>
           </div>
         </div>
       </div>
-      
-      <!-- Scroll to top button -->
-      <button 
-        v-if="showScrollToTop" 
-        class="scroll-to-top-btn"
-        @click="scrollToTop"
-        aria-label="回到顶部"
+    </div>
+
+    <!-- 零滚动紧凑自适应状态矩阵 (大厂 3+2 零横向溢出) -->
+    <div class="p-2.5 border-b border-white/[0.08] bg-[#080B11]/40 space-y-1.5">
+      <!-- 第一行：3个常用状态 (全部 · AI · 我的) -->
+      <div class="grid grid-cols-3 gap-1.5">
+        <button
+          @click="currentFilterTab = 'all'"
+          :class="['grid-pill', currentFilterTab === 'all' ? 'active' : '']"
+        >
+          <span class="flex items-center gap-1 truncate"><i class="fa-solid fa-inbox text-[11px]"></i> 全部</span>
+          <span class="text-[10px] font-mono px-1 rounded bg-white/10 text-slate-200">28</span>
+        </button>
+
+        <button
+          @click="currentFilterTab = 'ai'"
+          :class="['grid-pill', currentFilterTab === 'ai' ? 'active' : '']"
+        >
+          <span class="flex items-center gap-1 truncate"><i class="fa-solid fa-robot text-[11px] text-emerald-400"></i> AI</span>
+          <span class="text-[10px] font-mono px-1 rounded bg-emerald-500/15 text-emerald-400">14</span>
+        </button>
+
+        <button
+          @click="currentFilterTab = 'mine'"
+          :class="['grid-pill', currentFilterTab === 'mine' ? 'active-blue' : '']"
+        >
+          <span class="flex items-center gap-1 truncate"><i class="fa-solid fa-user-check text-[11px] text-blue-400"></i> 我的</span>
+          <span class="text-[10px] font-mono px-1 rounded bg-blue-500/15 text-blue-400">6</span>
+        </button>
+      </div>
+
+      <!-- 第二行：2个关键工作流状态 (待人工接入 · 已关闭) -->
+      <div class="grid grid-cols-2 gap-1.5">
+        <button
+          @click="currentFilterTab = 'queue'"
+          :class="['grid-pill', currentFilterTab === 'queue' ? 'active-amber' : '']"
+        >
+          <span class="flex items-center gap-1.5 truncate">
+            <span class="w-2 h-2 rounded-full bg-amber-400 pulse-subtle shrink-0"></span>
+            <span class="truncate">⏳ 待人工接入</span>
+          </span>
+          <span class="text-[10px] font-mono font-bold px-1.5 rounded bg-amber-500/20 text-amber-300">5</span>
+        </button>
+
+        <button
+          @click="currentFilterTab = 'closed'"
+          :class="['grid-pill', currentFilterTab === 'closed' ? 'active-closed' : '']"
+        >
+          <span class="flex items-center gap-1.5 truncate">
+            <i class="fa-solid fa-lock text-[10px] text-slate-500"></i>
+            <span class="truncate">🔒 已解决关闭</span>
+          </span>
+          <span class="text-[10px] font-mono px-1 rounded bg-white/5 text-slate-400">3</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Intercom 风格全景视图折叠树面板 -->
+    <div
+      v-if="showFolderDrawer"
+      class="p-2 border-b border-white/[0.08] bg-[#131B2E]/95 space-y-1 text-xs animate-in fade-in duration-150 shadow-lg"
+    >
+      <div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-2 py-1 flex items-center justify-between">
+        <span>收件箱视图 (Inbox Views)</span>
+        <span class="text-emerald-400 font-mono">SLA 正常</span>
+      </div>
+      <div @click="currentFilterTab = 'all'" class="flex items-center justify-between p-2 rounded-lg hover:bg-white/5 cursor-pointer text-slate-200">
+        <span class="flex items-center gap-2"><i class="fa-solid fa-inbox text-emerald-400"></i> 全部实时会话</span>
+        <span class="font-mono text-slate-400 font-bold">28</span>
+      </div>
+      <div @click="currentFilterTab = 'ai'" class="flex items-center justify-between p-2 rounded-lg hover:bg-white/5 cursor-pointer text-slate-200">
+        <span class="flex items-center gap-2"><i class="fa-solid fa-robot text-emerald-400"></i> 🤖 AI 智能应答中</span>
+        <span class="font-mono text-emerald-400 font-bold">14</span>
+      </div>
+      <div @click="currentFilterTab = 'mine'" class="flex items-center justify-between p-2 rounded-lg hover:bg-white/5 cursor-pointer text-slate-200">
+        <span class="flex items-center gap-2"><i class="fa-solid fa-user-check text-blue-400"></i> 👤 分配给我的接待</span>
+        <span class="font-mono text-blue-400 font-bold">6</span>
+      </div>
+      <div @click="currentFilterTab = 'queue'" class="flex items-center justify-between p-2 rounded-lg hover:bg-white/5 cursor-pointer text-slate-200">
+        <span class="flex items-center gap-2"><i class="fa-solid fa-clock text-amber-400"></i> ⏳ 排队等待人工接入</span>
+        <span class="font-mono text-amber-400 font-bold pulse-subtle">5</span>
+      </div>
+      <div @click="currentFilterTab = 'closed'" class="flex items-center justify-between p-2 rounded-lg hover:bg-white/5 cursor-pointer text-slate-200">
+        <span class="flex items-center gap-2"><i class="fa-solid fa-circle-check text-slate-400"></i> 🔒 已解决/历史归档</span>
+        <span class="font-mono text-slate-500">3</span>
+      </div>
+    </div>
+
+    <!-- 会话卡片列表容器 -->
+    <div class="flex-1 overflow-y-auto divide-y divide-white/[0.04] p-2 space-y-1.5">
+      <div
+        v-for="conv in filteredConversations"
+        :key="conv.id"
+        @click="selectSession(conv.id)"
+        :class="[
+          'p-3 rounded-xl cursor-pointer relative transition-all duration-150',
+          activeId === conv.id ? 'conv-card-active' : 'conv-card-default',
+        ]"
       >
-        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M18 15l-6-6-6 6"/>
-        </svg>
-      </button>
+        <div class="flex items-start gap-3">
+          <!-- 头像与渠道角标 -->
+          <div class="relative shrink-0 mt-0.5">
+            <img
+              :src="conv.avatar"
+              :alt="conv.customerName"
+              class="w-10 h-10 rounded-xl object-cover border border-white/10 shadow-md"
+            />
+            <span
+              :class="[
+                'absolute -bottom-1 -right-1 w-4 h-4 rounded-full flex items-center justify-center text-[9px] border-2 border-[#0F1523]',
+                conv.channelColor,
+              ]"
+            >
+              <i v-if="conv.channel === 'whatsapp'" class="fa-brands fa-whatsapp"></i>
+              <i v-else-if="conv.channel === 'email'" class="fa-regular fa-envelope"></i>
+              <i v-else-if="conv.channel === 'shopify'" class="fa-brands fa-shopify"></i>
+              <i v-else-if="conv.channel === 'amazon'" class="fa-brands fa-amazon"></i>
+              <i v-else-if="conv.channel === 'tiktok'" class="fa-brands fa-tiktok"></i>
+              <i v-else-if="conv.channel === 'telegram'" class="fa-brands fa-telegram"></i>
+              <i v-else-if="conv.channel === 'instagram'" class="fa-brands fa-instagram"></i>
+              <i v-else class="fa-solid fa-comments"></i>
+            </span>
+          </div>
+
+          <!-- 会话主体信息 -->
+          <div class="flex-1 min-w-0">
+            <!-- 姓名、平台、时间 -->
+            <div class="flex items-center justify-between leading-none">
+              <div class="flex items-center gap-1.5 truncate">
+                <span
+                  :class="[
+                    'font-bold text-xs truncate',
+                    activeId === conv.id ? 'text-emerald-300' : 'text-slate-100',
+                  ]"
+                >
+                  {{ conv.customerName }}
+                </span>
+                <span
+                  :class="[
+                    'text-[10px] px-1.5 py-0.2 rounded font-medium border truncate',
+                    conv.platformBadge,
+                  ]"
+                >
+                  {{ conv.storePlatform }}
+                </span>
+              </div>
+              <span class="text-[10px] text-slate-500 font-mono shrink-0 ml-1">{{ conv.lastTime }}</span>
+            </div>
+
+            <!-- 消息摘要 -->
+            <p class="text-xs text-slate-400 truncate mt-1 leading-snug">
+              {{ conv.lastMessage }}
+            </p>
+
+            <!-- 底部状态与未读数 -->
+            <div class="flex items-center justify-between mt-1.5 pt-1 border-t border-white/[0.05]">
+              <div>
+                <span
+                  v-if="conv.status === 'ai'"
+                  class="inline-flex items-center gap-1 px-1.5 py-0.2 text-[10px] font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/25 rounded-full"
+                >
+                  <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 pulse-subtle"></span>AI 处理中
+                </span>
+                <span
+                  v-else-if="conv.status === 'queue'"
+                  class="inline-flex items-center gap-1 px-1.5 py-0.2 text-[10px] font-semibold bg-amber-500/15 text-amber-400 border border-amber-500/25 rounded-full"
+                >
+                  <span class="w-1.5 h-1.5 rounded-full bg-amber-400 pulse-subtle"></span>待人工接入
+                </span>
+                <span
+                  v-else-if="conv.status === 'mine'"
+                  class="inline-flex items-center gap-1 px-1.5 py-0.2 text-[10px] font-semibold bg-blue-500/15 text-blue-400 border border-blue-500/25 rounded-full"
+                >
+                  👤 人工接管
+                </span>
+                <span
+                  v-else
+                  class="inline-flex items-center gap-1 px-1.5 py-0.2 text-[10px] font-medium bg-slate-800/60 text-slate-400 border border-white/5 rounded-full"
+                >
+                  🔒 已解决关闭
+                </span>
+              </div>
+              <span
+                v-if="conv.unreadCount > 0"
+                class="px-2 py-0.2 bg-gradient-to-r from-rose-500 to-pink-500 text-white font-extrabold text-[10px] rounded-full shadow-sm"
+              >
+                {{ conv.unreadCount }}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 激活专属 3px 流光指示条 -->
+        <div
+          v-if="activeId === conv.id"
+          class="absolute left-0 top-2.5 bottom-2.5 w-[3px] bg-gradient-to-b from-emerald-400 to-teal-500 rounded-r-full shadow-[0_0_8px_rgba(16,185,129,0.8)]"
+        ></div>
+      </div>
+
+      <div
+        v-if="filteredConversations.length === 0"
+        class="py-12 text-center text-slate-500 text-xs"
+      >
+        没有匹配的会话
+      </div>
     </div>
 
-    <!-- Chat view -->
-    <div class="chat-view">
-      <div v-if="chatLoading" class="loading-state">
-        正在加载会话详情…
-      </div>
-      <ConversationChat
-        v-else-if="selectedChat"
-        :chat="selectedChat"
-        @refresh="() => {
-          // force: this chat is already open, and loadChatDetail skips a session
-          // it thinks it has — without it this refetch was a silent no-op.
-          selectedChat && loadChatDetail(selectedChat.session_id, true);
-          emit('refresh');
-        }"
-        @chatUpdated="(updated) => {
-          // Forward as well as store locally. Taking a chat over from the chat
-          // pane changes user_id, and the info panel decides whether to offer
-          // 'End Chat' from its own chatInfo prop — which only the parent can
-          // update. Without this the button stayed hidden until a refresh.
-          selectedChat = updated;
-          emit('chatUpdated', updated);
-        }"
-        @clearUnread="clearUnread"
-        @back="emit('back')"
-        @info="emit('info')"
-      />
-      <div v-else class="no-chat-selected">
-        请从左侧列表中选择一个会话进行查看与回复
-      </div>
+    <!-- 列表底部状态 -->
+    <div class="p-2.5 border-t border-white/[0.08] bg-[#080B11]/70 text-[11px] text-slate-400 flex items-center justify-between px-3">
+      <span class="flex items-center gap-1.5">
+        <span class="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.8)] pulse-subtle"></span>
+        <span>AI 自动接单引擎运行中</span>
+      </span>
+      <span class="text-slate-500 font-mono text-[10px]">0.6s 极速应答</span>
     </div>
-  </div>
+  </section>
 </template>
 
 <style scoped>
-.conversations-container {
-  display: grid;
-  grid-template-columns: 320px 1fr;
-  /* Same as the parent grid: without a bounded row the sidebar's height: 100%
-     resolves against content, so .conversations-list can never scroll. */
-  grid-template-rows: minmax(0, 1fr);
-  gap: 0;
-  height: 100%;
-  width: 100%;
-  background: var(--bg);
-  color: var(--text);
-  position: relative;
+/* 默认未选中卡片 */
+.conv-card-default {
+  background: rgba(19, 27, 46, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+.conv-card-default:hover {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.1);
+  transform: translateY(-0.5px);
 }
 
-.conversations-container.with-chat-info {
-  grid-template-columns: 320px 1fr;
+/* 激活高定卡片 */
+.conv-card-active {
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.12) 0%, rgba(19, 27, 46, 0.95) 100%);
+  border: 1px solid rgba(16, 185, 129, 0.45);
+  border-top: 1px solid rgba(52, 211, 153, 0.7);
+  box-shadow: 0 4px 16px -2px rgba(16, 185, 129, 0.18);
 }
 
-.conversations-sidebar {
-  border-right: 1px solid var(--o08);
-  background: var(--bg2);
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  overflow: hidden;
-  min-width: 0;
-  position: relative;
-}
-
-.filter-controls {
-  display: flex;
-  padding: 10px 12px;
-  border-bottom: 1px solid var(--o07);
-  background: var(--bg2);
-  gap: 4px;
-}
-
-.filter-btn {
-  flex: 1;
-  padding: 7px 12px;
-  background: transparent;
-  border: none;
-  color: var(--muted);
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all var(--transition-fast);
+/* 3+2 紧凑胶囊按钮 */
+.grid-pill {
+  padding: 6px 8px;
   border-radius: 8px;
-}
-
-.filter-btn:hover {
-  background: var(--o05);
-  color: var(--text);
-}
-
-.filter-btn.active {
-  background: var(--o10);
-  color: var(--text);
-  font-weight: 600;
-}
-
-.conversations-list {
-  overflow-y: auto;
-  flex: 1;
-  min-height: 0;
-  padding: 0;
-  margin: 0;
-  scrollbar-width: thin; /* For Firefox */
-  scrollbar-color: var(--border-color) transparent; /* For Firefox */
-}
-
-/* Webkit scrollbar styling */
-.conversations-list::-webkit-scrollbar {
-  width: 6px;
-}
-
-.conversations-list::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.conversations-list::-webkit-scrollbar-thumb {
-  background-color: var(--border-color);
-  border-radius: 3px;
-}
-
-/* Status and handler sit on one line and wrap together on a narrow row. */
-.conversation-footer {
+  background: #131B2E;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #94a3b8;
   display: flex;
   align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
-  margin-top: 4px;
-  min-width: 0;
-}
-
-.conversation-status {
-  font-size: 10px;
-  font-family: var(--font-mono);
-  letter-spacing: 0.04em;
-  padding: 2px 7px;
-  border-radius: var(--radius-full);
-  text-transform: uppercase;
-  display: inline-block;
-  font-weight: 600;
-}
-
-.conversation-status.open {
-  background: rgba(201,242,78,.12);
-  color: var(--accent-ink);
-}
-
-.conversation-status.closed {
-  background: var(--o06);
-  color: var(--muted);
-}
-
-.conversation-status.transferred {
-  background-color: var(--warning-color-soft);
-  color: var(--warning-color);
-}
-
-.chat-view {
-  height: 100%;
-  width: 100%;
-  overflow: hidden;
-  position: relative;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-}
-
-.sidebar-header {
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--border-color);
-  display: flex;
   justify-content: space-between;
-  align-items: center;
-}
-
-.sidebar-header h2 {
-  font-size: 14px;
-  font-weight: 500;
-}
-
-.conversation-item {
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--o06);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-  min-height: 72px;
-}
-
-.conversation-item:hover {
-  background: var(--o05);
-}
-
-.conversation-item.active {
-  background: var(--accent-bg-06);
-  border-left: 3px solid var(--accent-ink);
-}
-
-.conversation-item-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: var(--space-xs);
-}
-
-.conversation-item-header h3 {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
-  color: var(--text);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 170px;
+  transition: all 0.15s ease;
+}
+.grid-pill:hover {
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.08);
+}
+.grid-pill.active {
+  background: #131B2E;
+  border-color: #10b981;
+  color: #34d399;
+  box-shadow: 0 0 12px -2px rgba(16, 185, 129, 0.35);
+}
+.grid-pill.active-amber {
+  background: #131B2E;
+  border-color: #f59e0b;
+  color: #fbbf24;
+  box-shadow: 0 0 12px -2px rgba(245, 158, 11, 0.35);
+}
+.grid-pill.active-blue {
+  background: #131B2E;
+  border-color: #3b82f6;
+  color: #60a5fa;
+  box-shadow: 0 0 12px -2px rgba(59, 130, 246, 0.35);
+}
+.grid-pill.active-closed {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.2);
+  color: #f8fafc;
 }
 
-.timestamp {
-  font-size: 11px;
-  color: var(--muted);
+@keyframes pulse-subtle {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.7; transform: scale(1.04); }
 }
-
-.conversation-preview {
-  display: flex;
-  gap: 4px;
-  margin-bottom: 4px;
-  font-size: 12px;
-  align-items: center;
+.pulse-subtle {
+  animation: pulse-subtle 3s infinite ease-in-out;
 }
-
-.agent-name {
-  font-weight: 500;
-  color: var(--muted);
-}
-
-.last-message {
-  font-size: 12px;
-  color: var(--muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: 140px;
-}
-
-.message-count {
-  font-size: 11px;
-  color: var(--faint);
-}
-
-.unread-bubble {
-  background: var(--accent-solid);
-  color: var(--on-accent-solid);
-  border-radius: 50%;
-  min-width: 18px;
-  height: 18px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 10px;
-  font-weight: 700;
-  margin-left: auto;
-}
-
-.no-chat-selected {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
-  color: var(--muted);
-  opacity: 0.7;
-}
-
-.loading-state,
-.error-state,
-.empty-state {
-  padding: 16px;
-  text-align: center;
-  color: var(--muted);
-  font-size: 12px;
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
-}
-
-.refresh-button {
-  padding: 4px 8px;
-  background: var(--o06);
-  border: 1px solid var(--o10);
-  border-radius: var(--radius-sm);
-  color: var(--text3);
-  cursor: pointer;
-  font-size: 12px;
-}
-
-.load-more-trigger {
-  height: 40px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 12px 0;
-  margin: 8px 0;
-}
-
-.loading-more {
-  font-size: 12px;
-  color: var(--text-muted);
-  text-align: center;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.loading-spinner {
-  width: 16px;
-  height: 16px;
-  border: 2px solid var(--primary-color);
-  border-radius: 50%;
-  border-top-color: transparent;
-  animation: spin 1s linear infinite;
-}
-
-.load-more-container {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-}
-
-.load-more-hint {
-  font-size: 12px;
-  color: var(--text-muted);
-  opacity: 0.7;
-}
-
-.load-more-button {
-  padding: 6px 12px;
-  background-color: var(--background-soft);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
-  color: var(--text-primary);
-  font-size: 12px;
-  cursor: pointer;
-  transition: all var(--transition-fast);
-}
-
-.load-more-button:hover {
-  background-color: var(--accent-solid);
-  color: var(--on-accent-solid);
-  border-color: var(--primary-color);
-}
-
-.load-more-button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-.scroll-to-top-btn {
-  position: absolute;
-  bottom: 16px;
-  right: 16px;
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  background: var(--accent-solid);
-  color: var(--on-accent-solid);
-  border: none;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
-  transition: all var(--transition-fast);
-  z-index: 10;
-}
-
-.scroll-to-top-btn:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-}
-
-.scroll-to-top-btn:active {
-  transform: translateY(0);
-}
-
-.product-preview {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  color: var(--primary-color);
-  font-weight: 500;
-}
-
-.product-icon {
-  font-size: 14px;
-  line-height: 1;
-}
-
-.last-message.product-preview {
-  color: var(--primary-color);
-  max-width: 160px;
-}
-
-/* Mobile: single stacked pane — the list by default, the chat when a session
-   is selected (?session= in the URL, via the mobilePane prop) */
-@media (max-width: 768px) {
-  .conversations-container,
-  .conversations-container.with-chat-info {
-    grid-template-columns: 1fr;
-  }
-
-  .conversations-container .chat-view {
-    display: none;
-  }
-
-  .conversations-container.mobile-show-chat .conversations-sidebar {
-    display: none;
-  }
-
-  .conversations-container.mobile-show-chat .chat-view {
-    display: flex;
-  }
-
-  .conversations-sidebar {
-    border-right: none;
-  }
-
-  .conversation-item {
-    padding: 14px 16px;
-  }
-
-  .conversation-item.active {
-    background: transparent;
-    border-left: none;
-  }
-
-  .conversation-item-header h3 {
-    max-width: none;
-    font-size: 15px;
-  }
-
-  .last-message {
-    max-width: none;
-    flex: 1;
-  }
-}
-</style> 
+</style>

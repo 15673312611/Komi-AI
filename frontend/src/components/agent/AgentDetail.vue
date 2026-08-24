@@ -808,6 +808,8 @@ onMounted(async () => {
     }
 })
 
+const isWorkflowFullscreen = ref(false)
+
 </script>
 
 <template>

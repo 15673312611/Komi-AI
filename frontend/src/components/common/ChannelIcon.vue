@@ -56,7 +56,7 @@ const visible = computed(() => !!props.channel)
 </script>
 
 <template>
-  <span v-if="visible" class="channel-icon" :title="channel">
+  <span v-if="visible" class="channel-icon" :title="channel || undefined">
     <font-awesome-icon :icon="visual.icon" :style="{ fontSize: `${size}px` }" />
   </span>
 </template>

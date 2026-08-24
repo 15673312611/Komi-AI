@@ -180,8 +180,7 @@ export function useConversationChat(
   const handleTakeover = async () => {
     try {
       isLoading.value = true
-      const updated = await chatService.takeoverChat(chat.value.session_id)
-      publishChat(updated, true)
+      await chatService.takeoverChat(chat.value.session_id)
       toast.success('已接管会话', { description: '现在可以向客户发送消息', duration: 3500 })
       emit('refresh')
     } catch (err: any) {
