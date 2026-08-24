@@ -43,12 +43,12 @@ defineProps<{
       </div>
       
       <div v-if="data.config?.model" class="node-preview">
-        <div class="preview-label">Model:</div>
+        <div class="preview-label">模型：</div>
         <div class="preview-content">{{ data.config.model }}</div>
       </div>
       
       <div v-if="data.config?.systemPrompt" class="node-preview">
-        <div class="preview-label">System Prompt:</div>
+        <div class="preview-label">系统指令：</div>
         <div class="preview-content">
           {{ data.config.systemPrompt.substring(0, 80) }}{{ data.config.systemPrompt.length > 80 ? '...' : '' }}
         </div>

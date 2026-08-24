@@ -23,10 +23,10 @@ const props = defineProps<{ job: FaqGenerationJob }>()
 
 const STAGE_ORDER: FaqJobStage[] = ['analyzing_sources', 'extracting', 'drafting', 'grouping']
 const STAGE_LABELS = [
-  'Analyzing your sources',
-  'Extracting questions from your content',
-  'Drafting grounded answers',
-  'Grouping by topic',
+  '正在分析知识源文档',
+  '从知识正文中提取高频问题',
+  '依据知识库内容起草标准回答',
+  '智能主题分类与归纳整理',
 ]
 
 const steps = computed(() => {
@@ -46,9 +46,9 @@ const steps = computed(() => {
     <div class="progress-card__head">
       <FaqOrb :size="48" />
       <div>
-        <div class="progress-card__title">Reading your knowledge base…</div>
+        <div class="progress-card__title">正在深度解析您的知识库…</div>
         <div class="progress-card__note">
-          This usually takes under a minute. You can leave this page — we'll keep working.
+          通常需要不到 1 分钟。您可以随时切换或离开当前页面，后台将持续处理。
         </div>
       </div>
     </div>

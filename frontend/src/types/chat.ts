@@ -29,6 +29,7 @@ export interface Message {
   message_type: string
   created_at: string
   session_id: string
+  client_message_id?: string
   // Live replies are revealed client-side with a typewriter effect.
   stream?: boolean
   attributes?: Record<string, any>
@@ -119,4 +120,5 @@ export interface ChatDetail {
   channel?: string
   /** The connected account this conversation arrived on; absent for web chats. */
   channel_account_id?: string | null
+  ai_auto_reply?: boolean
 }

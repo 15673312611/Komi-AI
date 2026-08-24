@@ -22,7 +22,7 @@ import { faqService } from '@/services/faq'
 
 const props = withDefaults(
   defineProps<{ modelValue: string; placeholder?: string }>(),
-  { placeholder: 'Answer — Markdown supported (headings, **bold**, lists, links, images)' },
+  { placeholder: '回答正文 — 支持 Markdown 语法 (标题、**粗体**、列表、超链接、图片)' },
 )
 const emit = defineEmits<{ 'update:modelValue': [value: string] }>()
 
@@ -37,7 +37,7 @@ const uploading = ref(false)
 const previewDoc = computed(() => {
   const body = props.modelValue.trim()
     ? (marked.parse(props.modelValue, { breaks: true, async: false }) as string)
-    : '<p style="color:#9aa0ad">Nothing to preview yet.</p>'
+    : '<p style="color:#9aa0ad">暂无可预览的内容。</p>'
   return `<!doctype html><html><head><meta charset="utf-8"><style>
     body{font-family:system-ui,-apple-system,sans-serif;font-size:14px;line-height:1.7;color:#2a303e;margin:14px;}
     h1,h2,h3,h4{font-weight:700;line-height:1.3;margin:20px 0 10px;color:#1a1b25;}
@@ -87,7 +87,7 @@ function prefixLine(prefix: string, placeholder: string) {
 
 function insertLink() {
   replaceSelection((sel) => {
-    const label = sel || 'link text'
+    const label = sel || '链接文字'
     return { text: `[${label}](https://)`, caretOffset: label.length + 3 }
   })
 }
@@ -103,7 +103,7 @@ async function onFile(event: Event) {
     const alt = file.name.replace(/\.[^.]+$/, '')
     replaceSelection(() => ({ text: `\n![${alt}](${url})\n` }))
   } catch (error: any) {
-    toast.error(error?.message || 'Failed to upload image')
+    toast.error(error?.message || '上传图片失败')
   } finally {
     uploading.value = false
   }
@@ -114,23 +114,23 @@ async function onFile(event: Event) {
   <div class="md-editor">
     <div class="md-toolbar">
       <div class="md-tools">
-        <button type="button" class="md-btn" title="Heading" @click="prefixLine('## ', 'Heading')">H</button>
-        <button type="button" class="md-btn md-btn--bold" title="Bold" @click="wrap('**', '**', 'bold')">B</button>
-        <button type="button" class="md-btn" title="Bullet list" @click="prefixLine('- ', 'List item')">
+        <button type="button" class="md-btn" title="二级标题" @click="prefixLine('## ', '二级标题')">H</button>
+        <button type="button" class="md-btn md-btn--bold" title="粗体" @click="wrap('**', '**', '粗体文字')">B</button>
+        <button type="button" class="md-btn" title="无序列表" @click="prefixLine('- ', '列表项')">
           <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="20" y2="12"/><line x1="8" y1="18" x2="20" y2="18"/><circle cx="3.5" cy="6" r="1"/><circle cx="3.5" cy="12" r="1"/><circle cx="3.5" cy="18" r="1"/></svg>
         </button>
-        <button type="button" class="md-btn" title="Link" @click="insertLink">
+        <button type="button" class="md-btn" title="插入链接" @click="insertLink">
           <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7 0l2-2a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-2 2a5 5 0 0 0 7 7l1-1"/></svg>
         </button>
-        <button type="button" class="md-btn" title="Insert image" :disabled="uploading" @click="fileInput?.click()">
+        <button type="button" class="md-btn" title="上传插入图片" :disabled="uploading" @click="fileInput?.click()">
           <svg v-if="!uploading" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
           <span v-else class="md-spin"></span>
         </button>
         <input ref="fileInput" type="file" accept="image/png,image/jpeg,image/gif,image/webp" hidden @change="onFile" />
       </div>
       <div class="md-modes">
-        <button type="button" class="md-mode" :class="{ 'md-mode--on': mode === 'write' }" @click="mode = 'write'">Write</button>
-        <button type="button" class="md-mode" :class="{ 'md-mode--on': mode === 'preview' }" @click="mode = 'preview'">Preview</button>
+        <button type="button" class="md-mode" :class="{ 'md-mode--on': mode === 'write' }" @click="mode = 'write'">编辑撰写</button>
+        <button type="button" class="md-mode" :class="{ 'md-mode--on': mode === 'preview' }" @click="mode = 'preview'">效果预览</button>
       </div>
     </div>
 
@@ -144,7 +144,7 @@ async function onFile(event: Event) {
       @input="emit('update:modelValue', ($event.target as HTMLTextAreaElement).value)"
     ></textarea>
 
-    <iframe v-show="mode === 'preview'" class="md-preview" :srcdoc="previewDoc" sandbox="" title="Answer preview"></iframe>
+    <iframe v-show="mode === 'preview'" class="md-preview" :srcdoc="previewDoc" sandbox="" title="问答回答预览"></iframe>
   </div>
 </template>
 

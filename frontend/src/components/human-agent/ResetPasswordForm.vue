@@ -53,17 +53,17 @@ const handlePasswordInput = () => {
 const handleConfirmPasswordInput = () => {
   error.value =
     confirmPassword.value && password.value !== confirmPassword.value
-      ? 'Passwords do not match'
+      ? '两次输入的密码不一致'
       : ''
 }
 
 const handleSubmit = () => {
   if (password.value !== confirmPassword.value) {
-    error.value = 'Passwords do not match'
+    error.value = '两次输入的密码不一致'
     return
   }
   if (!meetsPasswordPolicy(passwordStrength.value)) {
-    error.value = 'Password is not strong enough'
+    error.value = '密码强度不足，请包含大小写字母、数字或特殊符号'
     return
   }
 
@@ -74,9 +74,8 @@ const handleSubmit = () => {
 <template>
   <form @submit.prevent="handleSubmit" class="reset-password-form">
     <p class="intro">
-      Set a new password for <strong>{{ props.user.full_name }}</strong>
-      ({{ props.user.email }}). They aren't notified — share it with them
-      directly and ask them to change it after signing in.
+      正在为坐席 <strong>{{ props.user.full_name }}</strong>
+      ({{ props.user.email }}) 设置新登录密码。系统不会发送自动通知邮件，请将新密码直接告知该坐席，并建议其登录后自行修改。
     </p>
 
     <div v-if="error" class="error-message">
@@ -84,11 +83,12 @@ const handleSubmit = () => {
     </div>
 
     <div class="form-group">
-      <label for="newPassword">New Password</label>
+      <label for="newPassword">新密码</label>
       <input
         id="newPassword"
         v-model="password"
         type="password"
+        placeholder="请输入至少8位安全密码"
         required
         class="form-input"
         autocomplete="new-password"
@@ -98,25 +98,26 @@ const handleSubmit = () => {
     </div>
 
     <div class="form-group">
-      <label for="confirmNewPassword">Confirm New Password</label>
+      <label for="confirmNewPassword">确认新密码</label>
       <input
         id="confirmNewPassword"
         v-model="confirmPassword"
         type="password"
+        placeholder="再次输入新密码"
         required
         class="form-input"
         autocomplete="new-password"
-        :class="{ error: error.includes('match') }"
+        :class="{ error: error.includes('不一致') }"
         @input="handleConfirmPasswordInput"
       />
     </div>
 
     <div class="form-actions">
       <button type="button" class="btn btn-secondary" @click="emit('cancel')">
-        Cancel
+        取消
       </button>
       <button type="submit" class="btn btn-primary" :disabled="props.submitting">
-        {{ props.submitting ? 'Resetting...' : 'Reset Password' }}
+        {{ props.submitting ? '正在重置...' : '确认重置密码' }}
       </button>
     </div>
   </form>

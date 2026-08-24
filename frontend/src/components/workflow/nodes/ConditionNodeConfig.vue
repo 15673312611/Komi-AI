@@ -57,15 +57,15 @@ const emit = defineEmits<{
 
 // Available operators
 const operators = [
-  { value: '===', label: 'equals' },
-  { value: '!==', label: 'not equals' },
-  { value: '>', label: 'greater than' },
-  { value: '<', label: 'less than' },
-  { value: '>=', label: 'greater than or equal' },
-  { value: '<=', label: 'less than or equal' },
-  { value: 'includes', label: 'contains' },
-  { value: 'startsWith', label: 'starts with' },
-  { value: 'endsWith', label: 'ends with' }
+  { value: '===', label: '等于 (==)' },
+  { value: '!==', label: '不等于 (!=)' },
+  { value: '>', label: '大于 (>)' },
+  { value: '<', label: '小于 (<)' },
+  { value: '>=', label: '大于等于 (>=)' },
+  { value: '<=', label: '小于等于 (<=)' },
+  { value: 'includes', label: '包含 (contains)' },
+  { value: 'startsWith', label: '以...开头 (starts with)' },
+  { value: 'endsWith', label: '以...结尾 (ends with)' }
 ]
 
 // Initialize condition groups from existing data or create default
@@ -242,10 +242,10 @@ const updateGroupOperator = (groupId: string, operator: 'AND' | 'OR') => {
   <div class="condition-node-config">
     <!-- Condition Builder -->
     <div class="form-group">
-      <label>Condition Rules *</label>
+      <label>条件规则配置 (Condition Rules) *</label>
       
       <div v-if="!availableVariables || availableVariables.length === 0" class="no-variables">
-        <p>No variables available. Add form or user input nodes before this condition node to use their values in conditions.</p>
+        <p>暂无可用上下文变量。请在该条件节点之前添加「表单收集」或「等待用户输入」节点以产生变量值。</p>
       </div>
       
       <div v-else class="condition-builder">
@@ -256,7 +256,7 @@ const updateGroupOperator = (groupId: string, operator: 'AND' | 'OR') => {
         >
           <!-- Group Header -->
           <div v-if="groupIndex > 0" class="group-separator">
-            <span class="separator-text">OR</span>
+            <span class="separator-text">或 (OR)</span>
           </div>
           
           <div class="group-content">
@@ -273,8 +273,8 @@ const updateGroupOperator = (groupId: string, operator: 'AND' | 'OR') => {
                   @change="updateGroupOperator(group.id, ($event.target as HTMLSelectElement).value as 'AND' | 'OR')"
                   class="operator-select"
                 >
-                  <option value="AND">AND</option>
-                  <option value="OR">OR</option>
+                  <option value="AND">且 (AND)</option>
+                  <option value="OR">或 (OR)</option>
                 </select>
               </div>
               
@@ -286,7 +286,7 @@ const updateGroupOperator = (groupId: string, operator: 'AND' | 'OR') => {
                   @change="updateRule(group.id, rule.id, 'variable', ($event.target as HTMLSelectElement).value)"
                   class="variable-select"
                 >
-                  <option value="">Select variable</option>
+                  <option value="">选择变量</option>
                   <option 
                     v-for="variable in availableVariables" 
                     :key="variable.fieldName"
@@ -316,7 +316,7 @@ const updateGroupOperator = (groupId: string, operator: 'AND' | 'OR') => {
                   type="text"
                   :value="rule.value"
                   @input="updateRule(group.id, rule.id, 'value', ($event.target as HTMLInputElement).value)"
-                  placeholder="Enter value"
+                  placeholder="匹配目标值"
                   class="value-input"
                 />
                 
@@ -326,7 +326,7 @@ const updateGroupOperator = (groupId: string, operator: 'AND' | 'OR') => {
                   type="button"
                   @click="removeRule(group.id, rule.id)"
                   class="remove-btn rule-remove"
-                  title="Remove rule"
+                  title="删除该条规则"
                 >
                   ×
                 </button>
@@ -339,7 +339,7 @@ const updateGroupOperator = (groupId: string, operator: 'AND' | 'OR') => {
               @click="addRule(group.id)"
               class="add-btn add-rule"
             >
-              + Add Rule
+              + 添加规则条件
             </button>
           </div>
           
@@ -349,7 +349,7 @@ const updateGroupOperator = (groupId: string, operator: 'AND' | 'OR') => {
             type="button"
             @click="removeGroup(group.id)"
             class="remove-btn group-remove"
-            title="Remove group"
+            title="删除整个条件组"
           >
             ×
           </button>
@@ -361,13 +361,13 @@ const updateGroupOperator = (groupId: string, operator: 'AND' | 'OR') => {
           @click="addGroup"
           class="add-btn add-group"
         >
-          + Add Group (OR)
+          + 添加并行条件组 (OR)
         </button>
       </div>
       
       <!-- Generated expression preview -->
       <div v-if="generateConditionExpression()" class="expression-preview">
-        <label>Generated Expression:</label>
+        <label>生成判定的逻辑表达式：</label>
         <code class="expression-code">{{ generateConditionExpression() }}</code>
       </div>
       

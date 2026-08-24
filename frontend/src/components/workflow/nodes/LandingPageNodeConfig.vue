@@ -51,7 +51,7 @@ const updateFormData = (field: keyof LandingPageNodeData, value: any) => {
 <template>
   <div class="landing-page-node-config">
     <div class="form-group">
-      <label for="landing-page-heading">Heading *</label>
+      <label for="landing-page-heading">页面主标题 (Heading) *</label>
       <input
         id="landing-page-heading"
         :value="formData.landing_page_heading"
@@ -59,7 +59,7 @@ const updateFormData = (field: keyof LandingPageNodeData, value: any) => {
         @blur="$emit('validate-field', 'landing_page_heading')"
         class="form-input"
         :class="{ 'error': validationErrors.landing_page_heading }"
-        placeholder="Enter a welcoming heading for your landing page"
+        placeholder="输入引导落地页的欢迎主标题"
         required
       />
       <div v-if="validationErrors.landing_page_heading" class="error-message">
@@ -68,7 +68,7 @@ const updateFormData = (field: keyof LandingPageNodeData, value: any) => {
     </div>
     
     <div class="form-group">
-      <label for="landing-page-content">Content *</label>
+      <label for="landing-page-content">页面详细内容 (Content) *</label>
       <textarea
         id="landing-page-content"
         :value="formData.landing_page_content"
@@ -76,7 +76,7 @@ const updateFormData = (field: keyof LandingPageNodeData, value: any) => {
         @blur="$emit('validate-field', 'landing_page_content')"
         class="form-textarea"
         :class="{ 'error': validationErrors.landing_page_content }"
-        placeholder="Enter the content text for your landing page. This will be displayed below the heading."
+        placeholder="输入在主标题下方展示的引导正文、业务简介或操作指引"
         rows="4"
         required
       ></textarea>

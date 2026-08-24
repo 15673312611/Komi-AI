@@ -139,10 +139,10 @@ const handleDisconnectCrm = async (provider: CrmProvider) => {
 const crmCardWarning = (connection: CrmConnection | null): string | undefined => {
   if (!connection) return undefined
   if (connection.status !== 'active') {
-    return 'Connection expired — reconnect to resume lead sync.'
+    return '连接已过期 — 请重新授权以恢复线索自动同步。'
   }
   if (connection.recent_failures > 0) {
-    return `${connection.recent_failures} lead${connection.recent_failures === 1 ? '' : 's'} failed to sync in the last 7 days.`
+    return `过去 7 天内有 ${connection.recent_failures} 条线索同步失败。`
   }
   return undefined
 }
@@ -220,9 +220,9 @@ const disconnectChannelAccounts = async (channelType: string, label: string) => 
       }
     }
     channelAccounts.value = channelAccounts.value.filter(a => a.channel_type !== channelType)
-    toast.success(`${label} disconnected successfully`)
+    toast.success(`${label} 已成功断开连接`)
   } catch (error: any) {
-    toast.error(error?.response?.data?.detail || `Error disconnecting ${label}`)
+    toast.error(error?.response?.data?.detail || `断开 ${label} 连接失败`)
   } finally {
     channelsLoading.value = false
     showDisconnectConfirm.value = false
@@ -276,7 +276,7 @@ const connectJira = () => {
     window.location.href = getJiraAuthUrl()
   } catch (error) {
     console.error('Error connecting to Jira:', error)
-    toast.error('Error connecting to Jira')
+    toast.error('连接 Jira 发生错误')
   }
 }
 
@@ -299,10 +299,10 @@ const handleDisconnectJira = async () => {
     await disconnectJira()
     jiraConnected.value = false
     jiraSiteUrl.value = ''
-    toast.success('Jira disconnected successfully')
+    toast.success('Jira 已成功断开连接')
   } catch (error: any) {
     console.error('Error disconnecting from Jira:', error)
-    let errorMessage = 'Error disconnecting from Jira'
+    let errorMessage = '断开 Jira 连接失败'
     
     // Try to extract a more detailed error message if available
     if (error.response && error.response.data && error.response.data.detail) {
@@ -343,10 +343,10 @@ const openShopifyInstallation = () => {
     window.open(installUrl, '_blank')
     
     // Show helpful message
-    toast.info('Redirected to Shopify for app installation. After installation, refresh this page to see the connection status.')
+    toast.info('正在前往 Shopify 应用安装页面。安装完成后，请刷新本页面查看连接状态。')
   } catch (error: any) {
     console.error('Error opening Shopify installation:', error)
-    toast.error('Error opening Shopify installation page')
+    toast.error('打开 Shopify 安装页面失败')
   }
 }
 
@@ -362,10 +362,10 @@ const handleDisconnectShopify = () => {
     window.open(shopifyAdminUrl, '_blank')
 
     // Show a helpful toast message
-    toast.info('Please uninstall the ChatterMate app from your Shopify admin to complete the disconnection.')
+    toast.info('请在 Shopify 管理后台卸载本应用，以完成完全解绑。')
   } catch (error: any) {
     console.error('Error opening Shopify admin:', error)
-    toast.error('Error opening Shopify admin')
+    toast.error('打开 Shopify 管理后台失败')
     showDisconnectConfirm.value = false
     disconnectingIntegration.value = null
   }
@@ -399,9 +399,9 @@ const availableIntegrations = computed<IntegrationCard[]>(() => [
   {
     id: 'jira',
     name: 'Jira',
-    description: 'Connect to Jira to create issues directly from ChatterMate.',
+    description: '连接 Jira 实例，支持直接在客服对话与事件中一键创建缺陷工单。',
     logo: jiraLogo,
-    category: 'PROJECT MANAGEMENT',
+    category: '项目管理',
     color: 'purple',
     connected: jiraConnected.value,
     siteUrl: jiraSiteUrl.value,
@@ -412,9 +412,9 @@ const availableIntegrations = computed<IntegrationCard[]>(() => [
   {
     id: 'shopify',
     name: 'Shopify',
-    description: 'Install from Shopify App Store to integrate your store with ChatterMate.',
+    description: '从 Shopify App Store 安装应用，将您的独立站店铺与客户对话无缝集成。',
     logo: shopifyLogo,
-    category: 'E-COMMERCE',
+    category: '跨境电商',
     color: 'teal',
     connected: shopifyConnected.value,
     shopDomain: shopifyShopDomain.value,
@@ -424,9 +424,9 @@ const availableIntegrations = computed<IntegrationCard[]>(() => [
   {
     id: 'slack',
     name: 'Slack',
-    description: 'Connect a Slack workspace so users can chat with your AI agent via @mentions and DMs.',
+    description: '连接 Slack 工作区，团队成员可通过 @提及 或私信与 AI 智能体实时问答。',
     logo: slackLogo,
-    category: 'MESSAGING',
+    category: '即时通讯',
     color: 'accent',
     connected: accountsFor('slack').length > 0,
     teamName: accountsFor('slack').map(a => a.display_name).filter(Boolean).join(', '),
@@ -437,9 +437,9 @@ const availableIntegrations = computed<IntegrationCard[]>(() => [
   {
     id: 'telegram',
     name: 'Telegram',
-    description: 'Connect a Telegram bot so customers can chat with your AI agent on Telegram.',
+    description: '连接 Telegram Bot，让客户可直接在 Telegram 上与 AI 客服对话。',
     logo: telegramLogo,
-    category: 'MESSAGING',
+    category: '即时通讯',
     color: 'accent',
     connected: telegramAccounts.value.length > 0,
     teamName: telegramAccounts.value.map(a => a.display_name).filter(Boolean).join(', '),
@@ -450,13 +450,13 @@ const availableIntegrations = computed<IntegrationCard[]>(() => [
   ...(['whatsapp', 'messenger', 'instagram'] as const).map(channel => {
     const meta = {
       whatsapp: { name: 'WhatsApp', logo: whatsappLogo, color: 'teal',
-        description: 'Let customers message your AI agent on WhatsApp Business.',
+        description: '接入 WhatsApp Business，让全球客户在 WhatsApp 上与 AI 智能体沟通。',
         disconnect: handleDisconnectWhatsApp },
       messenger: { name: 'Messenger', logo: messengerLogo, color: 'accent',
-        description: 'Let customers chat with your AI agent on Facebook Messenger.',
+        description: '连接 Facebook Messenger，让公共主页访客直接咨询 AI 客服。',
         disconnect: handleDisconnectMessenger },
       instagram: { name: 'Instagram', logo: instagramLogo, color: 'purple',
-        description: 'Let customers DM your AI agent on Instagram.',
+        description: '接入 Instagram Direct，让客户在 Instagram 私信中与 AI 客服互动。',
         disconnect: handleDisconnectInstagram },
     }[channel]
     const accounts = accountsFor(channel)
@@ -465,7 +465,7 @@ const availableIntegrations = computed<IntegrationCard[]>(() => [
       name: meta.name,
       description: meta.description,
       logo: meta.logo,
-      category: 'MESSAGING',
+      category: '即时通讯',
       color: meta.color,
       connected: accounts.length > 0,
       teamName: accounts.map(a => a.display_name).filter(Boolean).join(', '),
@@ -474,20 +474,20 @@ const availableIntegrations = computed<IntegrationCard[]>(() => [
       disconnectAction: meta.disconnect,
       // Templates are WhatsApp-only — the other Meta channels have no equivalent.
       ...(channel === 'whatsapp' && accounts.length > 0
-        ? { extraActionLabel: 'Templates', extraAction: () => { showTemplateManager.value = true } }
+        ? { extraActionLabel: '消息模板', extraAction: () => { showTemplateManager.value = true } }
         : {})
     }
   }),
   ...(['email', 'sms', 'line'] as const).map(channel => {
     const meta = {
       email: { name: 'Email', logo: emailLogo, color: 'purple',
-        description: 'Connect a support inbox so email conversations are answered by your AI agent.',
+        description: '接入企业客服支持邮箱，客户邮件将由 AI 智能体自动解析并答复。',
         disconnect: handleDisconnectEmail },
-      sms: { name: 'SMS', logo: smsLogo, color: 'coral',
-        description: 'Connect a Twilio number so customers can text your AI agent.',
+      sms: { name: 'SMS 短信', logo: smsLogo, color: 'coral',
+        description: '连接 Twilio 短信号码，让客户通过发送手机短信与 AI 客服交流。',
         disconnect: handleDisconnectSms },
       line: { name: 'LINE', logo: lineLogo, color: 'teal',
-        description: 'Connect a LINE Official Account so customers can chat with your AI agent on LINE.',
+        description: '连接 LINE 官方账号 (Official Account)，让客户在 LINE 上与 AI 互动。',
         disconnect: handleDisconnectLine },
     }[channel]
     const accounts = accountsFor(channel)
@@ -496,7 +496,7 @@ const availableIntegrations = computed<IntegrationCard[]>(() => [
       name: meta.name,
       description: meta.description,
       logo: meta.logo,
-      category: 'MESSAGING',
+      category: '即时通讯',
       color: meta.color,
       connected: accounts.length > 0,
       teamName: accounts.map(a => a.display_name).filter(Boolean).join(', '),
@@ -508,9 +508,9 @@ const availableIntegrations = computed<IntegrationCard[]>(() => [
   ...CRM_PROVIDERS.map(provider => {
     const meta = {
       hubspot: { name: 'HubSpot', logo: hubspotLogo, color: 'coral',
-        description: 'Push captured leads into HubSpot as contacts, deduped by email, with the AI summary attached.' },
+        description: '自动将对话捕获的线索同步至 HubSpot Contacts，按邮箱去重并附带 AI 总结。' },
       pipedrive: { name: 'Pipedrive', logo: pipedriveLogo, color: 'teal',
-        description: 'Push captured leads into Pipedrive as persons and leads, deduped by email, with the AI summary attached.' },
+        description: '自动将捕获的线索同步至 Pipedrive Persons/Leads，按邮箱去重并附带 AI 总结。' },
     }[provider]
     const connection = crmFor(provider)
     return {
@@ -518,7 +518,7 @@ const availableIntegrations = computed<IntegrationCard[]>(() => [
       name: meta.name,
       description: meta.description,
       logo: meta.logo,
-      category: 'CRM',
+      category: 'CRM 客户管理',
       color: meta.color,
       connected: connection?.status === 'active',
       teamName: connection?.display_name || undefined,
@@ -531,10 +531,10 @@ const availableIntegrations = computed<IntegrationCard[]>(() => [
   // Native AI ticketing (built-in) — the card links to its settings page.
   {
     id: 'ai-ticketing',
-    name: 'AI Ticketing',
-    description: 'Native tickets triaged and investigated by AI — no external tracker needed.',
+    name: 'AI 原生智能工单',
+    description: '内置全流程 AI 工单系统，支持自动分类流转与根因溯源 — 无需配置第三方追踪工具。',
     logo: chattermateLogo,
-    category: 'SUPPORT',
+    category: '客服与工单',
     color: 'lime',
     connected: true,
     connectAction: () => router.push('/settings/ticketing'),
@@ -544,9 +544,9 @@ const availableIntegrations = computed<IntegrationCard[]>(() => [
   {
     id: 'zendesk',
     name: 'Zendesk',
-    description: 'Connect to Zendesk to manage customer support tickets.',
+    description: '连接 Zendesk 客户支持平台，实现跨渠道客服工单统一同步与管理。',
     logo: zendeskLogo,
-    category: 'SUPPORT',
+    category: '客服与工单',
     color: 'coral',
     connected: false,
     comingSoon: true
@@ -571,7 +571,7 @@ const intEmpty = computed(() => filteredIntegrations.value.length === 0)
 const intSummary = computed(() => {
   const total = availableIntegrations.value.length
   const connected = availableIntegrations.value.filter(it => it.connected).length
-  return `${connected}/${total} connected`
+  return `${connected}/${total} 已连接`
 })
 
 // Display name for an ?integration= id, taken from the card list so a new
@@ -594,10 +594,10 @@ onMounted(async () => {
   if (route.query.status) {
     if (route.query.status === 'success') {
       if (route.query.integration === 'shopify') {
-        toast.success('Shopify connected successfully!')
+        toast.success('Shopify 店铺连接成功！')
       } 
       else if (route.query.integration === 'slack') {
-        toast.success('Slack connected — choose which agent should answer.')
+        toast.success('Slack 已成功连接 — 请选择由哪位 AI 智能体接待答复。')
         // Open the agent picker for the just-connected Slack workspace
         const slackAcc = accountsFor('slack')[0]
         if (slackAcc) {
@@ -606,7 +606,7 @@ onMounted(async () => {
         }
       }
       else {
-        toast.success(`${integrationName(route.query.integration as string)} connected successfully!`)
+        toast.success(`${integrationName(route.query.integration as string)} 连接成功！`)
       }
       connectionError.value = null
     } else if (route.query.status === 'failure') {
@@ -615,17 +615,17 @@ onMounted(async () => {
       const name = integrationName(failedIntegration)
       const reason = route.query.reason as string || 'unknown'
 
-      let errorMessage = `Failed to connect to ${name}`
+      let errorMessage = `连接至 ${name} 失败`
 
       // Map common error reasons to user-friendly messages
       if (reason === 'cancelled') {
-        errorMessage = `${name} connection was cancelled`
+        errorMessage = `${name} 授权连接已取消`
       } else if (reason === 'invalid_state') {
-        errorMessage = 'Authentication session expired or is invalid'
+        errorMessage = '身份认证会话已失效或过期'
       } else if (reason.includes('unauthorized')) {
-        errorMessage = 'Authorization failed. Please check your permissions'
+        errorMessage = '授权失败，请检查您的账号权限'
       } else if (reason) {
-        errorMessage = `Failed to connect to ${name}: ${reason.replace(/_/g, ' ')}`
+        errorMessage = `连接至 ${name} 失败：${reason.replace(/_/g, ' ')}`
       }
 
       toast.error(errorMessage)
@@ -655,8 +655,8 @@ onMounted(async () => {
       <!-- Page header + search -->
       <div class="int-page-header">
         <div class="int-page-titles">
-          <h1 class="int-title">Integrations</h1>
-          <p class="int-subtitle">Connect ChatterMate with the tools your team already uses.</p>
+          <h1 class="int-title">第三方渠道与平台集成</h1>
+          <p class="int-subtitle">将 ChatterMate 与您团队正在使用的电商、即时通讯、工单和 CRM 工具无缝连接。</p>
         </div>
         <div class="int-search">
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
@@ -668,8 +668,8 @@ onMounted(async () => {
             type="search"
             name="integration-search"
             autocomplete="off"
-            aria-label="Search integrations"
-            placeholder="Search integrations…"
+            aria-label="搜索集成平台"
+            placeholder="搜索集成渠道与平台…"
           />
         </div>
       </div>
@@ -705,31 +705,31 @@ onMounted(async () => {
               class="status-badge connected"
             >
               <span class="status-dot"></span>
-              Connected
+              已连接
             </span>
             <span
               v-else-if="!integration.comingSoon"
               class="status-badge not-connected"
             >
               <span class="status-dot"></span>
-              Not connected
+              未连接
             </span>
             <span
               v-else
               class="status-badge soon"
             >
-              Soon
+              即将推出
             </span>
           </div>
 
           <p class="integration-desc">{{ integration.description }}</p>
 
           <div v-if="integration.connected && integration.siteUrl" class="integration-meta">
-            <a :href="integration.siteUrl" target="_blank" class="meta-link">↗ Visit {{ integration.name }} Site</a>
+            <a :href="integration.siteUrl" target="_blank" class="meta-link">↗ 访问 {{ integration.name }} 站点</a>
           </div>
           <div v-else-if="integration.connected && integration.shopDomain" class="integration-meta">
             <span class="meta-text">{{ integration.shopDomain }}</span>
-            <a :href="`https://${integration.shopDomain}/admin`" target="_blank" class="meta-link">↗ Visit Shopify Admin</a>
+            <a :href="`https://${integration.shopDomain}/admin`" target="_blank" class="meta-link">↗ 打开 Shopify 管理后台</a>
           </div>
           <div v-else-if="integration.connected && integration.teamName" class="integration-meta">
             <span class="meta-text">{{ integration.teamName }}</span>
@@ -748,12 +748,12 @@ onMounted(async () => {
             disabled
           >
             <span class="loading-spinner"></span>
-            Loading…
+            正在加载…
           </button>
 
           <!-- Connected: Manage + Disconnect -->
           <div v-else-if="integration.connected" class="int-actions">
-            <button class="int-btn int-btn-manage" @click="manageIntegration(integration)">Manage</button>
+            <button class="int-btn int-btn-manage" @click="manageIntegration(integration)">管理</button>
             <button
               v-if="integration.extraAction"
               class="int-btn int-btn-manage"
@@ -762,7 +762,7 @@ onMounted(async () => {
               {{ integration.extraActionLabel }}
             </button>
             <button class="int-btn int-btn-disconnect" @click="showDisconnectConfirmation(integration.id)">
-              Disconnect
+              断开连接
             </button>
           </div>
 
@@ -772,7 +772,7 @@ onMounted(async () => {
             class="int-btn int-btn-soon"
             disabled
           >
-            Coming soon
+            即将推出
           </button>
 
           <!-- Not connected: Connect / Install -->
@@ -784,14 +784,14 @@ onMounted(async () => {
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
               <path d="M12 5v14M5 12h14"></path>
             </svg>
-            {{ integration.id === 'shopify' ? 'Install' : 'Connect' }}
+            {{ integration.id === 'shopify' ? '去安装' : '立即连接' }}
           </button>
         </div>
       </div>
 
       <!-- Empty state -->
       <div v-if="intEmpty" class="int-empty">
-        No integrations match your search.
+        未找到与搜索相匹配的集成平台。
       </div>
     </div>
   </DashboardLayout>
@@ -800,74 +800,74 @@ onMounted(async () => {
   <div v-if="showDisconnectConfirm" class="disconnect-modal">
     <div class="disconnect-modal-content">
       <div class="disconnect-modal-header">
-        <h3>Disconnect Integration</h3>
+        <h3>断开集成连接</h3>
         <button class="close-modal-btn" @click="cancelDisconnect">
           <span>×</span>
         </button>
       </div>
       <div class="disconnect-modal-body">
         <div class="warning-icon">⚠️</div>
-        <p>Are you sure you want to disconnect this integration?</p>
-        <p class="warning-text">This will remove all connections and configurations associated with this integration.</p>
+        <p>确定要断开此平台的集成连接吗？</p>
+        <p class="warning-text">此操作将移除与该集成关联的所有账号配置与连接关系。</p>
         
         <div v-if="disconnectingIntegration === 'jira'" class="integration-specific-warning">
-          <p>Disconnecting Jira will:</p>
+          <p>断开 Jira 连接将会：</p>
           <ul>
-            <li>Remove all Jira configurations from your agents</li>
-            <li>Disable ticket creation functionality</li>
-            <li>Require you to reconnect and reconfigure Jira settings if you want to use it again</li>
+            <li>从所有智能体中移除 Jira 相关配置</li>
+            <li>停用客服会话中的 Jira 工单创建功能</li>
+            <li>如需再次使用，需要重新授权并重新配置</li>
           </ul>
         </div>
         
         <div v-if="disconnectingIntegration === 'shopify'" class="integration-specific-warning">
-          <p>To disconnect Shopify:</p>
+          <p>断开 Shopify 连接步骤：</p>
           <ul>
-            <li>You'll be redirected to your Shopify admin</li>
-            <li>Uninstall the ChatterMate app from your Shopify store</li>
-            <li>This ensures the disconnection is synchronized on both platforms</li>
-            <li>You'll need to reinstall the app if you want to use it again</li>
+            <li>系统将引导您前往 Shopify 后台应用列表</li>
+            <li>在 Shopify 店铺中卸载本应用</li>
+            <li>此操作可确保两端平台的数据完全解绑同步</li>
+            <li>如需再次使用，需重新从应用市场安装</li>
           </ul>
         </div>
 
         <div v-if="disconnectingIntegration === 'slack'" class="integration-specific-warning">
-          <p>Disconnecting Slack will:</p>
+          <p>断开 Slack 连接将会：</p>
           <ul>
-            <li>Remove all Slack channel configurations</li>
-            <li>Disable chat functionality in Slack</li>
-            <li>Delete stored conversation data for GDPR compliance</li>
-            <li>Require you to reconnect and reconfigure if you want to use it again</li>
+            <li>移除所有 Slack 频道与机器人配置</li>
+            <li>停用 Slack 中的智能体对话功能</li>
+            <li>删除已存储的会话缓存数据</li>
+            <li>如需再次使用，需要重新发起 OAuth 授权</li>
           </ul>
         </div>
 
         <div v-if="disconnectingIntegration === 'telegram'" class="integration-specific-warning">
-          <p>Disconnecting Telegram will:</p>
+          <p>断开 Telegram 连接将会：</p>
           <ul>
-            <li>Remove the bot's webhook so it stops receiving messages</li>
-            <li>Remove the agent routing for this bot</li>
-            <li>Require you to reconnect the bot token to use it again</li>
+            <li>注销 Bot Webhook 回调地址，机器人将停止接收消息</li>
+            <li>解除该 Bot 与当前 AI 智能体的绑定关系</li>
+            <li>如需再次使用，需重新录入 Bot Token</li>
           </ul>
         </div>
 
         <div v-if="disconnectingIntegration === 'whatsapp' || disconnectingIntegration === 'messenger' || disconnectingIntegration === 'instagram'" class="integration-specific-warning">
-          <p>Disconnecting this channel will:</p>
+          <p>断开此渠道连接将会：</p>
           <ul>
-            <li>Stop the AI agent from receiving and answering its messages</li>
-            <li>Remove the agent routing for the connected account</li>
-            <li>Require re-entering credentials to use it again</li>
+            <li>AI 智能体将停止接收和答复来自该渠道的客户消息</li>
+            <li>解除该渠道账号与客服智能体的路由绑定</li>
+            <li>如需再次使用，需重新配置凭证进行授权</li>
           </ul>
         </div>
 
         <div v-if="disconnectingIntegration === 'hubspot' || disconnectingIntegration === 'pipedrive'" class="integration-specific-warning">
-          <p>Disconnecting this CRM will:</p>
+          <p>断开此 CRM 系统将会：</p>
           <ul>
-            <li>Stop pushing captured leads to it (queued pushes are cancelled)</li>
-            <li>Revoke ChatterMate's access tokens</li>
-            <li>Leave agents' "Sync to CRM" setting in place — it stays inactive until you reconnect</li>
+            <li>停止推送新捕获的销售线索（待推送队列将被取消）</li>
+            <li>注销并吊销访问令牌 Token</li>
+            <li>保留智能体中的“同步到 CRM”配置项（重新连接后自动恢复）</li>
           </ul>
         </div>
       </div>
       <div class="disconnect-modal-actions">
-        <button class="btn-cancel" @click="cancelDisconnect">Cancel</button>
+        <button class="btn-cancel" @click="cancelDisconnect">取消</button>
         <button 
           v-if="disconnectingIntegration === 'jira'" 
           class="btn-disconnect" 
@@ -875,7 +875,7 @@ onMounted(async () => {
           :disabled="isLoading"
         >
           <span v-if="isLoading" class="loading-spinner"></span>
-          <span v-else>Disconnect Jira</span>
+          <span v-else>断开 Jira 连接</span>
         </button>
         <button
           v-if="disconnectingIntegration === 'shopify'"
@@ -883,7 +883,7 @@ onMounted(async () => {
           @click="handleDisconnectShopify"
         >
           <span class="btn-icon">↗</span>
-          <span>Open Shopify Admin</span>
+          <span>打开 Shopify 管理后台</span>
         </button>
         <button
           v-if="disconnectingIntegration === 'slack'"
@@ -892,7 +892,7 @@ onMounted(async () => {
           :disabled="channelsLoading"
         >
           <span v-if="channelsLoading" class="loading-spinner"></span>
-          <span v-else>Disconnect Slack</span>
+          <span v-else>断开 Slack 连接</span>
         </button>
         <button
           v-if="disconnectingIntegration === 'telegram'"
@@ -901,7 +901,7 @@ onMounted(async () => {
           :disabled="channelsLoading"
         >
           <span v-if="channelsLoading" class="loading-spinner"></span>
-          <span v-else>Disconnect Telegram</span>
+          <span v-else>断开 Telegram 连接</span>
         </button>
         <button
           v-if="disconnectingIntegration === 'email' || disconnectingIntegration === 'sms' || disconnectingIntegration === 'line'"
@@ -910,7 +910,7 @@ onMounted(async () => {
           :disabled="channelsLoading"
         >
           <span v-if="channelsLoading" class="loading-spinner"></span>
-          <span v-else>Disconnect {{ disconnectingIntegration === 'email' ? 'Email' : disconnectingIntegration === 'sms' ? 'SMS' : 'LINE' }}</span>
+          <span v-else>断开 {{ disconnectingIntegration === 'email' ? 'Email' : disconnectingIntegration === 'sms' ? 'SMS 短信' : 'LINE' }} 连接</span>
         </button>
         <button
           v-if="disconnectingIntegration === 'whatsapp' || disconnectingIntegration === 'messenger' || disconnectingIntegration === 'instagram'"
@@ -919,7 +919,7 @@ onMounted(async () => {
           :disabled="channelsLoading"
         >
           <span v-if="channelsLoading" class="loading-spinner"></span>
-          <span v-else>Disconnect {{ disconnectingIntegration === 'whatsapp' ? 'WhatsApp' : disconnectingIntegration === 'messenger' ? 'Messenger' : 'Instagram' }}</span>
+          <span v-else>断开 {{ disconnectingIntegration === 'whatsapp' ? 'WhatsApp' : disconnectingIntegration === 'messenger' ? 'Messenger' : 'Instagram' }} 连接</span>
         </button>
         <button
           v-if="disconnectingIntegration === 'hubspot' || disconnectingIntegration === 'pipedrive'"
@@ -928,7 +928,7 @@ onMounted(async () => {
           :disabled="crmLoading"
         >
           <span v-if="crmLoading" class="loading-spinner"></span>
-          <span v-else>Disconnect {{ disconnectingIntegration === 'hubspot' ? 'HubSpot' : 'Pipedrive' }}</span>
+          <span v-else>断开 {{ disconnectingIntegration === 'hubspot' ? 'HubSpot' : 'Pipedrive' }} 连接</span>
         </button>
       </div>
     </div>

@@ -45,10 +45,10 @@ const crmTargetName = computed(() =>
 )
 
 const STANDARD_FIELDS: { key: string; label: string }[] = [
-  { key: 'email', label: 'Email' },
-  { key: 'name', label: 'Name' },
-  { key: 'company', label: 'Company' },
-  { key: 'phone', label: 'Phone' },
+  { key: 'email', label: '电子邮箱 (Email)' },
+  { key: 'name', label: '联系人姓名 (Name)' },
+  { key: 'company', label: '所属企业/店铺 (Company)' },
+  { key: 'phone', label: '手机电话 (Phone)' },
 ]
 
 // --- Fields ---
@@ -169,10 +169,10 @@ onMounted(load)
   <div class="lead-capture-tab" v-if="!loading">
     <div class="lc-header">
       <div>
-        <h3 class="lc-title">Lead capture</h3>
-        <p class="lc-sub">When on, the agent collects contact details in conversation — it helps first, then asks at the natural moment. No forms.</p>
+        <h3 class="lc-title">线索收集与意向留资 (Lead capture)</h3>
+        <p class="lc-sub">开启后，智能体将在对话交流中自然挖掘意向并引导客户留资 — 先帮客户解决问题，再在最恰当的时机询问联系方式，无感高效，无需繁琐表单。</p>
       </div>
-      <button class="lc-save" :disabled="saving" @click="save">{{ saving ? 'Saving…' : 'Save changes' }}</button>
+      <button class="lc-save" :disabled="saving" @click="save">{{ saving ? '正在保存…' : '保存线索配置' }}</button>
     </div>
 
     <div class="lc-grid">
@@ -182,8 +182,8 @@ onMounted(load)
         <section class="lc-card">
           <div class="lc-toggle-row">
             <div>
-              <div class="lc-toggle-title">Enable lead capture</div>
-              <div class="lc-toggle-desc">The agent decides when to ask (like transfer-to-human) and captures details conversationally.</div>
+              <div class="lc-toggle-title">启用智能线索收集</div>
+              <div class="lc-toggle-desc">智能体将根据上下文自主判断留资时机，以自然对话的形式收集买家或访客信息。</div>
             </div>
             <button class="lc-switch" :class="{ on: enabled }" @click="enabled = !enabled" :aria-pressed="enabled">
               <span class="lc-knob"></span>
@@ -194,8 +194,8 @@ onMounted(load)
         <template v-if="enabled">
           <!-- What to collect -->
           <section class="lc-card">
-            <h4 class="lc-card-title">What to collect</h4>
-            <p class="lc-card-sub">The agent asks for these in conversation and reports them as structured data. Add your own too.</p>
+            <h4 class="lc-card-title">需要收集的信息字段</h4>
+            <p class="lc-card-sub">智能客服将在对话中循序渐进地询问这些信息，并转化为结构化线索记录。您也可以随时添加自定义字段。</p>
             <div class="lc-chips">
               <button
                 v-for="sf in STANDARD_FIELDS" :key="sf.key"
@@ -206,137 +206,137 @@ onMounted(load)
                   <svg v-if="isStandardEnabled(sf.key)" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5" /></svg>
                 </span>
                 <span class="lc-chip-label">{{ sf.label }}</span>
-                <span v-if="sf.key === 'email'" class="lc-req">required</span>
+                <span v-if="sf.key === 'email'" class="lc-req">必填</span>
                 <span
                   v-else-if="isStandardEnabled(sf.key)"
                   class="lc-req-toggle" :class="{ on: isRequired(sf.key) }"
                   @click.stop="toggleRequired(sf.key)"
-                  :title="isRequired(sf.key) ? 'Required — click to make optional' : 'Optional — click to make required'"
-                >{{ isRequired(sf.key) ? 'required' : 'optional' }}</span>
+                  :title="isRequired(sf.key) ? '当前为必填 — 点击设为选填' : '当前为选填 — 点击设为必填'"
+                >{{ isRequired(sf.key) ? '必填' : '选填' }}</span>
               </button>
               <span v-for="cf in customFields" :key="cf.key" class="lc-chip on custom">
                 <span class="lc-cbox purple on">
                   <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5" /></svg>
                 </span>
                 <span class="lc-chip-label">{{ cf.label }}</span>
-                <span v-if="cf.options && cf.options.length" class="lc-type" :title="cf.options.join(', ')">{{ cf.options.length }} choices</span>
+                <span v-if="cf.options && cf.options.length" class="lc-type" :title="cf.options.join(', ')">{{ cf.options.length }} 个选项</span>
                 <span
                   class="lc-req-toggle" :class="{ on: cf.required }"
                   @click="toggleRequired(cf.key)"
-                  :title="cf.required ? 'Required — click to make optional' : 'Optional — click to make required'"
-                >{{ cf.required ? 'required' : 'optional' }}</span>
-                <button class="lc-chip-x" title="Remove" @click="removeCustomField(cf.key)">✕</button>
+                  :title="cf.required ? '当前为必填 — 点击设为选填' : '当前为选填 — 点击设为必填'"
+                >{{ cf.required ? '必填' : '选填' }}</span>
+                <button class="lc-chip-x" title="删除字段" @click="removeCustomField(cf.key)">✕</button>
               </span>
             </div>
-            <p class="lc-chip-hint">Tap <b>optional / required</b> on a field to control whether the agent insists on it before recording a lead. Email is always required.</p>
+            <p class="lc-chip-hint">点击字段上的 <b>选填 / 必填</b> 可控制智能客服是否必须获得该项信息才生成有效线索（邮箱默认为核心必填项）。</p>
             <div class="lc-custom-add">
-              <input class="lc-input" v-model="newFieldLabel" placeholder="Custom field label (e.g. Team size)" />
-              <input class="lc-input" v-model="newFieldOptions" placeholder="Allowed values, comma-separated (optional)" />
-              <button class="lc-add" @click="addCustomField">＋ Add field</button>
+              <input class="lc-input" v-model="newFieldLabel" placeholder="自定义字段标签 (例如：采购预算/店铺规模)" />
+              <input class="lc-input" v-model="newFieldOptions" placeholder="可选候选值列表，英文逗号分隔 (可选)" />
+              <button class="lc-add" @click="addCustomField">＋ 添加字段</button>
             </div>
           </section>
 
           <!-- Behaviour: consent + guidance -->
           <section class="lc-card">
-            <h4 class="lc-card-title">How it asks</h4>
+            <h4 class="lc-card-title">互动与收集方式</h4>
             <div class="lc-toggle-row bordered">
               <div>
-                <div class="lc-toggle-title">Require consent <span class="lc-badge">GDPR</span></div>
-                <div class="lc-toggle-desc">The agent must get an explicit “yes” before a lead is recorded. Recommended.</div>
+                <div class="lc-toggle-title">收集前征得客户同意 <span class="lc-badge">GDPR 合规</span></div>
+                <div class="lc-toggle-desc">智能体在记录联系方式前会礼貌询问客户是否同意销售专员联系。强烈建议开启。</div>
               </div>
               <button class="lc-switch" :class="{ on: requireConsent }" @click="requireConsent = !requireConsent" :aria-pressed="requireConsent">
                 <span class="lc-knob"></span>
               </button>
             </div>
-            <label class="lc-guidance-label">Guidance <span class="lc-optional">optional</span></label>
+            <label class="lc-guidance-label">留资指引策略 Prompt <span class="lc-optional">可选</span></label>
             <textarea
               class="lc-input lc-textarea"
               v-model="guidance"
               rows="3"
-              placeholder="Steer when/how it asks — e.g. “Prioritise pricing-page visitors; be more proactive after hours.”"
+              placeholder="引导智能体在何时以何种语气索取联系方式 — 例如：“优先关注浏览了批量批发页面的访客；非工作时间提高留资主动性。”"
             ></textarea>
           </section>
 
           <!-- When a lead qualifies (CRM sync live; routing coming soon) -->
           <section class="lc-card">
-            <h4 class="lc-card-title">When a lead qualifies</h4>
-            <p class="lc-card-sub">Push qualified leads straight into your CRM. Assignment and Slack alerts arrive in an upcoming release.</p>
+            <h4 class="lc-card-title">线索达标后的自动化动作</h4>
+            <p class="lc-card-sub">将合格线索实时推送到您的企业 CRM 客户关系管理系统中。</p>
             <div class="lc-route-row">
-              <span>Sync to CRM</span>
+              <span>同步至 CRM 系统</span>
               <select class="lc-input lc-input-sm" v-model="crmSyncTarget">
-                <option value="none">Don't sync</option>
+                <option value="none">暂不同步</option>
                 <option value="hubspot">HubSpot</option>
                 <option value="pipedrive">Pipedrive</option>
-                <option value="salesforce" disabled>Salesforce (coming soon)</option>
+                <option value="salesforce" disabled>Salesforce (即将上线)</option>
               </select>
             </div>
             <p v-if="crmTargetUnconnected" class="lc-crm-warning">
-              {{ crmTargetName }} isn't connected — leads won't sync until you
-              <RouterLink to="/settings/integrations">connect it in Integrations</RouterLink>.
+              {{ crmTargetName }} 尚未完成授权连接 — 请先前往
+              <RouterLink to="/settings/integrations">系统设置 → 渠道集成</RouterLink> 进行连接。
             </p>
             <div class="lc-route-row">
-              <span>Assign to <span class="lc-soon">Coming soon</span></span>
+              <span>线索自动分流指派 <span class="lc-soon">即将上线</span></span>
               <select class="lc-input lc-input-sm" v-model="assignmentMode" disabled>
-                <option value="none">No one — log only</option>
-                <option value="sales_team">Sales team</option>
-                <option value="round_robin">Round-robin</option>
+                <option value="none">仅记录归档，不自动分派</option>
+                <option value="sales_team">售前销售团队</option>
+                <option value="round_robin">轮询均分给在线客服</option>
               </select>
             </div>
             <div class="lc-route-row">
-              <span>Notify in Slack <span class="lc-soon">Coming soon</span></span>
+              <span>在 Slack 频道实时通知 <span class="lc-soon">即将上线</span></span>
               <input type="checkbox" v-model="slackNotifyEnabled" disabled />
             </div>
           </section>
         </template>
 
         <div v-else class="lc-off">
-          Lead capture is off — this agent answers questions only. Turn it on to start capturing leads in conversation.
+          当前已关闭线索收集 — 智能客服仅执行问答咨询。开启开关即可开始在会话中自动挖掘商业销售线索。
         </div>
       </div>
 
       <!-- RIGHT: live preview (conversational) -->
       <div class="lc-right">
         <div class="lc-preview-head">
-          <span class="lc-preview-tag">LIVE PREVIEW</span>
-          <span class="lc-preview-mode">{{ enabled ? 'In conversation' : 'Answers only' }}</span>
+          <span class="lc-preview-tag">实时模拟预览</span>
+          <span class="lc-preview-mode">{{ enabled ? '会话中智能留资' : '仅基础问答' }}</span>
         </div>
         <div class="lc-pv-widget">
           <div class="lc-pv-topbar">
             <span class="lc-pv-logo"><i></i><i></i><i></i></span>
             <span>
-              <span class="lc-pv-name">Sales Assistant</span>
-              <span class="lc-pv-online"><i></i>Online now</span>
+              <span class="lc-pv-name">专属商务顾问</span>
+              <span class="lc-pv-online"><i></i>当前在线</span>
             </span>
           </div>
           <div class="lc-pv-body">
-            <div class="lc-pv-msg user">Do you integrate with Shopify? ~800 orders a week.</div>
-            <div class="lc-pv-msg bot">Yes — one-click Shopify install, and I can look up orders live in chat.</div>
+            <div class="lc-pv-msg user">你们支持接入 Shopify 吗？我们店铺每周大概 800 单。</div>
+            <div class="lc-pv-msg bot">支持的！我们提供 Shopify 一键安装插件，且智能体能在聊天中实时查询订单与物流履约。</div>
             <template v-if="enabled">
-              <div class="lc-pv-msg bot">Happy to set this up for your store — could I grab your {{ firstAskLabel }} so a specialist can follow up?</div>
-              <div class="lc-pv-msg user">Sure — jane@acme.com</div>
-              <div v-if="requireConsent" class="lc-pv-msg bot">Great — ok if someone reaches out to you there?</div>
-              <div v-if="requireConsent" class="lc-pv-msg user">Yep, go ahead.</div>
-              <div class="lc-pv-msg bot">Perfect — I'll have a specialist reach out at jane@acme.com. 👍</div>
+              <div class="lc-pv-msg bot">很乐意协助您完成店铺接入 — 方便留一下您的{{ firstAskLabel }}吗？稍后专属技术顾问将为您跟进方案。</div>
+              <div class="lc-pv-msg user">好的，我的邮箱是 service@company.com</div>
+              <div v-if="requireConsent" class="lc-pv-msg bot">收到！稍后会有顾问通过此邮箱与您联系，请问可以吗？</div>
+              <div v-if="requireConsent" class="lc-pv-msg user">没问题，发给我就好。</div>
+              <div class="lc-pv-msg bot">太棒了！我们已安排资深顾问联系您，祝您生意兴隆！👍</div>
             </template>
-            <div v-else class="lc-pv-tagline">capture off · answers only</div>
+            <div v-else class="lc-pv-tagline">留资已停用 · 仅提供基础应答</div>
           </div>
           <div class="lc-pv-inputbar">
-            <span class="lc-pv-typebox">Type a message…</span>
+            <span class="lc-pv-typebox">输入咨询内容…</span>
             <span class="lc-pv-send">↑</span>
           </div>
         </div>
 
         <div v-if="enabled" class="lc-pv-captured">
-          <div class="lc-pv-captured-label">RECORDED AS A LEAD →</div>
+          <div class="lc-pv-captured-label">已捕获为高价值线索 →</div>
           <div class="lc-pv-chips">
             <span v-for="l in enabledFieldLabels" :key="l" class="lc-pv-fchip">{{ l }}</span>
-            <span class="lc-pv-fchip summary">＋ AI summary</span>
+            <span class="lc-pv-fchip summary">＋ AI 意图智能摘要</span>
           </div>
         </div>
       </div>
     </div>
   </div>
-  <div v-else class="lc-loading">Loading lead capture settings…</div>
+  <div v-else class="lc-loading">正在加载线索收集设置…</div>
 </template>
 
 <style scoped>

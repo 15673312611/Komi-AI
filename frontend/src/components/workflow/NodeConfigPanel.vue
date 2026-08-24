@@ -185,8 +185,8 @@ const handleObjectChange = (fieldKey: string, value: string) => {
     <div class="node-config-panel" @click.stop>
       <div class="panel-header">
         <div class="header-left">
-          <h3>Configure {{ getNodeTypeName(node.type) }} Node</h3>
-          <span class="node-id">ID: {{ node.id }}</span>
+          <h3>配置 {{ getNodeTypeName(node.type) }} 节点</h3>
+          <span class="node-id">节点 ID: {{ node.id }}</span>
         </div>
         <button class="close-button" @click="handleCancel">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -200,27 +200,27 @@ const handleObjectChange = (fieldKey: string, value: string) => {
         <form @submit.prevent="handleSave">
           <!-- Basic Information -->
           <div class="form-section">
-            <h4>Basic Information</h4>
+            <h4>基础信息</h4>
             
             <div class="form-group">
-              <label for="node-label">Node Label *</label>
+              <label for="node-label">节点名称 *</label>
               <input
                 id="node-label"
                 v-model="formData.label"
                 type="text"
                 class="form-input"
-                placeholder="Enter node label"
+                placeholder="请输入节点显示名称"
                 required
               />
             </div>
 
             <div class="form-group">
-              <label for="node-description">Description</label>
+              <label for="node-description">节点说明描述</label>
               <textarea
                 id="node-description"
                 v-model="formData.description"
                 class="form-textarea"
-                placeholder="Enter node description (optional)"
+                placeholder="请输入该节点的业务说明（选填）"
                 rows="3"
               ></textarea>
             </div>
@@ -228,7 +228,7 @@ const handleObjectChange = (fieldKey: string, value: string) => {
 
           <!-- Node-specific Configuration -->
           <div v-if="currentConfig.fields.length > 0" class="form-section">
-            <h4>{{ getNodeTypeName(node.type) }} Configuration</h4>
+            <h4>{{ getNodeTypeName(node.type) }} 参数配置</h4>
             
             <div
               v-for="field in currentConfig.fields"
@@ -247,7 +247,7 @@ const handleObjectChange = (fieldKey: string, value: string) => {
                  v-model="formData.config[field.key]"
                  type="text"
                  class="form-input"
-                 :placeholder="field.placeholder || `Enter ${field.label?.toLowerCase() || 'value'}`"
+                 :placeholder="field.placeholder || `请输入${field.label || '内容'}`"
                  :required="field.required"
                />
 
@@ -271,7 +271,7 @@ const handleObjectChange = (fieldKey: string, value: string) => {
                  :id="`config-${field.key}`"
                  v-model="formData.config[field.key]"
                  class="form-textarea"
-                 :placeholder="field.placeholder || `Enter ${field.label?.toLowerCase() || 'value'}`"
+                 :placeholder="field.placeholder || `请输入${field.label || '内容'}`"
                  rows="4"
                  :required="field.required"
                ></textarea>
@@ -284,7 +284,7 @@ const handleObjectChange = (fieldKey: string, value: string) => {
                 class="form-select"
                 :required="field.required"
               >
-                <option value="">Select {{ field.label.toLowerCase() }}</option>
+                <option value="">请选择 {{ field.label }}</option>
                 <option
                   v-for="option in field.options"
                   :key="option"
@@ -315,7 +315,7 @@ const handleObjectChange = (fieldKey: string, value: string) => {
                 :value="JSON.stringify(formData.config[field.key] || {}, null, 2)"
                 @input="handleObjectChange(field.key, ($event.target as HTMLTextAreaElement).value)"
                 class="form-textarea"
-                placeholder="Enter JSON object"
+                placeholder="请输入 JSON 对象内容"
                 rows="4"
               ></textarea>
 
@@ -338,17 +338,17 @@ const handleObjectChange = (fieldKey: string, value: string) => {
                       v-model="formData.config[field.key][index].name"
                       type="text"
                       class="form-input"
-                      placeholder="Field name"
+                      placeholder="字段名称"
                     />
                     <select
                       v-model="formData.config[field.key][index].type"
                       class="form-select"
                     >
-                      <option value="text">Text</option>
-                      <option value="email">Email</option>
-                      <option value="number">Number</option>
-                      <option value="select">Select</option>
-                      <option value="checkbox">Checkbox</option>
+                      <option value="text">文本 (Text)</option>
+                      <option value="email">邮箱 (Email)</option>
+                      <option value="number">数字 (Number)</option>
+                      <option value="select">下拉选择 (Select)</option>
+                      <option value="checkbox">复选框 (Checkbox)</option>
                     </select>
                   </div>
                   <button
@@ -364,7 +364,7 @@ const handleObjectChange = (fieldKey: string, value: string) => {
                   class="add-item-btn"
                   @click="addArrayItem(field.key)"
                 >
-                  Add {{ field.label }}
+                  + 添加 {{ field.label }}
                 </button>
               </div>
             </div>
@@ -374,14 +374,14 @@ const handleObjectChange = (fieldKey: string, value: string) => {
 
       <div class="panel-footer">
         <button type="button" class="btn btn-danger" @click="handleDelete">
-          Delete Node
+          删除节点
         </button>
         <div class="footer-actions">
           <button type="button" class="btn btn-secondary" @click="handleCancel">
-            Cancel
+            取消
           </button>
           <button type="submit" class="btn btn-primary" @click="handleSave">
-            Save Changes
+            保存配置
           </button>
         </div>
       </div>

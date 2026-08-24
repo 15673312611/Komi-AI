@@ -67,11 +67,11 @@ function onFileChange(event: Event) {
   input.value = ''
   if (!file) return
   if (!/^image\/(png|jpe?g|webp)$/.test(file.type)) {
-    error.value = 'Use a PNG, JPG or WebP image.'
+    error.value = '请上传 PNG、JPG 或 WebP 格式的图片。'
     return
   }
   if (file.size > props.maxBytes) {
-    error.value = `Image must be ${maxMbLabel.value} or smaller.`
+    error.value = `图片文件大小不能超过 ${maxMbLabel.value}。`
     return
   }
   error.value = ''
@@ -91,7 +91,7 @@ async function confirmCrop() {
     emit('upload', new File([blob], `${props.kind}.png`, { type: 'image/png' }))
     closeCropper()
   } catch {
-    error.value = 'Could not process that image. Try another one.'
+    error.value = '处理图片失败，请尝试更换其他图片。'
   } finally {
     saving.value = false
   }
@@ -112,8 +112,8 @@ function closeCropper() {
         <img class="logo-chip__img" :src="imageUrl" :alt="kind" />
         <div class="logo-chip__name">{{ imageName }}</div>
       </div>
-      <button class="btn-sm" type="button" @click="pick">Replace</button>
-      <button class="icon-btn" type="button" :title="`Remove ${kind}`" @click="$emit('remove')">
+      <button class="btn-sm" type="button" @click="pick">更换图片</button>
+      <button class="icon-btn" type="button" :title="`移除${kind === 'logo' ? 'Logo' : '图标'}`" @click="$emit('remove')">
         <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16" /><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" /><path d="M6 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13" /></svg>
       </button>
     </div>
@@ -122,8 +122,8 @@ function closeCropper() {
         <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4" /><path d="M8 8l4-4 4 4" /><path d="M4 20h16" /></svg>
       </span>
       <span>
-        <span class="upload-btn__title">Upload your {{ kind }}</span>
-        <span class="upload-btn__sub">PNG, JPG or WebP, up to {{ maxMbLabel }} · crop it to fit</span>
+        <span class="upload-btn__title">上传 {{ kind === 'logo' ? '品牌 Logo' : 'Favicon 图标' }}</span>
+        <span class="upload-btn__sub">PNG、JPG 或 WebP，最大 {{ maxMbLabel }} · 支持自由裁剪</span>
       </span>
     </button>
 
@@ -133,7 +133,7 @@ function closeCropper() {
          from the original file (metadata, oversized pixels) reaches the server. -->
     <div v-if="showCropper" class="crop-modal" @click.self="closeCropper">
       <div class="crop-panel">
-        <div class="crop-head">Crop your {{ kind }}</div>
+        <div class="crop-head">裁剪 {{ kind === 'logo' ? '品牌 Logo' : 'Favicon 图标' }}</div>
         <div class="crop-stage">
           <Cropper
             ref="cropper"
@@ -145,9 +145,9 @@ function closeCropper() {
           />
         </div>
         <div class="crop-actions">
-          <button class="btn-cancel" type="button" @click="closeCropper">Cancel</button>
+          <button class="btn-cancel" type="button" @click="closeCropper">取消</button>
           <button class="btn-save" type="button" :disabled="saving" @click="confirmCrop">
-            {{ saving ? 'Saving…' : `Save ${kind}` }}
+            {{ saving ? '正在保存…' : '确认裁剪并保存' }}
           </button>
         </div>
       </div>

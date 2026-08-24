@@ -57,8 +57,8 @@ async function saveEdit() {
     editing.value = false
     emit('updated')
   } catch (error: any) {
-    toast.error('Could not save', {
-      description: error?.response?.data?.detail || 'Please try again',
+    toast.error('保存失败', {
+      description: error?.response?.data?.detail || '请稍后重试',
     })
   } finally {
     saving.value = false
@@ -93,10 +93,10 @@ async function syncNow() {
   syncing.value = true
   try {
     crm.value = await peopleService.syncToCrm(props.customerId)
-    toast.success('Synced to CRM')
+    toast.success('已成功同步至 CRM')
   } catch (error: any) {
-    toast.error('Could not sync', {
-      description: error?.response?.data?.detail || 'Please try again',
+    toast.error('同步 CRM 失败', {
+      description: error?.response?.data?.detail || '请稍后重试',
     })
   } finally {
     syncing.value = false
@@ -111,7 +111,7 @@ function goToIntegrations() {
 async function load() {
   loading.value = true
   try { person.value = await peopleService.getPerson(props.customerId) }
-  catch { toast.error('Failed to load person') }
+  catch { toast.error('获取客户档案失败') }
   finally { loading.value = false }
 }
 
@@ -119,10 +119,10 @@ async function markCustomer() {
   marking.value = true
   try {
     person.value = await peopleService.markAsCustomer(props.customerId)
-    toast.success('Marked as customer')
+    toast.success('已成功标记为成交客户')
     emit('updated', 'customer')
   } catch (error: any) {
-    toast.error('Failed to mark as customer', {
+    toast.error('标记客户失败', {
       description: error?.response?.data?.detail || undefined,
     })
   } finally {
@@ -142,7 +142,7 @@ async function loadWhatsAppAccounts() {
 }
 
 const whatsappDisabledReason = computed(() => {
-  if (!whatsappAccounts.value.length) return 'Connect WhatsApp in Settings → Integrations first'
+  if (!whatsappAccounts.value.length) return '请先在“设置 → 渠道与集成”中连接 WhatsApp 账号'
   return ''
 })
 
@@ -152,10 +152,19 @@ function onConversationStarted(sessionId: string) {
   router.push({ path: '/conversations', query: { session: sessionId } })
 }
 
-function stageLabel(s?: string) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : '' }
+function stageLabel(s?: string) {
+  if (!s) return ''
+  const map: Record<string, string> = {
+    visitor: '访客',
+    lead: '销售线索',
+    customer: '成交客户',
+    all: '全部'
+  }
+  return map[s] || s.charAt(0).toUpperCase() + s.slice(1)
+}
 function fmt(d?: string | null) {
   if (!d) return ''
-  try { return new Date(d).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) } catch { return '' }
+  try { return new Date(d).toLocaleString('zh-CN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) } catch { return '' }
 }
 
 onMounted(() => { load(); loadWhatsAppAccounts(); loadCrm() })
@@ -166,51 +175,51 @@ onMounted(() => { load(); loadWhatsAppAccounts(); loadCrm() })
     <aside class="pdd">
       <div class="pdd-head">
         <div class="pdd-head-main" v-if="person">
-          <div class="pdd-name">{{ person.name || (person.is_anonymous ? 'Anonymous visitor' : (person.email || '—')) }}</div>
+          <div class="pdd-name">{{ person.name || (person.is_anonymous ? '匿名访客' : (person.email || '—')) }}</div>
           <div class="pdd-email">
-            {{ person.is_anonymous ? 'anonymous' : (person.email || '') }}
+            {{ person.is_anonymous ? '匿名会话' : (person.email || '') }}
             <span v-if="person.phone" class="pdd-phone">{{ person.phone }}</span>
           </div>
         </div>
-        <button class="pdd-close" @click="emit('close')">✕</button>
+        <button class="pdd-close" @click="emit('close')" aria-label="关闭">✕</button>
       </div>
 
-      <div v-if="loading" class="pdd-loading">Loading…</div>
+      <div v-if="loading" class="pdd-loading">正在加载客户档案…</div>
 
       <div v-else-if="person" class="pdd-body">
         <div class="pdd-stagerow">
           <span class="pdd-badge" :class="person.lead_stage">{{ stageLabel(person.lead_stage) }}</span>
-          <span v-if="person.qualified" class="pdd-star" title="Qualified">★ Qualified</span>
+          <span v-if="person.qualified" class="pdd-star" title="AI 评定为高意向线索">★ AI 意向达标</span>
         </div>
 
         <!-- CRM sync -->
         <div class="pdd-sync">
           <!-- No CRM connected for the org -->
           <template v-if="!crmConnected">
-            <span class="pdd-sync-text">No CRM connected.</span>
-            <button class="pdd-sync-btn" @click="goToIntegrations">Connect</button>
+            <span class="pdd-sync-text">未绑定 CRM 系统。</span>
+            <button class="pdd-sync-btn" @click="goToIntegrations">去连接</button>
           </template>
           <!-- Already synced -->
           <template v-else-if="crmSynced.length">
             <span class="pdd-sync-text">
-              Synced to {{ syncedSummary }}
+              已同步至 {{ syncedSummary }}
               <span v-if="crmSynced[0].synced_at" class="pdd-sync-when"> · {{ fmt(crmSynced[0].synced_at) }}</span>
-              <a v-if="crmSynced[0].record_url" :href="crmSynced[0].record_url" target="_blank" rel="noopener" class="pdd-sync-link">View in CRM ↗</a>
+              <a v-if="crmSynced[0].record_url" :href="crmSynced[0].record_url" target="_blank" rel="noopener" class="pdd-sync-link">在 CRM 中查看 ↗</a>
             </span>
             <button class="pdd-sync-btn" :disabled="syncing || !canSync" @click="syncNow">
-              {{ syncing ? 'Syncing…' : 'Re-sync' }}
+              {{ syncing ? '同步中…' : '重新同步' }}
             </button>
           </template>
           <!-- Connected but not yet synced -->
           <template v-else>
-            <span class="pdd-sync-text">Not synced to {{ connectedSummary }} yet.</span>
+            <span class="pdd-sync-text">尚未同步至 {{ connectedSummary }}。</span>
             <button
               class="pdd-sync-btn primary"
               :disabled="syncing || !canSync"
-              :title="canSync ? '' : 'Add an email first — CRM sync dedupes by email'"
+              :title="canSync ? '' : '请先添加客户邮箱 — CRM 依据邮箱排重合并'"
               @click="syncNow"
             >
-              {{ syncing ? 'Syncing…' : 'Sync now' }}
+              {{ syncing ? '同步中…' : '立即同步' }}
             </button>
           </template>
         </div>
@@ -219,13 +228,13 @@ onMounted(() => { load(); loadWhatsAppAccounts(); loadCrm() })
           v-if="canEditPeople && person.lead_stage !== 'customer'"
           class="pdd-mark"
           :disabled="marking || !person.identified"
-          :title="person.identified ? '' : 'Add an email or phone first — this person is anonymous'"
+          :title="person.identified ? '' : '请先补充邮箱或电话 — 当前为匿名会话'"
           @click="markCustomer"
         >
-          {{ marking ? 'Marking…' : 'Mark as customer' }}
+          {{ marking ? '正在标记…' : '标记为成交客户' }}
         </button>
         <p v-if="!person.identified" class="pdd-identify-hint">
-          Anonymous visitor — add a name or phone below to identify them.
+          匿名访客 — 可在下方补充姓名或联系电话以生成客户档案。
         </p>
 
         <button
@@ -235,47 +244,47 @@ onMounted(() => { load(); loadWhatsAppAccounts(); loadCrm() })
           @click="showNewConversation = true"
         >
           <font-awesome-icon :icon="['fab', 'whatsapp']" />
-          Message on WhatsApp
+          通过 WhatsApp 发起对话
         </button>
 
         <!-- Contact edit: the one place a wrong phone can be corrected -->
         <div class="pdd-section-title">
-          CONTACT
+          联系人信息
           <button
             v-if="canEditPeople && !editing"
             type="button"
             class="pdd-edit-link"
             @click="startEdit"
-          >Edit</button>
+          >编辑</button>
         </div>
         <div v-if="editing" class="pdd-edit">
           <label class="pdd-edit-field">
-            <span>Name</span>
-            <input v-model="editName" placeholder="Priya" autocomplete="off" />
+            <span>姓名</span>
+            <input v-model="editName" placeholder="输入客户姓名" autocomplete="off" />
           </label>
           <label class="pdd-edit-field">
-            <span>Phone</span>
-            <input v-model="editPhone" placeholder="+91 12345 67890" autocomplete="off" />
+            <span>联系电话</span>
+            <input v-model="editPhone" placeholder="+86 13800000000" autocomplete="off" />
           </label>
           <div class="pdd-edit-actions">
-            <button type="button" class="pdd-edit-btn" @click="editing = false">Cancel</button>
+            <button type="button" class="pdd-edit-btn" @click="editing = false">取消</button>
             <button type="button" class="pdd-edit-btn primary" :disabled="saving" @click="saveEdit">
-              {{ saving ? 'Saving…' : 'Save' }}
+              {{ saving ? '正在保存…' : '保存修改' }}
             </button>
           </div>
         </div>
         <div v-else class="pdd-attrs">
-          <div class="pdd-attr"><span class="pdd-attr-k">Phone</span><span class="pdd-attr-v">{{ person.phone || '—' }}</span></div>
+          <div class="pdd-attr"><span class="pdd-attr-k">联系电话</span><span class="pdd-attr-v">{{ person.phone || '—' }}</span></div>
         </div>
 
         <!-- AI qualification summary -->
         <template v-if="person.summary">
-          <div class="pdd-section-title">AI SUMMARY</div>
+          <div class="pdd-section-title">AI 意向度小结</div>
           <div class="pdd-summary">{{ person.summary }}</div>
         </template>
 
         <!-- Lifecycle -->
-        <div class="pdd-section-title">LIFECYCLE</div>
+        <div class="pdd-section-title">生命周期流转时间线</div>
         <div class="pdd-timeline">
           <div v-for="(t, i) in person.timeline" :key="i" class="pdd-tl">
             <span class="pdd-tl-dot" :class="t.stage"></span>
@@ -285,28 +294,28 @@ onMounted(() => { load(); loadWhatsAppAccounts(); loadCrm() })
         </div>
 
         <!-- Captured attributes -->
-        <div class="pdd-section-title">CAPTURED ATTRIBUTES</div>
+        <div class="pdd-section-title">捕获的留资画像字段</div>
         <div v-if="attrEntries.length" class="pdd-attrs">
           <div v-for="[k, v] in attrEntries" :key="k" class="pdd-attr">
             <span class="pdd-attr-k">{{ k }}</span>
             <span class="pdd-attr-v">{{ v }}</span>
           </div>
         </div>
-        <div v-else class="pdd-none">No attributes captured yet.</div>
+        <div v-else class="pdd-none">暂无捕获的留资字段。</div>
 
         <!-- Conversations -->
-        <div class="pdd-section-title">CONVERSATIONS <span class="pdd-count">{{ person.conversations.length }}</span></div>
+        <div class="pdd-section-title">历史关联会话 <span class="pdd-count">{{ person.conversations.length }}</span></div>
         <div v-if="person.conversations.length" class="pdd-convos">
           <div v-for="c in person.conversations" :key="c.session_id" class="pdd-convo">
             <div class="pdd-convo-top">
-              <span class="pdd-agent">{{ c.agent_name || 'Agent' }}</span>
+              <span class="pdd-agent">{{ c.agent_name || '智能体' }}</span>
               <span class="pdd-status">{{ c.status }}</span>
             </div>
             <div class="pdd-snippet">{{ c.last_message || '—' }}</div>
             <div class="pdd-convo-date">{{ fmt(c.created_at) }}</div>
           </div>
         </div>
-        <div v-else class="pdd-none">No conversations yet.</div>
+        <div v-else class="pdd-none">暂无历史关联会话。</div>
       </div>
     </aside>
 

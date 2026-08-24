@@ -43,12 +43,12 @@ const canManage = permissionChecks.canManageTickets()
 const csatSub = computed(() => {
   const s = stats.value
   if (!s) return ''
-  const window = `last ${s.csat_window_days} days`
+  const window = `近 ${s.csat_window_days} 天`
   if (!s.csat_responses) return window
   const parts: string[] = []
   if (s.csat_ai_avg != null) parts.push(`AI ${s.csat_ai_avg.toFixed(1)}`)
-  if (s.csat_human_avg != null) parts.push(`human ${s.csat_human_avg.toFixed(1)}`)
-  return parts.length ? parts.join(' · ') : `${s.csat_responses} rated · ${window}`
+  if (s.csat_human_avg != null) parts.push(`人工 ${s.csat_human_avg.toFixed(1)}`)
+  return parts.length ? parts.join(' · ') : `${s.csat_responses} 条评价 · ${window}`
 })
 
 const csatColor = computed(() => {
@@ -58,23 +58,23 @@ const csatColor = computed(() => {
 })
 
 const statChips = computed(() => [
-  { label: 'Open', value: stats.value?.open ?? '—', color: 'var(--c-info)', alert: false },
-  { label: 'Awaiting approval', value: stats.value?.awaiting_approval ?? '—', color: 'var(--c-warn)', alert: false },
+  { label: '待处理工单', value: stats.value?.open ?? '—', color: 'var(--c-info)', alert: false },
+  { label: '待审批动作', value: stats.value?.awaiting_approval ?? '—', color: 'var(--c-warn)', alert: false },
   {
-    label: 'SLA breaching',
+    label: '即将/已超时 (SLA)',
     value: stats.value?.sla_breaching ?? '—',
     color: 'var(--c-danger)',
     alert: (stats.value?.sla_breaching ?? 0) > 0,
   },
   {
-    label: 'AI-resolved',
+    label: 'AI 自主解决率',
     value: stats.value?.ai_resolved_pct_7d != null ? `${stats.value.ai_resolved_pct_7d}%` : '—',
     color: 'var(--c-positive)',
     alert: false,
-    sub: 'last 7 days',
+    sub: '近 7 天',
   },
   {
-    label: 'CSAT',
+    label: '客户满意度 (CSAT)',
     value: stats.value?.csat_avg != null ? `${stats.value.csat_avg.toFixed(1)}/5` : '—',
     color: csatColor.value,
     alert: false,
@@ -95,13 +95,13 @@ function openTicket(id: string) {
   <div class="tickets-view">
     <div class="page-header">
       <div>
-        <h1 class="page-title">Tickets</h1>
+        <h1 class="page-title">工单与 AI 调查管理</h1>
         <p class="page-subtitle">
-          The AI investigates in the open — every conclusion traces back to evidence.
+          AI 智能体全流程协同调查 — 自动生成假设、溯源业务数据库并提供完整证据链。
         </p>
       </div>
       <button v-if="canManage" class="new-ticket-btn" @click="showCreateModal = true">
-        <span class="plus">+</span> New ticket
+        <span class="plus">+</span> 新建工单
       </button>
     </div>
 
@@ -128,11 +128,11 @@ function openTicket(id: string) {
       <div class="ticket-table">
         <div class="table-scroll">
           <div class="table-head">
-            <span>Ticket</span><span>Title</span><span>Status</span><span>Priority</span>
-            <span>AI state</span><span>Assignee / SLA</span><span class="right">Updated</span>
+            <span>工单编号</span><span>主题</span><span>状态</span><span>优先级</span>
+            <span>AI 状态</span><span>处理人 / SLA</span><span class="right">最近更新</span>
           </div>
 
-          <div v-if="phase === 'loading'" class="table-loading">Loading tickets…</div>
+          <div v-if="phase === 'loading'" class="table-loading">正在加载工单列表…</div>
 
           <template v-else-if="phase === 'populated'">
             <div
@@ -155,7 +155,7 @@ function openTicket(id: string) {
                 <span
                   class="avatar"
                   :class="{ 'avatar-ai': !ticket.assignee_name }"
-                  :title="ticket.assignee_name || 'ChatterMate AI'"
+                  :title="ticket.assignee_name || 'AI 智能体'"
                 >
                   {{ ticketInitials(ticket.assignee_name) }}
                 </span>
@@ -179,10 +179,10 @@ function openTicket(id: string) {
         </div>
 
         <div v-if="pagination && pagination.total_pages > 1" class="pager">
-          <button class="pager-btn" :disabled="page <= 1" @click="page--">← Prev</button>
-          <span class="pager-info">Page {{ pagination.page }} of {{ pagination.total_pages }}</span>
+          <button class="pager-btn" :disabled="page <= 1" @click="page--">← 上一页</button>
+          <span class="pager-info">第 {{ pagination.page }} 页 / 共 {{ pagination.total_pages }} 页</span>
           <button class="pager-btn" :disabled="page >= pagination.total_pages" @click="page++">
-            Next →
+            下一页 →
           </button>
         </div>
       </div>

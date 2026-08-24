@@ -299,13 +299,13 @@ onMounted(async () => {
                 <font-awesome-icon v-if="ticketingLocked" :icon="['fas', 'lock']" class="lock-icon" />
               </div>
               <div class="integration-desc">
-                Let this agent open native support tickets that the AI investigates and resolves.
+                允许该智能体在会话中直接创建原生工单，由 AI 进行调查并生成复盘解决方案。
               </div>
             </div>
           </div>
           <label
             class="switch"
-            v-tooltip="ticketingLocked ? 'Available on the Pro plan — upgrade to enable AI ticketing.' : 'Turn native AI ticketing on or off for this agent'"
+            v-tooltip="ticketingLocked ? '专业版 (Pro) 专享功能 — 升级套餐以启用 AI 工单联动。' : '开启或关闭该智能体的原生工单联动功能'"
           >
             <input
               type="checkbox"
@@ -317,12 +317,11 @@ onMounted(async () => {
           </label>
         </div>
         <p v-if="ticketingLocked" class="helper-text">
-          AI Ticketing is a Pro-plan feature.
-          <router-link to="/settings/subscription" class="connect-link">Upgrade to enable</router-link>
+          AI 智能工单为专业版专享功能。
+          <router-link to="/settings/subscription" class="connect-link">立即升级套餐</router-link>
         </p>
         <p v-else class="helper-text">
-          When on, this agent creates tickets during chats; Jira auto-ticketing below takes
-          precedence when enabled.
+          开启后，智能客服可在对话中识别复杂售后并自动立项工单；若下方开启 Jira 联动，将优先同步至 Jira。
         </p>
       </div>
 
@@ -332,8 +331,8 @@ onMounted(async () => {
           <div class="integration-head-left">
             <div class="integration-badge badge-teal">Ji</div>
             <div class="integration-heading">
-              <div class="integration-title">Jira — auto-ticketing</div>
-              <div class="integration-desc">Create Jira tickets for issues that need follow-up.</div>
+              <div class="integration-title">Jira — 研发工单自动同步</div>
+              <div class="integration-desc">为需要技术/研发团队跟进的复杂异常问题自动创建 Jira Issue。</div>
             </div>
           </div>
           <router-link
@@ -341,20 +340,20 @@ onMounted(async () => {
             to="/settings/integrations"
             class="connect-btn"
           >
-            Connect
+            去连接
           </router-link>
           <router-link
             v-else
             to="/settings/integrations"
             class="connect-btn"
           >
-            Manage
+            管理集成
           </router-link>
         </div>
         <!-- Jira Ticket Creation Toggle -->
         <div v-if="jiraConnected" class="ticket-toggle">
           <div class="toggle-header">
-            <h5 class="toggle-title">Create Jira Tickets</h5>
+            <h5 class="toggle-title">开启自动创建 Jira 工单</h5>
             <label class="switch" v-tooltip="ticketTooltipContent">
               <input type="checkbox" 
                 :checked="createTicketEnabled"
@@ -363,29 +362,29 @@ onMounted(async () => {
               <span class="slider"></span>
             </label>
           </div>
-          <p class="helper-text">Create Jira tickets for issues that need further attention</p>
+          <p class="helper-text">当客户反馈产品 Bug 或需要技术介入时，自动在对应 Jira 项目中生成工单</p>
           
           <!-- Jira Connection Status -->
           <div v-if="jiraLoading" class="jira-status loading">
-            Checking Jira connection...
+            正在检测 Jira 连通性...
           </div>
           <div v-else-if="!jiraConnected" class="jira-status not-connected">
             <span class="status-icon">⚠️</span>
-            Jira is not connected
+            Jira 尚未授权连接
             <router-link to="/settings/integrations" class="connect-link">
-              Connect Jira
+              立即连接 Jira
             </router-link>
           </div>
           <div v-else class="jira-status connected">
             <span class="status-icon">✓</span>
-            Jira is connected
+            Jira 已成功连接
           </div>
           
           <!-- Jira Project Selection -->
           <div v-if="createTicketEnabled && jiraConnected" class="jira-config">
             <div class="form-group">
-              <label for="jira-project">Jira Project</label>
-              <div v-if="loadingProjects" class="loading-indicator">Loading projects...</div>
+              <label for="jira-project">Jira 项目</label>
+              <div v-if="loadingProjects" class="loading-indicator">正在加载项目列表...</div>
               <select 
                 v-else
                 id="jira-project" 
@@ -393,7 +392,7 @@ onMounted(async () => {
                 @change="handleProjectChange"
                 :disabled="loadingProjects"
               >
-                <option value="">Select a project</option>
+                <option value="">选择目标 Jira 项目</option>
                 <option 
                   v-for="project in jiraProjects" 
                   :key="project.id" 
@@ -405,8 +404,8 @@ onMounted(async () => {
             </div>
             
             <div class="form-group">
-              <label for="issue-type">Issue Type</label>
-              <div v-if="loadingIssueTypes" class="loading-indicator">Loading issue types...</div>
+              <label for="issue-type">工单问题类型 (Issue Type)</label>
+              <div v-if="loadingIssueTypes" class="loading-indicator">正在加载问题类型...</div>
               <select 
                 v-else
                 id="issue-type" 
@@ -414,7 +413,7 @@ onMounted(async () => {
                 @change="handleIssueTypeChange"
                 :disabled="!localSelectedProject || loadingIssueTypes"
               >
-                <option value="">Select an issue type</option>
+                <option value="">选择工单类型</option>
                 <option 
                   v-for="issueType in jiraIssueTypes" 
                   :key="issueType.id" 
@@ -430,7 +429,7 @@ onMounted(async () => {
               @click="saveJiraConfig"
               :disabled="!localSelectedProject || !localSelectedIssueType"
             >
-              Save Configuration
+              保存配置
             </button>
           </div>
         </div>
@@ -442,8 +441,8 @@ onMounted(async () => {
           <div class="integration-head-left">
             <div class="integration-badge badge-lime">Sh</div>
             <div class="integration-heading">
-              <div class="integration-title">Shopify — orders &amp; products</div>
-              <div class="integration-desc">Let the agent look up orders and recommend products.</div>
+              <div class="integration-title">Shopify — 订单与商品库联动</div>
+              <div class="integration-desc">允许智能体查询买家订单物流履约状态并智能推荐关联商品。</div>
             </div>
           </div>
           <router-link
@@ -451,19 +450,19 @@ onMounted(async () => {
             to="/settings/integrations"
             class="connect-btn"
           >
-            Connect
+            去连接
           </router-link>
           <router-link
             v-else
             to="/settings/integrations"
             class="connect-btn"
           >
-            Manage
+            管理集成
           </router-link>
         </div>
         <div v-if="shopifyConnected" class="ticket-toggle">
           <div class="toggle-header">
-            <h5 class="toggle-title">Enable Shopify Features</h5>
+            <h5 class="toggle-title">启用 Shopify 电商扩展</h5>
             <div class="toggle-with-loader">
               <div class="toggle-loader" v-if="shopifyToggleInProgress">
                 <span class="loader-dot"></span>
@@ -480,22 +479,22 @@ onMounted(async () => {
               </label>
             </div>
           </div>
-          <p class="helper-text">Enable Shopify product information and features for this agent</p>
+          <p class="helper-text">为该智能客服开启店铺实时库存、订单查询及商品卡片推送功能</p>
           
           <!-- Shopify Connection Status -->
           <div v-if="shopifyLoading" class="jira-status loading">
-            Checking Shopify connection...
+            正在检测 Shopify 店铺状态...
           </div>
           <div v-else-if="!shopifyConnected" class="jira-status not-connected">
             <span class="status-icon">⚠️</span>
-            Shopify is not connected
+            Shopify 店铺尚未连接
             <router-link to="/settings/integrations" class="connect-link">
-              Connect Shopify
+              立即连接 Shopify
             </router-link>
           </div>
           <div v-else class="jira-status connected">
             <span class="status-icon">✓</span>
-            Connected to {{ shopifyShopDomain }}
+            已成功连接至店铺 {{ shopifyShopDomain }}
           </div>
         </div>
         <!-- Add error message display -->
@@ -511,18 +510,18 @@ onMounted(async () => {
           <div class="integration-head-left">
             <div class="integration-badge badge-purple">Ch</div>
             <div class="integration-heading">
-              <div class="integration-title">Messaging channels — customer chat</div>
-              <div class="integration-desc">Let customers chat with this agent on Telegram, WhatsApp, Messenger, Instagram, Slack, Email, SMS and LINE.</div>
+              <div class="integration-title">多渠道通讯集成 — 客户触达</div>
+              <div class="integration-desc">让智能客服支持在 Telegram、WhatsApp、Messenger、Instagram、Slack、邮件、短信和 LINE 上全天候接待客户。</div>
             </div>
           </div>
           <router-link to="/settings/integrations" class="connect-btn">
-            {{ channelAccounts.length > 0 ? 'Manage' : 'Connect' }}
+            {{ channelAccounts.length > 0 ? '管理渠道' : '去连接渠道' }}
           </router-link>
         </div>
 
         <div v-if="channelAccounts.length > 0" class="msg-config">
           <p class="helper-text">
-            Each connected account is answered by one agent. Toggle an account to route its conversations to this agent.
+            每个连接的通讯账号由一个智能体负责应答。勾选下方账号即可将该渠道的访客消息路由至当前智能客服。
           </p>
           <div class="msg-list">
             <div
@@ -535,10 +534,10 @@ onMounted(async () => {
                 <span class="msg-badge">{{ CHANNEL_LABELS[account.channel_type] || account.channel_type }}</span>
                 <span class="msg-name">{{ account.display_name || account.external_account_id }}</span>
                 <span v-if="account.agent_id && account.agent_id !== props.agentId" class="msg-note">
-                  routed to another agent
+                  当前路由至其他智能体
                 </span>
               </div>
-              <label class="msg-toggle" :title="account.agent_id === props.agentId ? 'Answering' : 'Not answering'">
+              <label class="msg-toggle" :title="account.agent_id === props.agentId ? '正在负责应答' : '未分配应答'">
                 <input
                   type="checkbox"
                   :checked="account.agent_id === props.agentId"
@@ -551,7 +550,7 @@ onMounted(async () => {
           </div>
         </div>
         <div v-else class="no-channels-message">
-          No messaging channels connected yet. Connect one from Settings → Integrations.
+          暂未绑定任何第三方社交通讯渠道。请前往「系统设置 → 渠道集成」进行连接。
         </div>
       </div>
     </section>

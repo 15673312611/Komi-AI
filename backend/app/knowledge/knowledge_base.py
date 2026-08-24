@@ -558,8 +558,7 @@ class KnowledgeManager:
                     success = True
 
                 else:
-                    raise ValueError(f"Unsupported source type: {
-                                     queue_item.source_type}")
+                    raise ValueError(f"Unsupported source type: {queue_item.source_type}")
 
                 if not success:
                     raise Exception("Failed to process knowledge source")

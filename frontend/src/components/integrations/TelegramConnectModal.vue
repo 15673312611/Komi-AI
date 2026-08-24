@@ -50,15 +50,15 @@ onMounted(async () => {
 
 const connect = async () => {
   if (!botToken.value.trim()) {
-    toast.error('Paste the bot token from @BotFather')
+    toast.error('请粘贴从 @BotFather 获取的 Bot Token')
     return
   }
   try {
     connecting.value = true
     account.value = await channelsService.connectTelegram(botToken.value.trim())
-    toast.success(`Connected ${account.value.display_name || 'Telegram bot'}`)
+    toast.success(`已成功连接 ${account.value.display_name || 'Telegram 机器人'}`)
   } catch (error: any) {
-    const detail = error?.response?.data?.detail || 'Failed to connect Telegram bot'
+    const detail = error?.response?.data?.detail || '连接 Telegram 机器人失败'
     toast.error(detail)
   } finally {
     connecting.value = false
@@ -70,10 +70,10 @@ const saveAgent = async () => {
   try {
     savingAgent.value = true
     const updated = await channelsService.setAccountAgent(account.value.id, selectedAgentId.value)
-    toast.success('Agent assigned — your bot is live!')
+    toast.success('已指定接待智能体 — Telegram 机器人已正式上线！')
     emit('connected', updated)
   } catch (error: any) {
-    toast.error(error?.response?.data?.detail || 'Failed to assign agent')
+    toast.error(error?.response?.data?.detail || '指定接待智能体失败')
   } finally {
     savingAgent.value = false
   }
@@ -84,18 +84,18 @@ const saveAgent = async () => {
   <div class="tg-modal" @click.self="emit('close')">
     <div class="tg-modal-content">
       <div class="tg-modal-header">
-        <h3>Connect Telegram</h3>
+        <h3>连接 Telegram 机器人</h3>
         <button class="tg-close-btn" @click="emit('close')">×</button>
       </div>
 
       <!-- Step 1: bot token -->
       <div v-if="!account" class="tg-modal-body">
         <ol class="tg-steps">
-          <li>Open <strong>@BotFather</strong> in Telegram and send <code>/newbot</code></li>
-          <li>Follow the prompts to name your bot</li>
-          <li>Copy the bot token and paste it below</li>
+          <li>在 Telegram 中打开 <strong>@BotFather</strong> 并发送指令 <code>/newbot</code></li>
+          <li>按提示设置机器人的显示名称与唯一 Username</li>
+          <li>复制生成的 HTTP API Token 并粘贴在下方</li>
         </ol>
-        <label class="tg-label" for="tg-token">Bot token</label>
+        <label class="tg-label" for="tg-token">机器人令牌 (Bot Token)</label>
         <input
           id="tg-token"
           v-model="botToken"
@@ -107,9 +107,9 @@ const saveAgent = async () => {
           @keyup.enter="connect"
         />
         <div class="tg-actions">
-          <button class="tg-btn tg-btn-secondary" @click="emit('close')">Cancel</button>
+          <button class="tg-btn tg-btn-secondary" @click="emit('close')">取消</button>
           <button class="tg-btn tg-btn-primary" :disabled="connecting" @click="connect">
-            {{ connecting ? 'Connecting…' : 'Connect' }}
+            {{ connecting ? '正在连接…' : '立即连接' }}
           </button>
         </div>
       </div>
@@ -117,19 +117,19 @@ const saveAgent = async () => {
       <!-- Step 2: route to an agent -->
       <div v-else class="tg-modal-body">
         <p class="tg-connected-note">
-          <strong>{{ account.display_name }}</strong> is connected.
-          Choose which AI agent answers its messages:
+          <strong>{{ account.display_name }}</strong> 已成功连接。
+          请选择由哪位 AI 智能体负责答复客户消息：
         </p>
-        <label class="tg-label" for="tg-agent">AI agent</label>
+        <label class="tg-label" for="tg-agent">接待 AI 智能体</label>
         <select id="tg-agent" v-model="selectedAgentId" class="tg-input">
           <option v-for="agent in agents" :key="String(agent.id)" :value="String(agent.id)">
             {{ agent.display_name || agent.name }}
           </option>
         </select>
         <div class="tg-actions">
-          <button class="tg-btn tg-btn-secondary" @click="emit('connected', account)">Skip for now</button>
+          <button class="tg-btn tg-btn-secondary" @click="emit('connected', account)">稍后指定</button>
           <button class="tg-btn tg-btn-primary" :disabled="savingAgent || !selectedAgentId" @click="saveAgent">
-            {{ savingAgent ? 'Saving…' : 'Assign agent' }}
+            {{ savingAgent ? '正在保存…' : '确认指定智能体' }}
           </button>
         </div>
       </div>

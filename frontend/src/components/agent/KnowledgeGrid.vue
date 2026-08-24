@@ -264,34 +264,33 @@ const closeKnowledgeModal = () => {
     <div class="knowledge-grid-container">
         <div class="knowledge-header">
             <div class="header-left">
-                <h3>Knowledge sources</h3>
-                <p class="header-subtitle">Connect docs and pages — ChatterMate indexes them automatically to ground
-                    every answer.</p>
+                <h3>知识库源</h3>
+                <p class="header-subtitle">关联文档与网页 — ChatterMate 将自动构建索引，让智能体的每次回复都有据可循。</p>
             </div>
             <div class="header-actions">
                 <button class="action-button action-button--primary" @click="showKnowledgeModal = true">
-                    + Add knowledge
+                    + 添加知识源
                 </button>
                 <button class="action-button action-button--ghost" @click="showLinkModal = true">
-                    Link existing
+                    关联已有知识库
                 </button>
             </div>
             <div v-if="totalPages > 1" class="pagination">
                 <button :disabled="currentPage === 1" @click="handlePageChange(currentPage - 1)"
                     class="pagination-button">
-                    Previous
+                    上一页
                 </button>
-                <span class="page-info">Page {{ currentPage }} of {{ totalPages }}</span>
+                <span class="page-info">第 {{ currentPage }} 页 / 共 {{ totalPages }} 页</span>
                 <button :disabled="currentPage === totalPages" @click="handlePageChange(currentPage + 1)"
                     class="pagination-button">
-                    Next
+                    下一页
                 </button>
             </div>
         </div>
 
         <!-- Queue Status Section -->
         <div v-if="queueItems && queueItems.length > 0" class="queue-section">
-            <h4 class="queue-header">Processing Queue</h4>
+            <h4 class="queue-header">知识索引处理队列</h4>
             <div class="queue-items">
                 <div v-for="item in queueItems" :key="item.id" class="queue-item">
                     <div class="queue-item-content">
@@ -305,11 +304,11 @@ const closeKnowledgeModal = () => {
                             </div>
                             <div class="queue-status-container">
                                 <span :class="['status-badge', item.status]">
-                                    {{ item.status }}
+                                    {{ item.status === 'processing' ? '处理中' : item.status === 'pending' ? '排队中' : item.status === 'failed' ? '失败' : item.status }}
                                 </span>
                                 <button v-if="item.status === 'failed' || item.status === 'pending'"
                                     class="delete-queue-btn" @click="deleteQueueItem(item.id)"
-                                    title="Remove from queue">
+                                    title="从队列中移除">
                                     <img :src="DeleteIcon" alt="Delete" class="delete-icon-sm" />
                                 </button>
                             </div>
@@ -333,7 +332,7 @@ const closeKnowledgeModal = () => {
         </div>
 
         <div v-if="isLoading" class="loading-state">
-            Loading knowledge sources...
+            正在加载知识库源…
         </div>
 
         <div v-else-if="error" class="error-state">
@@ -342,14 +341,14 @@ const closeKnowledgeModal = () => {
 
         <div v-else class="knowledge-grid">
             <div class="knowledge-grid-header">
-                <div class="header-cell">Source</div>
-                <div class="header-cell">Type</div>
-                <div class="header-cell">Status</div>
-                <div class="header-cell"></div>
+                <div class="header-cell">知识源名称</div>
+                <div class="header-cell">类型</div>
+                <div class="header-cell">状态</div>
+                <div class="header-cell">操作</div>
             </div>
 
             <div v-if="!knowledgeItems.length" class="knowledge-empty">
-                ⚠ No knowledge sources yet — add a URL or PDF to ground your agent.
+                ⚠ 暂无关联知识源 — 请添加网页 URL 或上传 PDF 文档以赋能智能体。
             </div>
 
             <template v-for="item in knowledgeItems" :key="item.id">
@@ -358,14 +357,14 @@ const closeKnowledgeModal = () => {
                     <div class="grid-cell">
                         <span class="type-tag"
                             :class="String(item.type).toLowerCase().includes('pdf') || String(item.type).toLowerCase().includes('file') ? 'type-tag--pdf' : 'type-tag--web'">{{
-                                String(item.type).toLowerCase().includes('pdf') || String(item.type).toLowerCase().includes('file') ? 'PDF' : 'Website' }}</span>
+                                String(item.type).toLowerCase().includes('pdf') || String(item.type).toLowerCase().includes('file') ? 'PDF 文件' : '网页链接' }}</span>
                     </div>
                     <div class="grid-cell status-cell">
-                        <span class="status-indexed">✓ indexed</span>
+                        <span class="status-indexed">✓ 已索引</span>
                     </div>
                     <div class="grid-cell remove-cell">
-                        <button class="remove-button" @click="confirmDelete(item.id)" title="Remove knowledge source">
-                            Remove
+                        <button class="remove-button" @click="confirmDelete(item.id)" title="移除该知识源">
+                            移除
                         </button>
                     </div>
                 </div>
@@ -376,23 +375,23 @@ const closeKnowledgeModal = () => {
         <div v-if="showKnowledgeModal" class="modal-overlay">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h3>Add Knowledge Source</h3>
+                    <h3>添加知识源</h3>
                     <button class="close-button" @click="closeKnowledgeModal">×</button>
                 </div>
 
                 <div class="knowledge-tabs">
                     <button :class="{ active: activeTab === 'pdf' }" @click="activeTab = 'pdf'">
-                        PDF Upload
+                        上传 PDF 文档
                     </button>
                     <button :class="{ active: activeTab === 'url' }" @click="activeTab = 'url'">
-                        URL Import
+                        导入网页 URL
                     </button>
                 </div>
 
                 <div v-if="activeTab === 'pdf'" class="tab-content">
                     <input type="file" ref="fileInput" multiple accept=".pdf" class="hidden" @change="handleFileSelect">
                     <button class="select-files-button" @click="triggerFileInput">
-                        Select PDF Files
+                        选择 PDF 文件
                     </button>
 
                     <div v-if="uploadError" class="upload-error">
@@ -404,15 +403,15 @@ const closeKnowledgeModal = () => {
                             {{ file.name }}
                         </div>
                         <button class="upload-button" :disabled="isUploading" @click="handleFileUpload">
-                            {{ isUploading ? 'Uploading...' : 'Upload Files' }}
+                            {{ isUploading ? '正在上传…' : '开始上传文件' }}
                         </button>
                     </div>
                 </div>
 
                 <div v-if="activeTab === 'url'" class="tab-content">
                     <div class="url-input-group">
-                        <input type="url" v-model="newUrl" placeholder="Enter URL" @keyup.enter="handleUrlAdd">
-                        <button @click="handleUrlAdd">Add</button>
+                        <input type="url" v-model="newUrl" placeholder="输入网页 URL 地址" @keyup.enter="handleUrlAdd">
+                        <button @click="handleUrlAdd">添加</button>
                     </div>
 
                     <div v-if="urlFormError" class="error-message">
@@ -426,12 +425,12 @@ const closeKnowledgeModal = () => {
                     <div v-if="urls.length" class="url-list">
                         <div v-for="(url, index) in urls" :key="index" class="url-item">
                             <span>{{ url }}</span>
-                            <button class="remove-url-button" @click="removeUrl(index)" title="Remove URL">
+                            <button class="remove-url-button" @click="removeUrl(index)" title="移除 URL">
                                 <span class="remove-icon">×</span>
                             </button>
                         </div>
                         <button class="upload-button" :disabled="isUploading" @click="handleUrlUpload">
-                            {{ isUploading ? 'Uploading...' : 'Upload URLs' }}
+                            {{ isUploading ? '正在导入…' : '开始导入 URL' }}
                         </button>
                     </div>
                 </div>
@@ -452,19 +451,19 @@ const closeKnowledgeModal = () => {
         <div v-if="showLinkModal" class="modal-overlay">
             <div class="modal-content link-modal">
                 <div class="modal-header">
-                    <h3>Link Existing Knowledge</h3>
+                    <h3>关联已有知识源</h3>
                     <button class="close-button" @click="showLinkModal = false">×</button>
                 </div>
 
                 <div v-if="isLoadingOrg" class="loading-state">
-                    Loading knowledge sources...
+                    正在加载知识库源…
                 </div>
 
                 <div v-else class="org-knowledge-grid">
                     <div class="knowledge-grid-header">
-                        <div class="header-cell source-cell">Source</div>
-                        <div class="header-cell type-cell">Type</div>
-                        <div class="header-cell action-cell">Action</div>
+                        <div class="header-cell source-cell">知识源名称</div>
+                        <div class="header-cell type-cell">类型</div>
+                        <div class="header-cell action-cell">操作</div>
                     </div>
 
                     <template v-for="item in orgKnowledgeItems" :key="item.id">
@@ -474,10 +473,10 @@ const closeKnowledgeModal = () => {
                             <div class="grid-cell action-cell">
                                 <button v-if="!isKnowledgeLinked(item.id)" class="link-button"
                                     @click="handleLink(item.id)">
-                                    Link
+                                    关联
                                 </button>
                                 <button v-else class="unlink-button" @click="handleUnlink(item.id)">
-                                    Unlink
+                                    取消关联
                                 </button>
                             </div>
                         </div>
@@ -486,14 +485,14 @@ const closeKnowledgeModal = () => {
                     <div v-if="orgTotalPages > 1" class="pagination">
                         <button :disabled="orgCurrentPage === 1" @click="handleOrgPageChange(orgCurrentPage - 1)"
                             class="pagination-button">
-                            Previous
+                            上一页
                         </button>
                         <span class="page-info">
-                            Page {{ orgCurrentPage }} of {{ orgTotalPages }}
+                            第 {{ orgCurrentPage }} 页 / 共 {{ orgTotalPages }} 页
                         </span>
                         <button :disabled="orgCurrentPage === orgTotalPages"
                             @click="handleOrgPageChange(orgCurrentPage + 1)" class="pagination-button">
-                            Next
+                            下一页
                         </button>
                     </div>
                 </div>
@@ -504,14 +503,14 @@ const closeKnowledgeModal = () => {
         <div v-if="showDeleteConfirm" class="modal-overlay">
             <div class="modal-content confirm-modal">
                 <div class="modal-header">
-                    <h3>Confirm Delete</h3>
+                    <h3>确认删除</h3>
                     <button class="close-button" @click="cancelDelete">×</button>
                 </div>
                 <div class="confirm-content">
-                    <p>Are you sure you want to delete this knowledge source? This action cannot be undone.</p>
+                    <p>确定要删除此知识源吗？删除后智能体将不再引用该内容，此操作无法撤销。</p>
                     <div class="confirm-actions">
-                        <button class="cancel-button" @click="cancelDelete">Cancel</button>
-                        <button class="delete-button" @click="handleDelete">Delete</button>
+                        <button class="cancel-button" @click="cancelDelete">取消</button>
+                        <button class="delete-button" @click="handleDelete">确认删除</button>
                     </div>
                 </div>
             </div>
@@ -521,12 +520,12 @@ const closeKnowledgeModal = () => {
         <div v-if="showContentModal" class="modal-overlay">
             <div class="modal-content content-modal">
                 <div class="modal-header">
-                    <h3>Knowledge Content</h3>
+                    <h3>知识库切片内容</h3>
                     <button class="close-button" @click="closeContentModal">×</button>
                 </div>
 
                 <div v-if="isLoadingContent" class="loading-state">
-                    Loading content...
+                    正在加载切片内容…
                 </div>
 
                 <div v-else-if="knowledgeContent" class="content-body">
@@ -534,10 +533,10 @@ const closeKnowledgeModal = () => {
                         <div class="content-info">
                             <span class="content-source">{{ knowledgeContent.source }}</span>
                             <span class="content-type">{{ knowledgeContent.source_type }}</span>
-                            <span class="content-subpages-count">{{ knowledgeContent.chunks.length }} subpages</span>
+                            <span class="content-subpages-count">{{ knowledgeContent.chunks.length }} 个切片子页</span>
                         </div>
-                        <button class="add-subpage-btn" @click="showAddSubpageModal = true" title="Add new subpage">
-                            + Add Subpage
+                        <button class="add-subpage-btn" @click="showAddSubpageModal = true" title="添加新切片子页">
+                            + 新增切片子页
                         </button>
                     </div>
 
@@ -545,9 +544,9 @@ const closeKnowledgeModal = () => {
                         <table class="content-table">
                             <thead>
                                 <tr>
-                                    <th class="col-url">Subpage Name</th>
-                                    <th class="col-content">Content</th>
-                                    <th class="col-actions">Actions</th>
+                                    <th class="col-url">切片子页名称</th>
+                                    <th class="col-content">正文内容</th>
+                                    <th class="col-actions">操作</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -571,12 +570,12 @@ const closeKnowledgeModal = () => {
                                     <td class="cell-actions">
                                         <div class="actions-buttons">
                                             <button class="edit-subpage-btn" @click="() => editSubpage(subpage.id)"
-                                                title="Edit this subpage">
+                                                title="编辑此切片">
                                                 <img :src="EditIcon" alt="Edit" class="action-icon-sm" />
                                             </button>
                                             <button class="delete-subpage-btn"
                                                 @click="() => confirmDeleteSubpage(subpage.id)"
-                                                title="Delete this subpage">
+                                                title="删除此切片">
                                                 <img :src="DeleteIcon" alt="Delete" class="action-icon-sm" />
                                             </button>
                                         </div>
@@ -593,19 +592,19 @@ const closeKnowledgeModal = () => {
         <div v-if="showEditSubpageModal" class="modal-overlay">
             <div class="modal-content subpage-edit-modal">
                 <div class="modal-header">
-                    <h3>Edit Subpage Content</h3>
+                    <h3>编辑切片内容</h3>
                     <button class="close-button" @click="cancelEditSubpage">×</button>
                 </div>
 
                 <div class="modal-body">
                     <textarea v-model="editingSubpageContent" class="subpage-edit-textarea"
-                        placeholder="Edit subpage content..."></textarea>
+                        placeholder="请输入编辑后的切片正文内容…"></textarea>
                 </div>
 
                 <div class="modal-footer">
-                    <button class="cancel-button" @click="cancelEditSubpage">Cancel</button>
+                    <button class="cancel-button" @click="cancelEditSubpage">取消</button>
                     <button class="save-button" @click="saveEditedSubpage" :disabled="isSavingContent">
-                        {{ isSavingContent ? 'Saving...' : 'Save' }}
+                        {{ isSavingContent ? '正在保存…' : '保存修改' }}
                     </button>
                 </div>
             </div>
@@ -615,17 +614,17 @@ const closeKnowledgeModal = () => {
         <div v-if="showDeleteSubpageConfirm" class="modal-overlay">
             <div class="modal-content confirm-modal">
                 <div class="modal-header">
-                    <h3>Confirm Delete</h3>
+                    <h3>确认删除</h3>
                     <button class="close-button" @click="cancelDeleteSubpage">×</button>
                 </div>
 
                 <div class="modal-body">
-                    <p>Are you sure you want to delete this subpage? This action cannot be undone.</p>
+                    <p>确定要删除该切片子页吗？此操作无法撤销。</p>
                 </div>
 
                 <div class="modal-footer">
-                    <button class="cancel-button" @click="cancelDeleteSubpage">Cancel</button>
-                    <button class="delete-button" @click="deleteSubpage">Delete</button>
+                    <button class="cancel-button" @click="cancelDeleteSubpage">取消</button>
+                    <button class="delete-button" @click="deleteSubpage">确认删除</button>
                 </div>
             </div>
         </div>
@@ -634,7 +633,7 @@ const closeKnowledgeModal = () => {
         <div v-if="showAddSubpageModal" class="modal-overlay">
             <div class="modal-content subpage-edit-modal">
                 <div class="modal-header">
-                    <h3>Add New Subpage</h3>
+                    <h3>新增切片子页</h3>
                     <button class="close-button" @click="cancelAddSubpage">×</button>
                 </div>
 
@@ -643,22 +642,22 @@ const closeKnowledgeModal = () => {
                         {{ error }}
                     </div>
                     <div class="form-group">
-                        <label for="subpage-name">Subpage Name (must be unique)</label>
+                        <label for="subpage-name">切片子页名称 (需唯一)</label>
                         <input id="subpage-name" v-model="newSubpageName" type="text" class="subpage-name-input"
-                            placeholder="Enter unique subpage name..." />
+                            placeholder="请输入唯一的子页名称…" />
                     </div>
                     <div class="form-group">
-                        <label for="subpage-content">Content</label>
+                        <label for="subpage-content">正文内容</label>
                         <textarea id="subpage-content" v-model="newSubpageContent" class="subpage-edit-textarea"
-                            placeholder="Enter subpage content..."></textarea>
+                            placeholder="请输入切片子页的正文内容…"></textarea>
                     </div>
                 </div>
 
                 <div class="modal-footer">
-                    <button class="cancel-button" @click="cancelAddSubpage">Cancel</button>
+                    <button class="cancel-button" @click="cancelAddSubpage">取消</button>
                     <button class="save-button" @click="addNewSubpage"
                         :disabled="!newSubpageName.trim() || !newSubpageContent.trim()">
-                        Add Subpage
+                        确认新增
                     </button>
                 </div>
             </div>

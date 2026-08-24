@@ -136,8 +136,8 @@ onBeforeUnmount(() => {
     <div v-if="showFilters" class="filters-container">
       <div class="filters-dropdown">
         <div class="filters-header">
-          <h3>Filter Conversations</h3>
-          <button @click="emit('toggle')" class="close-btn" aria-label="Close filters">
+          <h3>筛选会话记录</h3>
+          <button @click="emit('toggle')" class="close-btn" aria-label="关闭筛选">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <line x1="18" y1="6" x2="6" y2="18"/>
               <line x1="6" y1="6" x2="18" y2="18"/>
@@ -147,25 +147,25 @@ onBeforeUnmount(() => {
         
         <div class="filters-grid">
           <div class="filter-group">
-            <label for="customer-email">Customer Email</label>
+            <label for="customer-email">客户邮箱</label>
             <input 
               id="customer-email"
               v-model="localFilters.customerEmailFilter" 
               type="email" 
-              placeholder="Filter by customer email..."
+              placeholder="按客户邮箱过滤..."
               class="filter-input"
             />
           </div>
           
           <div class="filter-group">
-            <label for="agent-filter">Agent</label>
+            <label for="agent-filter">AI 智能体</label>
             <select 
               id="agent-filter"
               v-model="localFilters.agentFilter" 
               class="filter-input filter-select"
               :disabled="loadingAgents"
             >
-              <option value="">All Agents</option>
+              <option value="">全部智能体</option>
               <option v-for="agent in agents" :key="agent.id" :value="agent.id">
                 {{ agent.display_name || agent.name }}
               </option>
@@ -173,14 +173,14 @@ onBeforeUnmount(() => {
           </div>
           
           <div class="filter-group">
-            <label for="user-filter">User</label>
+            <label for="user-filter">人工客服成员</label>
             <select 
               id="user-filter"
               v-model="localFilters.userFilter" 
               class="filter-input filter-select"
               :disabled="loadingUsers"
             >
-              <option value="">All Users</option>
+              <option value="">全部客服人员</option>
               <option v-for="user in users" :key="user.id" :value="user.id">
                 {{ user.full_name }} ({{ user.email }})
               </option>
@@ -188,7 +188,7 @@ onBeforeUnmount(() => {
           </div>
           
           <div class="filter-group">
-            <label for="date-from">From Date</label>
+            <label for="date-from">起始日期</label>
             <input 
               id="date-from"
               v-model="localFilters.dateFromFilter" 
@@ -198,7 +198,7 @@ onBeforeUnmount(() => {
           </div>
           
           <div class="filter-group">
-            <label for="date-to">To Date</label>
+            <label for="date-to">截止日期</label>
             <input 
               id="date-to"
               v-model="localFilters.dateToFilter" 
@@ -209,8 +209,8 @@ onBeforeUnmount(() => {
         </div>
         
         <div class="filter-actions">
-          <button @click="applyFilters" class="apply-btn">Apply Filters</button>
-          <button @click="clearFilters" class="clear-btn">Clear All</button>
+          <button @click="applyFilters" class="apply-btn">应用筛选</button>
+          <button @click="clearFilters" class="clear-btn">重置筛选</button>
         </div>
       </div>
     </div>

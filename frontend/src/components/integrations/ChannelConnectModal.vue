@@ -36,15 +36,15 @@ const emit = defineEmits<{
 
 const FORMS = {
   email: {
-    title: 'Connect Email',
-    intro: 'Enter the support address customers write to, then point your provider’s inbound-parse / forwarding webhook at the URL shown. Optionally add your own outbound SMTP so replies send from your domain with correct SPF/DKIM (leave blank to use the platform mail server).',
+    title: '连接客服支持邮箱 (Email)',
+    intro: '请输入客户用于发送咨询的客服邮箱地址，然后将您的邮件服务商收件解析/转发 Webhook 指向系统提供的 URL。您也可以配置自备的 SMTP 外发服务器（留空则默认使用系统邮件服务）。',
     fields: [
-      { key: 'inbound_address', label: 'Support email address', placeholder: 'support@yourcompany.com', secret: false },
-      { key: 'smtp_host', label: 'SMTP host (optional)', placeholder: 'smtp.yourprovider.com', secret: false, optional: true },
-      { key: 'smtp_port', label: 'SMTP port (optional)', placeholder: '587', secret: false, optional: true },
-      { key: 'smtp_username', label: 'SMTP username (optional)', placeholder: 'apikey / user', secret: false, optional: true },
-      { key: 'smtp_password', label: 'SMTP password (optional)', placeholder: '••••••••', secret: true, optional: true },
-      { key: 'from_email', label: 'From address (optional)', placeholder: 'defaults to the support address', secret: false, optional: true },
+      { key: 'inbound_address', label: '客服接收邮箱地址', placeholder: 'support@yourcompany.com', secret: false },
+      { key: 'smtp_host', label: 'SMTP 服务器地址 (选填)', placeholder: 'smtp.yourprovider.com', secret: false, optional: true },
+      { key: 'smtp_port', label: 'SMTP 端口 (选填)', placeholder: '587', secret: false, optional: true },
+      { key: 'smtp_username', label: 'SMTP 用户名 (选填)', placeholder: 'apikey / user', secret: false, optional: true },
+      { key: 'smtp_password', label: 'SMTP 密码/Token (选填)', placeholder: '••••••••', secret: true, optional: true },
+      { key: 'from_email', label: '发件人显示地址 (选填)', placeholder: '留空则默认使用客服邮箱', secret: false, optional: true },
     ],
     connect: (v: Record<string, string>) => {
       const payload: any = { inbound_address: v.inbound_address }
@@ -59,8 +59,8 @@ const FORMS = {
     },
   },
   sms: {
-    title: 'Connect SMS',
-    intro: 'Choose your SMS provider, enter the number to send from, and its API credentials. After connecting, set the URL shown as the number’s inbound-message webhook (SNS uses an HTTPS topic subscription).',
+    title: '连接 SMS 短信',
+    intro: '选择您的短信服务商，输入发件号码与 API 认证凭证。连接成功后，请将系统提供的 Webhook URL 配置到该号码的短信接收回调中。',
     // Fields are provider-specific and resolved dynamically (see activeFields)
     fields: [],
     connect: (v: Record<string, string>) => {
@@ -77,11 +77,11 @@ const FORMS = {
     },
   },
   line: {
-    title: 'Connect LINE',
-    intro: 'From the LINE Developers console (Messaging API channel), copy the channel secret and issue a channel access token. The webhook is configured automatically.',
+    title: '连接 LINE 官方账号',
+    intro: '在 LINE Developers 控制台 (Messaging API channel) 中，复制 Channel secret 并颁发 Channel access token。Webhook 回调将被自动注册。',
     fields: [
-      { key: 'channel_secret', label: 'Channel secret', placeholder: '••••••••', secret: true },
-      { key: 'channel_access_token', label: 'Channel access token', placeholder: 'long-lived token', secret: true },
+      { key: 'channel_secret', label: 'Channel Secret', placeholder: '••••••••', secret: true },
+      { key: 'channel_access_token', label: 'Channel Access Token', placeholder: '长期有效的访问令牌', secret: true },
     ],
     connect: (v: Record<string, string>) => channelsService.connectLine({
       channel_secret: v.channel_secret, channel_access_token: v.channel_access_token }),
@@ -89,8 +89,8 @@ const FORMS = {
   slack: {
     // Slack connects via OAuth (no credential form); this modal is only used
     // in manage mode to pick the answering agent.
-    title: 'Slack',
-    intro: 'Choose which AI agent answers your Slack mentions and DMs.',
+    title: '管理 Slack 智能体',
+    intro: '请选择由哪位 AI 智能体负责答复 Slack 中的 @提及 与私信消息。',
     fields: [],
     connect: async () => { throw new Error('Slack connects via OAuth') },
   },
@@ -112,7 +112,7 @@ const activeFields = computed(() => {
   if (props.channel !== 'sms') return form.value.fields
   const info = smsProviders.value.find(p => p.name === selectedProvider.value)
   return [
-    { key: 'phone_number', label: 'Phone number / sender ID', placeholder: '+15551234567', secret: false },
+    { key: 'phone_number', label: '手机号码 / Sender ID', placeholder: '+15551234567', secret: false },
     ...(info?.fields || []).map(f => ({
       key: f.key, label: f.label, placeholder: f.secret ? '••••••••' : '',
       secret: f.secret, optional: f.optional,
@@ -141,7 +141,7 @@ onMounted(async () => {
 const connect = async () => {
   const missing = activeFields.value.filter(f => !(f as any).optional && !values.value[f.key]?.trim())
   if (missing.length > 0) {
-    toast.error(`Please fill in: ${missing.map(f => f.label).join(', ')}`)
+    toast.error(`请填写必要项：${missing.map(f => f.label).join(', ')}`)
     return
   }
   try {
@@ -149,9 +149,9 @@ const connect = async () => {
     const trimmed = Object.fromEntries(
       Object.entries(values.value).map(([k, v]) => [k, v.trim()]))
     account.value = await form.value.connect(trimmed)
-    toast.success(`Connected ${account.value.display_name || form.value.title.replace('Connect ', '')}`)
+    toast.success(`已成功连接 ${account.value.display_name || form.value.title.replace('连接 ', '')}`)
   } catch (error: any) {
-    toast.error(error?.response?.data?.detail || `Failed to connect ${props.channel}`)
+    toast.error(error?.response?.data?.detail || `连接 ${props.channel} 失败`)
   } finally {
     connecting.value = false
   }
@@ -160,7 +160,7 @@ const connect = async () => {
 const copyWebhookUrl = async () => {
   if (!account.value?.webhook_url) return
   await navigator.clipboard.writeText(account.value.webhook_url)
-  toast.success('Webhook URL copied')
+  toast.success('Webhook 回调地址已复制到剪贴板')
 }
 
 const saveAgent = async () => {
@@ -168,10 +168,10 @@ const saveAgent = async () => {
   try {
     savingAgent.value = true
     const updated = await channelsService.setAccountAgent(account.value.id, selectedAgentId.value)
-    toast.success('Agent assigned — this channel is live!')
+    toast.success('已指定接待智能体 — 该渠道已正式上线！')
     emit('connected', updated)
   } catch (error: any) {
-    toast.error(error?.response?.data?.detail || 'Failed to assign agent')
+    toast.error(error?.response?.data?.detail || '指定接待智能体失败')
   } finally {
     savingAgent.value = false
   }
@@ -184,7 +184,7 @@ const saveAgent = async () => {
   <div class="cc-modal">
     <div class="cc-modal-content">
       <div class="cc-modal-header">
-        <h3>{{ isManage ? form.title.replace('Connect', 'Manage') : form.title }}</h3>
+        <h3>{{ isManage ? form.title.replace('连接', '管理') : form.title }}</h3>
         <button class="cc-close-btn" @click="emit('close')">×</button>
       </div>
 
@@ -194,7 +194,7 @@ const saveAgent = async () => {
 
         <!-- SMS provider picker -->
         <div v-if="channel === 'sms'" class="cc-field">
-          <label class="cc-label" for="cc-provider">SMS provider</label>
+          <label class="cc-label" for="cc-provider">短信服务商 (SMS Provider)</label>
           <select id="cc-provider" v-model="selectedProvider" class="cc-input">
             <option v-for="p in smsProviders" :key="p.name" :value="p.name">{{ p.label }}</option>
           </select>
@@ -213,9 +213,9 @@ const saveAgent = async () => {
           />
         </div>
         <div class="cc-actions">
-          <button class="cc-btn cc-btn-secondary" @click="emit('close')">Cancel</button>
+          <button class="cc-btn cc-btn-secondary" @click="emit('close')">取消</button>
           <button class="cc-btn cc-btn-primary" :disabled="connecting" @click="connect">
-            {{ connecting ? 'Connecting…' : 'Connect' }}
+            {{ connecting ? '正在连接…' : '立即连接' }}
           </button>
         </div>
       </div>
@@ -223,16 +223,16 @@ const saveAgent = async () => {
       <!-- Step 2: webhook URL (if applicable) + agent routing -->
       <div v-else class="cc-modal-body">
         <p class="cc-intro">
-          <strong>{{ account.display_name }}</strong> is connected.
+          <strong>{{ account.display_name }}</strong> 已成功连接。
         </p>
         <div v-if="account.webhook_url" class="cc-field">
-          <label class="cc-label">Webhook URL — set this on your provider</label>
+          <label class="cc-label">Webhook URL — 请配置在您的服务商回调设置中</label>
           <div class="cc-webhook-row">
             <input class="cc-input" :value="account.webhook_url" readonly />
-            <button class="cc-btn cc-btn-secondary" @click="copyWebhookUrl">Copy</button>
+            <button class="cc-btn cc-btn-secondary" @click="copyWebhookUrl">复制</button>
           </div>
         </div>
-        <label class="cc-label" for="cc-agent">AI agent that answers this channel</label>
+        <label class="cc-label" for="cc-agent">负责接待并答复此渠道的 AI 智能体</label>
         <select id="cc-agent" v-model="selectedAgentId" class="cc-input">
           <option v-for="agent in agents" :key="String(agent.id)" :value="String(agent.id)">
             {{ agent.display_name || agent.name }}
@@ -240,11 +240,11 @@ const saveAgent = async () => {
         </select>
         <div class="cc-actions">
           <button v-if="isManage && channel !== 'slack'" class="cc-btn cc-btn-secondary" @click="account = null">
-            Reconfigure credentials
+            重新配置凭证
           </button>
-          <button v-else class="cc-btn cc-btn-secondary" @click="emit('connected', account)">Skip for now</button>
+          <button v-else class="cc-btn cc-btn-secondary" @click="emit('connected', account)">稍后指定</button>
           <button class="cc-btn cc-btn-primary" :disabled="savingAgent || !selectedAgentId" @click="saveAgent">
-            {{ savingAgent ? 'Saving…' : 'Assign agent' }}
+            {{ savingAgent ? '正在保存…' : '确认指定智能体' }}
           </button>
         </div>
       </div>

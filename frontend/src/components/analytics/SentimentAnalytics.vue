@@ -21,22 +21,22 @@ limitations under the License.
     </div>
 
     <div v-else-if="isLoading" class="loading-state">
-      Loading sentiment analytics data...
+      正在加载情绪分析数据…
     </div>
 
     <div v-else-if="!sentimentData?.total_analyzed" class="no-data">
-      No sentiment data available for the selected period
+      所选时间段内暂无情绪分析数据
     </div>
 
     <div v-else class="sentiment-analytics-content">
       <!-- Summary Cards -->
       <div class="metrics-overview">
         <div class="metric-card">
-          <h3>Messages Analyzed</h3>
+          <h3>已分析客户消息量</h3>
           <div class="metric-value">{{ sentimentData.total_analyzed }}</div>
         </div>
         <div class="metric-card">
-          <h3>Average Sentiment</h3>
+          <h3>平均情绪评分</h3>
           <div class="metric-value">
             {{ sentimentData.avg_score.toFixed(2) }}
             <span class="change" :class="{ positive: sentimentData.score_change >= 0 }">
@@ -47,23 +47,23 @@ limitations under the License.
           <div class="metric-sub">{{ scoreLabel(sentimentData.avg_score) }}</div>
         </div>
         <div class="metric-card">
-          <h3>Positive</h3>
+          <h3>积极正面消息</h3>
           <div class="metric-value positive-text">{{ sentimentData.distribution.positive }}</div>
-          <div class="metric-sub">{{ percentOf(sentimentData.distribution.positive) }}% of total</div>
+          <div class="metric-sub">占总量 {{ percentOf(sentimentData.distribution.positive) }}%</div>
         </div>
         <div class="metric-card">
-          <h3>Negative</h3>
+          <h3>消极负面消息</h3>
           <div class="metric-value negative-text">{{ sentimentData.distribution.negative }}</div>
-          <div class="metric-sub">{{ percentOf(sentimentData.distribution.negative) }}% of total</div>
+          <div class="metric-sub">占总量 {{ percentOf(sentimentData.distribution.negative) }}%</div>
         </div>
       </div>
 
       <!-- Charts -->
       <div class="charts-grid">
         <div class="chart-container">
-          <h3>Sentiment Distribution</h3>
+          <h3>情绪分布占比</h3>
           <div v-if="!hasDistribution" class="no-data">
-            No distribution data available
+            暂无分布数据
           </div>
           <apexchart
             v-else
@@ -75,9 +75,9 @@ limitations under the License.
         </div>
 
         <div class="chart-container">
-          <h3>Sentiment Trend Over Time</h3>
+          <h3>情绪得分历史趋势</h3>
           <div v-if="!sentimentData.trend?.data?.length" class="no-data">
-            No trend data available
+            暂无趋势数据
           </div>
           <apexchart
             v-else
@@ -91,18 +91,18 @@ limitations under the License.
 
       <!-- Negative Sessions Needing Attention -->
       <div class="negative-sessions-section">
-        <h3>Sessions Needing Attention</h3>
+        <h3>需重点关注的负向会话</h3>
         <div v-if="!sentimentData.negative_sessions?.length" class="no-data small">
-          No negative sentiment sessions in this period 🎉
+          该时间段内未发现负向情绪会话 🎉
         </div>
         <table v-else class="sentiment-table">
           <thead>
             <tr>
-              <th>Session</th>
-              <th>Sentiment</th>
-              <th>Score</th>
-              <th>Status</th>
-              <th>Actions</th>
+              <th>会话标识</th>
+              <th>情绪倾向</th>
+              <th>情绪得分</th>
+              <th>状态</th>
+              <th>操作</th>
             </tr>
           </thead>
           <tbody>
@@ -111,21 +111,21 @@ limitations under the License.
                 <router-link
                   class="session-link"
                   :to="{ name: 'conversations', query: { session: session.session_id, status: session.status } }"
-                  title="Open conversation history"
+                  title="查看完整对话历史"
                 >
                   {{ shortId(session.session_id) }}
                 </router-link>
               </td>
               <td>
                 <span class="sentiment-badge" :class="session.sentiment_label">
-                  {{ session.sentiment_label }}
+                  {{ session.sentiment_label === 'negative' ? '负面消极' : session.sentiment_label === 'positive' ? '正面积极' : '中性平和' }}
                 </span>
               </td>
-              <td>{{ session.sentiment_score !== null ? session.sentiment_score.toFixed(2) : 'N/A' }}</td>
+              <td>{{ session.sentiment_score !== null ? session.sentiment_score.toFixed(2) : '无' }}</td>
               <td><span class="status-text">{{ session.status }}</span></td>
               <td>
                 <button class="view-details-btn" @click="showSessionDetails(session.session_id)">
-                  View Details
+                  查看明细
                 </button>
               </td>
             </tr>
@@ -137,23 +137,23 @@ limitations under the License.
       <div v-if="selectedSession" class="session-details-modal" @click.self="selectedSession = null">
         <div class="modal-content">
           <div class="modal-header">
-            <h3>Session Sentiment Breakdown</h3>
+            <h3>会话消息情绪逐句分析</h3>
             <button class="close-btn" @click="selectedSession = null">&times;</button>
           </div>
           <div class="modal-body">
             <div class="session-overall">
-              <span class="overall-label">Overall:</span>
+              <span class="overall-label">整体情绪：</span>
               <span class="sentiment-badge" :class="selectedSession.overall_sentiment.label || 'neutral'">
-                {{ selectedSession.overall_sentiment.label || 'N/A' }}
+                {{ selectedSession.overall_sentiment.label === 'negative' ? '负面消极' : selectedSession.overall_sentiment.label === 'positive' ? '正面积极' : '中性平和' }}
               </span>
               <span v-if="selectedSession.overall_sentiment.score !== null" class="overall-score">
                 ({{ selectedSession.overall_sentiment.score.toFixed(2) }})
               </span>
             </div>
 
-            <div v-if="detailLoading" class="loading-state">Loading messages...</div>
+            <div v-if="detailLoading" class="loading-state">正在加载消息…</div>
             <div v-else-if="!selectedSession.messages?.length" class="no-data small">
-              No analyzed customer messages in this session
+              该会话中暂无已分析的客户消息
             </div>
             <div v-else class="message-list">
               <div
@@ -164,14 +164,14 @@ limitations under the License.
               >
                 <div class="message-header">
                   <span class="sentiment-badge" :class="msg.sentiment_label">
-                    {{ msg.sentiment_label }}
+                    {{ msg.sentiment_label === 'negative' ? '负面' : msg.sentiment_label === 'positive' ? '正面' : '中性' }}
                   </span>
                   <span class="message-score">
                     {{ msg.sentiment_score !== null ? msg.sentiment_score.toFixed(2) : '' }}
                   </span>
                   <span class="message-date">{{ formatDate(msg.created_at) }}</span>
                 </div>
-                <p class="message-text">{{ msg.message || 'No content' }}</p>
+                <p class="message-text">{{ msg.message || '无文字内容' }}</p>
               </div>
             </div>
           </div>
@@ -258,7 +258,7 @@ const distributionSeries = computed(() => {
 
 const distributionOptions = computed(() => ({
   chart: { type: 'donut', toolbar: { show: false } },
-  labels: ['Positive', 'Neutral', 'Negative'],
+  labels: ['积极正面', '中性平和', '消极负面'],
   colors: [COLOR_POSITIVE, COLOR_NEUTRAL, COLOR_NEGATIVE],
   legend: { position: 'bottom' },
   dataLabels: { enabled: true, formatter: (val: number) => `${val.toFixed(0)}%` },
@@ -268,7 +268,7 @@ const distributionOptions = computed(() => ({
       donut: {
         labels: {
           show: true,
-          total: { show: true, label: 'Total', formatter: () => `${sentimentData.value?.total_analyzed || 0}` }
+          total: { show: true, label: '总计', formatter: () => `${sentimentData.value?.total_analyzed || 0}` }
         }
       }
     }
@@ -279,7 +279,7 @@ const trendSeries = computed(() => {
   const t = sentimentData.value?.trend
   if (!t?.data) return []
   return [{
-    name: 'Avg Sentiment',
+    name: '平均情绪得分',
     data: t.data.map((value, index) => ({
       x: new Date(t.labels[index]).getTime(),
       y: value
@@ -306,7 +306,7 @@ const trendOptions = computed(() => ({
   annotations: {
     yaxis: [{ y: 0, borderColor: '#9ca3af', strokeDashArray: 4 }]
   },
-  tooltip: { x: { format: 'MMM dd, yyyy' } }
+  tooltip: { x: { format: 'yyyy年MM月dd日' } }
 }))
 
 const percentOf = (count: number): string => {
@@ -316,9 +316,9 @@ const percentOf = (count: number): string => {
 }
 
 const scoreLabel = (score: number): string => {
-  if (score > 0.1) return 'Positive'
-  if (score < -0.1) return 'Negative'
-  return 'Neutral'
+  if (score > 0.1) return '倾向积极正面'
+  if (score < -0.1) return '倾向消极负面'
+  return '倾向中性平和'
 }
 
 const shortId = (id: string): string => id.slice(0, 8)

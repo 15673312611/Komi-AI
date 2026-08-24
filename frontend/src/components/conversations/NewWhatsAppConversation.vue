@@ -153,13 +153,13 @@ const send = async () => {
       customer_id: pickedPerson.value?.id,
       customer_name: name.value.trim() || undefined,
     })
-    toast.success('Message sent', {
-      description: 'The conversation is in your inbox; the AI answers when they reply.',
+    toast.success('消息发送成功', {
+      description: '会话已添加到您的会话列表中，客户回复时 AI 将自动应答。',
     })
     emit('started', result.session_id)
   } catch (error: any) {
-    toast.error('Could not start the conversation', {
-      description: error?.response?.data?.detail || 'Please try again',
+    toast.error('无法发起 WhatsApp 对话', {
+      description: error?.response?.data?.detail || '请稍后重试',
       closeButton: true,
     })
   } finally {
@@ -171,15 +171,14 @@ onBeforeUnmount(() => clearTimeout(searchTimer))
 </script>
 
 <template>
-  <BaseModal title="New WhatsApp conversation" width="560px" @close="emit('close')">
+  <BaseModal title="发起 WhatsApp 新会话" width="560px" @close="emit('close')">
     <!-- Meta's opt-in policy is the operator's obligation; state it, don't police it -->
     <p class="nwc-intro">
-      Only message people who agreed to hear from you on WhatsApp — Meta blocks businesses
-      whose messages get reported.
+      请确保仅向已同意在 WhatsApp 接收您消息的客户发送沟通信息，合规发送有助于维护账号良好信誉。
     </p>
 
     <label v-if="accounts.length > 1" class="nwc-field">
-      <span class="nwc-label">From number</span>
+      <span class="nwc-label">发送方号码</span>
       <select v-model="accountId" class="nwc-input">
         <option v-for="account in accounts" :key="account.id" :value="account.id">
           {{ account.display_name || account.external_account_id }}
@@ -188,29 +187,22 @@ onBeforeUnmount(() => clearTimeout(searchTimer))
     </label>
 
     <div class="nwc-field">
-      <span class="nwc-label">To</span>
+      <span class="nwc-label">接收客户手机号</span>
       <input
         v-model="to"
         class="nwc-input"
-        placeholder="+91 12345 67890"
+        placeholder="+86 13800138000"
         autocomplete="off"
-        :aria-label="peopleAvailable ? 'Phone number or search People' : 'Phone number'"
+        :aria-label="peopleAvailable ? '输入手机号或搜索联系人' : '手机号码'"
       />
       <span v-if="pickedPerson" class="nwc-picked">
-        Sending to <strong>{{ pickedPerson.label }}</strong>
-        <button type="button" class="nwc-unpick" aria-label="Not this person" @click="unpick">×</button>
+        正在发送给 <strong>{{ pickedPerson.label }}</strong>
+        <button type="button" class="nwc-unpick" aria-label="取消选择此人" @click="unpick">×</button>
       </span>
       <span v-else-if="to && !phoneLooksValid" class="nwc-hint">
-        International format with country code, e.g. +91…
+        需包含国际国家区号格式，例如 +86…
       </span>
-      <!-- A plain list of buttons, deliberately NOT role="listbox". The
-           children are real buttons: Tab reaches each one and Enter picks it.
-           Claiming listbox told screen readers to expect role="option"
-           children and announced "listbox, 0 options" over working controls —
-           worse than the honest markup, and the full combobox pattern
-           (aria-expanded/controls/activedescendant plus arrow-key handling)
-           is more than a field that degrades to a plain phone input needs. -->
-      <ul v-if="suggestions.length" class="nwc-suggestions" aria-label="Matching people">
+      <ul v-if="suggestions.length" class="nwc-suggestions" aria-label="匹配到的联系人">
         <li v-for="person in suggestions" :key="person.id">
           <button type="button" class="nwc-suggestion" @click="pick(person)">
             <span class="nwc-suggestion-name">{{ person.name || person.email }}</span>
@@ -221,25 +213,25 @@ onBeforeUnmount(() => clearTimeout(searchTimer))
     </div>
 
     <label v-if="!pickedPerson" class="nwc-field">
-      <span class="nwc-label">Name (optional)</span>
-      <input v-model="name" class="nwc-input" placeholder="Priya" autocomplete="off" />
-      <span class="nwc-hint">Used only if this number isn't a person in People yet.</span>
+      <span class="nwc-label">客户姓名 (可选)</span>
+      <input v-model="name" class="nwc-input" placeholder="例如：李先生 / 张女士" autocomplete="off" />
+      <span class="nwc-hint">若该号码尚未录入团队联系人，将自动建立记录。</span>
     </label>
 
     <div class="nwc-field">
-      <span class="nwc-label">Template</span>
+      <span class="nwc-label">消息模板</span>
       <!-- Key: switching the sending number reloads that account's templates -->
       <WhatsAppTemplateSelect
         :key="accountId"
         v-model:selection="selection"
         :account-id="accountId"
         :categories="OUTBOUND_CATEGORIES"
-        empty-hint="Outbound conversations need an approved Utility or Authentication template. Create one from the WhatsApp card in Settings → Integrations."
+        empty-hint="主动发起会话需要已审核通过的实用 (Utility) 或身份验证 (Authentication) 模板。可在 系统设置 → 渠道集成 中配置。"
       />
     </div>
 
     <template #actions>
-      <button class="modal-btn" @click="emit('close')">Cancel</button>
+      <button class="modal-btn" @click="emit('close')">取消</button>
       <button
         class="modal-btn modal-btn-primary"
         :disabled="!canSend"
@@ -247,7 +239,7 @@ onBeforeUnmount(() => clearTimeout(searchTimer))
         @click="send"
       >
         <font-awesome-icon v-if="sending" icon="fa-solid fa-spinner" spin />
-        {{ sending ? 'Sending…' : 'Send and open conversation' }}
+        {{ sending ? '正在发送…' : '发送并打开会话' }}
       </button>
     </template>
   </BaseModal>

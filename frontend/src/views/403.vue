@@ -27,10 +27,10 @@ const landingRoute = resolveLandingRoute()
 <template>
   <DashboardLayout>
     <div class="unauthorized">
-      <h1>Access Denied</h1>
-      <p>You don't have permission to access this page.</p>
+      <h1>访问受限 (403)</h1>
+      <p>抱歉，您当前的角色账号没有权限访问该页面或功能。</p>
       <router-link :to="landingRoute" class="back-link">
-        Go to a page you can open
+        返回您的主页
       </router-link>
     </div>
   </DashboardLayout>

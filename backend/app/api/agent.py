@@ -91,8 +91,10 @@ async def save_file(file: UploadFile, organization_id: UUID) -> str:
     if size > MAX_FILE_SIZE:
         raise HTTPException(
             status_code=400,
-            detail=f"File size exceeds maximum limit of {
-                MAX_FILE_SIZE // 1024 // 1024}MB"
+            detail=(
+                f"File size exceeds maximum limit of "
+                f"{MAX_FILE_SIZE // 1024 // 1024}MB"
+            )
         )
 
     # Validate image type

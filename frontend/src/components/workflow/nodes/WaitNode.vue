@@ -43,12 +43,12 @@ defineProps<{
       </div>
       
       <div v-if="data.config?.duration" class="node-preview">
-        <div class="preview-label">Duration:</div>
-        <div class="preview-content">{{ data.config.duration }} {{ data.config.unit || 'seconds' }}</div>
+        <div class="preview-label">等待时长：</div>
+        <div class="preview-content">{{ data.config.duration }} {{ data.config.unit || '秒' }}</div>
       </div>
       
       <div v-if="data.config?.waitType" class="node-preview">
-        <div class="preview-label">Wait Type:</div>
+        <div class="preview-label">等待类型：</div>
         <div class="preview-content">{{ data.config.waitType }}</div>
       </div>
     </div>

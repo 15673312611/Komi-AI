@@ -1,0 +1,2262 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ChatterMate AI · 多渠道跨境电商智能客服工作台 (旗舰尊享版)</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome 6 Pro Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <!-- Google Fonts: Plus Jakarta Sans & JetBrains Mono -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#ecfdf5',
+                            100: '#d1fae5',
+                            300: '#6ee7b7',
+                            400: '#34d399',
+                            500: '#10b981', // 核心翡翠绿
+                            600: '#059669',
+                            glow: '#00F29D'
+                        },
+                        obsidian: {
+                            950: '#080B11', // 最底层极夜黑
+                            900: '#0C101A', // 导航 Rail & 深色面板
+                            850: '#0F1523', // 列表栏底色
+                            800: '#131B2E', // 卡片基底
+                            750: '#18223B', // 卡片高亮悬停
+                            700: '#1E2B4A', // 边框高光
+                            border: 'rgba(255, 255, 255, 0.06)',
+                            borderLight: 'rgba(255, 255, 255, 0.1)',
+                            borderEmerald: 'rgba(16, 185, 129, 0.35)'
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['"Plus Jakarta Sans"', 'system-ui', '-apple-system', 'sans-serif'],
+                        mono: ['"JetBrains Mono"', 'monospace']
+                    },
+                    boxShadow: {
+                        'crystal': '0 4px 20px -2px rgba(0, 0, 0, 0.5), inset 0 1px 0 0 rgba(255, 255, 255, 0.08)',
+                        'crystal-hover': '0 8px 28px -4px rgba(0, 0, 0, 0.6), inset 0 1px 0 0 rgba(255, 255, 255, 0.14)',
+                        'glow-emerald': '0 0 16px -2px rgba(16, 185, 129, 0.35)',
+                        'glow-amber': '0 0 16px -2px rgba(245, 158, 11, 0.3)',
+                        'glow-blue': '0 0 16px -2px rgba(59, 130, 246, 0.35)',
+                        'floating': '0 20px 40px -15px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 255, 255, 0.08)'
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* 极致细腻丝滑滚动条 */
+        * {
+            scrollbar-width: thin;
+            scrollbar-color: rgba(255, 255, 255, 0.1) transparent;
+        }
+        *::-webkit-scrollbar {
+            width: 4px;
+            height: 4px;
+        }
+        *::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        *::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.12);
+            border-radius: 9999px;
+        }
+        *::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.25);
+        }
+        
+        /* 晶体拟态玻璃面板 (Crystal Glass) - 带顶部 1px 物理高光微边 */
+        .crystal-panel {
+            background: rgba(15, 21, 35, 0.82);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.07);
+            border-top: 1px solid rgba(255, 255, 255, 0.12);
+        }
+
+        /* 晶体卡片与微交互 */
+        .crystal-card {
+            background: linear-gradient(180deg, rgba(20, 27, 46, 0.75) 0%, rgba(16, 22, 38, 0.85) 100%);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            transition: all 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .crystal-card:hover {
+            background: linear-gradient(180deg, rgba(26, 36, 61, 0.85) 0%, rgba(20, 28, 48, 0.95) 100%);
+            border-color: rgba(255, 255, 255, 0.12);
+            border-top: 1px solid rgba(255, 255, 255, 0.2);
+            transform: translateY(-1px);
+        }
+        .crystal-card-active {
+            background: linear-gradient(180deg, rgba(24, 34, 58, 0.95) 0%, rgba(18, 25, 44, 0.95) 100%);
+            border: 1px solid rgba(16, 185, 129, 0.4);
+            border-top: 1px solid rgba(16, 185, 129, 0.6);
+            box-shadow: 0 4px 20px -2px rgba(16, 185, 129, 0.15);
+        }
+
+        /* AI 智能解答卡片 - 带有流光顶边 */
+        .ai-crystal-bubble {
+            background: linear-gradient(135deg, rgba(16, 185, 129, 0.09) 0%, rgba(6, 78, 59, 0.15) 100%);
+            border: 1px solid rgba(16, 185, 129, 0.25);
+            border-top: 1px solid rgba(52, 211, 153, 0.45);
+            box-shadow: 0 4px 20px -4px rgba(16, 185, 129, 0.12);
+        }
+
+        /* 内部团队便签 - 优雅琥珀色磨砂 */
+        .note-crystal-bubble {
+            background: linear-gradient(135deg, rgba(245, 158, 11, 0.08) 0%, rgba(217, 119, 6, 0.04) 100%);
+            border: 1px solid rgba(245, 158, 11, 0.25);
+            border-top: 1px solid rgba(251, 191, 36, 0.45);
+        }
+
+        /* 沉浸式高级聊天画布 - 极其淡雅的微深空纵深 */
+        .chat-space-bg {
+            background-color: #080B11;
+            background-image: 
+                radial-gradient(at 50% 0%, rgba(16, 185, 129, 0.03) 0px, transparent 60%),
+                radial-gradient(at 100% 100%, rgba(59, 130, 246, 0.02) 0px, transparent 50%);
+        }
+
+        /* 平缓自然的呼吸动效 */
+        @keyframes pulse-subtle {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.7; transform: scale(1.04); }
+        }
+        .pulse-subtle {
+            animation: pulse-subtle 3s infinite ease-in-out;
+        }
+
+        /* 状态胶囊交互 */
+        .grid-pill {
+            transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .grid-pill.active {
+            background: rgba(16, 185, 129, 0.15);
+            border-color: rgba(16, 185, 129, 0.45);
+            border-top-color: rgba(52, 211, 153, 0.7);
+            color: #34d399;
+            box-shadow: 0 0 14px -2px rgba(16, 185, 129, 0.25);
+        }
+        .grid-pill.active-amber {
+            background: rgba(245, 158, 11, 0.15);
+            border-color: rgba(245, 158, 11, 0.45);
+            border-top-color: rgba(251, 191, 36, 0.7);
+            color: #fbbf24;
+            box-shadow: 0 0 14px -2px rgba(245, 158, 11, 0.25);
+        }
+        .grid-pill.active-blue {
+            background: rgba(59, 130, 246, 0.15);
+            border-color: rgba(59, 130, 246, 0.45);
+            border-top-color: rgba(96, 165, 250, 0.7);
+            color: #60a5fa;
+            box-shadow: 0 0 14px -2px rgba(59, 130, 246, 0.25);
+        }
+    </style>
+</head>
+<body class="bg-obsidian-950 text-slate-100 antialiased h-screen w-screen overflow-hidden flex select-none font-sans">
+
+    <!-- ========================================================================= -->
+    <!-- 0. 全局极窄导航栏 (App Rail - 64px) · 高定金属质感 -->
+    <!-- ========================================================================= -->
+    <aside class="w-16 bg-obsidian-900 border-r border-obsidian-border flex flex-col items-center py-4 justify-between shrink-0 z-30 shadow-2xl">
+        <!-- Logo 与核心模块入口 -->
+        <div class="flex flex-col items-center gap-6">
+            <!-- Brand Logo (带有翡翠宝石折光) -->
+            <div class="relative group cursor-pointer" title="ChatterMate AI 跨境电商智能客服">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-400 via-emerald-600 to-teal-800 flex items-center justify-center text-white font-black text-lg shadow-glow-emerald border border-emerald-300/30 transition-transform group-hover:scale-105">
+                    <i class="fa-solid fa-bolt text-sm"></i>
+                </div>
+                <div class="absolute -bottom-1 -right-1 w-3 h-3 bg-emerald-400 rounded-full border-2 border-obsidian-900 shadow-glow-emerald"></div>
+            </div>
+
+            <!-- 主导航菜单 -->
+            <nav class="flex flex-col items-center gap-2">
+                <!-- 会话中心 (Active) -->
+                <button class="relative w-10 h-10 rounded-xl bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 border-t-emerald-400/50 flex items-center justify-center transition-all group shadow-glow-emerald" title="会话中心 (Ctrl+1)">
+                    <i class="fa-solid fa-message text-base"></i>
+                    <!-- 左侧激活发光指示条 -->
+                    <span class="absolute -left-4 w-1.5 h-6 bg-emerald-400 rounded-r-full shadow-glow-emerald"></span>
+                    <!-- 未读角标 -->
+                    <span class="absolute -top-1 -right-1 px-1.5 py-0.2 bg-rose-500 text-white font-bold text-[10px] rounded-full border-2 border-obsidian-900 pulse-subtle">12</span>
+                </button>
+
+                <!-- AI Agent 机器人配置 -->
+                <button onclick="showToast('正在打开 AI Agent 知识库与工作流编排中心...', 'info')" class="w-10 h-10 rounded-xl text-slate-400 hover:text-slate-100 hover:bg-white/5 flex items-center justify-center transition-all group" title="AI Agent 知识库与工作流">
+                    <i class="fa-solid fa-robot text-base group-hover:text-emerald-400 transition-colors"></i>
+                </button>
+
+                <!-- Shopify / Amazon / TikTok 电商订单 -->
+                <button onclick="showToast('正在同步 Shopify / Amazon / TikTok 全渠道订单...', 'info')" class="w-10 h-10 rounded-xl text-slate-400 hover:text-slate-100 hover:bg-white/5 flex items-center justify-center transition-all group" title="全渠道电商订单中心">
+                    <i class="fa-solid fa-bag-shopping text-base group-hover:text-emerald-400 transition-colors"></i>
+                </button>
+
+                <!-- 客户统一画像 (CDP) -->
+                <button onclick="showToast('正在打开全渠道客户 360° 画像看板...', 'info')" class="w-10 h-10 rounded-xl text-slate-400 hover:text-slate-100 hover:bg-white/5 flex items-center justify-center transition-all group" title="客户统一画像与标签">
+                    <i class="fa-solid fa-users text-base group-hover:text-emerald-400 transition-colors"></i>
+                </button>
+
+                <!-- 多渠道集成 (WhatsApp / Meta / Email) -->
+                <button onclick="showToast('全渠道集成正常: WhatsApp 🟢, Meta 🟢, Email 🟢', 'success')" class="w-10 h-10 rounded-xl text-slate-400 hover:text-slate-100 hover:bg-white/5 flex items-center justify-center transition-all group" title="多渠道集成中心">
+                    <i class="fa-solid fa-network-wired text-base group-hover:text-emerald-400 transition-colors"></i>
+                </button>
+
+                <!-- 实时服务看板 / 运营数据 -->
+                <button onclick="showToast('正在生成跨境客服 SLA 与 CSAT 满意度报表...', 'info')" class="w-10 h-10 rounded-xl text-slate-400 hover:text-slate-100 hover:bg-white/5 flex items-center justify-center transition-all group" title="数据分析 & 满意度报表">
+                    <i class="fa-solid fa-chart-line text-base group-hover:text-emerald-400 transition-colors"></i>
+                </button>
+
+                <!-- 知识库 & 快捷话术 -->
+                <button onclick="showQuickReplyModal()" class="w-10 h-10 rounded-xl text-slate-400 hover:text-slate-100 hover:bg-white/5 flex items-center justify-center transition-all group" title="知识库与快捷话术库">
+                    <i class="fa-solid fa-book-bookmark text-base group-hover:text-emerald-400 transition-colors"></i>
+                </button>
+            </nav>
+        </div>
+
+        <!-- 底部网络、设置与客服状态 -->
+        <div class="flex flex-col items-center gap-3">
+            <!-- 实时网络延迟 -->
+            <div class="w-8 h-8 rounded-lg bg-emerald-500/10 text-emerald-400 flex items-center justify-center text-xs border border-emerald-500/20" title="系统延迟: 18ms · WebSocket 实时双工已连接">
+                <i class="fa-solid fa-wifi"></i>
+            </div>
+
+            <!-- 系统设置 -->
+            <button onclick="showToast('已打开工作台全局配置面板', 'info')" class="w-10 h-10 rounded-xl text-slate-400 hover:text-slate-100 hover:bg-white/5 flex items-center justify-center transition-all" title="工作台全局设置">
+                <i class="fa-solid fa-gear text-base"></i>
+            </button>
+
+            <!-- 客服头像 & 状态切换 -->
+            <div class="relative cursor-pointer group" onclick="showToast('当前状态: Alex Chen (🟢 在线接单中)', 'success')">
+                <img src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&auto=format&fit=crop&q=80" alt="Avatar" class="w-9 h-9 rounded-xl object-cover border border-white/15 group-hover:border-emerald-500 transition-all shadow-md">
+                <span id="agentStatusDot" class="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-emerald-500 rounded-full border-2 border-obsidian-900 shadow-glow-emerald"></span>
+            </div>
+        </div>
+    </aside>
+
+    <!-- ========================================================================= -->
+    <!-- 1. 左栏：会话导航与列表 (Conversation List - 340px 完整宽度) -->
+    <!-- ========================================================================= -->
+    <section class="w-[340px] bg-obsidian-850 border-r border-obsidian-border flex flex-col shrink-0 relative z-20">
+        
+        <!-- 顶部标题与快速操作 -->
+        <div class="p-3.5 border-b border-obsidian-border flex items-center justify-between bg-obsidian-850/80">
+            <div class="flex items-center gap-2">
+                <h1 class="text-sm font-bold text-slate-100 tracking-tight flex items-center gap-2">
+                    <span>会话中心</span>
+                    <span class="px-2 py-0.5 text-[11px] font-bold bg-emerald-500/15 text-emerald-400 rounded-full border border-emerald-500/25">
+                        <span id="activeCountDisplay" class="font-mono">28</span> 待办
+                    </span>
+                </h1>
+            </div>
+            <div class="flex items-center gap-1">
+                <!-- 切换折叠收件箱分组视图 -->
+                <button onclick="toggleInboxFolderView()" id="btnToggleFolderView" class="w-7 h-7 rounded-lg text-slate-400 hover:text-emerald-400 hover:bg-white/5 flex items-center justify-center transition-colors" title="展开/收起 Intercom 风格大收件箱分组">
+                    <i class="fa-solid fa-layer-group text-xs"></i>
+                </button>
+                <button onclick="refreshConversations()" class="w-7 h-7 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-white/5 flex items-center justify-center transition-colors" title="刷新列表">
+                    <i class="fa-solid fa-arrow-rotate-right text-xs"></i>
+                </button>
+            </div>
+        </div>
+
+        <!-- 搜索框 & 店铺筛选器 -->
+        <div class="p-3 space-y-2 border-b border-obsidian-border bg-obsidian-900/60">
+            <!-- 搜索框 -->
+            <div class="relative">
+                <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
+                <input 
+                    id="conversationSearchInput"
+                    type="text" 
+                    placeholder="搜索客户姓名、邮箱、消息、订单号..." 
+                    oninput="filterConversations()"
+                    class="w-full bg-obsidian-950 text-xs text-slate-200 placeholder-slate-500 rounded-lg pl-8 pr-8 py-2 border border-obsidian-border focus:border-emerald-500/60 focus:outline-none focus:ring-1 focus:ring-emerald-500/30 transition-all shadow-inner"
+                >
+                <span class="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] text-slate-500 bg-white/5 px-1 py-0.5 rounded font-mono">⌘K</span>
+            </div>
+
+            <!-- 多店铺下拉选择器 -->
+            <div class="relative">
+                <button 
+                    id="storeDropdownBtn" 
+                    onclick="toggleStoreDropdown()" 
+                    class="w-full flex items-center justify-between px-2.5 py-1.5 bg-obsidian-950/80 hover:bg-white/[0.04] rounded-lg border border-obsidian-border text-xs text-slate-300 transition-colors shadow-sm"
+                >
+                    <div class="flex items-center gap-2 truncate">
+                        <span id="selectedStoreIcon" class="w-4 h-4 rounded flex items-center justify-center text-[10px] bg-emerald-500/20 text-emerald-400">
+                            <i class="fa-solid fa-store"></i>
+                        </span>
+                        <span id="selectedStoreName" class="font-medium truncate text-xs">全部跨境店铺 (All Stores)</span>
+                    </div>
+                    <i class="fa-solid fa-chevron-down text-[10px] text-slate-400"></i>
+                </button>
+
+                <!-- 店铺下拉菜单 -->
+                <div id="storeDropdownMenu" class="hidden absolute left-0 right-0 top-full mt-1 bg-obsidian-800 border border-obsidian-borderLight rounded-xl shadow-floating p-1.5 z-50 text-xs space-y-1">
+                    <div onclick="selectStore('all', '全部跨境店铺 (All Stores)', 'fa-store', 'emerald')" class="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-white/5 cursor-pointer text-slate-200">
+                        <span class="w-5 h-5 rounded bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-[10px]"><i class="fa-solid fa-store"></i></span>
+                        <span class="flex-1 font-medium">全部跨境店铺 (All Stores)</span>
+                        <span class="text-[10px] text-slate-500 font-mono">28</span>
+                    </div>
+                    <div onclick="selectStore('shopify_us', 'SHE-GLOW 女装美东站 (Shopify)', 'fa-bag-shopping', 'rose')" class="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-white/5 cursor-pointer text-slate-200">
+                        <span class="w-5 h-5 rounded bg-rose-500/20 text-rose-400 flex items-center justify-center text-[10px]"><i class="fa-brands fa-shopify"></i></span>
+                        <span class="flex-1 font-medium truncate">SHE-GLOW 女装美东站</span>
+                        <span class="text-[10px] text-rose-400 bg-rose-500/10 px-1 rounded font-medium">Shopify</span>
+                    </div>
+                    <div onclick="selectStore('amazon_uk', 'CYBER-TECH 数码旗舰 (Amazon UK)', 'fa-amazon', 'amber')" class="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-white/5 cursor-pointer text-slate-200">
+                        <span class="w-5 h-5 rounded bg-amber-500/20 text-amber-400 flex items-center justify-center text-[10px]"><i class="fa-brands fa-amazon"></i></span>
+                        <span class="flex-1 font-medium truncate">CYBER-TECH 旗舰店</span>
+                        <span class="text-[10px] text-amber-400 bg-amber-500/10 px-1 rounded font-medium">Amazon</span>
+                    </div>
+                    <div onclick="selectStore('tiktok_sea', 'AURA 美妆个护 (TikTok SEA)', 'fa-tiktok', 'cyan')" class="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-white/5 cursor-pointer text-slate-200">
+                        <span class="w-5 h-5 rounded bg-cyan-500/20 text-cyan-400 flex items-center justify-center text-[10px]"><i class="fa-brands fa-tiktok"></i></span>
+                        <span class="flex-1 font-medium truncate">AURA 美妆东南亚</span>
+                        <span class="text-[10px] text-cyan-400 bg-cyan-500/10 px-1 rounded font-medium">TikTok</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 零滚动紧凑自适应状态矩阵 (大厂 3+2 零横向溢出) -->
+        <div id="compactPillsContainer" class="p-2.5 border-b border-obsidian-border bg-obsidian-950/40 space-y-1.5">
+            <!-- 第一行：3个常用状态 (全部 · AI · 我的) -->
+            <div class="grid grid-cols-3 gap-1.5">
+                <button 
+                    onclick="setFilterTab('all')" 
+                    id="pill-all" 
+                    class="grid-pill active py-1.5 px-2 rounded-lg bg-obsidian-800 border border-obsidian-border text-slate-300 hover:text-white flex items-center justify-between text-xs font-semibold"
+                >
+                    <span class="flex items-center gap-1 truncate"><i class="fa-solid fa-inbox text-[11px]"></i> 全部</span>
+                    <span class="text-[10px] font-mono px-1 rounded bg-white/10 text-slate-200">28</span>
+                </button>
+
+                <button 
+                    onclick="setFilterTab('ai')" 
+                    id="pill-ai" 
+                    class="grid-pill py-1.5 px-2 rounded-lg bg-obsidian-800 border border-obsidian-border text-slate-400 hover:text-emerald-400 flex items-center justify-between text-xs font-semibold"
+                >
+                    <span class="flex items-center gap-1 truncate"><i class="fa-solid fa-robot text-[11px] text-emerald-400"></i> AI</span>
+                    <span class="text-[10px] font-mono px-1 rounded bg-emerald-500/15 text-emerald-400">14</span>
+                </button>
+
+                <button 
+                    onclick="setFilterTab('mine')" 
+                    id="pill-mine" 
+                    class="grid-pill py-1.5 px-2 rounded-lg bg-obsidian-800 border border-obsidian-border text-slate-400 hover:text-blue-400 flex items-center justify-between text-xs font-semibold"
+                >
+                    <span class="flex items-center gap-1 truncate"><i class="fa-solid fa-user-check text-[11px] text-blue-400"></i> 我的</span>
+                    <span class="text-[10px] font-mono px-1 rounded bg-blue-500/15 text-blue-400">6</span>
+                </button>
+            </div>
+
+            <!-- 第二行：2个关键工作流状态 (待人工接入 · 已关闭) -->
+            <div class="grid grid-cols-2 gap-1.5">
+                <button 
+                    onclick="setFilterTab('queue')" 
+                    id="pill-queue" 
+                    class="grid-pill py-1.5 px-2 rounded-lg bg-obsidian-800 border border-obsidian-border text-slate-400 hover:text-amber-400 flex items-center justify-between text-xs font-semibold"
+                >
+                    <span class="flex items-center gap-1.5 truncate">
+                        <span class="w-2 h-2 rounded-full bg-amber-400 pulse-subtle shrink-0 shadow-glow-amber"></span>
+                        <span class="truncate">⏳ 待人工接入</span>
+                    </span>
+                    <span class="text-[10px] font-mono font-bold px-1.5 rounded bg-amber-500/20 text-amber-300">5</span>
+                </button>
+
+                <button 
+                    onclick="setFilterTab('closed')" 
+                    id="pill-closed" 
+                    class="grid-pill py-1.5 px-2 rounded-lg bg-obsidian-800 border border-obsidian-border text-slate-400 hover:text-slate-200 flex items-center justify-between text-xs font-semibold"
+                >
+                    <span class="flex items-center gap-1.5 truncate">
+                        <i class="fa-solid fa-lock text-[10px] text-slate-500"></i>
+                        <span class="truncate">🔒 已解决关闭</span>
+                    </span>
+                    <span class="text-[10px] font-mono px-1 rounded bg-white/5 text-slate-400">3</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Intercom 风格全景视图折叠树面板 -->
+        <div id="inboxFolderDrawer" class="hidden p-2 border-b border-obsidian-border bg-obsidian-800/95 space-y-1 text-xs animate-in fade-in duration-200 shadow-lg">
+            <div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-2 py-1 flex items-center justify-between">
+                <span>收件箱视图 (Inbox Views)</span>
+                <span class="text-emerald-400">SLA 正常</span>
+            </div>
+            <div onclick="setFilterTab('all')" class="flex items-center justify-between p-2 rounded-lg hover:bg-white/5 cursor-pointer text-slate-200">
+                <span class="flex items-center gap-2"><i class="fa-solid fa-inbox text-emerald-400"></i> 全部实时会话</span>
+                <span class="font-mono text-slate-400 font-bold">28</span>
+            </div>
+            <div onclick="setFilterTab('ai')" class="flex items-center justify-between p-2 rounded-lg hover:bg-white/5 cursor-pointer text-slate-200">
+                <span class="flex items-center gap-2"><i class="fa-solid fa-robot text-emerald-400"></i> 🤖 AI 智能应答中</span>
+                <span class="font-mono text-emerald-400 font-bold">14</span>
+            </div>
+            <div onclick="setFilterTab('mine')" class="flex items-center justify-between p-2 rounded-lg hover:bg-white/5 cursor-pointer text-slate-200">
+                <span class="flex items-center gap-2"><i class="fa-solid fa-user-check text-blue-400"></i> 👤 分配给我的接待</span>
+                <span class="font-mono text-blue-400 font-bold">6</span>
+            </div>
+            <div onclick="setFilterTab('queue')" class="flex items-center justify-between p-2 rounded-lg hover:bg-white/5 cursor-pointer text-slate-200">
+                <span class="flex items-center gap-2"><i class="fa-solid fa-clock text-amber-400"></i> ⏳ 排队等待人工接入</span>
+                <span class="font-mono text-amber-400 font-bold pulse-subtle">5</span>
+            </div>
+            <div onclick="setFilterTab('closed')" class="flex items-center justify-between p-2 rounded-lg hover:bg-white/5 cursor-pointer text-slate-200">
+                <span class="flex items-center gap-2"><i class="fa-solid fa-circle-check text-slate-400"></i> 🔒 已解决/历史归档</span>
+                <span class="font-mono text-slate-500">3</span>
+            </div>
+        </div>
+
+        <!-- 会话卡片列表容器 -->
+        <div id="conversationListContainer" class="flex-1 overflow-y-auto divide-y divide-obsidian-border/40 p-2 space-y-1.5">
+            <!-- 动态卡片 -->
+        </div>
+
+        <!-- 列表底部状态 -->
+        <div class="p-2.5 border-t border-obsidian-border bg-obsidian-950/70 text-[11px] text-slate-400 flex items-center justify-between px-3">
+            <span class="flex items-center gap-1.5">
+                <span class="w-2 h-2 rounded-full bg-emerald-500 shadow-glow-emerald"></span>
+                <span>AI 自动接单引擎运行中</span>
+            </span>
+            <span class="text-slate-500 font-mono text-[10px]">0.6s 极速应答</span>
+        </div>
+    </section>
+
+    <!-- ========================================================================= -->
+    <!-- 2. 中栏：聊天流与多模式回复区 (Flex-1 大气主屏) -->
+    <!-- ========================================================================= -->
+    <main class="flex-1 flex flex-col bg-obsidian-950 relative overflow-hidden">
+        
+        <!-- 顶部工作流状态条 (Workflow Header) -->
+        <header class="h-16 px-4 bg-obsidian-850/90 border-b border-obsidian-border flex items-center justify-between shrink-0 crystal-panel z-10 shadow-sm">
+            <!-- 客户主信息与渠道 -->
+            <div class="flex items-center gap-3">
+                <div class="relative">
+                    <img id="headerCustomerAvatar" src="https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=120&auto=format&fit=crop&q=80" alt="Customer" class="w-10 h-10 rounded-xl object-cover border border-white/10 shadow-md">
+                    <span id="headerChannelBadge" class="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-emerald-500 text-white flex items-center justify-center text-[9px] shadow-sm">
+                        <i class="fa-brands fa-whatsapp"></i>
+                    </span>
+                </div>
+                <div>
+                    <div class="flex items-center gap-2">
+                        <h2 id="headerCustomerName" class="text-sm font-bold text-slate-100">Jessica Miller</h2>
+                        <span id="headerVipBadge" class="px-1.5 py-0.2 text-[10px] font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30 rounded flex items-center gap-1">
+                            <i class="fa-solid fa-gem text-[8px]"></i> 钻石 VIP
+                        </span>
+                        <span id="headerStoreBadge" class="px-1.5 py-0.2 text-[10px] font-medium bg-white/5 text-slate-300 border border-white/10 rounded">
+                            SHE-GLOW 美东站
+                        </span>
+                    </div>
+                    <div class="flex items-center gap-3 text-xs text-slate-400 mt-0.5">
+                        <span id="headerCustomerEmail" class="flex items-center gap-1 text-[11px]"><i class="fa-regular fa-envelope text-[10px]"></i> jessica.m@outlook.com</span>
+                        <span class="text-slate-600">·</span>
+                        <span id="headerCustomerTimezone" class="text-[11px] text-emerald-400 font-mono"><i class="fa-regular fa-clock text-[10px]"></i> 🇺🇸 纽约时间 14:28 PM</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 实时接待状态指示灯 + 快捷操作组 -->
+            <div class="flex items-center gap-2.5">
+                <!-- 实时状态胶囊 -->
+                <div id="headerStatusBadge" class="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-xs font-semibold shadow-glow-emerald">
+                    <span class="w-2 h-2 rounded-full bg-emerald-400 pulse-subtle"></span>
+                    <span id="headerStatusText">AI 处理中 (置信度 98%)</span>
+                </div>
+
+                <div class="h-5 w-px bg-white/10"></div>
+
+                <!-- 操作按钮组 -->
+                <div class="flex items-center gap-1.5">
+                    <button id="btnTakeover" onclick="handleTakeover()" class="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs flex items-center gap-1.5 shadow-glow-blue transition-all">
+                        <i class="fa-solid fa-user-check text-xs"></i>
+                        <span>人工接管</span>
+                    </button>
+
+                    <button id="btnHandoverAI" onclick="handleHandoverAI()" class="px-2.5 py-1.5 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-300 font-medium text-xs flex items-center gap-1.5 transition-all">
+                        <i class="fa-solid fa-robot text-xs"></i>
+                        <span>转回 AI</span>
+                    </button>
+
+                    <button onclick="showTransferModal()" class="px-2.5 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 text-xs flex items-center gap-1.5 transition-all" title="转交给售后/物流专员">
+                        <i class="fa-solid fa-arrow-right-arrow-left text-xs"></i>
+                        <span>转交</span>
+                    </button>
+
+                    <button onclick="handleResolveSession()" class="px-2.5 py-1.5 rounded-lg bg-white/5 hover:bg-emerald-500/20 hover:text-emerald-300 hover:border-emerald-500/30 border border-white/10 text-slate-300 text-xs flex items-center gap-1.5 transition-all" title="解决并关闭会话">
+                        <i class="fa-solid fa-check-double text-xs"></i>
+                        <span>解决</span>
+                    </button>
+
+                    <button onclick="toggleRightDrawer()" class="w-8 h-8 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 flex items-center justify-center transition-all ml-1" title="展开/收起右侧栏">
+                        <i id="rightDrawerIcon" class="fa-solid fa-table-columns text-xs"></i>
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <!-- WhatsApp 24 小时合规窗口倒计时提示条 -->
+        <div id="complianceBanner" class="bg-amber-500/10 border-b border-amber-500/20 px-4 py-1.5 flex items-center justify-between text-xs text-amber-300">
+            <div class="flex items-center gap-2">
+                <i class="fa-solid fa-triangle-exclamation text-amber-400"></i>
+                <span><strong>WhatsApp 24小时合规窗口：</strong> 距离会话窗口关闭还剩 <span class="font-mono font-bold text-amber-200">03:42:15</span>。超时后仅允许发送 Meta 官方 Approved 模板消息。</span>
+            </div>
+            <button onclick="showTemplateModal()" class="px-2.5 py-0.5 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 rounded text-amber-200 text-[11px] font-medium transition-colors flex items-center gap-1">
+                <i class="fa-solid fa-file-lines text-[10px]"></i> 选取官方模板
+            </button>
+        </div>
+
+        <!-- 消息展示流区域 (Chat Space Feed) -->
+        <div id="chatMessageFeed" class="flex-1 overflow-y-auto p-4 space-y-4 chat-space-bg">
+            <!-- 动态渲染 -->
+        </div>
+
+        <!-- AI Copilot 实时推荐回复胶囊条 -->
+        <div id="aiSuggestionBar" class="px-4 py-2 bg-obsidian-850 border-t border-obsidian-border flex items-center gap-2 overflow-x-auto text-xs shrink-0">
+            <div class="flex items-center gap-1.5 text-emerald-400 font-bold shrink-0 text-xs">
+                <i class="fa-solid fa-wand-magic-sparkles text-xs"></i>
+                <span>AI Copilot 推荐回复：</span>
+            </div>
+            <div id="aiSuggestionChips" class="flex items-center gap-2 overflow-x-auto scrollbar-none py-0.5">
+                <!-- 动态胶囊 -->
+            </div>
+        </div>
+
+        <!-- 底部输入与多模式回复区 (Dual-Tab Reply Area) -->
+        <footer class="bg-obsidian-850 border-t border-obsidian-border flex flex-col shrink-0">
+            <!-- Dual-Tab 模式切换条 -->
+            <div class="px-4 pt-2 flex items-center justify-between border-b border-obsidian-border/50">
+                <div class="flex items-center gap-2">
+                    <button 
+                        id="tabModeReply" 
+                        onclick="switchReplyMode('reply')" 
+                        class="px-3.5 py-1.5 rounded-t-lg font-bold text-xs flex items-center gap-1.5 text-emerald-400 bg-emerald-500/10 border-t-2 border-emerald-500 transition-all"
+                    >
+                        <i class="fa-solid fa-reply text-xs"></i>
+                        <span>💬 回复客户 (Reply)</span>
+                    </button>
+
+                    <button 
+                        id="tabModeNote" 
+                        onclick="switchReplyMode('note')" 
+                        class="px-3.5 py-1.5 rounded-t-lg font-semibold text-xs flex items-center gap-1.5 text-slate-400 hover:text-amber-300 hover:bg-amber-500/5 transition-all"
+                    >
+                        <i class="fa-solid fa-note-sticky text-xs"></i>
+                        <span>📝 内部团队便签 (Private Note)</span>
+                    </button>
+                </div>
+
+                <!-- AI 自动回复 Toggle -->
+                <div class="flex items-center gap-2 text-xs text-slate-400 pb-1">
+                    <span class="text-[11px] font-medium">🤖 AI 自动回复接管</span>
+                    <label class="relative inline-flex items-center cursor-pointer">
+                        <input id="aiToggleCheckbox" type="checkbox" checked onchange="toggleAiAutoReply(this)" class="sr-only peer">
+                        <div class="w-8 h-4 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-emerald-500"></div>
+                    </label>
+                </div>
+            </div>
+
+            <!-- 输入框主体 -->
+            <div id="replyBoxWrapper" class="p-3">
+                <div id="replyBoxBorder" class="bg-obsidian-950 rounded-xl border border-obsidian-borderLight focus-within:border-emerald-500/60 focus-within:ring-1 focus-within:ring-emerald-500/30 transition-all p-2.5 shadow-inner">
+                    <textarea 
+                        id="messageTextarea" 
+                        rows="3" 
+                        placeholder="输入回复内容... (按 Enter 发送，Shift+Enter 换行，输入 '/' 快捷调用话术，输入 '@' 提及团队成员)"
+                        onkeydown="handleTextareaKeydown(event)"
+                        class="w-full bg-transparent text-xs text-slate-100 placeholder-slate-500 resize-none focus:outline-none font-sans leading-relaxed"
+                    ></textarea>
+
+                    <!-- 工具栏 -->
+                    <div class="flex items-center justify-between pt-2 mt-1 border-t border-white/[0.06]">
+                        <div class="flex items-center gap-1 text-slate-400">
+                            <button onclick="triggerFileUpload()" class="w-7 h-7 rounded hover:bg-white/5 hover:text-slate-200 flex items-center justify-center transition-colors" title="添加图片/文件/商品附件">
+                                <i class="fa-solid fa-paperclip text-xs"></i>
+                            </button>
+                            <button onclick="showQuickReplyModal()" class="w-7 h-7 rounded hover:bg-white/5 hover:text-amber-400 flex items-center justify-center transition-colors" title="常用快捷话术库 (快捷键 /)">
+                                <i class="fa-solid fa-bolt text-xs text-amber-400"></i>
+                            </button>
+                            <button onclick="showAiPolishModal()" class="w-7 h-7 rounded hover:bg-white/5 hover:text-emerald-300 flex items-center justify-center transition-colors" title="AI 智能润色/多语言母语级翻译">
+                                <i class="fa-solid fa-wand-sparkles text-xs text-emerald-400"></i>
+                            </button>
+                            <button onclick="showProductPickerModal()" class="w-7 h-7 rounded hover:bg-white/5 hover:text-rose-400 flex items-center justify-center transition-colors" title="发送 Shopify 商品卡片">
+                                <i class="fa-brands fa-shopify text-xs text-rose-400"></i>
+                            </button>
+                            <button onclick="insertEmoji('😊')" class="w-7 h-7 rounded hover:bg-white/5 hover:text-slate-200 flex items-center justify-center transition-colors" title="插入表情">
+                                <i class="fa-regular fa-face-smile text-xs"></i>
+                            </button>
+                        </div>
+
+                        <!-- 发送按钮组合 -->
+                        <div class="flex items-center gap-1.5">
+                            <span class="text-[10px] text-slate-500 hidden sm:inline-block">Enter 发送</span>
+                            <div class="inline-flex rounded-lg shadow-sm">
+                                <button 
+                                    id="btnSendMessage" 
+                                    onclick="sendMessage()" 
+                                    class="px-4 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs rounded-l-lg flex items-center gap-1.5 shadow-glow-emerald transition-all"
+                                >
+                                    <i class="fa-solid fa-paper-plane text-xs"></i>
+                                    <span id="sendBtnLabel">发送</span>
+                                </button>
+                                <button onclick="toggleSendOptions()" class="px-2 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-slate-950 text-xs rounded-r-lg border-l border-emerald-700/50 transition-colors">
+                                    <i class="fa-solid fa-chevron-down text-[10px]"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </footer>
+    </main>
+
+    <!-- ========================================================================= -->
+    <!-- 3. 右栏：客户画像与电商上下文 (Customer Profile & E-commerce - 360px 完整豪华宽度) -->
+    <!-- ========================================================================= -->
+    <aside id="rightDrawer" class="w-[360px] bg-obsidian-850 border-l border-obsidian-border flex flex-col shrink-0 overflow-y-auto transition-all duration-300 relative z-20 shadow-2xl">
+        
+        <!-- 客户画像头部卡片 -->
+        <div class="p-4 border-b border-obsidian-border bg-gradient-to-b from-obsidian-800 to-obsidian-850">
+            <div class="flex items-start justify-between">
+                <div class="flex items-center gap-3">
+                    <img id="profileAvatar" src="https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=120&auto=format&fit=crop&q=80" alt="Avatar" class="w-12 h-12 rounded-2xl object-cover border-2 border-emerald-500/40 shadow-glow-emerald">
+                    <div>
+                        <div class="flex items-center gap-1.5">
+                            <h3 id="profileName" class="font-bold text-slate-100 text-sm">Jessica Miller</h3>
+                            <span class="text-sm">🇺🇸</span>
+                        </div>
+                        <p id="profileEmail" class="text-xs text-slate-400 mt-0.5 flex items-center gap-1 cursor-pointer hover:text-emerald-400" onclick="copyText('jessica.m@outlook.com', '邮箱已复制')">
+                            <span>jessica.m@outlook.com</span>
+                            <i class="fa-regular fa-copy text-[10px]"></i>
+                        </p>
+                    </div>
+                </div>
+                <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30">
+                    L5 钻冠会员
+                </span>
+            </div>
+
+            <!-- 电商关键指标概览 -->
+            <div class="grid grid-cols-3 gap-2 mt-4 p-2.5 rounded-xl bg-obsidian-950/80 border border-obsidian-border text-center shadow-inner">
+                <div>
+                    <div class="text-[10px] text-slate-400">历史总消费</div>
+                    <div id="profileLtv" class="text-xs font-bold text-emerald-400 font-mono mt-0.5">$1,842.50</div>
+                </div>
+                <div class="border-x border-white/5">
+                    <div class="text-[10px] text-slate-400">订单总数</div>
+                    <div id="profileOrderCount" class="text-xs font-bold text-slate-100 font-mono mt-0.5">8 笔</div>
+                </div>
+                <div>
+                    <div class="text-[10px] text-slate-400">满意度评价</div>
+                    <div class="text-xs font-bold text-amber-400 font-mono mt-0.5">5.0 ⭐</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 🏷️ 对话标签系统 -->
+        <div class="p-3.5 border-b border-obsidian-border">
+            <div class="flex items-center justify-between mb-2">
+                <span class="text-xs font-bold text-slate-300 flex items-center gap-1.5">
+                    <i class="fa-solid fa-tags text-emerald-400 text-[11px]"></i>
+                    <span>客户与对话标签</span>
+                </span>
+                <span class="text-[10px] text-slate-500">点击标签即可管理</span>
+            </div>
+
+            <!-- 动态标签容器 -->
+            <div id="tagContainer" class="flex flex-wrap gap-1.5 mb-2.5">
+                <!-- 动态渲染 -->
+            </div>
+
+            <!-- 快捷一键打标预设库 & 自定义添加 -->
+            <div class="space-y-2">
+                <div class="flex items-center gap-1">
+                    <input 
+                        id="newTagInput" 
+                        type="text" 
+                        placeholder="输入新标签按回车..." 
+                        onkeydown="handleTagInputKeydown(event)"
+                        class="flex-1 bg-obsidian-950 text-[11px] text-slate-200 placeholder-slate-500 rounded-lg px-2.5 py-1.5 border border-obsidian-border focus:outline-none focus:border-emerald-500/50"
+                    >
+                    <button onclick="addTagFromInput()" class="px-2.5 py-1.5 bg-white/5 hover:bg-white/10 text-slate-300 rounded-lg text-xs font-medium border border-obsidian-border">
+                        + 添加
+                    </button>
+                </div>
+                <div class="flex flex-wrap gap-1 text-[10px] text-slate-400">
+                    <span class="text-slate-500">常用:</span>
+                    <button onclick="addPresetTag('🔥 VIP客户', 'amber')" class="px-1.5 py-0.5 rounded bg-white/5 hover:bg-white/10 text-slate-300">+ VIP客户</button>
+                    <button onclick="addPresetTag('📦 物流催件', 'cyan')" class="px-1.5 py-0.5 rounded bg-white/5 hover:bg-white/10 text-slate-300">+ 物流催件</button>
+                    <button onclick="addPresetTag('💰 退款咨询', 'rose')" class="px-1.5 py-0.5 rounded bg-white/5 hover:bg-white/10 text-slate-300">+ 退款咨询</button>
+                    <button onclick="addPresetTag('👗 尺码偏小', 'purple')" class="px-1.5 py-0.5 rounded bg-white/5 hover:bg-white/10 text-slate-300">+ 尺码偏小</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 📦 Shopify / 多渠道电商订单面板 -->
+        <div class="p-3.5 border-b border-obsidian-border">
+            <div class="flex items-center justify-between mb-3">
+                <span class="text-xs font-bold text-slate-300 flex items-center gap-1.5">
+                    <i class="fa-brands fa-shopify text-emerald-400 text-sm"></i>
+                    <span>关联 Shopify 订单</span>
+                </span>
+                <span class="text-[11px] text-emerald-400 hover:underline cursor-pointer flex items-center gap-1" onclick="showToast('已加载该客户全部 8 笔 Shopify 历史订单', 'info')">
+                    <span>查看全部 8 笔</span>
+                    <i class="fa-solid fa-arrow-up-right-from-square text-[9px]"></i>
+                </span>
+            </div>
+
+            <!-- 当前最新关注订单卡片 -->
+            <div id="orderCardContainer" class="rounded-xl bg-obsidian-800 border border-obsidian-borderLight p-3 space-y-3 shadow-md">
+                <!-- 订单编号与状态 -->
+                <div class="flex items-center justify-between pb-2 border-b border-white/[0.06]">
+                    <div class="flex items-center gap-1.5">
+                        <span id="orderNumber" class="font-mono font-bold text-slate-100 text-xs">#US-2026-9812</span>
+                        <button onclick="copyText('US-2026-9812', '订单号已复制')" class="text-slate-400 hover:text-slate-200" title="复制订单号">
+                            <i class="fa-regular fa-copy text-[10px]"></i>
+                        </button>
+                    </div>
+                    <div class="flex items-center gap-1.5">
+                        <span id="orderPayBadge" class="px-1.5 py-0.2 rounded text-[10px] font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/20">已支付</span>
+                        <span id="orderFulfillBadge" class="px-1.5 py-0.2 rounded text-[10px] font-semibold bg-blue-500/15 text-blue-400 border border-blue-500/20">国际运输中</span>
+                    </div>
+                </div>
+
+                <!-- 订单商品清单 -->
+                <div id="orderProductsList" class="space-y-2">
+                    <!-- 动态渲染 -->
+                </div>
+
+                <!-- 物流单号与一键查询 -->
+                <div class="p-2 rounded-lg bg-obsidian-950 border border-obsidian-border text-xs space-y-1.5 shadow-inner">
+                    <div class="flex items-center justify-between text-[11px]">
+                        <span class="text-slate-400 flex items-center gap-1">
+                            <i class="fa-solid fa-truck-fast text-emerald-400"></i>
+                            <span id="carrierName">DHL Express</span>
+                        </span>
+                        <span class="text-emerald-400 font-mono text-[10px]">清关完成 · 预计明日送达</span>
+                    </div>
+                    <div class="flex items-center justify-between font-mono text-[11px] text-slate-200">
+                        <span id="trackingCode">DHL-883921094US</span>
+                        <div class="flex items-center gap-2">
+                            <button onclick="copyText('DHL-883921094US', '运单号已复制')" class="text-slate-400 hover:text-emerald-300 text-[10px]" title="复制单号">
+                                <i class="fa-regular fa-copy"></i>
+                            </button>
+                            <button onclick="showTrackingTimelineModal()" class="px-1.5 py-0.5 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 rounded text-[10px] font-sans font-medium">
+                                实时轨迹
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 快捷订单操作 -->
+                <div class="grid grid-cols-3 gap-1.5 pt-1">
+                    <button onclick="showRefundModal()" class="px-2 py-1.5 rounded bg-white/5 hover:bg-rose-500/20 hover:text-rose-300 text-[11px] text-slate-300 text-center font-medium border border-obsidian-border transition-colors">
+                        <i class="fa-solid fa-rotate-left text-[10px]"></i> 发起退款
+                    </button>
+                    <button onclick="showAddressModal()" class="px-2 py-1.5 rounded bg-white/5 hover:bg-blue-500/20 hover:text-blue-300 text-[11px] text-slate-300 text-center font-medium border border-obsidian-border transition-colors">
+                        <i class="fa-solid fa-location-dot text-[10px]"></i> 改派地址
+                    </button>
+                    <button onclick="resendOrderInvoice()" class="px-2 py-1.5 rounded bg-white/5 hover:bg-amber-500/20 hover:text-amber-300 text-[11px] text-slate-300 text-center font-medium border border-obsidian-border transition-colors">
+                        <i class="fa-regular fa-paper-plane text-[10px]"></i> 重发凭证
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 👤 团队协同与分配面板 -->
+        <div class="p-3.5 border-b border-obsidian-border">
+            <div class="flex items-center justify-between mb-2">
+                <span class="text-xs font-bold text-slate-300 flex items-center gap-1.5">
+                    <i class="fa-solid fa-user-group text-blue-400 text-[11px]"></i>
+                    <span>团队协同与工单指派</span>
+                </span>
+                <span class="text-[10px] text-emerald-400">● 客服在线</span>
+            </div>
+
+            <div class="space-y-2">
+                <div class="flex items-center justify-between p-2 rounded-lg bg-obsidian-800 border border-obsidian-border">
+                    <div class="flex items-center gap-2">
+                        <img id="assigneeAvatar" src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=80&auto=format&fit=crop&q=80" class="w-7 h-7 rounded-lg object-cover">
+                        <div>
+                            <div id="assigneeName" class="text-xs font-semibold text-slate-100">Alex Chen (我)</div>
+                            <div class="text-[10px] text-slate-400">高级跨境售后支持 · P1 处理中</div>
+                        </div>
+                    </div>
+                    <button onclick="showTransferModal()" class="px-2 py-1 bg-white/5 hover:bg-white/10 text-slate-300 text-[11px] rounded border border-obsidian-border">
+                        重新指派
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 📜 往期多渠道咨询历史 -->
+        <div class="p-3.5 flex-1">
+            <div class="flex items-center justify-between mb-3">
+                <span class="text-xs font-bold text-slate-300 flex items-center gap-1.5">
+                    <i class="fa-solid fa-clock-rotate-left text-purple-400 text-[11px]"></i>
+                    <span>往期多渠道咨询历史 (3)</span>
+                </span>
+            </div>
+
+            <div id="historyTimelineContainer" class="space-y-3 relative pl-3 border-l border-white/10 ml-2">
+                <!-- 动态渲染 -->
+            </div>
+        </div>
+    </aside>
+
+    <!-- ========================================================================= -->
+    <!-- 模态框 1: 物流实时全球轨迹弹窗 -->
+    <!-- ========================================================================= -->
+    <div id="trackingModal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
+        <div class="w-full max-w-lg bg-obsidian-800 border border-obsidian-borderLight rounded-2xl shadow-floating overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div class="p-4 border-b border-obsidian-border flex items-center justify-between bg-obsidian-850">
+                <div class="flex items-center gap-2">
+                    <span class="w-8 h-8 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-sm"><i class="fa-solid fa-plane-departure"></i></span>
+                    <div>
+                        <h3 class="text-sm font-bold text-slate-100">跨境物流实时流转轨迹</h3>
+                        <p class="text-[11px] text-slate-400">运单号: <span class="font-mono text-emerald-400">DHL-883921094US</span> · 专线航空次日达</p>
+                    </div>
+                </div>
+                <button onclick="closeModal('trackingModal')" class="w-7 h-7 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 flex items-center justify-center">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+            
+            <div class="p-5 space-y-4 max-h-[60vh] overflow-y-auto">
+                <div class="relative pl-6 space-y-6 border-l-2 border-emerald-500/40 ml-2 text-xs">
+                    <div class="relative">
+                        <span class="absolute -left-[31px] top-0.5 w-4 h-4 rounded-full bg-emerald-500 border-4 border-obsidian-800 pulse-subtle shadow-glow-emerald"></span>
+                        <div class="font-bold text-emerald-400 text-sm">快件到达目的地分拨中心 [美国 洛杉矶]</div>
+                        <p class="text-slate-300 mt-0.5">已完成海关免税清关放行，正在安排顺路派送员装车，预计今天 16:00 前派送完毕。</p>
+                        <span class="text-[10px] text-slate-500 font-mono">2026-08-24 09:15:22 (Local Time)</span>
+                    </div>
+
+                    <div class="relative">
+                        <span class="absolute -left-[31px] top-0.5 w-4 h-4 rounded-full bg-slate-600 border-4 border-obsidian-800"></span>
+                        <div class="font-semibold text-slate-200">洛杉矶国际机场 LAX 顺利入境清关</div>
+                        <p class="text-slate-400 mt-0.5">商业清关文件齐全，海关 Inspection PASSED。</p>
+                        <span class="text-[10px] text-slate-500 font-mono">2026-08-23 21:40:10</span>
+                    </div>
+
+                    <div class="relative">
+                        <span class="absolute -left-[31px] top-0.5 w-4 h-4 rounded-full bg-slate-600 border-4 border-obsidian-800"></span>
+                        <div class="font-semibold text-slate-200">国际专线航班起飞 [深圳宝安 SZX -> 洛杉矶 LAX]</div>
+                        <p class="text-slate-400 mt-0.5">货物搭载航班 CX8820 离港。</p>
+                        <span class="text-[10px] text-slate-500 font-mono">2026-08-22 14:00:00</span>
+                    </div>
+
+                    <div class="relative">
+                        <span class="absolute -left-[31px] top-0.5 w-4 h-4 rounded-full bg-slate-600 border-4 border-obsidian-800"></span>
+                        <div class="font-semibold text-slate-200">华南保税中心仓出库揽收完成</div>
+                        <p class="text-slate-400 mt-0.5">包裹完成称重打包质检并贴标。</p>
+                        <span class="text-[10px] text-slate-500 font-mono">2026-08-21 18:32:11</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="p-3 border-t border-obsidian-border bg-obsidian-850 flex items-center justify-between">
+                <button onclick="copyText('https://track.dhl.com/en?tracking=DHL-883921094US', '公开查询链接已复制')" class="text-xs text-emerald-400 hover:underline">
+                    <i class="fa-solid fa-link text-[10px]"></i> 复制客户专属追踪链接
+                </button>
+                <button onclick="insertTrackingToChat()" class="px-3.5 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded-lg text-xs shadow-glow-emerald">
+                    一键发送给客户
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 模态框 2: 常用快捷话术库 -->
+    <div id="quickReplyModal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
+        <div class="w-full max-w-xl bg-obsidian-800 border border-obsidian-borderLight rounded-2xl shadow-floating overflow-hidden">
+            <div class="p-4 border-b border-obsidian-border flex items-center justify-between bg-obsidian-850">
+                <div class="flex items-center gap-2">
+                    <span class="w-8 h-8 rounded-lg bg-amber-500/20 text-amber-400 flex items-center justify-center text-sm"><i class="fa-solid fa-bolt"></i></span>
+                    <h3 class="text-sm font-bold text-slate-100">跨境电商标准快捷话术库 (快捷键 /)</h3>
+                </div>
+                <button onclick="closeModal('quickReplyModal')" class="w-7 h-7 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 flex items-center justify-center">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+
+            <div class="p-3 border-b border-obsidian-border bg-obsidian-850/40 flex items-center gap-2">
+                <input 
+                    type="text" 
+                    id="quickReplySearch" 
+                    placeholder="输入关键词搜索话术 (如: 物流、退款、尺码、关税)..." 
+                    oninput="filterQuickReplies()"
+                    class="flex-1 bg-obsidian-950 text-xs text-slate-200 placeholder-slate-500 rounded-lg px-3 py-2 border border-obsidian-border focus:outline-none focus:border-amber-500/50"
+                >
+            </div>
+
+            <div id="quickReplyList" class="p-3 space-y-2 max-h-[50vh] overflow-y-auto">
+                <!-- 动态渲染 -->
+            </div>
+        </div>
+    </div>
+
+    <!-- 模态框 3: AI Copilot 智能改写与母语翻译 -->
+    <div id="aiPolishModal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
+        <div class="w-full max-w-lg bg-obsidian-800 border border-obsidian-borderLight rounded-2xl shadow-floating overflow-hidden">
+            <div class="p-4 border-b border-obsidian-border flex items-center justify-between bg-obsidian-850">
+                <div class="flex items-center gap-2">
+                    <span class="w-8 h-8 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-sm"><i class="fa-solid fa-wand-magic-sparkles"></i></span>
+                    <div>
+                        <h3 class="text-sm font-bold text-slate-100">AI Copilot 智能润色与母语翻译</h3>
+                        <p class="text-[11px] text-slate-400">基于 Google Gemini 跨境电商多模态语料引擎</p>
+                    </div>
+                </div>
+                <button onclick="closeModal('aiPolishModal')" class="w-7 h-7 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 flex items-center justify-center">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+
+            <div class="p-4 space-y-3 text-xs">
+                <div>
+                    <label class="block text-slate-400 mb-1">当前待处理草稿：</label>
+                    <textarea id="aiDraftInput" rows="2" class="w-full bg-obsidian-950 text-slate-200 rounded-lg p-2 border border-obsidian-border focus:outline-none" placeholder="输入你想表达的意思..."></textarea>
+                </div>
+
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+                    <button onclick="applyAiTransform('polite')" class="p-2 rounded-lg bg-white/5 hover:bg-emerald-500/20 hover:text-emerald-300 border border-obsidian-border text-center font-medium">
+                        ✨ 委婉专业礼貌
+                    </button>
+                    <button onclick="applyAiTransform('translate_en')" class="p-2 rounded-lg bg-white/5 hover:bg-blue-500/20 hover:text-blue-300 border border-obsidian-border text-center font-medium">
+                        🇺🇸 译为地道美语
+                    </button>
+                    <button onclick="applyAiTransform('apology')" class="p-2 rounded-lg bg-white/5 hover:bg-amber-500/20 hover:text-amber-300 border border-obsidian-border text-center font-medium">
+                        🙇‍♂️ 诚恳致歉挽单
+                    </button>
+                    <button onclick="applyAiTransform('promo')" class="p-2 rounded-lg bg-white/5 hover:bg-purple-500/20 hover:text-purple-300 border border-obsidian-border text-center font-medium">
+                        🎁 促单并送优惠券
+                    </button>
+                </div>
+
+                <div id="aiResultBox" class="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 space-y-2">
+                    <div class="flex items-center justify-between text-emerald-400 font-semibold text-[11px]">
+                        <span>AI 优化生成结果：</span>
+                        <span class="font-mono text-[10px]">耗时 0.4s</span>
+                    </div>
+                    <p id="aiResultText" class="text-slate-100 leading-relaxed">
+                        "Dear Jessica, thank you so much for your patience! We have coordinated directly with DHL priority express, and your package is scheduled for delivery today by 4 PM. Here is a 15% VIP discount code [VIPCARE15] for your next order as a courtesy!"
+                    </p>
+                </div>
+            </div>
+
+            <div class="p-3 border-t border-obsidian-border bg-obsidian-850 flex items-center justify-end gap-2">
+                <button onclick="closeModal('aiPolishModal')" class="px-3 py-1.5 text-slate-400 hover:text-slate-200 text-xs">取消</button>
+                <button onclick="applyAiResultToTextarea()" class="px-4 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded-lg text-xs shadow-glow-emerald">
+                    采纳并填入输入框
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 模态框 4: WhatsApp 模板消息 -->
+    <div id="templateModal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
+        <div class="w-full max-w-lg bg-obsidian-800 border border-obsidian-borderLight rounded-2xl shadow-floating overflow-hidden">
+            <div class="p-4 border-b border-obsidian-border flex items-center justify-between bg-obsidian-850">
+                <div class="flex items-center gap-2">
+                    <span class="w-8 h-8 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-sm"><i class="fa-brands fa-whatsapp"></i></span>
+                    <div>
+                        <h3 class="text-sm font-bold text-slate-100">Meta WhatsApp 官方报备模板 (24h 超时复联专用)</h3>
+                        <p class="text-[11px] text-slate-400">已通过 Meta 认证，可突破 24 小时对话窗口限制主动触达</p>
+                    </div>
+                </div>
+                <button onclick="closeModal('templateModal')" class="w-7 h-7 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 flex items-center justify-center">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+
+            <div class="p-4 space-y-3 text-xs">
+                <div onclick="selectWhatsAppTemplate(1)" class="p-3 rounded-xl bg-white/5 hover:bg-emerald-500/10 hover:border-emerald-500/30 border border-obsidian-border cursor-pointer transition-all">
+                    <div class="flex items-center justify-between font-bold text-slate-200 mb-1">
+                        <span>📦 订单物流关键节点更新 (order_shipping_update_v2)</span>
+                        <span class="px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 text-[10px]">Utility 类别</span>
+                    </div>
+                    <p class="text-slate-400 text-[11px] leading-relaxed">
+                        "Hi {{1}}, your order {{2}} has arrived at the local sorting hub in {{3}}. Click below to track live status."
+                    </p>
+                </div>
+
+                <div onclick="selectWhatsAppTemplate(2)" class="p-3 rounded-xl bg-white/5 hover:bg-emerald-500/10 hover:border-emerald-500/30 border border-obsidian-border cursor-pointer transition-all">
+                    <div class="flex items-center justify-between font-bold text-slate-200 mb-1">
+                        <span>💳 退款/售后处理进度确认 (aftersales_refund_notice)</span>
+                        <span class="px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-400 text-[10px]">Service 类别</span>
+                    </div>
+                    <p class="text-slate-400 text-[11px] leading-relaxed">
+                        "Hello {{1}}, our customer specialist {{2}} has approved your refund request for {{3}}. Funds will arrive in 1-3 business days."
+                    </p>
+                </div>
+            </div>
+
+            <div class="p-3 border-t border-obsidian-border bg-obsidian-850 flex items-center justify-end">
+                <button onclick="sendSelectedTemplate()" class="px-4 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded-lg text-xs shadow-glow-emerald">
+                    立即发送该模板消息
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 模态框 5: 会话团队转派 -->
+    <div id="transferModal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
+        <div class="w-full max-w-md bg-obsidian-800 border border-obsidian-borderLight rounded-2xl shadow-floating overflow-hidden">
+            <div class="p-4 border-b border-obsidian-border flex items-center justify-between bg-obsidian-850">
+                <h3 class="text-sm font-bold text-slate-100 flex items-center gap-2">
+                    <i class="fa-solid fa-arrow-right-arrow-left text-emerald-400"></i>
+                    <span>转交会话给团队成员/部门</span>
+                </h3>
+                <button onclick="closeModal('transferModal')" class="w-7 h-7 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 flex items-center justify-center">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+            <div class="p-4 space-y-3 text-xs">
+                <div>
+                    <label class="block text-slate-400 mb-1">选择目标客服或部门：</label>
+                    <select id="transferSelect" class="w-full bg-obsidian-950 text-slate-200 rounded-lg p-2 border border-obsidian-border">
+                        <option value="sarah">Sarah Jenkins (高级海外售后组 - 在线)</option>
+                        <option value="david">David Wu (跨境物流与关税专员 - 在线)</option>
+                        <option value="vip_team">VIP 钻石客户专属服务梯队</option>
+                        <option value="ai_agent">🤖 全自动 AI Agent (回归自动应答)</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-slate-400 mb-1">转交内部交接备注 (仅团队可见)：</label>
+                    <textarea id="transferNoteInput" rows="2" class="w-full bg-obsidian-950 text-slate-200 rounded-lg p-2 border border-obsidian-border" placeholder="如: 客户要求退货运费补贴，已口头承诺赠送 15% 优惠券..."></textarea>
+                </div>
+            </div>
+            <div class="p-3 border-t border-obsidian-border bg-obsidian-850 flex items-center justify-end gap-2">
+                <button onclick="closeModal('transferModal')" class="px-3 py-1.5 text-slate-400 text-xs">取消</button>
+                <button onclick="confirmTransfer()" class="px-4 py-1.5 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-lg text-xs shadow-glow-blue">
+                    确认转交
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 全局 Toast 提示容器 -->
+    <div id="toastContainer" class="fixed top-4 right-4 z-50 flex flex-col gap-2 pointer-events-none"></div>
+
+    <!-- ========================================================================= -->
+    <!-- 完整业务数据与交互脚本 (Vanilla JavaScript - 100% 丰富完整) -->
+    <!-- ========================================================================= -->
+    <script>
+        const CONVERSATIONS_DATA = [
+            {
+                id: "conv-1",
+                customerName: "Jessica Miller",
+                avatar: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=120&auto=format&fit=crop&q=80",
+                email: "jessica.m@outlook.com",
+                country: "🇺🇸 美国 (US)",
+                timezone: "🇺🇸 纽约时间 14:28 PM",
+                channel: "whatsapp",
+                channelName: "WhatsApp",
+                channelIcon: "fa-brands fa-whatsapp",
+                channelColor: "text-emerald-400 bg-emerald-500/20",
+                storeId: "shopify_us",
+                storeName: "SHE-GLOW 美东站",
+                storePlatform: "Shopify",
+                vipLevel: "钻石 VIP",
+                ltv: "$1,842.50",
+                orderCount: 8,
+                status: "ai",
+                statusText: "AI 处理中",
+                unreadCount: 2,
+                lastTime: "14:25",
+                lastMessage: "Can you confirm if DHL will deliver my dress before Friday evening?",
+                tags: [
+                    { name: "🔥 VIP大客户", color: "amber" },
+                    { name: "📦 物流催件", color: "cyan" },
+                    { name: "👗 晚礼服大促", color: "purple" }
+                ],
+                order: {
+                    number: "#US-2026-9812",
+                    date: "2026-08-21 16:20",
+                    total: "$149.00",
+                    payStatus: "已支付",
+                    fulfillStatus: "国际运输中",
+                    carrier: "DHL Express",
+                    tracking: "DHL-883921094US",
+                    products: [
+                        {
+                            title: "Silk Halter Evening Maxi Dress",
+                            sku: "DR-992-BLK-M",
+                            specs: "Black / M 码",
+                            price: "$129.00",
+                            qty: 1,
+                            image: "https://images.unsplash.com/photo-1595777457583-95e059d581b8?w=100&auto=format&fit=crop&q=80"
+                        },
+                        {
+                            title: "Pearl Embellished Evening Clutch",
+                            sku: "AC-102-WHT",
+                            specs: "Ivory Pearl / 均码",
+                            price: "$20.00",
+                            qty: 1,
+                            image: "https://images.unsplash.com/photo-1584917865442-de89df76afd3?w=100&auto=format&fit=crop&q=80"
+                        }
+                    ]
+                },
+                history: [
+                    { channel: "Instagram DM", date: "2026-07-12", title: "咨询尺码推荐表", outcome: "已推荐购买 M 码并成单" },
+                    { channel: "Email", date: "2026-05-18", title: "申请更改收件邮编", outcome: "客服 Sarah 2分钟内已同步 Shopify" }
+                ],
+                messages: [
+                    {
+                        type: "customer",
+                        time: "14:20",
+                        text: "Hi! I ordered the Silk Halter Evening Dress for my sister's wedding this Saturday. Can you confirm if DHL will deliver it before Friday evening?"
+                    },
+                    {
+                        type: "ai",
+                        time: "14:21",
+                        duration: "0.6s",
+                        intent: "物流时效查询与加急催促",
+                        source: "《北美专线时效保障规则 & DHL Express API》",
+                        text: "Hello Jessica! ✨ I checked your order #US-2026-9812. The package has cleared US Customs in Los Angeles LAX this morning and is already sorted at your local DHL hub. It is guaranteed to be delivered by Thursday, August 27 at 4:00 PM (1 day ahead of your sister's wedding)! 👗",
+                        card: "tracking"
+                    },
+                    {
+                        type: "note",
+                        author: "Alex Chen (售后主管)",
+                        time: "14:22",
+                        text: "内部备注：该客户是 L5 钻冠会员，年消费超 $1500。若出现任何物流异常，授权可直接赠送 $20 无门槛券补偿并电话跟进。"
+                    },
+                    {
+                        type: "customer",
+                        time: "14:25",
+                        text: "That is amazing news! Thank you so much for the super quick response! Does the dress have stretch around the bust area?"
+                    }
+                ],
+                aiSuggestions: [
+                    "👗 告知面料微弹（含 5% 氨纶）并附赠穿搭指南",
+                    "🎁 推荐搭配同系列珍珠耳坠并送 15% 优惠券",
+                    "📦 发送专属物流动态实时跟踪卡片"
+                ]
+            },
+            {
+                id: "conv-2",
+                customerName: "Liam Smith",
+                avatar: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=120&auto=format&fit=crop&q=80",
+                email: "liam.tech@gmail.com",
+                country: "🇬🇧 英国 (UK)",
+                timezone: "🇬🇧 伦敦时间 19:28 PM",
+                channel: "email",
+                channelName: "Email 邮件",
+                channelIcon: "fa-solid fa-envelope",
+                channelColor: "text-blue-400 bg-blue-500/20",
+                storeId: "amazon_uk",
+                storeName: "CYBER-TECH 旗舰店",
+                storePlatform: "Amazon",
+                vipLevel: "金牌会员",
+                ltv: "$840.00",
+                orderCount: 4,
+                status: "queue",
+                statusText: "排队待接入 (等待 3m)",
+                unreadCount: 1,
+                lastTime: "14:18",
+                lastMessage: "The ANC wireless headphone has a crack on the right hinge. Requesting refund.",
+                tags: [
+                    { name: "💰 退款申请", color: "rose" },
+                    { name: "🚨 售后破损", color: "rose" },
+                    { name: "🎧 3C数码", color: "blue" }
+                ],
+                order: {
+                    number: "#UK-90412",
+                    date: "2026-08-19",
+                    total: "$189.99",
+                    payStatus: "已支付",
+                    fulfillStatus: "已妥投",
+                    carrier: "Royal Mail",
+                    tracking: "RM-772183921GB",
+                    products: [
+                        {
+                            title: "CyberPulse ANC Noise-Canceling Headphones",
+                            sku: "CP-ANC-PRO",
+                            specs: "Matte Black",
+                            price: "$189.99",
+                            qty: 1,
+                            image: "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=100&auto=format&fit=crop&q=80"
+                        }
+                    ]
+                },
+                history: [
+                    { channel: "Amazon Message", date: "2026-04-10", title: "咨询固件升级", outcome: "已解决" }
+                ],
+                messages: [
+                    {
+                        type: "customer",
+                        time: "14:15",
+                        text: "Hello support, I just unpacked my CyberPulse ANC headphones and noticed a hairline crack near the right slider hinge. Attached is the photo. I want a replacement or refund."
+                    },
+                    {
+                        type: "attachment",
+                        author: "Liam Smith",
+                        time: "14:16",
+                        img: "https://images.unsplash.com/photo-1546435770-a3e426bf472b?w=400&auto=format&fit=crop&q=80",
+                        fileName: "damage_hinge_photo.jpg (2.4 MB)"
+                    },
+                    {
+                        type: "system",
+                        time: "14:17",
+                        text: "系统识别：客户触发【产品破损退换】质保流程。AI 已自动核实购买凭证与质保期有效，正等待人工客服一键审核退款申请。"
+                    }
+                ],
+                aiSuggestions: [
+                    "💳 极速一键免退货补发全新机",
+                    "💰 发起全额原路退款并致歉",
+                    "📦 发送预付退货运费标签 (Prepaid Label)"
+                ]
+            },
+            {
+                id: "conv-3",
+                customerName: "Elena Rostova",
+                avatar: "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=120&auto=format&fit=crop&q=80",
+                email: "elena.r@tiktok.com",
+                country: "🇸🇬 新加坡 (SG)",
+                timezone: "🇸🇬 新加坡时间 02:28 AM",
+                channel: "tiktok",
+                channelName: "TikTok Shop",
+                channelIcon: "fa-brands fa-tiktok",
+                channelColor: "text-cyan-400 bg-cyan-500/20",
+                storeId: "tiktok_sea",
+                storeName: "AURA 美妆东南亚",
+                storePlatform: "TikTok",
+                vipLevel: "新晋客户",
+                ltv: "$68.00",
+                orderCount: 1,
+                status: "mine",
+                statusText: "人工接管 · Alex",
+                unreadCount: 0,
+                lastTime: "13:50",
+                lastMessage: "Is this peptide glow serum safe for sensitive acne-prone skin?",
+                tags: [
+                    { name: "💄 美妆护肤", color: "pink" },
+                    { name: "💡 售前成分咨询", color: "emerald" }
+                ],
+                order: {
+                    number: "#TK-SEA-3391",
+                    date: "2026-08-24 13:40",
+                    total: "$45.00",
+                    payStatus: "已支付",
+                    fulfillStatus: "准备打包",
+                    carrier: "J&T Express SEA",
+                    tracking: "JT-99128472SG",
+                    products: [
+                        {
+                            title: "HydraGlow Peptide Recovery Serum 50ml",
+                            sku: "AG-SERUM-50",
+                            specs: "50ml 瓶装",
+                            price: "$45.00",
+                            qty: 1,
+                            image: "https://images.unsplash.com/photo-1620916566398-39f1143ab7be?w=100&auto=format&fit=crop&q=80"
+                        }
+                    ]
+                },
+                history: [],
+                messages: [
+                    {
+                        type: "customer",
+                        time: "13:45",
+                        text: "Hi! I just saw your live stream on TikTok! Is this peptide glow serum safe for sensitive acne-prone skin? Does it contain alcohol or artificial fragrances?"
+                    },
+                    {
+                        type: "agent",
+                        author: "Alex Chen (在线)",
+                        time: "13:48",
+                        text: "Hi Elena! 🌿 Yes, absolutely! Our HydraGlow Peptide Serum is 100% alcohol-free, fragrance-free, and non-comedogenic. It is dermatologically tested on sensitive skin with Centella Asiatica to soothe acne irritation."
+                    },
+                    {
+                        type: "customer",
+                        time: "13:50",
+                        text: "That is perfect! Can you send me the link for the 3-step bundle? I want to get the cleanser too!"
+                    }
+                ],
+                aiSuggestions: [
+                    "🛍️ 推送 3 件套美妆礼盒并附赠 $5 优惠券",
+                    "🧴 推荐搭配温和氨基酸洁面乳",
+                    "🚚 告知东南亚 TikTok 专线 48h 极速达"
+                ]
+            },
+            {
+                id: "conv-4",
+                customerName: "Maximilian Weber",
+                avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=120&auto=format&fit=crop&q=80",
+                email: "m.weber@berlin-design.de",
+                country: "🇩🇪 德国 (DE)",
+                timezone: "🇩🇪 柏林时间 20:28 PM",
+                channel: "telegram",
+                channelName: "Telegram",
+                channelIcon: "fa-brands fa-telegram",
+                channelColor: "text-sky-400 bg-sky-500/20",
+                storeId: "shopify_us",
+                storeName: "SHE-GLOW 独立站",
+                storePlatform: "Shopify",
+                vipLevel: "B2B 批发客户",
+                ltv: "$4,500.00",
+                orderCount: 12,
+                status: "mine",
+                statusText: "人工接管 · Sarah",
+                unreadCount: 0,
+                lastTime: "12:10",
+                lastMessage: "We want to place an order of 500 units for our boutique store in Munich.",
+                tags: [
+                    { name: "💎 B2B大额批发", color: "purple" },
+                    { name: "🇪🇺 欧洲关税VAT", color: "blue" }
+                ],
+                order: {
+                    number: "#B2B-EU-108",
+                    date: "2026-08-20",
+                    total: "$3,200.00",
+                    payStatus: "电汇已确认",
+                    fulfillStatus: "海外仓整托备货",
+                    carrier: "Kuehne+Nagel",
+                    tracking: "KN-99018471DE",
+                    products: [
+                        {
+                            title: "Oversized Cashmere Blend Coat",
+                            sku: "CT-CASH-OVR",
+                            specs: "Camel / L 码",
+                            price: "$320.00",
+                            qty: 10,
+                            image: "https://images.unsplash.com/photo-1539533018447-63fcce667883?w=100&auto=format&fit=crop&q=80"
+                        }
+                    ]
+                },
+                history: [],
+                messages: [
+                    {
+                        type: "customer",
+                        time: "12:05",
+                        text: "Good day. We want to place an order of 500 units for our boutique store in Munich. Can we get the EU VAT reverse-charge invoice and DDP customs terms?"
+                    },
+                    {
+                        type: "agent",
+                        author: "Sarah Jenkins",
+                        time: "12:08",
+                        text: "Guten Tag Maximilian! Absolutely. We support full EU DDP (Delivered Duty Paid) with valid VAT reverse-charge. I am generating the custom B2B quotation sheet for you right now."
+                    }
+                ],
+                aiSuggestions: [
+                    "📑 生成 PDF 格式 B2B 批发报价单 (含 DDP 德国关税)",
+                    "✉️ 发送海外仓看样样品申请流程",
+                    "👥 安排专属大客户经理 1对1 电话沟通"
+                ]
+            },
+            {
+                id: "conv-5",
+                customerName: "Chloe Dupont",
+                avatar: "https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=120&auto=format&fit=crop&q=80",
+                email: "chloe.dupont@paris.fr",
+                country: "🇫🇷 法国 (FR)",
+                timezone: "🇫🇷 巴黎时间 20:28 PM",
+                channel: "instagram",
+                channelName: "Instagram DM",
+                channelIcon: "fa-brands fa-instagram",
+                channelColor: "text-pink-400 bg-pink-500/20",
+                storeId: "shopify_us",
+                storeName: "SHE-GLOW 独立站",
+                storePlatform: "Shopify",
+                vipLevel: "普通客户",
+                ltv: "$120.00",
+                orderCount: 1,
+                status: "ai",
+                statusText: "AI 处理中",
+                unreadCount: 0,
+                lastTime: "11:40",
+                lastMessage: "Merci! Le code promo VIP a bien fonctionné.",
+                tags: [
+                    { name: "🎁 促销优惠", color: "amber" }
+                ],
+                order: {
+                    number: "#FR-2918",
+                    date: "2026-08-24 11:38",
+                    total: "$88.00",
+                    payStatus: "已支付",
+                    fulfillStatus: "已出库",
+                    carrier: "Colissimo FR",
+                    tracking: "CL-88192019FR",
+                    products: [
+                        {
+                            title: "Vintage Denim High-Rise Jacket",
+                            sku: "JK-DENIM-01",
+                            specs: "Light Wash / S 码",
+                            price: "$88.00",
+                            qty: 1,
+                            image: "https://images.unsplash.com/photo-1544441893-675973e31985?w=100&auto=format&fit=crop&q=80"
+                        }
+                    ]
+                },
+                history: [],
+                messages: [
+                    {
+                        type: "customer",
+                        time: "11:35",
+                        text: "Bonjour! Est-ce que le code SUMMER15 fonctionne pour la France?"
+                    },
+                    {
+                        type: "ai",
+                        time: "11:36",
+                        duration: "0.5s",
+                        intent: "优惠券多语言咨询",
+                        text: "Bonjour Chloé! 🌸 Oui, le code promo SUMMER15 est valable pour toute commande expédiée en France! Vous bénéficiez de -15% et de la livraison gratuite dès 60€ d'achat."
+                    },
+                    {
+                        type: "customer",
+                        time: "11:40",
+                        text: "Merci! Le code promo VIP a bien fonctionné."
+                    }
+                ],
+                aiSuggestions: [
+                    "🛍️ 推荐搭配法式复古牛仔短裙",
+                    "📦 发送 Colissimo 法国本土清关时效说明"
+                ]
+            },
+            {
+                id: "conv-6",
+                customerName: "David Tanaka",
+                avatar: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=120&auto=format&fit=crop&q=80",
+                email: "tanaka.d@tokyo.jp",
+                country: "🇯🇵 日本 (JP)",
+                timezone: "🇯🇵 东京时间 03:28 AM",
+                channel: "livechat",
+                channelName: "LiveChat 网页在线",
+                channelIcon: "fa-solid fa-comments",
+                channelColor: "text-teal-400 bg-teal-500/20",
+                storeId: "shopify_us",
+                storeName: "SHE-GLOW 独立站",
+                storePlatform: "Shopify",
+                vipLevel: "银牌会员",
+                ltv: "$320.00",
+                orderCount: 2,
+                status: "closed",
+                statusText: "已解决关闭",
+                unreadCount: 0,
+                lastTime: "昨天",
+                lastMessage: "ありがとうございます！注文が完了しました。",
+                tags: [
+                    { name: "🔒 咨询已完结", color: "slate" }
+                ],
+                order: {
+                    number: "#JP-10928",
+                    date: "2026-08-23",
+                    total: "$158.00",
+                    payStatus: "已支付",
+                    fulfillStatus: "已签收",
+                    carrier: "Sagawa Express",
+                    tracking: "SG-99482109JP",
+                    products: [
+                        {
+                            title: "Minimalist Linen Long Cardigan",
+                            sku: "CD-LIN-BEI",
+                            specs: "Beige / M 码",
+                            price: "$158.00",
+                            qty: 1,
+                            image: "https://images.unsplash.com/photo-1434389677669-e08b4cac3105?w=100&auto=format&fit=crop&q=80"
+                        }
+                    ]
+                },
+                history: [],
+                messages: [
+                    {
+                        type: "customer",
+                        time: "08-23 15:10",
+                        text: "東京への配送料はいくらですか？"
+                    },
+                    {
+                        type: "ai",
+                        time: "08-23 15:11",
+                        duration: "0.4s",
+                        intent: "运费与关税政策",
+                        text: "Tanaka様、こんにちは！🌸 日本（東京）への送料は一律$9.99です。$80以上のお買い上げで【送料無料】となります！佐川急便で3〜5日でお届けいたします。"
+                    },
+                    {
+                        type: "customer",
+                        time: "08-23 15:15",
+                        text: "ありがとうございます！注文が完了しました。"
+                    }
+                ],
+                aiSuggestions: [
+                    "🙏 感谢购买并提示发货后自动邮件通知"
+                ]
+            }
+        ];
+
+        const QUICK_REPLIES_DATA = [
+            { category: "物流咨询", title: "解释国际空运时效与清关正常", text: "Hi {{name}}, your order has been dispatched via express air freight and has safely cleared customs. The final local courier will complete delivery within 24-48 hours. Thank you for your patience!" },
+            { category: "售后退款", title: "同意免退货极速退款", text: "Dear {{name}}, we sincerely apologize for the inconvenience! We have processed a 100% full refund to your original payment method. The funds will reflect in your account within 1-3 business days without needing to return the item." },
+            { category: "大促优惠", title: "发放 15% VIP 专属关怀优惠券", text: "As a token of our appreciation for being our valued VIP customer, here is an exclusive 15% discount code for your next order: [VIPCARE15]. Valid for 30 days on all items!" },
+            { category: "尺码咨询", title: "欧美标准尺码对比说明", text: "Our garments follow standard US sizing. For a relaxed or oversized fit, we recommend selecting one size up from your usual EU/Asian size. Please check our detailed size chart here!" }
+        ];
+
+        let currentConvId = "conv-1";
+        let currentFilterTab = "all";
+        let currentStoreFilter = "all";
+        let currentSearchQuery = "";
+        let currentReplyMode = "reply";
+        let isAiAutoEnabled = true;
+
+        document.addEventListener("DOMContentLoaded", () => {
+            renderConversationList();
+            renderActiveConversation(currentConvId);
+            renderQuickReplies(QUICK_REPLIES_DATA);
+        });
+
+        function renderConversationList() {
+            const container = document.getElementById("conversationListContainer");
+            if (!container) return;
+
+            let filtered = CONVERSATIONS_DATA.filter(conv => {
+                if (currentFilterTab === 'ai' && conv.status !== 'ai') return false;
+                if (currentFilterTab === 'mine' && conv.status !== 'mine') return false;
+                if (currentFilterTab === 'queue' && conv.status !== 'queue') return false;
+                if (currentFilterTab === 'closed' && conv.status !== 'closed') return false;
+                if (currentStoreFilter !== 'all' && conv.storeId !== currentStoreFilter) return false;
+
+                if (currentSearchQuery.trim() !== '') {
+                    const q = currentSearchQuery.toLowerCase();
+                    const matchName = conv.customerName.toLowerCase().includes(q);
+                    const matchEmail = conv.email.toLowerCase().includes(q);
+                    const matchMsg = conv.lastMessage.toLowerCase().includes(q);
+                    const matchOrder = conv.order?.number.toLowerCase().includes(q);
+                    if (!matchName && !matchEmail && !matchMsg && !matchOrder) return false;
+                }
+
+                return true;
+            });
+
+            if (filtered.length === 0) {
+                container.innerHTML = `
+                    <div class="flex flex-col items-center justify-center py-16 text-center text-slate-500">
+                        <div class="w-12 h-12 rounded-2xl bg-white/5 flex items-center justify-center text-slate-400 mb-3 text-lg">
+                            <i class="fa-regular fa-folder-open"></i>
+                        </div>
+                        <p class="text-xs font-semibold text-slate-400">没有匹配的会话</p>
+                        <p class="text-[11px] text-slate-600 mt-1">试试清除筛选或更改搜索词</p>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = filtered.map(conv => {
+                const isActive = conv.id === currentConvId;
+                
+                let statusBadgeHtml = '';
+                if (conv.status === 'ai') {
+                    statusBadgeHtml = `<span class="inline-flex items-center gap-1 px-1.5 py-0.2 text-[10px] font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 rounded-full"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400 pulse-subtle"></span>AI 处理中</span>`;
+                } else if (conv.status === 'queue') {
+                    statusBadgeHtml = `<span class="inline-flex items-center gap-1 px-1.5 py-0.2 text-[10px] font-semibold bg-amber-500/15 text-amber-400 border border-amber-500/20 rounded-full"><span class="w-1.5 h-1.5 rounded-full bg-amber-400 pulse-subtle"></span>待接入</span>`;
+                } else if (conv.status === 'mine') {
+                    statusBadgeHtml = `<span class="inline-flex items-center gap-1 px-1.5 py-0.2 text-[10px] font-semibold bg-blue-500/15 text-blue-400 border border-blue-500/20 rounded-full">👤 人工接管</span>`;
+                } else {
+                    statusBadgeHtml = `<span class="inline-flex items-center gap-1 px-1.5 py-0.2 text-[10px] font-medium bg-slate-700/50 text-slate-400 rounded-full">🔒 已关闭</span>`;
+                }
+
+                return `
+                    <div 
+                        onclick="selectConversation('${conv.id}')"
+                        class="p-2.5 rounded-xl cursor-pointer relative ${
+                            isActive 
+                                ? 'crystal-card-active' 
+                                : 'crystal-card'
+                        }"
+                    >
+                        <div class="flex items-start gap-2.5">
+                            <div class="relative shrink-0">
+                                <img src="${conv.avatar}" alt="${conv.customerName}" class="w-9 h-9 rounded-xl object-cover border border-white/10 shadow-sm">
+                                <span class="absolute -bottom-1 -right-1 w-4 h-4 rounded-full ${conv.channelColor} flex items-center justify-center text-[8px] shadow">
+                                    <i class="${conv.channelIcon}"></i>
+                                </span>
+                            </div>
+
+                            <div class="flex-1 min-w-0">
+                                <div class="flex items-center justify-between">
+                                    <div class="flex items-center gap-1.5 truncate">
+                                        <span class="font-bold text-xs ${isActive ? 'text-emerald-400' : 'text-slate-100'} truncate">${conv.customerName}</span>
+                                        <span class="text-[10px] px-1 py-0.2 rounded bg-white/5 text-slate-400 border border-white/5 truncate">${conv.storePlatform}</span>
+                                    </div>
+                                    <span class="text-[10px] text-slate-500 font-mono shrink-0">${conv.lastTime}</span>
+                                </div>
+
+                                <p class="text-xs text-slate-400 truncate mt-1 leading-snug">
+                                    ${conv.lastMessage}
+                                </p>
+
+                                <div class="flex items-center justify-between mt-2 pt-1 border-t border-white/[0.04]">
+                                    <div class="flex items-center gap-1">
+                                        ${statusBadgeHtml}
+                                    </div>
+                                    ${
+                                        conv.unreadCount > 0 
+                                            ? `<span class="px-1.5 py-0.2 bg-rose-500 text-white font-bold text-[10px] rounded-full shadow">${conv.unreadCount}</span>` 
+                                            : ''
+                                    }
+                                </div>
+                            </div>
+                        </div>
+
+                        ${isActive ? '<div class="absolute left-0 top-3 bottom-3 w-1 bg-emerald-400 rounded-r-full shadow-glow-emerald"></div>' : ''}
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function selectConversation(id) {
+            currentConvId = id;
+            const conv = CONVERSATIONS_DATA.find(c => c.id === id);
+            if (conv) conv.unreadCount = 0;
+            renderConversationList();
+            renderActiveConversation(id);
+        }
+
+        function renderActiveConversation(id) {
+            const conv = CONVERSATIONS_DATA.find(c => c.id === id);
+            if (!conv) return;
+
+            document.getElementById("headerCustomerAvatar").src = conv.avatar;
+            document.getElementById("headerCustomerName").innerText = conv.customerName;
+            document.getElementById("headerVipBadge").innerHTML = `<i class="fa-solid fa-gem text-[8px]"></i> ${conv.vipLevel}`;
+            document.getElementById("headerStoreBadge").innerText = conv.storeName;
+            document.getElementById("headerCustomerEmail").innerHTML = `<i class="fa-regular fa-envelope text-[10px]"></i> ${conv.email}`;
+            document.getElementById("headerCustomerTimezone").innerHTML = `<i class="fa-regular fa-clock text-[10px]"></i> ${conv.timezone}`;
+            
+            const channelBadge = document.getElementById("headerChannelBadge");
+            channelBadge.className = `absolute -bottom-1 -right-1 w-4 h-4 rounded-full ${conv.channelColor} flex items-center justify-center text-[9px] shadow`;
+            channelBadge.innerHTML = `<i class="${conv.channelIcon}"></i>`;
+
+            const statusBadge = document.getElementById("headerStatusBadge");
+            const statusText = document.getElementById("headerStatusText");
+            if (conv.status === 'ai') {
+                statusBadge.className = "flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-xs font-semibold shadow-glow-emerald";
+                statusText.innerText = "🤖 AI 处理中 (置信度 98%)";
+            } else if (conv.status === 'mine') {
+                statusBadge.className = "flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-500/15 border border-blue-500/30 text-blue-400 text-xs font-semibold shadow-glow-blue";
+                statusText.innerText = "👤 人工客服已接管 · Alex";
+            } else if (conv.status === 'queue') {
+                statusBadge.className = "flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-400 text-xs font-semibold shadow-glow-amber";
+                statusText.innerText = "⏳ 排队等待人工中...";
+            } else {
+                statusBadge.className = "flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-700/50 border border-slate-600 text-slate-300 text-xs font-semibold";
+                statusText.innerText = "🔒 会话已解决关闭";
+            }
+
+            renderMessageFeed(conv);
+            renderAiSuggestions(conv.aiSuggestions || []);
+            renderCustomerProfile(conv);
+        }
+
+        function renderMessageFeed(conv) {
+            const feed = document.getElementById("chatMessageFeed");
+            if (!feed) return;
+
+            let html = `
+                <div class="flex items-center justify-center my-2">
+                    <div class="px-3.5 py-1 rounded-full bg-obsidian-850 border border-obsidian-border text-[11px] text-slate-400 flex items-center gap-1.5 shadow-sm">
+                        <i class="fa-solid fa-lock text-[9px] text-emerald-400"></i>
+                        <span>已通过 ${conv.channelName} 端到端加密连接 · 所属店铺: ${conv.storeName}</span>
+                    </div>
+                </div>
+            `;
+
+            conv.messages.forEach(msg => {
+                if (msg.type === 'customer') {
+                    html += `
+                        <div class="flex items-start gap-2.5 max-w-[80%] animate-in fade-in duration-200">
+                            <img src="${conv.avatar}" class="w-8 h-8 rounded-xl object-cover shrink-0 mt-0.5 border border-white/10 shadow-sm">
+                            <div class="space-y-1">
+                                <div class="flex items-center gap-2">
+                                    <span class="text-xs font-semibold text-slate-300">${conv.customerName}</span>
+                                    <span class="text-[10px] text-slate-500 font-mono">${msg.time}</span>
+                                </div>
+                                <div class="p-3 rounded-2xl rounded-tl-sm bg-obsidian-800 border border-obsidian-borderLight text-xs text-slate-100 leading-relaxed shadow-sm">
+                                    ${msg.text}
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                } else if (msg.type === 'ai') {
+                    html += `
+                        <div class="flex flex-col items-end max-w-[85%] ml-auto space-y-1.5 animate-in fade-in duration-200">
+                            <div class="flex items-center gap-2">
+                                <span class="px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 text-[10px] font-bold border border-emerald-500/30 flex items-center gap-1">
+                                    <i class="fa-solid fa-bolt text-[8px]"></i> ⚡ AI ${msg.duration} 响应 · 意图: ${msg.intent || '智能解答'}
+                                </span>
+                                <span class="text-[10px] text-slate-500 font-mono">${msg.time}</span>
+                            </div>
+                            <div class="ai-crystal-bubble p-3.5 rounded-2xl rounded-tr-sm text-xs text-slate-100 leading-relaxed space-y-2.5 shadow-md">
+                                <div>${msg.text}</div>
+                                ${
+                                    msg.source ? `
+                                        <div class="pt-2 border-t border-emerald-500/20 flex items-center justify-between text-[11px] text-emerald-300">
+                                            <span class="flex items-center gap-1">
+                                                <i class="fa-solid fa-book-bookmark text-[10px]"></i> 引用: ${msg.source}
+                                            </span>
+                                            <div class="flex items-center gap-2">
+                                                <button onclick="showToast('已采纳该回复', 'success')" class="hover:text-white" title="赞同"><i class="fa-regular fa-thumbs-up"></i></button>
+                                                <button onclick="showToast('AI 正在重新生成并丰富细节...', 'info')" class="hover:text-white" title="重新生成"><i class="fa-solid fa-arrow-rotate-right"></i></button>
+                                            </div>
+                                        </div>
+                                    ` : ''
+                                }
+                            </div>
+                        </div>
+                    `;
+                } else if (msg.type === 'agent') {
+                    html += `
+                        <div class="flex flex-col items-end max-w-[80%] ml-auto space-y-1 animate-in fade-in duration-200">
+                            <div class="flex items-center gap-2">
+                                <span class="text-xs font-semibold text-blue-400">${msg.author}</span>
+                                <span class="text-[10px] text-slate-500 font-mono">${msg.time}</span>
+                            </div>
+                            <div class="p-3 rounded-2xl rounded-tr-sm bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-xs leading-relaxed shadow-glow-blue/40">
+                                ${msg.text}
+                            </div>
+                            <span class="text-[10px] text-slate-500 flex items-center gap-1"><i class="fa-solid fa-check-double text-blue-400"></i> 已送达客户</span>
+                        </div>
+                    `;
+                } else if (msg.type === 'note') {
+                    html += `
+                        <div class="my-2 p-3 rounded-xl note-crystal-bubble text-xs text-amber-200 space-y-1 shadow-sm">
+                            <div class="flex items-center justify-between text-amber-400 font-bold text-[11px]">
+                                <span class="flex items-center gap-1.5"><i class="fa-solid fa-lock"></i> 内部私信便签 (仅客服团队可见)</span>
+                                <span class="font-normal font-mono text-[10px]">${msg.author} · ${msg.time}</span>
+                            </div>
+                            <p class="leading-relaxed text-amber-100/90">${msg.text}</p>
+                        </div>
+                    `;
+                } else if (msg.type === 'attachment') {
+                    html += `
+                        <div class="flex items-start gap-2.5 max-w-[80%] animate-in fade-in duration-200">
+                            <img src="${conv.avatar}" class="w-8 h-8 rounded-xl object-cover shrink-0 mt-0.5 shadow-sm">
+                            <div class="space-y-1">
+                                <div class="text-xs font-semibold text-slate-300">${msg.author}</div>
+                                <div class="p-2 rounded-2xl bg-obsidian-800 border border-obsidian-borderLight space-y-2 shadow-sm">
+                                    <img src="${msg.img}" class="rounded-xl max-h-48 object-cover cursor-pointer hover:opacity-90 transition-opacity" onclick="window.open('${msg.img}')">
+                                    <div class="flex items-center justify-between text-[11px] text-slate-400 px-1">
+                                        <span class="truncate"><i class="fa-regular fa-image text-slate-400 mr-1"></i>${msg.fileName}</span>
+                                        <a href="${msg.img}" target="_blank" class="text-emerald-400 hover:underline">下载</a>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                } else if (msg.type === 'system') {
+                    html += `
+                        <div class="flex items-center justify-center my-2">
+                            <div class="px-3.5 py-1.5 rounded-xl bg-white/5 border border-white/10 text-[11px] text-slate-400 flex items-center gap-2 max-w-md text-center shadow-sm">
+                                <i class="fa-solid fa-circle-info text-blue-400"></i>
+                                <span>${msg.text}</span>
+                            </div>
+                        </div>
+                    `;
+                }
+            });
+
+            feed.innerHTML = html;
+            setTimeout(() => { feed.scrollTop = feed.scrollHeight; }, 50);
+        }
+
+        function renderAiSuggestions(suggestions) {
+            const container = document.getElementById("aiSuggestionChips");
+            if (!container) return;
+
+            if (suggestions.length === 0) {
+                container.innerHTML = `<span class="text-[11px] text-slate-500">AI 正在深度解析对话上下文...</span>`;
+                return;
+            }
+
+            container.innerHTML = suggestions.map(text => `
+                <button 
+                    onclick="useSuggestion('${escapeHtml(text)}')"
+                    class="px-3 py-1 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 hover:text-emerald-200 text-xs whitespace-nowrap transition-all flex items-center gap-1.5 shadow-sm"
+                >
+                    <span>${text}</span>
+                    <i class="fa-solid fa-arrow-turn-up text-[10px]"></i>
+                </button>
+            `).join('');
+        }
+
+        function renderCustomerProfile(conv) {
+            document.getElementById("profileAvatar").src = conv.avatar;
+            document.getElementById("profileName").innerText = conv.customerName;
+            document.getElementById("profileEmail").innerHTML = `<span>${conv.email}</span> <i class="fa-regular fa-copy text-[10px]"></i>`;
+            document.getElementById("profileLtv").innerText = conv.ltv;
+            document.getElementById("profileOrderCount").innerText = `${conv.orderCount} 笔`;
+
+            renderTags(conv.tags || []);
+
+            if (conv.order) {
+                document.getElementById("orderNumber").innerText = conv.order.number;
+                document.getElementById("orderPayBadge").innerText = conv.order.payStatus;
+                document.getElementById("orderFulfillBadge").innerText = conv.order.fulfillStatus;
+                document.getElementById("carrierName").innerText = conv.order.carrier;
+                document.getElementById("trackingCode").innerText = conv.order.tracking;
+
+                const prodList = document.getElementById("orderProductsList");
+                prodList.innerHTML = conv.order.products.map(p => `
+                    <div class="flex items-center gap-2.5 p-2 rounded-lg bg-obsidian-950/70 border border-white/[0.04] shadow-sm">
+                        <img src="${p.image}" class="w-10 h-10 rounded-lg object-cover border border-white/10 shrink-0">
+                        <div class="flex-1 min-w-0">
+                            <div class="font-semibold text-slate-200 text-xs truncate">${p.title}</div>
+                            <div class="text-[11px] text-slate-400 flex items-center justify-between mt-0.5">
+                                <span>${p.specs}</span>
+                                <span class="font-mono text-slate-300 font-bold">${p.price} × ${p.qty}</span>
+                            </div>
+                        </div>
+                    </div>
+                `).join('');
+            }
+
+            const histContainer = document.getElementById("historyTimelineContainer");
+            if (conv.history && conv.history.length > 0) {
+                histContainer.innerHTML = conv.history.map(h => `
+                    <div class="relative pl-3">
+                        <span class="absolute -left-[17px] top-1.5 w-2 h-2 rounded-full bg-purple-400 border-2 border-obsidian-850"></span>
+                        <div class="flex items-center justify-between text-[11px]">
+                            <span class="font-semibold text-slate-200">${h.title}</span>
+                            <span class="text-slate-500 font-mono text-[10px]">${h.date}</span>
+                        </div>
+                        <p class="text-[11px] text-slate-400 mt-0.5">${h.channel} · ${h.outcome}</p>
+                    </div>
+                `).join('');
+            } else {
+                histContainer.innerHTML = `<p class="text-[11px] text-slate-500 pl-3">该客户首次咨询，暂无往期记录</p>`;
+            }
+        }
+
+        function renderTags(tags) {
+            const container = document.getElementById("tagContainer");
+            if (!container) return;
+
+            if (tags.length === 0) {
+                container.innerHTML = `<span class="text-[11px] text-slate-500">暂无标签，点击下方快速贴标</span>`;
+                return;
+            }
+
+            const colorMap = {
+                amber: "bg-amber-500/15 text-amber-300 border-amber-500/30",
+                cyan: "bg-cyan-500/15 text-cyan-300 border-cyan-500/30",
+                rose: "bg-rose-500/15 text-rose-300 border-rose-500/30",
+                purple: "bg-purple-500/15 text-purple-300 border-purple-500/30",
+                blue: "bg-blue-500/15 text-blue-300 border-blue-500/30",
+                pink: "bg-pink-500/15 text-pink-300 border-pink-500/30",
+                slate: "bg-slate-700/40 text-slate-400 border-slate-600/30"
+            };
+
+            container.innerHTML = tags.map((t, idx) => {
+                const cls = colorMap[t.color] || colorMap.amber;
+                return `
+                    <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium border ${cls}">
+                        <span>${t.name}</span>
+                        <button onclick="removeTag(${idx})" class="hover:opacity-75 ml-0.5"><i class="fa-solid fa-xmark text-[9px]"></i></button>
+                    </span>
+                `;
+            }).join('');
+        }
+
+        function switchReplyMode(mode) {
+            currentReplyMode = mode;
+            const tabReply = document.getElementById("tabModeReply");
+            const tabNote = document.getElementById("tabModeNote");
+            const boxBorder = document.getElementById("replyBoxBorder");
+            const sendBtn = document.getElementById("btnSendMessage");
+            const textarea = document.getElementById("messageTextarea");
+            const sendBtnLabel = document.getElementById("sendBtnLabel");
+
+            if (mode === 'reply') {
+                tabReply.className = "px-3.5 py-1.5 rounded-t-lg font-bold text-xs flex items-center gap-1.5 text-emerald-400 bg-emerald-500/10 border-t-2 border-emerald-500 transition-all";
+                tabNote.className = "px-3.5 py-1.5 rounded-t-lg font-semibold text-xs flex items-center gap-1.5 text-slate-400 hover:text-amber-300 hover:bg-amber-500/5 transition-all";
+                boxBorder.className = "bg-obsidian-950 rounded-xl border border-obsidian-borderLight focus-within:border-emerald-500/60 focus-within:ring-1 focus-within:ring-emerald-500/30 transition-all p-2.5 shadow-inner";
+                sendBtn.className = "px-4 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs rounded-l-lg flex items-center gap-1.5 shadow-glow-emerald transition-all";
+                sendBtnLabel.innerText = "发送";
+                textarea.placeholder = "输入回复内容... (按 Enter 发送，Shift+Enter 换行，输入 '/' 快捷调用话术)";
+            } else {
+                tabNote.className = "px-3.5 py-1.5 rounded-t-lg font-bold text-xs flex items-center gap-1.5 text-amber-300 bg-amber-500/10 border-t-2 border-amber-500 transition-all";
+                tabReply.className = "px-3.5 py-1.5 rounded-t-lg font-semibold text-xs flex items-center gap-1.5 text-slate-400 hover:text-emerald-400 hover:bg-emerald-500/5 transition-all";
+                boxBorder.className = "bg-obsidian-950 rounded-xl border border-amber-500/40 focus-within:border-amber-500 focus-within:ring-1 focus-within:ring-amber-500/30 transition-all p-2.5 shadow-inner";
+                sendBtn.className = "px-4 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs rounded-l-lg flex items-center gap-1.5 shadow-glow-amber transition-all";
+                sendBtnLabel.innerText = "添加便签";
+                textarea.placeholder = "📝 输入内部团队便签 (仅同事可见，客户绝对不可见)...";
+            }
+        }
+
+        function sendMessage() {
+            const textarea = document.getElementById("messageTextarea");
+            const text = textarea.value.trim();
+            if (!text) return;
+
+            const conv = CONVERSATIONS_DATA.find(c => c.id === currentConvId);
+            if (!conv) return;
+
+            const now = new Date();
+            const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+
+            if (currentReplyMode === 'reply') {
+                conv.messages.push({
+                    type: "agent",
+                    author: "Alex Chen (我)",
+                    time: timeStr,
+                    text: text
+                });
+                conv.lastMessage = `我: ${text}`;
+                conv.lastTime = timeStr;
+                
+                if (conv.status === 'ai' || conv.status === 'queue') {
+                    conv.status = 'mine';
+                    conv.statusText = '人工接管 · Alex';
+                }
+
+                showToast("消息已发送", "success");
+            } else {
+                conv.messages.push({
+                    type: "note",
+                    author: "Alex Chen (便签)",
+                    time: timeStr,
+                    text: text
+                });
+                showToast("内部团队便签已保存", "info");
+            }
+
+            textarea.value = "";
+            renderConversationList();
+            renderActiveConversation(currentConvId);
+        }
+
+        function handleTextareaKeydown(event) {
+            if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault();
+                sendMessage();
+            } else if (event.key === '/' && event.target.value === '') {
+                setTimeout(() => showQuickReplyModal(), 50);
+            }
+        }
+
+        function useSuggestion(text) {
+            const textarea = document.getElementById("messageTextarea");
+            textarea.value = text;
+            textarea.focus();
+            showToast("已填入输入框，按 Enter 即可直接发送", "info");
+        }
+
+        function handleTakeover() {
+            const conv = CONVERSATIONS_DATA.find(c => c.id === currentConvId);
+            if (!conv) return;
+            conv.status = 'mine';
+            conv.statusText = '人工接管 · Alex';
+            renderConversationList();
+            renderActiveConversation(currentConvId);
+            showToast("已成功接管会话，AI 自动回复已暂停", "success");
+        }
+
+        function handleHandoverAI() {
+            const conv = CONVERSATIONS_DATA.find(c => c.id === currentConvId);
+            if (!conv) return;
+            conv.status = 'ai';
+            conv.statusText = 'AI 处理中';
+            renderConversationList();
+            renderActiveConversation(currentConvId);
+            showToast("已将该会话无缝转交回 AI 智能接待", "success");
+        }
+
+        function handleResolveSession() {
+            const conv = CONVERSATIONS_DATA.find(c => c.id === currentConvId);
+            if (!conv) return;
+            conv.status = 'closed';
+            conv.statusText = '已解决关闭';
+            renderConversationList();
+            renderActiveConversation(currentConvId);
+            showToast("会话已标记为【已解决】，满意度评价邀请已自动发送给客户", "success");
+        }
+
+        function toggleAiAutoReply(cb) {
+            isAiAutoEnabled = cb.checked;
+            showToast(isAiAutoEnabled ? "AI 自动应答模式已开启" : "AI 自动应答模式已暂停", "info");
+        }
+
+        function toggleRightDrawer() {
+            const drawer = document.getElementById("rightDrawer");
+            const icon = document.getElementById("rightDrawerIcon");
+            if (drawer.classList.contains("hidden")) {
+                drawer.classList.remove("hidden");
+                icon.className = "fa-solid fa-table-columns text-xs text-emerald-400";
+            } else {
+                drawer.classList.add("hidden");
+                icon.className = "fa-solid fa-table-columns text-xs text-slate-400";
+            }
+        }
+
+        function toggleInboxFolderView() {
+            const drawer = document.getElementById("inboxFolderDrawer");
+            drawer.classList.toggle("hidden");
+        }
+
+        function addPresetTag(name, color) {
+            const conv = CONVERSATIONS_DATA.find(c => c.id === currentConvId);
+            if (!conv) return;
+            if (!conv.tags) conv.tags = [];
+            if (conv.tags.some(t => t.name === name)) {
+                showToast("该标签已存在", "info");
+                return;
+            }
+            conv.tags.push({ name, color });
+            renderTags(conv.tags);
+            showToast(`已贴上标签: ${name}`, "success");
+        }
+
+        function addTagFromInput() {
+            const input = document.getElementById("newTagInput");
+            const val = input.value.trim();
+            if (!val) return;
+            addPresetTag(val, "purple");
+            input.value = "";
+        }
+
+        function handleTagInputKeydown(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                addTagFromInput();
+            }
+        }
+
+        function removeTag(idx) {
+            const conv = CONVERSATIONS_DATA.find(c => c.id === currentConvId);
+            if (!conv || !conv.tags) return;
+            conv.tags.splice(idx, 1);
+            renderTags(conv.tags);
+        }
+
+        function setFilterTab(tab) {
+            currentFilterTab = tab;
+            
+            document.querySelectorAll(".grid-pill").forEach(pill => {
+                pill.classList.remove("active", "active-amber", "active-blue");
+                pill.className = "grid-pill py-1.5 px-2 rounded-lg bg-obsidian-800 border border-obsidian-border text-slate-400 hover:text-white flex items-center justify-between text-xs font-semibold";
+            });
+
+            const activePill = document.getElementById(`pill-${tab}`);
+            if (activePill) {
+                if (tab === 'queue') {
+                    activePill.className = "grid-pill active-amber py-1.5 px-2 rounded-lg border text-amber-300 flex items-center justify-between text-xs font-bold";
+                } else if (tab === 'mine') {
+                    activePill.className = "grid-pill active-blue py-1.5 px-2 rounded-lg border text-blue-400 flex items-center justify-between text-xs font-bold";
+                } else {
+                    activePill.className = "grid-pill active py-1.5 px-2 rounded-lg border text-emerald-300 flex items-center justify-between text-xs font-bold";
+                }
+            }
+
+            renderConversationList();
+        }
+
+        function toggleStoreDropdown() {
+            const menu = document.getElementById("storeDropdownMenu");
+            menu.classList.toggle("hidden");
+        }
+
+        function selectStore(id, name, icon, color) {
+            currentStoreFilter = id;
+            document.getElementById("selectedStoreName").innerText = name;
+            document.getElementById("selectedStoreIcon").innerHTML = `<i class="fa-solid ${icon}"></i>`;
+            document.getElementById("storeDropdownMenu").classList.add("hidden");
+            renderConversationList();
+            showToast(`已切换店铺筛选: ${name}`, "info");
+        }
+
+        function filterConversations() {
+            currentSearchQuery = document.getElementById("conversationSearchInput").value;
+            renderConversationList();
+        }
+
+        function showModal(id) { document.getElementById(id).classList.remove("hidden"); }
+        function closeModal(id) { document.getElementById(id).classList.add("hidden"); }
+
+        function showTrackingTimelineModal() { showModal("trackingModal"); }
+        function showQuickReplyModal() { showModal("quickReplyModal"); }
+        function showAiPolishModal() {
+            const draft = document.getElementById("messageTextarea").value;
+            if (draft) document.getElementById("aiDraftInput").value = draft;
+            showModal("aiPolishModal"); 
+        }
+        function showTemplateModal() { showModal("templateModal"); }
+        function showTransferModal() { showModal("transferModal"); }
+
+        function showRefundModal() {
+            showToast("已打开 Shopify 退款专用通道，支持原路退款至客户信用卡", "info");
+        }
+        function showAddressModal() {
+            showToast("已获取客户最新地址并同步给国际物流承运商", "success");
+        }
+        function resendOrderInvoice() {
+            showToast("已将最新带有防伪盖章的 PDF 发票发送至客户邮箱", "success");
+        }
+
+        function triggerFileUpload() {
+            showToast("已调起附件选择器 (支持 PNG/JPG/PDF/MP4)", "info");
+        }
+
+        function showProductPickerModal() {
+            const conv = CONVERSATIONS_DATA.find(c => c.id === currentConvId);
+            if (!conv) return;
+            conv.messages.push({
+                type: "agent",
+                author: "Alex Chen",
+                time: "刚刚",
+                text: "Here is the Shopify recommended product card: [Silk Halter Evening Maxi Dress - Navy / L - $129.00]"
+            });
+            renderActiveConversation(currentConvId);
+            showToast("Shopify 商品卡片已成功推入聊天流", "success");
+        }
+
+        function insertEmoji(emoji) {
+            const textarea = document.getElementById("messageTextarea");
+            textarea.value += emoji;
+            textarea.focus();
+        }
+
+        function toggleSendOptions() {
+            showToast("快捷操作：按 Enter 直接发送，或点击菜单【发送并标记解决】", "info");
+        }
+
+        function insertTrackingToChat() {
+            const conv = CONVERSATIONS_DATA.find(c => c.id === currentConvId);
+            if (!conv) return;
+            conv.messages.push({
+                type: "agent",
+                author: "Alex Chen",
+                time: "刚刚",
+                text: `📦 Here is your live tracking update: DHL Express (Tracking: ${conv.order.tracking}). Status: Custom cleared at LAX hub, on schedule for arrival today by 4 PM!`
+            });
+            closeModal("trackingModal");
+            renderActiveConversation(currentConvId);
+            showToast("物流实时轨迹卡片已发送给客户", "success");
+        }
+
+        function renderQuickReplies(data) {
+            const container = document.getElementById("quickReplyList");
+            if (!container) return;
+            container.innerHTML = data.map(item => `
+                <div onclick="selectQuickReply('${escapeHtml(item.text)}')" class="p-2.5 rounded-xl bg-white/5 hover:bg-amber-500/10 hover:border-amber-500/30 border border-obsidian-border cursor-pointer transition-all">
+                    <div class="flex items-center justify-between mb-1">
+                        <span class="font-bold text-slate-200 text-xs">${item.title}</span>
+                        <span class="px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-400 text-[10px]">${item.category}</span>
+                    </div>
+                    <p class="text-[11px] text-slate-400 leading-snug">${item.text}</p>
+                </div>
+            `).join('');
+        }
+
+        function filterQuickReplies() {
+            const q = document.getElementById("quickReplySearch").value.toLowerCase();
+            const filtered = QUICK_REPLIES_DATA.filter(i => i.title.toLowerCase().includes(q) || i.text.toLowerCase().includes(q) || i.category.toLowerCase().includes(q));
+            renderQuickReplies(filtered);
+        }
+
+        function selectQuickReply(text) {
+            const conv = CONVERSATIONS_DATA.find(c => c.id === currentConvId);
+            const name = conv ? conv.customerName.split(' ')[0] : 'Customer';
+            const replaced = text.replace(/{{name}}/g, name);
+            document.getElementById("messageTextarea").value = replaced;
+            closeModal("quickReplyModal");
+            document.getElementById("messageTextarea").focus();
+            showToast("话术已载入输入框", "success");
+        }
+
+        function applyAiTransform(type) {
+            const resBox = document.getElementById("aiResultText");
+            if (type === 'polite') {
+                resBox.innerText = "Dear Jessica, thank you for reaching out! We truly appreciate your patience and will ensure your request is prioritized with our highest care.";
+            } else if (type === 'translate_en') {
+                resBox.innerText = "Hello! Your package has arrived at the regional distribution center and will be delivered straight to your doorstep before Friday afternoon.";
+            } else if (type === 'apology') {
+                resBox.innerText = "We sincerely apologize for any delay caused during the international customs inspection. We have expedited the shipment and attached a 15% courtesy coupon [VIPCARE15].";
+            } else if (type === 'promo') {
+                resBox.innerText = "Great choice! Today we have an exclusive bundle promotion: buy 2 get 1 free with free worldwide express shipping. Would you like me to reserve one for you?";
+            }
+            showToast("AI 已根据意图重新润色生成", "success");
+        }
+
+        function applyAiResultToTextarea() {
+            const text = document.getElementById("aiResultText").innerText.replace(/^"|"$/g, '');
+            document.getElementById("messageTextarea").value = text;
+            closeModal("aiPolishModal");
+            document.getElementById("messageTextarea").focus();
+            showToast("已采纳 AI 优化结果", "success");
+        }
+
+        function selectWhatsAppTemplate(num) {
+            showToast(`已选择 Meta 官方第 ${num} 号报备模板`, "info");
+        }
+
+        function sendSelectedTemplate() {
+            const conv = CONVERSATIONS_DATA.find(c => c.id === currentConvId);
+            if (!conv) return;
+            conv.messages.push({
+                type: "agent",
+                author: "Alex Chen (Meta 官方模板)",
+                time: "刚刚",
+                text: `[Meta WhatsApp Approved Template] Hi ${conv.customerName}, your order ${conv.order.number} has cleared customs and is scheduled for today's delivery!`
+            });
+            closeModal("templateModal");
+            renderActiveConversation(currentConvId);
+            showToast("Meta 官方模板消息已成功下发至客户 WhatsApp", "success");
+        }
+
+        function confirmTransfer() {
+            const sel = document.getElementById("transferSelect");
+            const text = sel.options[sel.selectedIndex].text;
+            closeModal("transferModal");
+            showToast(`会话已成功转交给: ${text}`, "success");
+        }
+
+        function copyText(text, successMsg) {
+            navigator.clipboard.writeText(text).then(() => {
+                showToast(successMsg || "已复制到剪贴板", "success");
+            }).catch(() => {
+                showToast("已复制: " + text, "success");
+            });
+        }
+
+        function showToast(message, type = "info") {
+            const container = document.getElementById("toastContainer");
+            if (!container) return;
+
+            const toast = document.createElement("div");
+            const icon = type === 'success' ? 'fa-circle-check text-emerald-400' : (type === 'error' ? 'fa-triangle-exclamation text-rose-400' : 'fa-circle-info text-blue-400');
+            const border = type === 'success' ? 'border-emerald-500/40' : (type === 'error' ? 'border-rose-500/40' : 'border-blue-500/40');
+
+            toast.className = `px-3.5 py-2.5 rounded-xl bg-obsidian-800/95 backdrop-blur-md border ${border} shadow-floating text-xs text-slate-100 flex items-center gap-2.5 transition-all duration-300 pointer-events-auto transform translate-y-2 opacity-0`;
+            toast.innerHTML = `
+                <i class="fa-solid ${icon} text-sm"></i>
+                <span class="font-medium">${message}</span>
+            `;
+
+            container.appendChild(toast);
+
+            setTimeout(() => {
+                toast.classList.remove("translate-y-2", "opacity-0");
+            }, 10);
+
+            setTimeout(() => {
+                toast.classList.add("opacity-0", "translate-y-2");
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+
+        function escapeHtml(str) {
+            return str.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+        }
+
+        function refreshConversations() {
+            showToast("正在拉取全渠道最新会话与订单数据...", "info");
+            setTimeout(() => {
+                renderConversationList();
+                showToast("数据已是最新 (18ms)", "success");
+            }, 400);
+        }
+    </script>
+</body>
+</html>

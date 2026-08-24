@@ -41,7 +41,7 @@ const router = useRouter()
 const { moreNavGroups } = useNavItems()
 
 const themeLabel = computed(() =>
-    props.themeMode === 'dark' ? 'Dark' : props.themeMode === 'light' ? 'Light' : 'System'
+    props.themeMode === 'dark' ? '深色' : props.themeMode === 'light' ? '浅色' : '跟随系统'
 )
 
 const themeIconName = computed(() =>
@@ -62,7 +62,7 @@ const navigate = (to?: string) => {
         <Transition name="more-sheet">
             <div v-if="open" class="more-sheet-root">
                 <div class="more-scrim" @click="emit('close')"></div>
-                <div class="more-sheet" role="dialog" aria-label="More">
+                <div class="more-sheet" role="dialog" aria-label="更多功能">
                     <div class="drag-handle" aria-hidden="true"></div>
 
                     <!-- Availability -->
@@ -75,8 +75,8 @@ const navigate = (to?: string) => {
                     >
                         <span class="availability-dot" :class="{ online: isOnline }"></span>
                         <span class="availability-text">
-                            <span class="availability-title">{{ isOnline ? "You're online" : "You're offline" }}</span>
-                            <span class="availability-sub">{{ isOnline ? 'Receiving new chats' : 'Not receiving new chats' }}</span>
+                            <span class="availability-title">{{ isOnline ? "当前在线" : "当前离线" }}</span>
+                            <span class="availability-sub">{{ isOnline ? '正常接收新客户咨询' : '暂停分配新客户会话' }}</span>
                         </span>
                         <span class="toggle-track" :class="{ on: isOnline }">
                             <span class="toggle-knob"></span>
@@ -86,7 +86,7 @@ const navigate = (to?: string) => {
                     <!-- Theme -->
                     <button type="button" class="sheet-row standalone" @click="emit('toggle-theme')">
                         <span class="row-icon theme-icon" aria-hidden="true" v-html="navIconSvg(themeIconName, 20)"></span>
-                        <span class="row-label">Theme</span>
+                        <span class="row-label">界面主题</span>
                         <span class="row-value">{{ themeLabel }}</span>
                     </button>
 
@@ -111,7 +111,7 @@ const navigate = (to?: string) => {
                     <!-- Notifications -->
                     <button type="button" class="sheet-row standalone" @click="emit('notifications')">
                         <span class="row-icon" v-html="navIconSvg('bell', 20)"></span>
-                        <span class="row-label">Notifications</span>
+                        <span class="row-label">消息通知</span>
                         <span v-if="unreadCount" class="row-badge">{{ badgeText }}</span>
                     </button>
 
@@ -123,7 +123,7 @@ const navigate = (to?: string) => {
                     <!-- Logout -->
                     <button type="button" class="logout-row" @click="emit('logout')">
                         <span class="row-icon" v-html="navIconSvg('logout', 19)"></span>
-                        Log out
+                        退出登录
                     </button>
                 </div>
             </div>

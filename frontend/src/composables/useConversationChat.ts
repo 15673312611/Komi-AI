@@ -1,19 +1,3 @@
-/*
-Copyright 2024-2026 ChatterMate
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-*/
-
 import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import type { ChatDetail, Message } from '@/types/chat'
 import { formatDistanceToNow } from 'date-fns'
@@ -26,15 +10,29 @@ import { canTakeOverChat, chatHandler } from '@/utils/chatState'
 import { routeChatToHuman } from '@/utils/chatActions'
 import { permissionChecks } from '@/utils/permissions'
 
-// Define valid chat statuses
+export interface OutboundFile {
+  content: string
+  filename: string
+  content_type: string
+  size: number
+}
+
 type ChatStatus = 'open' | 'closed' | 'transferred'
 
-/** Emitted by the backend when a reply was saved but never reached the customer. */
 interface DeliveryErrorEvent {
   error?: string
   type?: string
   session_id?: string
+  client_message_id?: string
   can_template?: boolean
+}
+
+const newClientMessageId = () => {
+  try {
+    return crypto.randomUUID()
+  } catch {
+    return `client-${Date.now()}-${Math.random().toString(36).slice(2)}`
+  }
 }
 
 export function useConversationChat(
@@ -49,181 +47,145 @@ export function useConversationChat(
   const newMessage = ref('')
   const messagesContainer = ref<HTMLElement | null>(null)
   const isLoading = ref(false)
+  const aiToggleLoading = ref(false)
   const currentUserId = userService.getUserId()
-  // Set once a send is refused because the messaging window closed and a
-  // template would reopen it. The frontend can't tell the window has expired on
-  // its own — it never sees the customer's last inbound time — so this is only
-  // known after the backend refuses a send.
   const templateCanReopen = ref(false)
 
-  // Claimable and allowed to claim. Shared with ChatInfoPanel via
-  // canTakeOverChat so the chat screen and the info panel can't disagree —
-  // this pane used to require status 'transferred', which left an AI-handled
-  // chat claimable only from the info panel.
   const showTakeoverButton = computed(
     () => canTakeOverChat(chat.value) && permissionChecks.canTakeOverChats()
   )
-
-  // Who is answering the customer. Derived once, shared with the inbox list and
-  // the info panel through chatHandler, so the three surfaces cannot disagree.
   const handler = computed(() => chatHandler(chat.value, currentUserId))
-
   const handledByAI = computed(() => handler.value.kind === 'ai')
-
-  // Nobody is answering yet: the AI queued it, or this agent never uses AI.
   const isWaitingForHuman = computed(() => handler.value.kind === 'waiting')
-
   const isChatClosed = computed(() => handler.value.kind === 'closed')
-
-  // A colleague holds it: we can watch, but not reply.
   const showTakenOverStatus = computed(
     () => handler.value.kind === 'human' && chat.value.user_id !== currentUserId
   )
-
-  /** One sentence explaining why the composer is unavailable, per handler. */
   const handlerCaption = computed(() => {
     switch (handler.value.kind) {
-      case 'ai':
-        return 'This chat is being handled by AI'
-      case 'waiting':
-        // Deliberately not "the AI handed this over": with AI switched off on
-        // the agent there was never an AI in the conversation to hand it on.
-        return 'This chat is waiting for someone to pick it up'
-      case 'closed':
-        return 'This chat has been closed'
-      default:
-        return `This chat is being handled by ${handler.value.label}`
+      case 'ai': return '此会话正在由 AI 智能体自动应答'
+      case 'waiting': return '会话已进入人工队列，等待客服接入'
+      case 'closed': return '此会话已关闭'
+      default: return `此会话由 ${handler.value.label} 负责`
     }
   })
-
-  const canSendMessage = computed(() => {
-    // Cannot send if chat is closed
-    if (isChatClosed.value) return false
-    
-    // Cannot send if needs takeover or taken by another user
-    return !showTakeoverButton.value && !showTakenOverStatus.value
-  })
+  const canSendMessage = computed(() =>
+    !isChatClosed.value && !showTakeoverButton.value && !showTakenOverStatus.value && !handledByAI.value
+  )
 
   const scrollToBottom = async () => {
-    // Wait for the new message to render, otherwise scrollHeight is still the
-    // pre-append height and the list stops short of the bottom.
     await nextTick()
-    if (messagesContainer.value) {
-      messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight
-    }
+    if (messagesContainer.value) messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight
   }
 
-  // Watch for changes in messages and scroll to bottom
   watch(() => chat.value.messages, (messages) => {
-    scrollToBottom()
-    // A customer message reopens the messaging window, so the closed-window
-    // notice must go — otherwise it sits above a composer that now works.
-    if (messages?.[messages.length - 1]?.message_type === 'user') {
-      templateCanReopen.value = false
-    }
+    void scrollToBottom()
+    if (messages?.[messages.length - 1]?.message_type === 'user') templateCanReopen.value = false
   }, { deep: true })
+  watch(() => chat.value.session_id, () => { templateCanReopen.value = false })
 
-  // The same composable instance serves whichever chat is selected, so a
-  // closed window learned about in one conversation must not follow us to the
-  // next. Sending a template reopens the window, which also clears it.
-  watch(() => chat.value.session_id, () => {
-    templateCanReopen.value = false
+  const clearTemplateSuggestion = () => { templateCanReopen.value = false }
+
+  const publishChat = (nextChat: ChatDetail, clearUnread = false) => {
+    chat.value = { ...nextChat, messages: [...(nextChat.messages || [])] }
+    if (clearUnread) emit('clearUnread', nextChat.session_id)
+    emit('chatUpdated', chat.value)
+    void scrollToBottom()
+  }
+
+  const updateChat = (nextChat: ChatDetail) => publishChat(nextChat, true)
+  const replaceChatFromProps = (nextChat: ChatDetail) => {
+    chat.value = { ...nextChat, messages: [...(nextChat.messages || [])] }
+  }
+
+  const optimisticMessage = (
+    text: string,
+    messageType: 'agent' | 'private_note' | 'system',
+    clientMessageId: string,
+    timestamp: string,
+    files: OutboundFile[] = [],
+    attributes: Record<string, unknown> = {}
+  ): Message => ({
+    message: text,
+    message_type: messageType,
+    created_at: timestamp,
+    session_id: chat.value.session_id,
+    client_message_id: clientMessageId,
+    user_name: userService.getUserName() || undefined,
+    attributes: {
+      ...attributes,
+      client_message_id: clientMessageId,
+      ...(messageType === 'private_note' ? { is_private: true } : {}),
+    },
+    ...(files.length ? {
+      attachments: files.map((file, index) => ({
+        id: -index - 1,
+        filename: file.filename,
+        file_url: '',
+        content_type: file.content_type,
+        file_size: file.size,
+      })),
+    } : {}),
   })
 
-  const clearTemplateSuggestion = () => {
-    templateCanReopen.value = false
+  const sendSocketMessage = (
+    text: string,
+    messageType: 'agent' | 'private_note' | 'system',
+    clientMessageId: string,
+    timestamp: string,
+    files: OutboundFile[] = [],
+    options: Record<string, unknown> = {}
+  ) => {
+    socketService.emit('agent_message', {
+      message: text,
+      session_id: chat.value.session_id,
+      message_type: messageType,
+      created_at: timestamp,
+      client_message_id: clientMessageId,
+      ...(files.length ? { files } : {}),
+      ...options,
+    })
   }
 
-  const updateChat = (newChat: ChatDetail) => {
-    chat.value = { ...newChat }
-    // Emit event to clear unreads
-    emit('clearUnread', newChat.session_id)
-    // Emit chatUpdated event to ensure the parent component updates
-    emit('chatUpdated', chat.value)
-  }
+  const sendMessage = async (
+    text = newMessage.value,
+    isPrivateNote = false,
+    files: OutboundFile[] = []
+  ) => {
+    const messageText = text.trim()
+    if ((!messageText && files.length === 0) || !canSendMessage.value) return false
 
-  // Replace chat state from parent props without emitting events
-  const replaceChatFromProps = (newChat: ChatDetail) => {
-    chat.value = { ...newChat }
-  }
-
-  const sendMessage = async () => {
-    if (!newMessage.value.trim() || !canSendMessage.value) return
-
-    try {
-      const messageText = newMessage.value
-      // Clear input immediately for better UX
-      newMessage.value = ''
-
-      // Add message locally first
-      const timestamp = new Date().toISOString()
-      const localMessage: Message = {
-        message: messageText,
-        message_type: 'agent',
-        created_at: timestamp,
-        session_id: chat.value.session_id
-      }
-
-      // Update chat with new message
-      chat.value.messages.push(localMessage)
-      chat.value.updated_at = timestamp
-
-      // Emit message through socket
-      socketService.emit('agent_message', {
-        message: messageText,
-        session_id: chat.value.session_id,
-        message_type: 'agent',
-        created_at: timestamp
-      })
-
-      scrollToBottom()
-    } catch (err) {
-      console.error('Failed to send message:', err)
-      toast.error('Failed to send message', {
-        description: 'Please try again',
-        duration: 4000,
-        closeButton: true
-      })
+    const clientMessageId = newClientMessageId()
+    const timestamp = new Date().toISOString()
+    const messageType = isPrivateNote ? 'private_note' : 'agent'
+    const local = optimisticMessage(messageText, messageType, clientMessageId, timestamp, files)
+    chat.value = {
+      ...chat.value,
+      messages: [...chat.value.messages, local],
+      updated_at: timestamp,
     }
+    newMessage.value = ''
+    emit('chatUpdated', chat.value)
+    void scrollToBottom()
+
+    sendSocketMessage(messageText, messageType, clientMessageId, timestamp, files, {
+      attributes: isPrivateNote ? { is_private: true } : undefined,
+    })
+    if (isPrivateNote) {
+      toast.success('内部便签已保存', { description: '仅团队成员可见，客户不会收到此内容', duration: 3000 })
+    }
+    return true
   }
 
   const handleTakeover = async () => {
     try {
       isLoading.value = true
-      await chatService.takeoverChat(chat.value.session_id)
-      
-      // Show success toast
-      toast.success('Chat taken over successfully', {
-        description: 'You can now send messages in this chat',
-        duration: 4000,
-        closeButton: true
-      })
-      const userName = userService.getUserName()
-      const userId = userService.getUserId()
-
-      // Update local chat state
-      chat.value = {
-        ...chat.value,
-        status: 'open',
-        user_id: userId,
-        user_name: userName
-      }
-
-      socketService.emit('taken_over', { session_id: chat.value.session_id, user_name: userName, profile_picture: userService.getCurrentUser()?.profile_pic ? userService.getCurrentUser()?.profile_pic : '' })
-      
-      // Emit refresh event to update chat status
+      const updated = await chatService.takeoverChat(chat.value.session_id)
+      publishChat(updated, true)
+      toast.success('已接管会话', { description: '现在可以向客户发送消息', duration: 3500 })
       emit('refresh')
-      // Also emit chatUpdated event to ensure the parent component updates
-      emit('chatUpdated', chat.value)
     } catch (err: any) {
-      console.error('Failed to takeover chat:', err)
-      
-      // Show error toast with specific message if available
-      toast.error('Failed to take over chat', {
-        description: err.response?.data?.detail || 'Please try again',
-        duration: 4000,
-        closeButton: true
-      })
+      toast.error('接管会话失败', { description: err.response?.data?.detail || '请稍后重试', duration: 4500 })
     } finally {
       isLoading.value = false
     }
@@ -233,155 +195,117 @@ export function useConversationChat(
     try {
       isLoading.value = true
       const updated = await routeChatToHuman(chat.value.session_id)
-      if (!updated) return
-
-      // The endpoint returns the whole thread back, so take its state rather
-      // than guessing at a local patch.
-      chat.value = updated
-      emit('refresh')
-      emit('chatUpdated', chat.value)
+      if (updated) {
+        publishChat(updated, true)
+        emit('refresh')
+      }
     } finally {
       isLoading.value = false
     }
   }
 
-  // Add endChat function
-  const endChat = async (requestRating = true) => {
+  const handleHandBackToAI = async () => {
     try {
       isLoading.value = true
-
-      // Only the web widget can render a rating; on external channels the ask
-      // is dropped and the closing message says nothing about rating.
-      const askRating = requestRating && canRequestRating(chat.value.channel)
-
-      // Create end chat message
-      const timestamp = new Date().toISOString()
-      const endChatMessage = {
-        message: endChatMessageFor(chat.value.channel),
-        message_type: "system",
-        created_at: timestamp,
-        session_id: chat.value.session_id,
-        end_chat: true,
-        request_rating: askRating,
-        end_chat_reason: "AGENT_REQUEST",
-        end_chat_description: "Agent manually ended the chat"
-
-      }
-
-      // Add message locally
-      chat.value.messages.push(endChatMessage)
-
-      // Update chat status locally
-      chat.value.status = 'closed'
-      chat.value.updated_at = timestamp
-
-      // Emit message through socket to end chat
-      socketService.emit('agent_message', {
-        message: endChatMessage.message,
-        session_id: chat.value.session_id,
-        message_type: endChatMessage.message_type,
-        created_at: timestamp,
-        end_chat: true,
-        request_rating: askRating,
-        end_chat_reason: "AGENT_REQUEST",
-        end_chat_description: "Agent manually ended the chat"
-      })
-
-      // Show success toast
-      toast.success('Chat ended successfully', {
-        description: askRating ? 'Customer will be asked for feedback' : 'Chat has been closed',
-        duration: 4000,
-        closeButton: true
-      })
-      
-      // Emit refresh event to update chat status
+      const updated = await chatService.handBackToAI(chat.value.session_id)
+      publishChat(updated, true)
+      toast.success('已交还给 AI', { description: '后续客户消息将由 AI 自动回复', duration: 3500 })
       emit('refresh')
-      emit('chatUpdated', chat.value)
-      
-      scrollToBottom()
-    } catch (err) {
-      console.error('Failed to end chat:', err)
-      toast.error('Failed to end chat', {
-        description: 'Please try again',
-        duration: 4000,
-        closeButton: true
-      })
+    } catch (err: any) {
+      toast.error('交还 AI 失败', { description: err.response?.data?.detail || '请稍后重试', duration: 4500 })
     } finally {
       isLoading.value = false
     }
   }
 
-  // Mark the message this failure belongs to. It was pushed optimistically and
-  // has no id yet, so it is matched as the newest agent message not already
-  // marked — the one that was just sent. The backend stamps the stored row too,
-  // so a later refetch carries the real reason.
-  const markLatestAgentMessageUndelivered = () => {
-    for (let i = chat.value.messages.length - 1; i >= 0; i--) {
-      const message = chat.value.messages[i]
+  const toggleAIAutoReply = async (enabled: boolean) => {
+    try {
+      aiToggleLoading.value = true
+      const updated = await chatService.toggleAIAutoReply(chat.value.session_id, enabled)
+      publishChat(updated, false)
+      toast.success(enabled ? '已开启 AI 自动回复' : '已暂停 AI 自动回复', { duration: 3000 })
+      emit('refresh')
+    } catch (err: any) {
+      toast.error('更新 AI 设置失败', { description: err.response?.data?.detail || '请稍后重试', duration: 4500 })
+    } finally {
+      aiToggleLoading.value = false
+    }
+  }
+
+  const endChat = async (requestRating = true) => {
+    if (!canSendMessage.value || isLoading.value) return
+    try {
+      isLoading.value = true
+      const askRating = requestRating && canRequestRating(chat.value.channel)
+      const text = endChatMessageFor(chat.value.channel)
+      const clientMessageId = newClientMessageId()
+      const timestamp = new Date().toISOString()
+      const local = optimisticMessage(text, 'system', clientMessageId, timestamp, [], {
+        end_chat: true,
+        request_rating: askRating,
+      })
+      chat.value = {
+        ...chat.value,
+        status: 'closed' as ChatStatus,
+        messages: [...chat.value.messages, local],
+        updated_at: timestamp,
+      }
+      emit('chatUpdated', chat.value)
+      sendSocketMessage(text, 'system', clientMessageId, timestamp, [], {
+        end_chat: true,
+        request_rating: askRating,
+        end_chat_reason: 'AGENT_REQUEST',
+        end_chat_description: 'Agent manually ended the chat',
+      })
+      toast.success('会话已结束', { description: askRating ? '客户将收到满意度评价邀请' : '会话已归档关闭', duration: 3500 })
+      emit('refresh')
+      void scrollToBottom()
+    } catch (err: any) {
+      toast.error('结束会话失败', { description: err.response?.data?.detail || '请稍后重试', duration: 4500 })
+    } finally {
+      isLoading.value = false
+    }
+  }
+
+  const markMessageUndelivered = (clientMessageId?: string) => {
+    const messages = chat.value.messages
+    for (let i = messages.length - 1; i >= 0; i -= 1) {
+      const message = messages[i]
       if (message.message_type !== 'agent' || message.attributes?.delivery_status) continue
-      message.attributes = { ...message.attributes, delivery_status: 'failed' }
+      if (clientMessageId && message.client_message_id !== clientMessageId && message.attributes?.client_message_id !== clientMessageId) continue
+      message.attributes = { ...(message.attributes || {}), delivery_status: 'failed' }
       return
     }
   }
 
-  // On external channels a send can fail after the message is already stored
-  // (typically once WhatsApp's 24h window closes). Without this the agent sees
-  // their message sitting in the thread and assumes it arrived.
   const handleDeliveryError = (data: DeliveryErrorEvent) => {
     if (data?.type !== 'delivery_error' || data.session_id !== chat.value.session_id) return
-    markLatestAgentMessageUndelivered()
+    markMessageUndelivered(data.client_message_id)
     if (data.can_template) templateCanReopen.value = true
-    toast.error('Message not delivered', {
-      description: data.error,
-      duration: 6000,
-      closeButton: true
-    })
+    toast.error('消息未送达', { description: data.error || '客户渠道拒绝了这条消息', duration: 6000 })
   }
 
-  const setupSocketListeners = () => {
-    socketService.on('error', handleDeliveryError)
-  }
+  const setupSocketListeners = () => socketService.on('error', handleDeliveryError)
+  const cleanupSocketListeners = () => socketService.off('error', handleDeliveryError)
+  const handleSocketReconnect = () => { cleanupSocketListeners(); setupSocketListeners() }
 
-  const cleanupSocketListeners = () => {
-    socketService.off('error', handleDeliveryError)
-  }
+  onMounted(() => { setupSocketListeners(); socketService.onReconnect(handleSocketReconnect) })
+  onBeforeUnmount(() => { cleanupSocketListeners(); socketService.offReconnect(handleSocketReconnect) })
 
-  const handleSocketReconnect = () => {
-    cleanupSocketListeners()
-    setupSocketListeners()
-  }
+  const formattedMessages = computed(() => chat.value.messages.map(message => ({
+    ...message,
+    timeAgo: formatDistanceToNow(new Date(message.created_at), { addSuffix: true }),
+  })))
 
-  onMounted(() => {
-    setupSocketListeners()
-    socketService.onReconnect(handleSocketReconnect)
-  })
-
-  onBeforeUnmount(() => {
-    cleanupSocketListeners()
-    socketService.offReconnect(handleSocketReconnect)
-  })
-
-  const formattedMessages = computed(() => {
-    const formatted = chat.value.messages.map(msg => ({
-      ...msg,
-      timeAgo: formatDistanceToNow(new Date(msg.created_at), { addSuffix: true })
-    }))
-    
-    // Debug: Log messages with attachments
-    formatted.forEach((msg, idx) => {
-      if (msg.attachments && msg.attachments.length > 0) {
-        console.log(`[Message ${idx}] Has ${msg.attachments.length} attachments:`, msg.attachments)
-      }
-    })
-    
-    return formatted
-  })
+  const sendPrivateNote = (noteText: string, files: OutboundFile[] = []) => sendMessage(noteText, true, files)
 
   return {
+    chat,
     newMessage,
     messagesContainer,
     formattedMessages,
     isLoading,
+    aiToggleLoading,
     showTakeoverButton,
     showTakenOverStatus,
     isChatClosed,
@@ -390,6 +314,9 @@ export function useConversationChat(
     sendMessage,
     handleTakeover,
     handleRouteToHuman,
+    handleHandBackToAI,
+    toggleAIAutoReply,
+    sendPrivateNote,
     isWaitingForHuman,
     handlerCaption,
     updateChat,
@@ -397,6 +324,6 @@ export function useConversationChat(
     handledByAI,
     endChat,
     templateCanReopen,
-    clearTemplateSuggestion
+    clearTemplateSuggestion,
   }
-} 
+}

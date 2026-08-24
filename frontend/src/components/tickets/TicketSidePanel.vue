@@ -75,14 +75,14 @@ const csat = computed(() => {
     return {
       state: 'scored' as const,
       score,
-      label: `${score}/5`,
+      label: `${score}/5 分`,
       color: score >= 4 ? 'var(--c-positive)' : score >= 3 ? 'var(--c-warn)' : 'var(--c-danger)',
     }
   }
   if (awaitingAnswer) {
-    return { state: 'pending' as const, score: 0, label: 'Pending', color: 'var(--muted2)' }
+    return { state: 'pending' as const, score: 0, label: '等待评价', color: 'var(--muted2)' }
   }
-  return { state: 'not-requested' as const, score: 0, label: 'Not requested', color: 'var(--faint)' }
+  return { state: 'not-requested' as const, score: 0, label: '未发起评价', color: 'var(--faint)' }
 })
 
 function openConversation() {
@@ -100,21 +100,21 @@ function pickAssignee(userId: string | null) {
 <template>
   <aside class="side-panel">
     <div class="panel-card">
-      <div class="card-label">Assignee</div>
+      <div class="card-label">工单处理人</div>
       <div class="assignee-row">
         <span class="avatar" :class="{ ai: !assigneeName }">
           {{ ticketInitials(assigneeName) }}
         </span>
         <div class="assignee-info">
-          <div class="assignee-name">{{ assigneeName || 'ChatterMate AI' }}</div>
-          <div class="assignee-sub">{{ assigneeName ? 'Human agent' : 'Unassigned — AI handles' }}</div>
+          <div class="assignee-name">{{ assigneeName || 'AI 智能体' }}</div>
+          <div class="assignee-sub">{{ assigneeName ? '人工坐席' : '未指定 — AI 智能体接管' }}</div>
         </div>
         <button v-if="canManage" class="change-btn" @click="isPickingAssignee = !isPickingAssignee">
-          Change
+          更改
         </button>
       </div>
       <div v-if="isPickingAssignee" class="assignee-picker">
-        <button class="picker-option" @click="pickAssignee(null)">ChatterMate AI (unassign)</button>
+        <button class="picker-option" @click="pickAssignee(null)">AI 智能体 (取消指定)</button>
         <button
           v-for="user in users"
           :key="user.id"
@@ -128,13 +128,13 @@ function pickAssignee(userId: string | null) {
 
     <div class="panel-card">
       <div class="card-label-row">
-        <div class="card-label">Customer</div>
+        <div class="card-label">关联客户</div>
         <button
           v-if="canManage && !isEditingCustomer"
           class="change-btn"
           @click="startCustomerEdit"
         >
-          {{ ticket.customer ? 'Edit' : 'Add' }}
+          {{ ticket.customer ? '编辑' : '添加' }}
         </button>
       </div>
       <template v-if="isEditingCustomer">
@@ -148,17 +148,17 @@ function pickAssignee(userId: string | null) {
         <input
           v-model="customerNameDraft"
           class="customer-input"
-          placeholder="Name (optional)"
+          placeholder="客户姓名 (选填)"
           maxlength="200"
         />
         <div class="customer-edit-actions">
-          <button class="customer-cancel" @click="isEditingCustomer = false">Cancel</button>
+          <button class="customer-cancel" @click="isEditingCustomer = false">取消</button>
           <button
             class="customer-save"
             :disabled="!customerEmailDraft.trim()"
             @click="saveCustomer"
           >
-            Save
+            保存
           </button>
         </div>
       </template>
@@ -167,39 +167,39 @@ function pickAssignee(userId: string | null) {
           {{ (ticket.customer.full_name || ticket.customer.email || '?')[0]?.toUpperCase() }}
         </span>
         <div>
-          <div class="assignee-name">{{ ticket.customer.full_name || 'Customer' }}</div>
+          <div class="assignee-name">{{ ticket.customer.full_name || '客户' }}</div>
           <div class="assignee-sub">{{ ticket.customer.email }}</div>
         </div>
       </div>
       <div v-else class="no-customer">
-        No customer linked — notifications can't be sent for this ticket.
+        未关联客户 — 系统无法发送该工单的处理进展通知。
       </div>
     </div>
 
     <div v-if="linkedSessionIds.length" class="panel-card">
-      <div class="card-label">Linked conversation</div>
-      <button class="open-conversation" @click="openConversation">Open conversation →</button>
+      <div class="card-label">关联客服会话</div>
+      <button class="open-conversation" @click="openConversation">打开关联会话 →</button>
     </div>
 
     <div class="panel-card">
-      <div class="card-label">SLA</div>
+      <div class="card-label">SLA 服务等级承诺</div>
       <div class="sla-row">
-        <span class="sla-label">First response</span>
+        <span class="sla-label">首次响应时效</span>
         <span class="sla-value" :style="{ color: firstResponseMet ? 'var(--c-positive)' : 'var(--muted2)' }">
           <template v-if="firstResponseMet">
-            <font-awesome-icon :icon="['fas', 'check']" /> Met
+            <font-awesome-icon :icon="['fas', 'check']" /> 已达标
           </template>
-          <template v-else>Pending</template>
+          <template v-else>等待响应</template>
         </span>
       </div>
       <div class="sla-row">
-        <span class="sla-label">Resolution</span>
+        <span class="sla-label">最终解决时效</span>
         <span class="sla-value mono" :style="{ color: sla.color }">{{ sla.label }}</span>
       </div>
     </div>
 
     <div class="panel-card">
-      <div class="card-label">CSAT</div>
+      <div class="card-label">客户满意度 (CSAT)</div>
       <div class="csat-row">
         <span v-if="csat.state === 'scored'" class="csat-stars" :style="{ color: csat.color }">
           <font-awesome-icon
@@ -211,28 +211,28 @@ function pickAssignee(userId: string | null) {
         <span class="sla-value" :style="{ color: csat.color }">{{ csat.label }}</span>
       </div>
       <p class="csat-note">
-        <template v-if="csat.state === 'scored'">Rated by the customer on the linked conversation.</template>
-        <template v-else-if="csat.state === 'pending'">Asked on close — waiting for the customer to rate.</template>
-        <template v-else-if="linkedSessionIds.length">Asked automatically when the ticket is closed.</template>
-        <template v-else>No linked conversation to rate, so CSAT isn't collected for this ticket.</template>
+        <template v-if="csat.state === 'scored'">客户已在关联会话中完成评分。</template>
+        <template v-else-if="csat.state === 'pending'">工单关闭时已发起邀评 — 正在等待客户打分。</template>
+        <template v-else-if="linkedSessionIds.length">工单关闭时将自动向关联会话发起满意度评价。</template>
+        <template v-else>未关联客服会话，因此不采集该工单的 CSAT 评价。</template>
       </p>
     </div>
 
     <div v-if="ticket.intent || ticket.ai_summary" class="panel-card">
-      <div class="card-label">AI triage</div>
+      <div class="card-label">AI 智能分诊分析</div>
       <div v-if="ticket.intent" class="triage-row">
-        <span class="sla-label">Intent</span>
+        <span class="sla-label">识别意图</span>
         <span class="sla-value mono">{{ ticket.intent }}</span>
       </div>
       <div v-if="ticket.triage_confidence != null" class="triage-row">
-        <span class="sla-label">Confidence</span>
+        <span class="sla-label">置信度</span>
         <span class="sla-value mono">{{ ticket.triage_confidence.toFixed(2) }}</span>
       </div>
       <p v-if="ticket.ai_summary" class="triage-summary">{{ ticket.ai_summary }}</p>
     </div>
 
     <div v-if="ticket.external_ref_id" class="panel-card">
-      <div class="card-label">External reference</div>
+      <div class="card-label">外部系统关联单号</div>
       <a
         :href="ticket.external_ref_url || '#'"
         target="_blank"

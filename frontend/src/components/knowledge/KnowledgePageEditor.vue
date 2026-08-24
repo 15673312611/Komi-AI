@@ -42,18 +42,18 @@ const canSave = computed(() => props.content.trim().length > 0 && !props.saving)
 <template>
   <div class="editor">
     <div class="editor__body">
-      <label class="editor__label" for="kb-page-title">PAGE TITLE</label>
+      <label class="editor__label" for="kb-page-title">页面标题</label>
       <input
         id="kb-page-title"
         class="editor__title"
         :value="title"
         type="text"
-        placeholder="Page title"
+        placeholder="请输入知识页面标题"
         @input="emit('update:title', ($event.target as HTMLInputElement).value)"
       />
 
       <template v-if="showUrl">
-        <label class="editor__label" for="kb-page-url">SOURCE URL (OPTIONAL)</label>
+        <label class="editor__label" for="kb-page-url">来源网址 URL (选填)</label>
         <input
           id="kb-page-url"
           class="editor__title editor__url"
@@ -64,24 +64,24 @@ const canSave = computed(() => props.content.trim().length > 0 && !props.saving)
         />
       </template>
 
-      <label class="editor__label" for="kb-page-content">PAGE CONTENT</label>
+      <label class="editor__label" for="kb-page-content">页面正文内容</label>
       <textarea
         id="kb-page-content"
         class="editor__content"
         :value="content"
-        placeholder="Type the page content here. Leave a blank line between paragraphs."
+        placeholder="在此输入知识页面正文内容。段落之间保留空行分隔。"
         @input="emit('update:content', ($event.target as HTMLTextAreaElement).value)"
       ></textarea>
     </div>
 
     <div class="editor__foot">
       <span class="editor__status">
-        <span class="editor__status-dot"></span>Editing — re-embeds on save
+        <span class="editor__status-dot"></span>正在编辑 — 保存后自动触发重新向量嵌入
       </span>
       <div class="editor__buttons">
-        <button class="btn btn--ghost" type="button" :disabled="saving" @click="emit('cancel')">Cancel</button>
+        <button class="btn btn--ghost" type="button" :disabled="saving" @click="emit('cancel')">取消</button>
         <button class="btn btn--primary" type="button" :disabled="!canSave" @click="emit('save')">
-          {{ saving ? 'Saving…' : submitLabel }}
+          {{ saving ? '正在保存…' : submitLabel }}
         </button>
       </div>
     </div>

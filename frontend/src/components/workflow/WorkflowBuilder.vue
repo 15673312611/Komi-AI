@@ -98,79 +98,65 @@ const getLLMNodeExitCondition = (nodeId: string): string => {
 const availableNodeTypes: NodeTypeInfo[] = [
   {
     type: 'landingPage',
-    label: 'Landing Page',
+    label: '引导落地页 (Landing Page)',
     icon: '🏠',
-    description: 'Display a welcome screen with customizable heading and content',
+    description: '展示欢迎落地页面、自定义主副标题及引导内容',
     color: '#6366F1'
   },
   {
     type: 'message',
-    label: 'Message',
+    label: '固定消息 (Message)',
     icon: '💬',
-    description: 'Send a predefined message to the user',
+    description: '向用户发送指定的预设消息文案',
     color: '#3B82F6'
   },
   {
     type: 'llm',
-    label: 'LLM',
+    label: 'AI 大模型 (LLM)',
     icon: '🤖',
-    description: 'AI model processing with configurable prompts',
+    description: '配置 AI 提示词 Prompt 进行多轮智能对话',
     color: '#8B5CF6'
   },
   {
     type: 'condition',
-    label: 'Condition',
+    label: '条件分支 (Condition)',
     icon: '🔀',
-    description: 'Branch conversation based on conditions using variables',
+    description: '根据上下文变量进行多分支逻辑判定与路由',
     color: '#F59E0B'
   },
   {
     type: 'form',
-    label: 'Form',
+    label: '表单收集 (Form)',
     icon: '📝',
-    description: 'Collect structured data from users',
+    description: '收集用户的结构化信息（如姓名、手机、选项等）',
     color: '#10B981'
   },
   {
     type: 'userInput',
-    label: 'User Input',
+    label: '等待用户输入 (User Input)',
     icon: '✏️',
-    description: 'Wait for user input with a custom prompt',
+    description: '暂停等待用户输入文本并暂存为变量',
     color: '#06B6D4'
   },
   {
     type: 'guardrails',
-    label: 'Guardrails',
+    label: '安全护栏 (Guardrails)',
     icon: '🛡️',
-    description: 'Check content for PII, jailbreak attempts, and other violations',
+    description: '检测输入内容中的隐私敏感信息 (PII) 或违规指令',
     color: '#EC4899'
   },
-  // {
-  //   type: 'action',
-  //   label: 'Action',
-  //   icon: '⚡',
-  //   description: 'Trigger external actions or API calls',
-  //   color: '#EF4444'
-  // },
   {
     type: 'humanTransfer',
-    label: 'Human Agent',
+    label: '转人工客服 (Human Agent)',
     icon: '👤',
-    description: 'Let a human agent handle the conversation',
+    description: '结束自动化流程并将对话无缝转交人工坐席',
     color: '#F97316'
   },
-  // {
-  //   type: 'wait',
-  //   label: 'Wait',
-  //   icon: '⏱️',
-  //   description: 'Pause execution for time-based triggers',
-  //   color: '#6B7280'
-  // },
   {
     type: 'end',
-    label: 'End',
+    label: '结束流程 (End)',
     icon: '🏁',
-    description: 'Terminate conversation flow',
+    description: '终止当前工作流执行',
     color: '#DC2626'
   }
 ]
@@ -726,7 +712,7 @@ onUnmounted(() => {
           'status-published': isPublished, 
           'status-draft': isDraft 
         }">
-          {{ isPublished ? 'Published' : 'Draft' }}
+          {{ isPublished ? '已发布运行' : '草稿状态' }}
         </span>
       </div>
       <div class="header-actions">
@@ -735,7 +721,7 @@ onUnmounted(() => {
             <line x1="18" y1="6" x2="6" y2="18"></line>
             <line x1="6" y1="6" x2="18" y2="18"></line>
           </svg>
-          Close
+          关闭画布
         </button>
         
         <!-- Publish/Unpublish button -->
@@ -751,7 +737,7 @@ onUnmounted(() => {
             <line x1="15" y1="9" x2="9" y2="15"></line>
             <line x1="9" y1="9" x2="15" y2="15"></line>
           </svg>
-          Unpublish
+          取消发布 (下线)
         </button>
         
         <button 
@@ -759,15 +745,15 @@ onUnmounted(() => {
           class="action-btn success" 
           @click="publishWorkflow" 
           :disabled="!canPublish || publishLoading"
-          :title="!hasNodes ? 'Add nodes to the workflow before publishing' : 
-                  !hasValidConnections ? 'Connect all nodes and ensure condition nodes have both true and false paths before publishing' : 
-                  'Publish workflow to make it live'"
+          :title="!hasNodes ? '发布前请先在画布中添加节点' : 
+                  !hasValidConnections ? '请连接所有节点，并确保条件分支包含 true 与 false 两个出口' : 
+                  '发布工作流以使其对访客生效'"
         >
           <div v-if="publishLoading" class="btn-spinner"></div>
           <svg v-else class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"></path>
           </svg>
-          Publish
+          发布工作流
         </button>
         
         <button class="action-btn primary" @click="saveWorkflow" :disabled="loading">
@@ -777,7 +763,7 @@ onUnmounted(() => {
             <polyline points="17,21 17,13 7,13 7,21"></polyline>
             <polyline points="7,3 7,8 15,8"></polyline>
           </svg>
-          Save
+          保存工作流
         </button>
       </div>
     </div>
@@ -786,8 +772,8 @@ onUnmounted(() => {
       <!-- Sidebar -->
       <div class="sidebar">
         <div class="sidebar-header">
-          <h3>Node Types</h3>
-          <p>Drag nodes to canvas</p>
+          <h3>节点组件库</h3>
+          <p>拖拽节点至右侧画布构建流程</p>
         </div>
         
         <div class="node-types">
@@ -815,7 +801,7 @@ onUnmounted(() => {
       <div class="canvas-container">
         <div v-if="loading" class="canvas-loading">
           <div class="loading-spinner"></div>
-          <p>Loading workflow...</p>
+          <p>正在加载工作流...</p>
         </div>
         
         <VueFlow
@@ -840,15 +826,15 @@ onUnmounted(() => {
           <!-- Empty state -->
           <div v-if="!hasNodes" class="empty-state">
             <div class="empty-icon">🎯</div>
-            <h3>Start Building Your Workflow</h3>
-            <p>Drag nodes from the sidebar to create your conversation flow</p>
+            <h3>开始编排您的对话工作流</h3>
+            <p>从左侧面板拖拽节点到画布中，连线构建多轮交互旅程</p>
             <div v-if="isPublished" class="empty-state-warning">
               <svg class="warning-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
                 <line x1="12" y1="9" x2="12" y2="13"></line>
                 <line x1="12" y1="17" x2="12.01" y2="17"></line>
               </svg>
-              <p>This workflow is published but has no nodes. Add nodes to make it functional.</p>
+              <p>该工作流处于发布状态，但画布中尚无任何节点。请添加节点以提供服务。</p>
             </div>
           </div>
         </VueFlow>

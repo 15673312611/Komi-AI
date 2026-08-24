@@ -52,19 +52,19 @@ const selectedId = ref<string | null>(null)
 // One definition per column: `label` heads the desktop table, `short` labels
 // the same value inside the mobile card (which has no table header to name it).
 const COLUMNS = {
-  person: { label: 'Person', short: 'Person' },
-  stage: { label: 'Stage', short: 'Stage' },
-  source: { label: 'Source', short: 'Source' },
-  captured: { label: 'Captured', short: 'Captured' },
-  activity: { label: 'Last activity', short: 'Active' },
-  sync: { label: 'Sync', short: 'Sync' },
+  person: { label: '客户/访客', short: '访客' },
+  stage: { label: '生命周期阶段', short: '阶段' },
+  source: { label: '来源渠道', short: '来源' },
+  captured: { label: '留资时间', short: '留资' },
+  activity: { label: '最近活跃', short: '活跃' },
+  sync: { label: 'CRM 同步', short: '同步' },
 } as const
 
 const STAGES = [
-  { value: 'all', label: 'All' },
-  { value: 'visitor', label: 'Visitors' },
-  { value: 'lead', label: 'Leads' },
-  { value: 'customer', label: 'Customers' },
+  { value: 'all', label: '全部' },
+  { value: 'visitor', label: '访客' },
+  { value: 'lead', label: '销售线索' },
+  { value: 'customer', label: '成交客户' },
 ] as const
 
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / pageSize)))
@@ -83,7 +83,7 @@ async function loadList() {
     items.value = res.items
     total.value = res.total
   } catch {
-    toast.error('Failed to load people')
+    toast.error('获取客户线索列表失败')
   } finally {
     loading.value = false
   }
@@ -105,10 +105,18 @@ function initials(p: PersonListItem): string {
   if (p.is_anonymous || !p.name) return ''
   return getInitials(p.name, '')
 }
-function stageLabel(s: string) { return s.charAt(0).toUpperCase() + s.slice(1) }
+function stageLabel(s: string) {
+  const map: Record<string, string> = {
+    visitor: '访客',
+    lead: '销售线索',
+    customer: '成交客户',
+    all: '全部'
+  }
+  return map[s] || s
+}
 function fmtDate(d?: string | null) {
   if (!d) return '—'
-  try { return new Date(d).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) } catch { return '—' }
+  try { return new Date(d).toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' }) } catch { return '—' }
 }
 function sourceLabel(p: PersonListItem) {
   const s = p.source || {}
@@ -153,35 +161,34 @@ onMounted(() => {
           <path d="M8 11V7a4 4 0 0 1 8 0v4"/>
         </svg>
       </div>
-      <div class="pv-locked-badge">Pro feature</div>
-      <h2 class="pv-locked-title">People &amp; Lead Management</h2>
+      <div class="pv-locked-badge">专业版高级功能</div>
+      <h2 class="pv-locked-title">客户画像与线索留资管理</h2>
       <p class="pv-locked-desc">
-        See every visitor, lead and customer your agents capture — deduplicated into one
-        profile, with AI qualification summaries, lifecycle stages and captured contact details.
+        聚合所有由智能体和人工客服接待捕获的访客、销售线索与签约客户 — 自动去重合并为统一客户档案，沉淀 AI 意向识别小结、生命周期阶段及留资画像信息。
       </p>
       <ul class="pv-locked-feats">
-        <li>Org-wide lead directory with stage filters &amp; search</li>
-        <li>AI-qualified lead summaries and captured attributes</li>
-        <li>Automatic visitor → lead → customer lifecycle</li>
+        <li>全企业统一客户库，支持多生命周期阶段筛选与搜索</li>
+        <li>AI 意向度智能打分评级与结构化画像字段自动归集</li>
+        <li>自动推进 访客 → 销售线索 → 成交客户 的全生命周期</li>
       </ul>
-      <button class="pv-locked-btn" @click="goToUpgrade">Upgrade to Pro</button>
+      <button class="pv-locked-btn" @click="goToUpgrade">立即升级专业版</button>
     </div>
   </div>
 
   <div v-else class="people-view">
     <div class="pv-header">
       <div>
-        <h1 class="pv-title">People</h1>
-        <p class="pv-sub">Every lead your agents capture, deduplicated into one profile.</p>
+        <h1 class="pv-title">客户与线索画像 (People)</h1>
+        <p class="pv-sub">智能体与客服接待捕获的客户线索库，跨渠道自动归集去重生成统一画像档案。</p>
       </div>
     </div>
 
     <!-- KPI strip -->
     <div class="pv-kpis" v-if="stats">
-      <div class="pv-kpi"><div class="pv-kpi-label">TOTAL PEOPLE</div><div class="pv-kpi-value">{{ stats.total_people }}</div></div>
-      <div class="pv-kpi"><div class="pv-kpi-label">NEW LEADS · 7D</div><div class="pv-kpi-value accent">{{ stats.new_leads_7d }}</div></div>
-      <div class="pv-kpi"><div class="pv-kpi-label">CUSTOMERS</div><div class="pv-kpi-value">{{ stats.customers }}</div></div>
-      <div class="pv-kpi"><div class="pv-kpi-label">SYNCED TO CRM</div><div class="pv-kpi-value muted">{{ stats.synced_to_crm }}</div></div>
+      <div class="pv-kpi"><div class="pv-kpi-label">客户线索总数</div><div class="pv-kpi-value">{{ stats.total_people }}</div></div>
+      <div class="pv-kpi"><div class="pv-kpi-label">近 7 天新增线索</div><div class="pv-kpi-value accent">{{ stats.new_leads_7d }}</div></div>
+      <div class="pv-kpi"><div class="pv-kpi-label">正式成交客户</div><div class="pv-kpi-value">{{ stats.customers }}</div></div>
+      <div class="pv-kpi"><div class="pv-kpi-label">已同步至 CRM</div><div class="pv-kpi-value muted">{{ stats.synced_to_crm }}</div></div>
     </div>
 
     <!-- toolbar -->
@@ -191,10 +198,10 @@ onMounted(() => {
         <!-- Anonymous sessions are a lead-capture funnel signal, not directory
              content — an explicit tab, never the default view. -->
         <button class="pv-tab pv-tab-anon" :class="{ on: view === 'anonymous' }" @click="showAnonymous()">
-          Anonymous<span v-if="stats?.anonymous" class="pv-tab-count">{{ stats.anonymous }}</span>
+          匿名访客<span v-if="stats?.anonymous" class="pv-tab-count">{{ stats.anonymous }}</span>
         </button>
       </div>
-      <input class="pv-search" v-model="search" placeholder="Search name, email or company…" />
+      <input class="pv-search" v-model="search" placeholder="搜索姓名、邮箱、电话或公司..." />
     </div>
 
     <!-- table -->
@@ -206,9 +213,9 @@ onMounted(() => {
         <span class="pv-person rcards-primary">
           <span class="pv-avatar" :class="{ anon: p.is_anonymous }">{{ initials(p) }}</span>
           <span class="pv-person-text">
-            <span class="pv-name">{{ p.name || (p.is_anonymous ? 'Anonymous visitor' : (p.email || '—')) }}</span>
+            <span class="pv-name">{{ p.name || (p.is_anonymous ? '匿名访客' : (p.email || '—')) }}</span>
             <span class="pv-email">
-              {{ p.is_anonymous ? 'anonymous' : (p.email || '') }}
+              {{ p.is_anonymous ? '匿名会话' : (p.email || '') }}
               <span v-if="p.phone" class="pv-phone">{{ p.phone }}</span>
               <span class="pv-id" :title="String(p.id)">{{ shortId(p) }}</span>
             </span>
@@ -216,7 +223,7 @@ onMounted(() => {
         </span>
         <span class="pv-stage rcards-badge">
           <span class="pv-badge" :class="p.lead_stage">{{ stageLabel(p.lead_stage) }}</span>
-          <span v-if="p.qualified" class="pv-star" title="Qualified">★</span>
+          <span v-if="p.qualified" class="pv-star" title="AI 意向度达标">★</span>
         </span>
         <span class="pv-source rcards-meta" :title="sourceTitle(p)">
           <span class="rcards-label">{{ COLUMNS.source.short }}</span>
@@ -232,16 +239,16 @@ onMounted(() => {
         </span>
         <span class="pv-sync rcards-meta">
           <span class="rcards-label">{{ COLUMNS.sync.short }}</span>
-          <span class="rcards-value">{{ p.synced ? 'Synced' : '—' }}</span>
+          <span class="rcards-value">{{ p.synced ? '已同步' : '—' }}</span>
         </span>
       </button>
-      <div v-if="!loading && items.length === 0" class="pv-empty">No people match this filter.</div>
-      <div v-if="loading" class="pv-empty">Loading…</div>
+      <div v-if="!loading && items.length === 0" class="pv-empty">暂无符合当前筛选条件的客户或线索。</div>
+      <div v-if="loading" class="pv-empty">正在加载...</div>
       <div class="pv-foot">
-        <span>{{ total }} people</span>
+        <span>共 {{ total }} 位客户档案</span>
         <span class="pv-pager">
           <button :disabled="page <= 1" @click="prevPage">‹</button>
-          <span>Page {{ page }} / {{ totalPages }}</span>
+          <span>第 {{ page }} 页 / 共 {{ totalPages }} 页</span>
           <button :disabled="page >= totalPages" @click="nextPage">›</button>
         </span>
       </div>

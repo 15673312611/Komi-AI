@@ -21,30 +21,30 @@ limitations under the License.
     </div>
 
     <div v-else-if="isLoading" class="loading-state">
-      Loading customer analytics data...
+      正在加载客户分析数据…
     </div>
 
     <div v-else class="customer-analytics-content">
       <!-- Customer Table -->
       <div class="customers-table-container">
         <div v-if="!customerData?.customers?.length" class="no-data">
-          No customer data available
+          暂无客户分析数据
         </div>
         <table v-else class="customers-table">
           <thead>
             <tr>
-              <th>Customer</th>
-              <th>Total Chats</th>
-              <th>Last Interaction</th>
-              <th>Avg. Rating</th>
-              <th>Actions</th>
+              <th>客户信息</th>
+              <th>咨询会话总数</th>
+              <th>最后互动时间</th>
+              <th>平均评分</th>
+              <th>操作</th>
             </tr>
           </thead>
           <tbody>
             <tr v-for="customer in paginatedCustomers" :key="customer.id">
               <td>
                 <div class="customer-info">
-                  <span class="customer-name">{{ customer.full_name || 'Anonymous' }}</span>
+                  <span class="customer-name">{{ customer.full_name || '匿名客户' }}</span>
                   <span class="customer-email">{{ customer.email }}</span>
                 </div>
               </td>
@@ -66,7 +66,7 @@ limitations under the License.
                   class="view-details-btn"
                   @click="showCustomerDetails(customer)"
                 >
-                  View Details
+                  查看详情
                 </button>
               </td>
             </tr>
@@ -76,7 +76,7 @@ limitations under the License.
         <!-- Pagination Controls -->
         <div v-if="customerData?.customers?.length" class="pagination-controls">
           <div class="pagination-summary">
-            <span class="total-items">{{ customerData.pagination.total_count }} customers</span>
+            <span class="total-items">共 {{ customerData.pagination.total_count }} 位客户</span>
           </div>
           
           <div class="pagination-buttons">
@@ -84,7 +84,7 @@ limitations under the License.
               class="pagination-btn first-page" 
               :disabled="currentPage === 1"
               @click="goToPage(1)"
-              title="First Page"
+              title="首页"
             >
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <polyline points="11 17 6 12 11 7"></polyline>
@@ -96,7 +96,7 @@ limitations under the License.
               class="pagination-btn" 
               :disabled="currentPage === 1"
               @click="goToPage(currentPage - 1)"
-              title="Previous Page"
+              title="上一页"
             >
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <polyline points="15 18 9 12 15 6"></polyline>
@@ -108,12 +108,12 @@ limitations under the License.
                 <input 
                   type="number" 
                   class="page-input" 
-                  :value="currentPage"
+                  :value="currentPage" 
                   min="1"
                   :max="totalPages"
                   @change="handlePageInputChange($event)"
                 />
-                <span class="page-separator">of</span>
+                <span class="page-separator">/</span>
                 <span class="total-pages">{{ totalPages }}</span>
               </div>
             </div>
@@ -122,7 +122,7 @@ limitations under the License.
               class="pagination-btn" 
               :disabled="currentPage === totalPages"
               @click="goToPage(currentPage + 1)"
-              title="Next Page"
+              title="下一页"
             >
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <polyline points="9 18 15 12 9 6"></polyline>
@@ -133,7 +133,7 @@ limitations under the License.
               class="pagination-btn last-page" 
               :disabled="currentPage === totalPages"
               @click="goToPage(totalPages)"
-              title="Last Page"
+              title="末页"
             >
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <polyline points="13 17 18 12 13 7"></polyline>
@@ -148,10 +148,10 @@ limitations under the License.
               :value="itemsPerPage" 
               @change="handlePageSizeChange($event)"
             >
-              <option value="5">5 per page</option>
-              <option value="10">10 per page</option>
-              <option value="25">25 per page</option>
-              <option value="50">50 per page</option>
+              <option value="5">5 条/页</option>
+              <option value="10">10 条/页</option>
+              <option value="25">25 条/页</option>
+              <option value="50">50 条/页</option>
             </select>
             <svg class="dropdown-icon" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <polyline points="6 9 12 15 18 9"></polyline>
@@ -164,20 +164,20 @@ limitations under the License.
       <div v-if="selectedCustomer" class="customer-details-modal">
         <div class="modal-content">
           <div class="modal-header">
-            <h3>Customer Details</h3>
+            <h3>客户画像与互动详情</h3>
             <button class="close-btn" @click="selectedCustomer = null">&times;</button>
           </div>
           <div class="modal-body">
             <div class="customer-profile">
-              <h4>{{ selectedCustomer.full_name || 'Anonymous' }}</h4>
+              <h4>{{ selectedCustomer.full_name || '匿名客户' }}</h4>
               <p class="customer-email">{{ selectedCustomer.email }}</p>
               <div class="customer-stats">
                 <div class="stat-item">
-                  <span class="stat-label">Total Chats:</span>
+                  <span class="stat-label">会话总次数：</span>
                   <span class="stat-value">{{ selectedCustomer.total_chats }}</span>
                 </div>
                 <div class="stat-item">
-                  <span class="stat-label">Average Rating:</span>
+                  <span class="stat-label">平均评分：</span>
                   <div class="rating-display">
                     <span class="stars">
                       <svg v-for="n in 5" :key="n" class="star-icon" :class="{ filled: n <= Math.round(selectedCustomer.avg_rating) }"
@@ -189,16 +189,16 @@ limitations under the License.
                   </div>
                 </div>
                 <div class="stat-item">
-                  <span class="stat-label">Last Interaction:</span>
+                  <span class="stat-label">最近互动时间：</span>
                   <span class="stat-value">{{ formatDate(selectedCustomer.last_interaction) }}</span>
                 </div>
               </div>
             </div>
 
             <div class="feedback-section">
-              <h4>Interaction History & Feedback</h4>
+              <h4>历史评价与客户反馈</h4>
               <div v-if="!selectedCustomer.feedback || !selectedCustomer.feedback.length" class="no-data">
-                No feedback or rating history available
+                暂无历史评价或反馈记录
               </div>
               <div v-else class="feedback-list">
                 <div v-for="(item, index) in selectedCustomer.feedback" :key="index" class="feedback-item">
@@ -206,7 +206,7 @@ limitations under the License.
                     <div class="feedback-date-agent">
                       <span class="feedback-date">{{ formatDate(item.created_at) }}</span>
                       <span class="agent-info">
-                        Handled by: <span class="agent-name">{{ item.agent_name || 'AI Bot' }}</span>
+                        接待客服：<span class="agent-name">{{ item.agent_name || 'AI 智能体' }}</span>
                       </span>
                     </div>
                     <div class="rating-display">
@@ -220,11 +220,11 @@ limitations under the License.
                     </div>
                   </div>
                   <div v-if="item.feedback" class="feedback-content">
-                    <h5 class="feedback-label">Customer Feedback:</h5>
+                    <h5 class="feedback-label">客户评价内容：</h5>
                     <p class="feedback-text">{{ item.feedback }}</p>
                   </div>
                   <div v-else class="feedback-content no-comment">
-                    <p class="feedback-text">No comment provided</p>
+                    <p class="feedback-text">客户未填写具体评语</p>
                   </div>
                 </div>
               </div>

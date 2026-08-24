@@ -190,13 +190,13 @@ watch(selectedTimezone, (newTz) => {
 
 // Add these helper functions
 const days = [
-  { key: 'monday', label: 'Monday' },
-  { key: 'tuesday', label: 'Tuesday' },
-  { key: 'wednesday', label: 'Wednesday' },
-  { key: 'thursday', label: 'Thursday' },
-  { key: 'friday', label: 'Friday' },
-  { key: 'saturday', label: 'Saturday' },
-  { key: 'sunday', label: 'Sunday' }
+  { key: 'monday', label: '周一' },
+  { key: 'tuesday', label: '周二' },
+  { key: 'wednesday', label: '周三' },
+  { key: 'thursday', label: '周四' },
+  { key: 'friday', label: '周五' },
+  { key: 'saturday', label: '周六' },
+  { key: 'sunday', label: '周日' }
 ] as const
 
 const timeOptions = Array.from({ length: 24 * 4 }, (_, i) => {
@@ -211,8 +211,8 @@ const timeOptions = Array.from({ length: 24 * 4 }, (_, i) => {
         <div class="container">
             <!-- Header -->
             <header class="setup-header text-center">
-                <h1 class="gradient-text">Welcome to ChatterMate</h1>
-                <p class="subtitle opacity-80">Let's get your organization set up</p>
+                <h1 class="gradient-text">欢迎使用 ChatterMate</h1>
+                <p class="subtitle opacity-80">让我们来完成您企业的初始化配置</p>
             </header>
 
             <!-- Content -->
@@ -220,29 +220,28 @@ const timeOptions = Array.from({ length: 24 * 4 }, (_, i) => {
                 <div class="card">
                     <form @submit.prevent="handleSubmit">
                         <div class="form-group">
-                            <label class="form-label" for="orgName">Organization Name</label>
+                            <label class="form-label" for="orgName">企业 / 组织名称</label>
                             <input class="form-input" id="orgName" v-model="orgData.name"
                                 @input="handleOrgNameInput(orgData.name)" type="text" required
                                 :class="{ 'invalid': orgNameTouched && !isOrgNameValid }"
-                                placeholder="Enter your organization name" autocomplete="organization">
+                                placeholder="输入您的企业或品牌名称" autocomplete="organization">
                             <p v-if="orgNameTouched && !isOrgNameValid" class="error-hint">
-                                Organization name must be 2-100 characters and can contain letters, numbers, spaces,
-                                hyphens, apostrophes, & and dots
+                                组织名称长度须在 2-100 个字符之间，支持中文、字母、数字、空格及连字符
                             </p>
                         </div>
 
                         <div class="form-group">
-                            <label class="form-label" for="domain">Domain</label>
+                            <label class="form-label" for="domain">主域名</label>
                             <input class="form-input" id="domain" v-model="orgData.domain"
                                 @input="handleDomainInput(orgData.domain)" type="text" required
                                 :class="{ 'invalid': domainTouched && !isDomainValid }" placeholder="yourdomain.com">
                             <p v-if="domainTouched && !isDomainValid" class="error-hint">
-                                Please enter a valid domain (e.g., example.com)
+                                请输入有效的企业主域名（例如 yourdomain.com）
                             </p>
                         </div>
 
                         <div class="form-group">
-                            <label class="form-label" for="timezone">Timezone</label>
+                            <label class="form-label" for="timezone">所在时区</label>
                             <select 
                                 class="form-input" 
                                 id="timezone" 
@@ -259,12 +258,12 @@ const timeOptions = Array.from({ length: 24 * 4 }, (_, i) => {
                                 </option>
                             </select>
                             <p class="form-hint">
-                                Select your organization's primary timezone
+                                选择企业业务运营的主要时区
                             </p>
                         </div>
 
                         <div class="form-group">
-                            <label class="form-label">Business Hours</label>
+                            <label class="form-label">客服服务工作时间 (Business Hours)</label>
                             <div class="business-hours">
                                 <div v-for="day in days" :key="day.key" class="day-row">
                                     <div class="day-toggle">
@@ -286,7 +285,7 @@ const timeOptions = Array.from({ length: 24 * 4 }, (_, i) => {
                                                 {{ time }}
                                             </option>
                                         </select>
-                                        <span class="time-separator">to</span>
+                                        <span class="time-separator">至</span>
                                         <select 
                                             v-model="orgData.business_hours[day.key].end"
                                             :disabled="!orgData.business_hours[day.key].enabled"
@@ -298,37 +297,36 @@ const timeOptions = Array.from({ length: 24 * 4 }, (_, i) => {
                                     </div>
                                 </div>
                             </div>
-                            <p class="form-hint">Set your organization's operating hours for each day</p>
+                            <p class="form-hint">设置客服团队在各工作日的接待时段</p>
                         </div>
 
                         <div class="form-group">
-                            <label class="form-label" for="adminName">Admin Name</label>
+                            <label class="form-label" for="adminName">超级管理员姓名</label>
                             <input class="form-input" id="adminName" v-model="orgData.admin_name"
                                 @input="handleAdminNameInput(orgData.admin_name)" type="text" required
                                 :class="{ 'invalid': adminNameTouched && !isAdminNameValid }"
-                                placeholder="Your full name" autocomplete="name">
+                                placeholder="输入管理员全名" autocomplete="name">
                             <p v-if="adminNameTouched && !isAdminNameValid" class="error-hint">
-                                Name must be 2-100 characters and can contain letters, numbers, spaces, hyphens and
-                                apostrophes
+                                姓名长度须在 2-100 个字符之间
                             </p>
                         </div>
 
                         <div class="form-group">
-                            <label class="form-label" for="adminEmail">Admin Email</label>
+                            <label class="form-label" for="adminEmail">管理员登录邮箱</label>
                             <input class="form-input" id="adminEmail" v-model="orgData.admin_email"
                                 @input="handleEmailInput(orgData.admin_email)" type="email" required
                                 :class="{ 'invalid': emailTouched && !isEmailValid }" placeholder="admin@yourdomain.com"
                                 autocomplete="email">
                             <p v-if="emailTouched && !isEmailValid" class="error-hint">
-                                Please enter a valid email address
+                                请输入有效的电子邮箱地址
                             </p>
                         </div>
 
                         <div class="form-group">
-                            <label class="form-label" for="adminPassword">Admin Password</label>
+                            <label class="form-label" for="adminPassword">管理员密码</label>
                             <input class="form-input" id="adminPassword" v-model="orgData.admin_password"
                                 @input="handlePasswordInput(orgData.admin_password)" type="password" required
-                                placeholder="Enter a secure password" autocomplete="new-password" minlength="8">
+                                placeholder="设置安全的管理员登录密码" autocomplete="new-password" minlength="8">
                             <div v-if="passwordTouched" class="password-strength">
                                 <div class="strength-meter">
                                     <div class="strength-bar"
@@ -339,28 +337,28 @@ const timeOptions = Array.from({ length: 24 * 4 }, (_, i) => {
                                 </div>
                                 <ul class="strength-requirements">
                                     <li :class="{ met: passwordStrength.hasMinLength }">
-                                        At least 8 characters
+                                        至少 8 个字符
                                     </li>
                                     <li :class="{ met: passwordStrength.hasUpperCase }">
-                                        Contains uppercase letter
+                                        包含大写字母
                                     </li>
                                     <li :class="{ met: passwordStrength.hasLowerCase }">
-                                        Contains lowercase letter
+                                        包含小写字母
                                     </li>
                                     <li :class="{ met: passwordStrength.hasNumber }">
-                                        Contains number
+                                        包含数字
                                     </li>
                                     <li :class="{ met: passwordStrength.hasSpecialChar }">
-                                        Contains special character (!@#$%^&*)
+                                        包含特殊字符 (!@#$%^&*)
                                     </li>
                                 </ul>
                             </div>
                         </div>
 
                         <div class="form-group">
-                            <label class="form-label" for="confirmPassword">Confirm Password</label>
+                            <label class="form-label" for="confirmPassword">确认管理员密码</label>
                             <input class="form-input" id="confirmPassword" v-model="confirmPassword" type="password"
-                                required placeholder="Confirm your password" autocomplete="new-password">
+                                required placeholder="再次确认登录密码" autocomplete="new-password">
                         </div>
 
                         <div v-if="error" class="error-message" role="alert">
@@ -369,7 +367,7 @@ const timeOptions = Array.from({ length: 24 * 4 }, (_, i) => {
 
                         <div class="form-actions">
                             <button type="submit" class="btn btn-primary" :class="{ loading }" :disabled="loading">
-                                {{ loading ? '' : 'Create Organization' }}
+                                {{ loading ? '正在创建...' : '立即创建企业组织' }}
                             </button>
                         </div>
                     </form>

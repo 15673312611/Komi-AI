@@ -122,16 +122,16 @@ const iframeEmbedCode = computed(() => {
 <template>
   <div class="widget-tab">
     <section class="detail-section">
-      <h3 class="section-title">Widget Integration</h3>
+      <h3 class="section-title">网页挂件集成与部署</h3>
       <p class="section-description">
-        Add your agent to any website by copying and pasting the code snippet below into your HTML.
+        只需将下方代码片段复制并粘贴到您网站的 HTML 源码中，即可让智能客服立即在您的网站上线运行。
       </p>
 
       <div class="widget-info">
-        <h4 class="widget-section-title">Embed Code</h4>
+        <h4 class="widget-section-title">挂件嵌入代码</h4>
         <div v-if="widgetLoading" class="loading-indicator">
           <div class="loading-spinner"></div>
-          Loading widget info...
+          正在加载挂件配置...
         </div>
         <div v-else-if="widget" class="widget-code-section">
           <!-- Token-based authentication (when require_token_auth is enabled) -->
@@ -140,22 +140,21 @@ const iframeEmbedCode = computed(() => {
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path d="M12 15V17M6 21H18C19.1046 21 20 20.1046 20 19V13C20 11.8954 19.1046 11 18 11H6C4.89543 11 4 11.8954 4 13V19C4 20.1046 4.89543 21 6 21ZM16 11V7C16 4.79086 14.2091 3 12 3C9.79086 3 8 4.79086 8 7V11H16Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
               </svg>
-              Token Authentication Required
+              已开启安全令牌 (Token) 身份认证
             </div>
 
             <p class="code-description">
-              This agent requires token authentication. Your backend must generate a token using the ChatterMate API before loading the widget.
+              该智能体开启了安全认证。在前端加载挂件前，您的后端服务必须先调用 ChatterMate API 签发临时安全 Token。
             </p>
 
             <!-- Step 1: Get API Key -->
             <div class="setup-step">
               <div class="step-header">
                 <span class="step-number">1</span>
-                <h5 class="step-title">Get your API Key</h5>
+                <h5 class="step-title">获取 API Key 密钥</h5>
               </div>
               <p class="step-description">
-                Go to <strong>Settings &gt; Widget Apps</strong> to create a Widget App and get your API key.
-                Keep this key secure - it should only be used server-side.
+                前往 <strong>系统设置 &gt; 挂件应用</strong> 创建挂件应用并获取专属 API Key。请妥善保管此密钥，仅在您的后端服务器中使用。
               </p>
             </div>
 
@@ -163,29 +162,29 @@ const iframeEmbedCode = computed(() => {
             <div class="setup-step">
               <div class="step-header">
                 <span class="step-number">2</span>
-                <h5 class="step-title">Generate token (Server-side)</h5>
+                <h5 class="step-title">后端生成访问令牌 (服务端接口)</h5>
               </div>
               <p class="step-description">
-                Create a backend endpoint that calls the ChatterMate API to generate a token:
+                在您的服务端创建一个接口，调用 ChatterMate 鉴权接口生成临时访问 Token：
               </p>
               <div class="code-block">
-                <pre><code>// Your backend endpoint (e.g., /api/chat-token)
+                <pre><code>// 您的后端接口 (例如 /api/chat-token)
 const response = await fetch('{{ widgetUrl }}/api/v1/generate-token', {
   method: 'POST',
   headers: {
     'Content-Type': 'application/json',
-    'Authorization': 'Bearer YOUR_API_KEY'  // From Widget Apps
+    'Authorization': 'Bearer 您的_API_KEY'  // 来自系统设置中的挂件应用
   },
   body: JSON.stringify({
     widget_id: '{{ widget.id }}',
-    customer_email: 'user@example.com',  // Optional
-    ttl_seconds: 3600  // Token validity (1 hour)
+    customer_email: 'user@example.com',  // 可选：当前登录客户邮箱
+    ttl_seconds: 3600  // 令牌有效期 (默认 1 小时)
   })
 });
 
 const { data } = await response.json();
-// Return data.token to your frontend</code></pre>
-                <button class="copy-button" @click="copyBackendCode" title="Copy backend code">
+// 将 data.token 返回给前端客户端</code></pre>
+                <button class="copy-button" @click="copyBackendCode" title="复制后端示例代码">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <path d="M8 4V16C8 17.1046 8.89543 18 10 18H18C19.1046 18 20 17.1046 20 16V7.41421C20 6.88378 19.7893 6.37507 19.4142 6L16 2.58579C15.6249 2.21071 15.1162 2 14.5858 2H10C8.89543 2 8 2.89543 8 4Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
                     <path d="M16 18V20C16 21.1046 15.1046 22 14 22H6C4.89543 22 4 21.1046 4 20V8C4 6.89543 4.89543 6 6 6H8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
@@ -198,14 +197,14 @@ const { data } = await response.json();
             <div class="setup-step">
               <div class="step-header">
                 <span class="step-number">3</span>
-                <h5 class="step-title">Add to your website (Client-side)</h5>
+                <h5 class="step-title">嵌入您的网站前端 (客户端)</h5>
               </div>
               <p class="step-description">
-                Add this code to your HTML, replacing <code>/api/chattermate</code> with your backend endpoint:
+                将以下代码添加到 HTML 页面中，并将 <code>/api/chattermate</code> 替换为您在第 2 步中创建的服务端鉴权接口路径：
               </p>
               <div class="code-block">
                 <pre><code>{{ embedCode }}</code></pre>
-                <button class="copy-button" @click="copyWidgetCode" title="Copy to clipboard">
+                <button class="copy-button" @click="copyWidgetCode" title="复制前端嵌入代码">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <path d="M8 4V16C8 17.1046 8.89543 18 10 18H18C19.1046 18 20 17.1046 20 16V7.41421C20 6.88378 19.7893 6.37507 19.4142 6L16 2.58579C15.6249 2.21071 15.1162 2 14.5858 2H10C8.89543 2 8 2.89543 8 4Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
                     <path d="M16 18V20C16 21.1046 15.1046 22 14 22H6C4.89543 22 4 21.1046 4 20V8C4 6.89543 4.89543 6 6 6H8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
@@ -221,7 +220,7 @@ const { data } = await response.json();
                 </svg>
               </div>
               <div class="info-content">
-                <p><strong>Security Note:</strong> Never expose your API key in client-side code. The token generation must happen on your server.</p>
+                <p><strong>安全提示：</strong> 切勿在前端页面代码中直接暴露您的 API Key。令牌签发必须在安全的服务端执行。</p>
               </div>
             </div>
           </template>
@@ -229,11 +228,11 @@ const { data } = await response.json();
           <!-- Simple integration (no token auth required) -->
           <template v-else>
             <p class="code-description">
-              Add this code snippet to your website's HTML, just before the closing <code>&lt;/body&gt;</code> tag:
+              将以下代码片段直接粘贴到您网站 HTML 的 <code>&lt;/body&gt;</code> 结束标签之前即可：
             </p>
             <div class="code-block">
               <pre><code>{{ embedCode }}</code></pre>
-              <button class="copy-button" @click="copyWidgetCode" title="Copy to clipboard">
+              <button class="copy-button" @click="copyWidgetCode" title="复制挂件代码">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                   <path d="M8 4V16C8 17.1046 8.89543 18 10 18H18C19.1046 18 20 17.1046 20 16V7.41421C20 6.88378 19.7893 6.37507 19.4142 6L16 2.58579C15.6249 2.21071 15.1162 2 14.5858 2H10C8.89543 2 8 2.89543 8 4Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
                   <path d="M16 18V20C16 21.1046 15.1046 22 14 22H6C4.89543 22 4 21.1046 4 20V8C4 6.89543 4.89543 6 6 6H8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
@@ -248,7 +247,7 @@ const { data } = await response.json();
                 </svg>
               </div>
               <div class="info-content">
-                <p>The widget will appear as a chat button in the bottom right corner of your website. No authentication setup required.</p>
+                <p>挂件将以对话气泡按钮的形式呈现在您网站右下角。无需任何复杂服务端鉴权即可开箱即用。</p>
               </div>
             </div>
           </template>
@@ -257,15 +256,15 @@ const { data } = await response.json();
 
       <!-- Per-page overrides + JS API -->
       <div class="widget-info">
-        <h4 class="widget-section-title">Customize &amp; control (optional)</h4>
+        <h4 class="widget-section-title">个性化高级定制与 JS 接口控制 (可选)</h4>
         <div class="widget-code-section">
           <p class="code-description">
-            Placement, size and launcher visibility are set in the <strong>Customization</strong> tab.
-            To override them on a specific page, set <code>window.chattermateConfig</code> before the loader script:
+            挂件的默认外观与弹出位置可在 <strong>挂件外观定制</strong> 标签页中直观设置。
+            若您需要在特定单页覆盖默认样式，可在挂件脚本加载前声明 <code>window.chattermateConfig</code>：
           </p>
           <div class="code-block">
             <pre><code>{{ configExampleCode }}</code></pre>
-            <button class="copy-button" @click="copyText(configExampleCode)" title="Copy to clipboard">
+            <button class="copy-button" @click="copyText(configExampleCode)" title="复制代码">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path d="M8 4V16C8 17.1046 8.89543 18 10 18H18C19.1046 18 20 17.1046 20 16V7.41421C20 6.88378 19.7893 6.37507 19.4142 6L16 2.58579C15.6249 2.21071 15.1162 2 14.5858 2H10C8.89543 2 8 2.89543 8 4Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
                 <path d="M16 18V20C16 21.1046 15.1046 22 14 22H6C4.89543 22 4 21.1046 4 20V8C4 6.89543 4.89543 6 6 6H8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
@@ -273,11 +272,11 @@ const { data } = await response.json();
             </button>
           </div>
           <p class="code-description">
-            Open, close and react to the widget from your own button:
+            通过 JavaScript 编程或自定义网页按钮控制挂件开启、关闭与消息监听：
           </p>
           <div class="code-block">
             <pre><code>{{ jsApiExampleCode }}</code></pre>
-            <button class="copy-button" @click="copyText(jsApiExampleCode)" title="Copy to clipboard">
+            <button class="copy-button" @click="copyText(jsApiExampleCode)" title="复制代码">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path d="M8 4V16C8 17.1046 8.89543 18 10 18H18C19.1046 18 20 17.1046 20 16V7.41421C20 6.88378 19.7893 6.37507 19.4142 6L16 2.58579C15.6249 2.21071 15.1162 2 14.5858 2H10C8.89543 2 8 2.89543 8 4Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
                 <path d="M16 18V20C16 21.1046 15.1046 22 14 22H6C4.89543 22 4 21.1046 4 20V8C4 6.89543 4.89543 6 6 6H8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
@@ -289,25 +288,25 @@ const { data } = await response.json();
 
       <!-- Iframe Integration Section for Ask Anything Style -->
       <div v-if="isAskAnythingStyle && !requiresTokenAuth" class="widget-info">
-        <h4 class="widget-section-title">Iframe Integration</h4>
+        <h4 class="widget-section-title">Iframe 嵌入集成</h4>
         <div v-if="widgetLoading" class="loading-indicator">
           <div class="loading-spinner"></div>
-          Loading iframe info...
+          正在加载 Iframe 信息...
         </div>
         <div v-else-if="widget" class="widget-code-section">
           <p class="code-description">
-            For "Ask Anything" style agents, you can embed the chat interface directly into your page:
+            针对「全知问答 (Ask Anything)」形态的智能体，您可以将对话界面以内嵌 Iframe 的形式直接嵌入到页面主体内容中：
           </p>
 
           <!-- Iframe Preview -->
           <div class="iframe-preview-section">
-            <h5 class="preview-title">Preview</h5>
+            <h5 class="preview-title">嵌入预览效果</h5>
             <div class="iframe-preview-container">
               <iframe
                 :src="iframeUrl"
                 class="iframe-preview"
                 frameborder="0"
-                title="AI Assistant Preview"
+                title="AI 助手嵌入预览"
                 allow="clipboard-write"
               ></iframe>
             </div>
@@ -316,7 +315,7 @@ const { data } = await response.json();
           <!-- Iframe Code -->
           <div class="code-block">
             <pre><code>{{ iframeEmbedCode }}</code></pre>
-            <button class="copy-button" @click="copyIframeCode" title="Copy iframe code">
+            <button class="copy-button" @click="copyIframeCode" title="复制 Iframe 代码">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path d="M8 4V16C8 17.1046 8.89543 18 10 18H18C19.1046 18 20 17.1046 20 16V7.41421C20 6.88378 19.7893 6.37507 19.4142 6L16 2.58579C15.6249 2.21071 15.1162 2 14.5858 2H10C8.89543 2 8 2.89543 8 4Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
                 <path d="M16 18V20C16 21.1046 15.1046 22 14 22H6C4.89543 22 4 21.1046 4 20V8C4 6.89543 4.89543 6 6 6H8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
@@ -331,7 +330,7 @@ const { data } = await response.json();
               </svg>
             </div>
             <div class="info-content">
-              <p><strong>Tip:</strong> Perfect for embedding directly into help pages, contact forms, or dedicated support sections.</p>
+              <p><strong>使用技巧：</strong> 非常适合直接嵌入帮助中心文档页、独立客服专区或营销落地页中。</p>
             </div>
           </div>
         </div>

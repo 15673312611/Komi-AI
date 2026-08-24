@@ -482,30 +482,30 @@ const isLeadCaptureLocked = computed(() => {
 const modalTitle = computed(() => {
     switch (upgradeModalType.value) {
         case 'workflow':
-            return 'Unlock Workflow Features'
+            return '解锁可视化工作流编排'
         case 'mcp':
-            return 'Unlock MCP Tools'
+            return '解锁 MCP 协议工具集成'
         case 'advanced':
-            return 'Unlock Advanced Settings'
+            return '解锁高级大模型参数设置'
         case 'lead-capture':
-            return 'Unlock Lead Capture'
+            return '解锁智能线索与客户留资'
         default:
-            return 'Unlock Premium Features'
+            return '解锁企业级高级功能'
     }
 })
 
 const modalDescription = computed(() => {
     switch (upgradeModalType.value) {
         case 'workflow':
-            return 'Workflow mode allows you to create sophisticated automation flows with conditional logic, multiple steps, and advanced integrations.'
+            return '工作流模式允许您通过条件逻辑分支、多步骤动作和高级系统集成，灵活编排高精度自动化客户服务流程。'
         case 'mcp':
-            return 'MCP Tools enable integration with Model Context Protocol servers to extend your agent\'s capabilities with external data sources and services.'
+            return 'MCP 工具支持对接 Model Context Protocol 协议服务器，无缝扩展智能体与外部私有系统、业务数据库和 API 的交互能力。'
         case 'advanced':
-            return 'Advanced settings provide fine-grained control over your agent\'s behavior, performance tuning, and enterprise-grade configuration options.'
+            return '高级配置提供对大模型运行温度、Top P、系统人设约束和超时策略的精细化控制与企业级调优选项。'
         case 'lead-capture':
-            return 'Lead Capture lets your agent collect and qualify contact details from visitors — with triggers, qualifying questions, and custom fields — then routes qualified leads to your team.'
+            return '线索收集功能让智能客服在对话中主动识别潜在意向客户并收集其联系方式，支持前置筛选与自动分流转交团队。'
         default:
-            return 'Upgrade your plan to access premium features and unlock the full potential of your AI agent.'
+            return '升级您的企业套餐，立即释放 AI 智能客服全套高级自动化能力。'
     }
 })
 
@@ -513,27 +513,27 @@ const modalFeatures = computed(() => {
     switch (upgradeModalType.value) {
         case 'workflow':
             return [
-                'Visual workflow builder',
-                'Conditional logic & branching',
-                'Advanced integrations',
-                'Custom automation flows'
+                '可视化节点拖拽编排',
+                '多条件分支与意图路由',
+                '多渠道动作与工单创建',
+                '自定义自动化闭环流程'
             ]
         case 'mcp':
             return [
-                'Connect to MCP servers',
-                'External data integration',
-                'Custom tool extensions',
-                'Protocol-based communication'
+                '无缝连接标准 MCP 服务端',
+                '集成企业外部数据库与系统',
+                '自定义函数与工具扩展调用',
+                '标准化安全协议通信'
             ]
         case 'advanced':
             return [
-                'Performance optimization',
-                'Custom system prompts',
-                'Enterprise configurations',
-                'Advanced debugging tools'
+                '大模型生成性能与温度微调',
+                '高精度系统 Prompt 注入',
+                '企业级安全与审计配置',
+                '深度会话调试与诊断工具'
             ]
         default:
-            return ['Premium features', 'Advanced capabilities', 'Enhanced functionality', 'Priority support']
+            return ['企业尊享功能', '无限知识库容量', '人机协同增强', '专属技术支持']
     }
 })
 
@@ -811,12 +811,12 @@ onMounted(async () => {
 </script>
 
 <template>
-    <div class="agent-detail">
+    <div class="agent-detail" :class="{ 'fullscreen-workflow': isWorkflowFullscreen }">
         <!-- Left Panel -->
         <div class="detail-panel">
-                    <div class="panel-header">
+            <div class="panel-header">
             <div class="header-layout">
-                <button class="back-button" @click="handleClose" aria-label="Back to agents">
+                <button class="back-button" @click="handleClose" aria-label="返回智能体列表">
                     <svg class="back-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M19 12H5m7-7-7 7 7 7"/>
                     </svg>
@@ -829,7 +829,7 @@ onMounted(async () => {
                             <div v-if="showOrbAvatar" class="agent-orb-avatar" :class="{ 'opacity-50': isUploading }" :style="orbStyle"></div>
                             <img v-else :src="photoUrl" :alt="agentData.name" :class="{ 'opacity-50': isUploading }">
                             <div class="upload-overlay" v-if="!isUploading">
-                                <span>Change</span>
+                                <span>更换</span>
                             </div>
                             <div class="upload-overlay" v-else>
                                 <span>...</span>
@@ -841,7 +841,7 @@ onMounted(async () => {
 
                         <!-- Preset avatar picker -->
                         <div v-if="showAvatarPicker" class="avatar-picker" @click.stop>
-                            <div class="avatar-picker-title">Choose a picture</div>
+                            <div class="avatar-picker-title">选择智能体头像</div>
                             <div class="avatar-picker-grid">
                                 <button
                                     v-for="(url, i) in presetAvatars"
@@ -850,7 +850,7 @@ onMounted(async () => {
                                     class="avatar-pick"
                                     :disabled="isUploading"
                                     @click="selectPresetAvatar(url)"
-                                    :aria-label="`Avatar ${i + 1}`"
+                                    :aria-label="`头像 ${i + 1}`"
                                 >
                                     <img :src="url" alt="">
                                 </button>
@@ -862,8 +862,8 @@ onMounted(async () => {
                                     :class="{ active: useOrbAvatar && (currentOrbVariant ?? -1) === n - 1 }"
                                     :disabled="isUploading"
                                     @click="selectOrbAvatar(n - 1)"
-                                    :aria-label="`Orb ${n}`"
-                                    :title="`Orb ${n}`"
+                                    :aria-label="`光晕 ${n}`"
+                                    :title="`极光色系 ${n}`"
                                 >
                                     <span class="avatar-orb-thumb" :style="getOrbStyleAt(n - 1)"></span>
                                 </button>
@@ -873,15 +873,15 @@ onMounted(async () => {
                                     :class="{ active: useTerminalMark }"
                                     :disabled="isUploading"
                                     @click="selectTerminalMark"
-                                    aria-label="Terminal mark"
-                                    title="Terminal >"
+                                    aria-label="命令行光标标识"
+                                    title="终端符 >"
                                 >
                                     <span class="avatar-terminal-thumb">&gt;</span>
                                 </button>
                             </div>
                             <button type="button" class="avatar-picker-upload" :disabled="isUploading" @click="chooseUploadAvatar">
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-                                Upload your own
+                                自定义上传本地图片
                             </button>
                         </div>
                     </div>
@@ -889,7 +889,7 @@ onMounted(async () => {
                         <div class="name-section">
                             <div v-if="!isEditingHeader" class="name-display">
                                 <h3>{{ agentData.display_name || agentData.name }}</h3>
-                                <button class="edit-icon-button" @click="isEditingHeader = true" title="Edit name and status">
+                                <button class="edit-icon-button" @click="isEditingHeader = true" title="编辑名称与状态">
                                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                         <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
                                         <path d="m18.5 2.5 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
@@ -900,17 +900,17 @@ onMounted(async () => {
                                 <input 
                                     v-model="editDisplayName" 
                                     class="name-input"
-                                    placeholder="Enter display name"
+                                    placeholder="输入展示名称"
                                     @keyup.enter="handleSaveHeader"
                                     @keyup.escape="handleCancelHeaderEdit"
                                 >
                                 <div class="edit-actions">
-                                    <button class="save-icon-button" @click="handleSaveHeader" title="Save">
+                                    <button class="save-icon-button" @click="handleSaveHeader" title="保存">
                                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                             <polyline points="20,6 9,17 4,12"></polyline>
                                         </svg>
                                     </button>
-                                    <button class="cancel-icon-button" @click="handleCancelHeaderEdit" title="Cancel">
+                                    <button class="cancel-icon-button" @click="handleCancelHeaderEdit" title="取消">
                                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                             <line x1="18" y1="6" x2="6" y2="18"></line>
                                             <line x1="6" y1="6" x2="18" y2="18"></line>
@@ -929,7 +929,7 @@ onMounted(async () => {
                                     >
                                     <span class="status-slider"></span>
                                 </label>
-                                <span class="status-text" :class="{ online: (isEditingHeader ? editIsActive : agentData.is_active) }">{{ (isEditingHeader ? editIsActive : agentData.is_active) ? 'Online' : 'Offline' }}</span>
+                                <span class="status-text" :class="{ online: (isEditingHeader ? editIsActive : agentData.is_active) }">{{ (isEditingHeader ? editIsActive : agentData.is_active) ? '在线' : '离线' }}</span>
                             </div>
                             
                             <!-- Mode Selection -->
@@ -944,7 +944,7 @@ onMounted(async () => {
                                             <circle cx="12" cy="12" r="3"/>
                                             <path d="M12 1v6m0 6v6m11-7h-6m-6 0H1m15.5-3.5L19 4l-1.5 1.5M6.5 17.5L5 19l1.5 1.5m0-11L5 5l1.5 1.5m11 11L19 19l-1.5-1.5"/>
                                         </svg>
-                                        <span class="mode-label">AI Mode</span>
+                                        <span class="mode-label">AI 对话模式</span>
                                     </button>
                                     <button 
                                         class="mode-button" 
@@ -954,7 +954,7 @@ onMounted(async () => {
                                         }"
                                         :disabled="isWorkflowLocked && !agentData.use_workflow"
                                         @click="agentData.use_workflow || handleToggleUseWorkflow()"
-                                        :title="isWorkflowLocked ? 'Upgrade your plan to unlock Workflow mode' : 'Switch to Workflow mode'"
+                                        :title="isWorkflowLocked ? '升级套餐解锁可视化工作流编排' : '切换至工作流编排模式'"
                                     >
                                         <svg class="mode-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                             <rect x="3" y="3" width="6" height="6"/>
@@ -963,7 +963,7 @@ onMounted(async () => {
                                             <path d="M6 9v3a3 3 0 0 0 3 3h6a3 3 0 0 0 3-3V9"/>
                                             <path d="M12 15v-3"/>
                                         </svg>
-                                        <span class="mode-label">Workflow</span>
+                                        <span class="mode-label">工作流模式</span>
                                         <font-awesome-icon v-if="hasEnterpriseModule && isWorkflowLocked" icon="fa-solid fa-lock" class="lock-icon" />
                                     </button>
                                 </div>
@@ -984,7 +984,7 @@ onMounted(async () => {
                             @click="switchTab('agent')"
                             v-if="!showWorkflowTab"
                         >
-                            Agent
+                            人设与配置
                         </button>
                         <button 
                             class="tab-button" 
@@ -994,10 +994,10 @@ onMounted(async () => {
                             }"
                             :disabled="isWorkflowLocked"
                             @click="isWorkflowLocked ? (upgradeModalType = 'workflow', showUpgradeModal = true) : switchTab('workflow-builder')"
-                            :title="isWorkflowLocked ? 'Upgrade your plan to unlock Workflow Builder' : 'Workflow Builder'"
+                            :title="isWorkflowLocked ? '升级套餐解锁工作流编排器' : '工作流编排器'"
                             v-if="agentData.use_workflow || isWorkflowLocked"
                         >
-                            Workflow Builder
+                            工作流编排
                             <font-awesome-icon v-if="hasEnterpriseModule && isWorkflowLocked" icon="fa-solid fa-lock" class="lock-icon-small" />
                         </button>
                         <button 
@@ -1005,37 +1005,37 @@ onMounted(async () => {
                             :class="{ 'active': activeTab === 'customization' }"
                             @click="switchTab('customization')"
                         >
-                            Chat Customization
+                            挂件外观定制
                         </button>
                         <button 
                             class="tab-button" 
                             :class="{ 'active': activeTab === 'preview' }"
                             @click="switchTab('preview')"
                         >
-                            Test & Preview
+                            调试与预览
                         </button>
                         <button 
                             class="tab-button" 
                             :class="{ 'active': activeTab === 'knowledge' }"
                             @click="switchTab('knowledge')"
                         >
-                            Knowledge
+                            知识库
                         </button>
                         <button 
                             class="tab-button" 
                             :class="{ 'active': activeTab === 'integrations' }"
                             @click="switchTab('integrations')"
                         >
-                            Integrations
+                            渠道与集成
                         </button>
                         <button
                             class="tab-button"
                             :class="{ 'active': activeTab === 'lead-capture', 'locked': isLeadCaptureLocked }"
                             :disabled="isLeadCaptureLocked"
                             @click="isLeadCaptureLocked ? (upgradeModalType = 'lead-capture', showUpgradeModal = true) : switchTab('lead-capture')"
-                            :title="isLeadCaptureLocked ? 'Upgrade your plan to unlock Lead Capture' : 'Lead Capture'"
+                            :title="isLeadCaptureLocked ? '升级套餐解锁线索收集' : '线索收集'"
                         >
-                            Lead Capture
+                            线索与留资
                             <font-awesome-icon v-if="hasEnterpriseModule && isLeadCaptureLocked" icon="fa-solid fa-lock" class="lock-icon-small" />
                         </button>
                         <button
@@ -1043,9 +1043,9 @@ onMounted(async () => {
                             :class="{ 'active': activeTab === 'mcp-tools', 'locked': isMCPLocked }"
                             :disabled="isMCPLocked"
                             @click="isMCPLocked ? (upgradeModalType = 'mcp', showUpgradeModal = true) : switchTab('mcp-tools')"
-                            :title="isMCPLocked ? 'Upgrade your plan to unlock MCP Tools' : 'MCP Tools'"
+                            :title="isMCPLocked ? '升级套餐解锁 MCP 工具协议' : 'MCP 工具'"
                         >
-                            MCP Tools
+                            MCP 扩展工具
                             <font-awesome-icon v-if="hasEnterpriseModule && isMCPLocked" icon="fa-solid fa-lock" class="lock-icon-small" />
                         </button>
                         <button 
@@ -1053,21 +1053,19 @@ onMounted(async () => {
                             :class="{ 'active': activeTab === 'widget' }"
                             @click="switchTab('widget')"
                         >
-                            Widget
+                            挂件部署
                         </button>
                         <button 
                             class="tab-button" 
                             :class="{ 'active': activeTab === 'advanced', 'locked': isAdvancedLocked }"
                             :disabled="isAdvancedLocked"
                             @click="isAdvancedLocked ? (upgradeModalType = 'advanced', showUpgradeModal = true) : switchTab('advanced')"
-                            :title="isAdvancedLocked ? 'Upgrade your plan to unlock Advanced Settings' : 'Advanced'"
+                            :title="isAdvancedLocked ? '升级套餐解锁高级大模型参数配置' : '高级配置'"
                         >
-                            Advanced
+                            高级模型配置
                             <font-awesome-icon v-if="hasEnterpriseModule && isAdvancedLocked" icon="fa-solid fa-lock" class="lock-icon-small" />
                         </button>
-
- 
-                    </div>
+                    </div>          </div>
 
                     <!-- Tab Content -->
                     <div class="tab-content-container">
@@ -1255,7 +1253,7 @@ onMounted(async () => {
                 </div>
             </div>
 
-            <!-- Cropper Modal -->
+        <!-- Cropper Modal -->
             <div v-if="showCropper" class="cropper-modal">
                 <div class="cropper-container">
                     <Cropper ref="cropper" :src="cropperImage" :stencil-props="{
@@ -1267,53 +1265,52 @@ onMounted(async () => {
                     }" :stencil-component="CircleStencil" image-restriction="stencil" background="var(--o05)" />
                     <div class="cropper-actions">
                         <button @click="handleCrop" :disabled="isUploading">
-                            {{ isUploading ? 'Uploading...' : 'Save' }}
+                            {{ isUploading ? '正在上传…' : '保存头像' }}
                         </button>
-                        <button @click="cancelCrop">Cancel</button>
+                        <button @click="cancelCrop">取消</button>
                     </div>
                 </div>
             </div>
-        </div>
 
         <!-- Knowledge Tips Dialog -->
         <div v-if="showTips" class="tips-dialog-overlay">
             <div class="tips-dialog">
                 <div class="tips-dialog-header">
-                    <h3>Knowledge Management Tips</h3>
+                    <h3>知识库管理小贴士</h3>
                     <button class="close-button" @click="closeTips">×</button>
                 </div>
                 <div class="tips-dialog-content">
                     <div class="tip-item">
                         <div class="tip-icon">📄</div>
                         <div class="tip-content">
-                            <h4>PDF Documents</h4>
-                            <p>Upload PDF files to give your agent access to document content. Best for manuals, reports, and structured documents.</p>
+                            <h4>PDF / 文本文件</h4>
+                            <p>上传 PDF 文档让智能体具备专业知识，适合产品手册、说明书及规章制度。</p>
                         </div>
                     </div>
                     <div class="tip-item">
                         <div class="tip-icon">🔗</div>
                         <div class="tip-content">
-                            <h4>Web Pages</h4>
-                            <p>Add URLs for web content you want the agent to reference. Great for dynamic information that updates regularly.</p>
+                            <h4>网页与在线链接</h4>
+                            <p>添加公开网页或站点 URL，适合频繁更新的帮助中心或产品活动页面。</p>
                         </div>
                     </div>
                     <div class="tip-item">
                         <div class="tip-icon">🔄</div>
                         <div class="tip-content">
-                            <h4>Link Existing Sources</h4>
-                            <p>Reuse knowledge sources across multiple agents to maintain consistency in responses.</p>
+                            <h4>复用已有知识源</h4>
+                            <p>跨多个智能体共享相同的知识库，保障企业多渠道回复口径统一。</p>
                         </div>
                     </div>
                     <div class="tip-item">
                         <div class="tip-icon">⚙️</div>
                         <div class="tip-content">
-                            <h4>Processing Time</h4>
-                            <p>Knowledge sources are processed asynchronously. Allow a few minutes for large documents to be fully indexed.</p>
+                            <h4>解析处理说明</h4>
+                            <p>数据源采用异步向量化处理，大型文档可能需要数分钟完成全量切片与索引。</p>
                         </div>
                     </div>
                 </div>
                 <div class="tips-dialog-footer">
-                    <button class="close-tips-button" @click="closeTips">Got it</button>
+                    <button class="close-tips-button" @click="closeTips">我知道了</button>
                 </div>
             </div>
         </div>
@@ -1347,12 +1344,12 @@ onMounted(async () => {
                 </div>
                 <div class="upgrade-modal-footer">
                     <button class="upgrade-button" @click="handleUpgrade">
-                        Upgrade Plan
+                        立即升级方案
                         <svg class="upgrade-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <path d="M5 12h14m-7-7 7 7-7 7"/>
                         </svg>
                     </button>
-                    <button class="cancel-upgrade-button" @click="closeUpgradeModal">Maybe Later</button>
+                    <button class="cancel-upgrade-button" @click="closeUpgradeModal">暂不需要</button>
                 </div>
             </div>
         </div>

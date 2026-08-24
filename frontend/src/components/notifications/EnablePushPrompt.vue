@@ -67,27 +67,26 @@ const enable = () => {
 
 <template>
   <Transition name="push-prompt">
-    <div v-if="visible" class="push-prompt" role="dialog" aria-label="Enable notifications">
+    <div v-if="visible" class="push-prompt" role="dialog" aria-label="开启消息通知">
       <div class="bell-tile" aria-hidden="true" v-html="navIconSvg('bell', 28)"></div>
 
       <template v-if="needsInstallFirst">
-        <div class="prompt-title">Install to get notifications</div>
+        <div class="prompt-title">安装应用以接收实时通知</div>
         <div class="prompt-body">
-          Add ChatterMate to your Home Screen first — on iPhone, push notifications only work
-          from an installed app. Tap the share icon, then "Add to Home Screen".
+          请先将 ChatterMate 添加到主屏幕 — 在 iPhone 上，推送通知需要在添加到主屏幕的应用中启用。点击分享图标，然后选择“添加到主屏幕”。
         </div>
-        <button type="button" class="secondary-btn" @click="snooze">Got it</button>
+        <button type="button" class="secondary-btn" @click="snooze">知道了</button>
       </template>
 
       <template v-else>
-        <div class="prompt-title">Get notified when a customer needs you</div>
+        <div class="prompt-title">当客户需要人工介入时即时提醒</div>
         <div class="prompt-body">
-          We'll ping you the moment the AI hands a chat over to you — so nobody waits.
+          当 AI 智能体将客户会话转接给您时，系统将第一时间推送桌面提醒，让客户无需久等。
         </div>
         <button type="button" class="primary-btn" @click="enable">
-          Enable notifications
+          开启桌面通知
         </button>
-        <button type="button" class="secondary-btn" @click="snooze">Not now</button>
+        <button type="button" class="secondary-btn" @click="snooze">暂不开启</button>
       </template>
     </div>
   </Transition>

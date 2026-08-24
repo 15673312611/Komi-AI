@@ -92,36 +92,36 @@ function askDeleteSource(source: ExplorerSource) {
   if (source.queued && source.queuedStatus === 'error') {
     // A failed crawl — not an in-flight one to "cancel".
     confirmState.value = {
-      title: 'Dismiss source',
-      message: `Dismiss the failed source “${source.name}”?`,
-      actionLabel: 'Dismiss',
-      busyLabel: 'Dismissing…',
+      title: '移除失败知识源',
+      message: `确认移除抓取失败的知识源 “${source.name}”？`,
+      actionLabel: '确认移除',
+      busyLabel: '正在移除…',
       action: () => ex.deleteSource(source),
     }
   } else if (source.queued) {
     confirmState.value = {
-      title: 'Cancel crawl',
-      message: `Cancel the queued crawl of “${source.name}”?`,
-      actionLabel: 'Cancel crawl',
-      busyLabel: 'Cancelling…',
+      title: '取消抓取任务',
+      message: `确认取消排队抓取知识源 “${source.name}”？`,
+      actionLabel: '取消抓取',
+      busyLabel: '正在取消…',
       action: () => ex.deleteSource(source),
     }
   } else if (props.mode === 'agent') {
     // In an agent's tab, "Remove" detaches the source from this agent but keeps
     // it in the organization's knowledge — it does not delete the source.
     confirmState.value = {
-      title: 'Remove from agent',
-      message: `Remove “${source.name}” from this agent? It stays in your organization’s knowledge.`,
-      actionLabel: 'Remove',
-      busyLabel: 'Removing…',
+      title: '从当前智能体解绑',
+      message: `确认从当前智能体解绑知识源 “${source.name}”？该知识源仍会保留在企业组织知识库中。`,
+      actionLabel: '解除关联',
+      busyLabel: '正在解除…',
       action: () => ex.unlinkSource(source.id),
     }
   } else {
     confirmState.value = {
-      title: 'Delete source',
-      message: `Delete “${source.name}” and all of its pages? This cannot be undone.`,
-      actionLabel: 'Delete',
-      busyLabel: 'Deleting…',
+      title: '彻底删除知识源',
+      message: `确认彻底删除知识源 “${source.name}” 及其所有子页面？此操作不可恢复。`,
+      actionLabel: '确认删除',
+      busyLabel: '正在删除…',
       action: () => ex.deleteSource(source),
     }
   }
@@ -131,10 +131,10 @@ function askDeletePage() {
   const page = ex.selectedPage.value
   if (!page) return
   confirmState.value = {
-    title: 'Delete page',
-    message: `Delete “${page.title}” from this source? This cannot be undone.`,
-    actionLabel: 'Delete',
-    busyLabel: 'Deleting…',
+    title: '删除知识页面',
+    message: `确认从当前知识源中删除页面 “${page.title}”？此操作不可恢复。`,
+    actionLabel: '确认删除',
+    busyLabel: '正在删除…',
     action: () => ex.deletePage(),
   }
 }
@@ -170,12 +170,12 @@ onUnmounted(() => {
         <button v-if="mode === 'agent'" class="btn btn--ghost" type="button" @click="ex.openLinkPicker">
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2"
             stroke-linecap="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7 0l2-2a5 5 0 0 0-7-7l-1 1M14 11a5 5 0 0 0-7 0l-2 2a5 5 0 0 0 7 7l1-1" /></svg>
-          Link existing
+          关联已有知识源
         </button>
         <button class="btn btn--primary" type="button" @click="openAdd">
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2"
             stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
-          Add source
+          + 添加知识源
         </button>
       </div>
     </header>
@@ -190,7 +190,7 @@ onUnmounted(() => {
 
     <div v-if="ex.error.value" class="banner" role="alert">
       {{ ex.error.value }}
-      <button class="banner__close" type="button" aria-label="Dismiss" @click="ex.error.value = null">×</button>
+      <button class="banner__close" type="button" aria-label="关闭" @click="ex.error.value = null">×</button>
     </div>
 
     <div class="grid">
@@ -215,7 +215,7 @@ onUnmounted(() => {
           :title="ex.draftTitle.value"
           :content="ex.draftContent.value"
           :saving="ex.isSaving.value"
-          :submit-label="ex.isAddingPage.value ? 'Add sub-page' : 'Save page'"
+          :submit-label="ex.isAddingPage.value ? '添加子页面' : '保存修改'"
           :url="ex.draftUrl.value"
           :show-url="ex.isAddingPage.value"
           @update:title="ex.draftTitle.value = $event"
@@ -237,9 +237,9 @@ onUnmounted(() => {
         />
         <div v-else class="empty">
           <div class="empty__orb"></div>
-          <div class="empty__title">Select a page to review</div>
+          <div class="empty__title">请选择要查看的知识页面</div>
           <p class="empty__text">
-            Pick any extracted page on the left to read its content, edit it, or remove it — or add a source of your own.
+            在左侧选择已提取解析的文档或页面进行阅读、编辑或管理；也可点击右上角添加新的知识源。
           </p>
         </div>
       </div>
@@ -250,7 +250,7 @@ onUnmounted(() => {
         <h3 class="confirm__title">{{ confirmState.title }}</h3>
         <p class="confirm__msg">{{ confirmState.message }}</p>
         <div class="confirm__actions">
-          <button class="btn btn--ghost" type="button" :disabled="ex.isDeleting.value" @click="confirmState = null">Cancel</button>
+          <button class="btn btn--ghost" type="button" :disabled="ex.isDeleting.value" @click="confirmState = null">取消</button>
           <button class="btn btn--danger-solid" type="button" :disabled="ex.isDeleting.value" @click="runConfirm">
             {{ ex.isDeleting.value ? confirmState.busyLabel : confirmState.actionLabel }}
           </button>

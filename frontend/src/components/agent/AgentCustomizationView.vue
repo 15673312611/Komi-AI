@@ -36,18 +36,18 @@ const emit = defineEmits<{
 
 // Predefined chat initiation messages
 const DEFAULT_CHAT_INITIATIONS = [
-    "👋 Hi! Need help? Ask me anything!",
-    "💬 Have a question? I'm here to help!",
-    "🤝 Welcome! How can I assist you today?",
-    "✨ Got questions? Let's chat!",
-    "👨‍💼 Need support? Click to chat with us!"
+    "👋 您好！有什么可以帮您的？随时向我提问！",
+    "💬 遇到任何疑问？我随时在线为您解答！",
+    "🤝 欢迎光临！今天有什么需要我协助的吗？",
+    "✨ 了解更多详情？点击开始聊聊吧！",
+    "👨‍💼 需要客服支持？点击立即与我沟通！"
 ]
 
 // Predefined quick-action buttons (clicking sends the label as a message)
 const DEFAULT_QUICK_ACTIONS = [
-    "Track my order",
-    "Start a return",
-    "Talk to a human"
+    "📦 查询我的订单物流",
+    "🔄 申请退换货",
+    "👤 转接人工客服"
 ]
 
 // Subscription and feature checking
@@ -112,50 +112,50 @@ const customization = ref<AgentCustomization>({
 const chatStyleOptions = [
     {
         value: 'CHATBOT' as ChatStyle,
-        label: 'Legacy',
-        description: 'The original look — light, neutral, classic chatbot.',
+        label: '经典客服 (Classic)',
+        description: '经典浅色外观 — 简洁、中性、标准的网页客服形态。',
         group: 'legacy' as const,
     },
     {
         value: 'ASK_ANYTHING' as ChatStyle,
-        label: 'Ask Anything',
-        description: 'Modern AI assistant style for general queries.',
+        label: '全知问答 (Ask Anything)',
+        description: '现代 AI 智能助手交互风格，适合知识库问答。',
         group: 'legacy' as const,
     },
     {
         value: 'GLASS' as ChatStyle,
-        label: 'Glass',
-        description: 'Frosted dark glass with soft glow and rounded bubbles.',
+        label: '暗夜毛玻璃 (Glass)',
+        description: '磨砂深色玻璃质感，柔和微光与圆润气泡。',
         group: 'new' as const,
     },
     {
         value: 'TERMINAL' as ChatStyle,
-        label: 'Terminal',
-        description: 'Monospace developer style, square corners.',
+        label: '极客终端 (Terminal)',
+        description: '等宽字符与硬朗边角，极客极简代码风格。',
         group: 'new' as const,
     },
     {
         value: 'PLAYFUL' as ChatStyle,
-        label: 'Playful',
-        description: 'Light, friendly and very rounded with warm accents.',
+        label: '活力元气 (Playful)',
+        description: '明亮友好的高圆角气泡与温馨暖色点缀。',
         group: 'new' as const,
     },
     {
         value: 'CALM_MINT' as ChatStyle,
-        label: 'Calm Mint',
-        description: 'Clean dark-teal with subtle borders.',
+        label: '薄荷静谧 (Calm Mint)',
+        description: '清爽深青色调，搭配细腻精致边框。',
         group: 'new' as const,
     },
     {
         value: 'AURORA' as ChatStyle,
-        label: 'Aurora',
-        description: 'The new ask-me-anything — dark, with a glowing aurora orb avatar.',
+        label: '极光幻境 (Aurora)',
+        description: '新一代智能问答界面 — 深色背景与流光微粒头像。',
         group: 'new' as const,
     },
     {
         value: 'SUNRISE' as ChatStyle,
-        label: 'Sunrise',
-        description: 'Bright, warm and airy — a light theme with a soft coral accent.',
+        label: '朝阳暖阳 (Sunrise)',
+        description: '通透明亮的大气浅色主题，点缀柔和珊瑚橙。',
         group: 'new' as const,
     },
 ]
@@ -197,10 +197,10 @@ const selectChatStyle = (value: ChatStyle) => {
 // The embed loader reads these as site-wide defaults; options set in the install
 // snippet (window.chattermateConfig / ChatterMate.init) override them per page.
 const displayModeOptions = [
-    { value: 'floating', label: 'Floating bubble', description: 'Classic corner launcher opening a chat window.' },
-    { value: 'sidebar-right', label: 'Right drawer', description: 'Full-height panel sliding in from the right edge.' },
-    { value: 'sidebar-left', label: 'Left drawer', description: 'Full-height panel sliding in from the left edge.' },
-    { value: 'search-bar', label: 'Search bar', description: 'An "Ask anything" bar that opens the Ask AI panel.', askAiOnly: true },
+    { value: 'floating', label: '悬浮气泡按钮', description: '网页右下角经典悬浮按钮，点击弹出独立聊天窗口。' },
+    { value: 'sidebar-right', label: '右侧滑出抽屉', description: '从网页右侧边缘展开的全高交互侧边栏。' },
+    { value: 'sidebar-left', label: '左侧滑出抽屉', description: '从网页左侧边缘展开的全高交互侧边栏。' },
+    { value: 'search-bar', label: '嵌入式搜索栏', description: '类似“全知搜索栏”的输入框，点击展开 AI 问答面板。', askAiOnly: true },
 ]
 
 // The search bar opens the Ask AI answer panel, which is what the Ask Anything and
@@ -634,8 +634,8 @@ const isSectionExpanded = (sectionId: string) => {
                     <input type="checkbox" v-model="customization.show_citations">
                     <span class="citations-toggle-track"><span class="citations-toggle-thumb"></span></span>
                     <span class="citations-toggle-text">
-                        <span class="citations-toggle-title">Show citations</span>
-                        <span class="citations-toggle-desc">Display the knowledge-base sources used to answer, as chips under each reply.</span>
+                        <span class="citations-toggle-title">显示知识库参考引用来源 (Citations)</span>
+                        <span class="citations-toggle-desc">在智能体回答底部以标签形式展示命中并引用的知识库文档来源。</span>
                     </span>
                 </label>
 
@@ -643,8 +643,8 @@ const isSectionExpanded = (sectionId: string) => {
                     <input type="checkbox" v-model="customization.collect_email">
                     <span class="citations-toggle-track"><span class="citations-toggle-thumb"></span></span>
                     <span class="citations-toggle-text">
-                        <span class="citations-toggle-title">Collect email before chat</span>
-                        <span class="citations-toggle-desc">Require visitors to enter their email before they can start chatting. Off by default.</span>
+                        <span class="citations-toggle-title">开启对话前强制收集邮箱</span>
+                        <span class="citations-toggle-desc">要求访客在开始与客服聊天前必须先输入电子邮箱。默认关闭。</span>
                     </span>
                 </label>
 
@@ -652,8 +652,8 @@ const isSectionExpanded = (sectionId: string) => {
                     <input type="checkbox" v-model="customization.show_ai_disclaimer">
                     <span class="citations-toggle-track"><span class="citations-toggle-thumb"></span></span>
                     <span class="citations-toggle-text">
-                        <span class="citations-toggle-title">Show AI disclaimer</span>
-                        <span class="citations-toggle-desc">Adds “{{ AI_DISCLAIMER_TEXT }}” to the widget footer. Hidden automatically once a human agent takes over.</span>
+                        <span class="citations-toggle-title">显示 AI 智能生成免责声明</span>
+                        <span class="citations-toggle-desc">在聊天窗口底部显示“{{ AI_DISCLAIMER_TEXT }}”。转接人工客服后将自动隐藏。</span>
                     </span>
                 </label>
 
@@ -661,16 +661,16 @@ const isSectionExpanded = (sectionId: string) => {
                     <input type="checkbox" v-model="customization.allow_new_chat">
                     <span class="citations-toggle-track"><span class="citations-toggle-thumb"></span></span>
                     <span class="citations-toggle-text">
-                        <span class="citations-toggle-title">Let visitors start a new chat</span>
-                        <span class="citations-toggle-desc">Adds a “New chat” control that ends the conversation and starts a fresh one. Hidden while a human agent is handling the chat.</span>
+                        <span class="citations-toggle-title">允许访客随时开启新会话</span>
+                        <span class="citations-toggle-desc">在顶部添加「新对话」按钮，点击结束当前会话并开启全新聊天。人工接待中自动隐藏。</span>
                     </span>
                 </label>
             </div>
 
             <!-- Widget placement Section -->
             <div class="form-section">
-                <h3 class="section-heading">Widget placement</h3>
-                <p class="section-subtext">How the widget sits on your site — preview it there. Options set in the embed snippet override these.</p>
+                <h3 class="section-heading">挂件呈现形态与屏幕位置</h3>
+                <p class="section-subtext">配置挂件在您网站上的展示形态与边距位置。嵌入代码中的个性化参数可覆盖此默认配置。</p>
 
                 <div class="chat-style-grid">
                     <button
@@ -680,7 +680,7 @@ const isSectionExpanded = (sectionId: string) => {
                         class="chat-style-card"
                         :class="{ 'active': activeDisplayMode === option.value, 'locked': !isModeAvailable(option) }"
                         :disabled="!isModeAvailable(option)"
-                        :title="isModeAvailable(option) ? undefined : 'Available with the Ask Anything or Aurora design'"
+                        :title="isModeAvailable(option) ? undefined : '仅在全知问答或极光幻境主题下可用'"
                         @click="setDisplay('mode', option.value)"
                     >
                         <div class="chat-style-thumb placement-thumb">
@@ -692,54 +692,54 @@ const isSectionExpanded = (sectionId: string) => {
                         </div>
                         <div class="chat-style-desc">
                             {{ option.description }}
-                            <template v-if="!isModeAvailable(option)"><br>Needs the Ask Anything or Aurora design.</template>
+                            <template v-if="!isModeAvailable(option)"><br>需配合全知问答或极光幻境主题。</template>
                         </div>
                     </button>
                 </div>
 
                 <div v-if="!isSidebarMode" class="placement-side-row">
-                    <span class="placement-label">Side</span>
+                    <span class="placement-label">停靠侧边</span>
                     <div class="placement-side-chips">
                         <button type="button" class="font-chip" :class="{ 'active': (widgetDisplay.side ?? 'right') === 'left' }"
-                            @click="setDisplay('side', 'left')">Left</button>
+                            @click="setDisplay('side', 'left')">左下角</button>
                         <button type="button" class="font-chip" :class="{ 'active': (widgetDisplay.side ?? 'right') === 'right' }"
-                            @click="setDisplay('side', 'right')">Right</button>
+                            @click="setDisplay('side', 'right')">右下角</button>
                     </div>
                 </div>
 
                 <div class="placement-fields">
                     <label v-if="activeDisplayMode === 'floating'" class="placement-field">
-                        <span>Window width (px)</span>
+                        <span>窗口宽度 (px)</span>
                         <input type="number" class="text-input" :value="widgetDisplay.width" placeholder="400"
                             :min="PLACEMENT_BOUNDS.width[0]" :max="PLACEMENT_BOUNDS.width[1]"
                             @change="setDisplayNumber('width', $event)">
                     </label>
                     <label v-if="activeDisplayMode === 'floating'" class="placement-field">
-                        <span>Window height (px)</span>
+                        <span>窗口高度 (px)</span>
                         <input type="number" class="text-input" :value="widgetDisplay.height" placeholder="560"
                             :min="PLACEMENT_BOUNDS.height[0]" :max="PLACEMENT_BOUNDS.height[1]"
                             @change="setDisplayNumber('height', $event)">
                     </label>
                     <label v-if="isSidebarMode" class="placement-field">
-                        <span>Drawer width (px)</span>
+                        <span>抽屉展开宽度 (px)</span>
                         <input type="number" class="text-input" :value="widgetDisplay.sidebar_width" placeholder="420"
                             :min="PLACEMENT_BOUNDS.sidebar_width[0]" :max="PLACEMENT_BOUNDS.sidebar_width[1]"
                             @change="setDisplayNumber('sidebar_width', $event)">
                     </label>
                     <label v-if="activeDisplayMode === 'search-bar'" class="placement-field placement-field-wide">
-                        <span>Search bar text</span>
+                        <span>搜索栏占位文字</span>
                         <input type="text" class="text-input" maxlength="80" :value="widgetDisplay.search_placeholder"
-                            placeholder="Ask anything..."
+                            placeholder="输入您想了解的问题..."
                             @change="setDisplay('search_placeholder', ($event.target as HTMLInputElement).value)">
                     </label>
                     <label class="placement-field">
-                        <span>Bottom offset (px)</span>
+                        <span>底部安全边距 (px)</span>
                         <input type="number" class="text-input" :value="widgetDisplay.offset_bottom" placeholder="20"
                             :min="PLACEMENT_BOUNDS.offset_bottom[0]" :max="PLACEMENT_BOUNDS.offset_bottom[1]"
                             @change="setDisplayNumber('offset_bottom', $event)">
                     </label>
                     <label class="placement-field">
-                        <span>Side offset (px)</span>
+                        <span>侧边安全边距 (px)</span>
                         <input type="number" class="text-input" :value="widgetDisplay.offset_side" placeholder="20"
                             :min="PLACEMENT_BOUNDS.offset_side[0]" :max="PLACEMENT_BOUNDS.offset_side[1]"
                             @change="setDisplayNumber('offset_side', $event)">
@@ -751,15 +751,15 @@ const isSectionExpanded = (sectionId: string) => {
                         @change="setDisplay('launcher', ($event.target as HTMLInputElement).checked ? false : null)">
                     <span class="citations-toggle-track"><span class="citations-toggle-thumb"></span></span>
                     <span class="citations-toggle-text">
-                        <span class="citations-toggle-title">Hide launcher — I'll use my own button</span>
-                        <span class="citations-toggle-desc">Open the chat from any element with <code>data-chattermate-open</code>, or call <code>ChatterMate.open()</code>.</span>
+                        <span class="citations-toggle-title">隐藏默认悬浮气泡 — 使用网站自定义按钮唤起</span>
+                        <span class="citations-toggle-desc">给网页任意元素添加 <code>data-chattermate-open</code> 属性，或通过 JS 调用 <code>ChatterMate.open()</code> 唤起。</span>
                     </span>
                 </label>
             </div>
 
             <!-- Brand color + Typography Section -->
             <div class="form-section">
-                <h3 class="section-heading">Brand color</h3>
+                <h3 class="section-heading">品牌主色调 (Brand Color)</h3>
                 <div class="accent-row">
                     <button
                         v-for="swatch in accentSwatchColors"
@@ -771,7 +771,7 @@ const isSectionExpanded = (sectionId: string) => {
                         :style="{ background: swatch, boxShadow: customization.accent_color?.toUpperCase() === swatch ? '0 0 0 2px ' + swatch : 'none' }"
                         @click="customization.accent_color = swatch"
                     ></button>
-                    <label class="accent-custom" title="Custom color">
+                    <label class="accent-custom" title="自定义颜色">
                         <input type="color" v-model="customization.accent_color">
                         <span class="accent-custom-icon">+</span>
                     </label>
@@ -780,21 +780,21 @@ const isSectionExpanded = (sectionId: string) => {
 
                 <div class="aux-color-row">
                     <label class="aux-color">
-                        <span class="aux-color-label">Background</span>
+                        <span class="aux-color-label">聊天背景色</span>
                         <span class="aux-color-input">
                             <input type="color" v-model="customization.chat_background_color">
                             <span class="aux-color-value">{{ customization.chat_background_color }}</span>
                         </span>
                     </label>
                     <label class="aux-color">
-                        <span class="aux-color-label">Text color</span>
+                        <span class="aux-color-label">文本文字颜色</span>
                         <span class="aux-color-input">
                             <input type="color" v-model="customization.chat_text_color">
                             <span class="aux-color-value">{{ customization.chat_text_color }}</span>
                         </span>
                     </label>
                     <label class="aux-color">
-                        <span class="aux-color-label">Chat bubble</span>
+                        <span class="aux-color-label">消息气泡颜色</span>
                         <span class="aux-color-input">
                             <input type="color" v-model="customization.chat_bubble_color"
                                 @input="emit('preview', { ...customization, showBubblePreview: true })"
@@ -805,12 +805,12 @@ const isSectionExpanded = (sectionId: string) => {
                     </label>
                 </div>
 
-                <h3 class="section-heading section-heading-gap">Typography</h3>
+                <h3 class="section-heading section-heading-gap">字体设置 (Typography)</h3>
                 <div class="font-picker">
                     <div class="font-dropdown" :class="{ 'active': showFontDropdown }">
                         <input type="text" :value="showFontDropdown ? fontSearch : customization.font_family"
                             @input="e => fontSearch = (e.target as HTMLInputElement).value"
-                            placeholder="Search fonts..." class="font-search"
+                            placeholder="搜索字体..." class="font-search"
                             :style="!showFontDropdown ? { fontFamily: customization.font_family } : {}"
                             :disabled="isLoadingFonts" @focus="showFontDropdown = true">
                         <div v-if="showFontDropdown" class="font-options">
@@ -836,38 +836,38 @@ const isSectionExpanded = (sectionId: string) => {
 
             <!-- Welcome Message Section (only for ASK_ANYTHING style) -->
             <div v-if="customization.chat_style === 'ASK_ANYTHING'" class="form-section">
-                <h3 class="section-heading">Welcome message</h3>
+                <h3 class="section-heading">问答页欢迎标题与副标题</h3>
                 <p class="section-subtext">
-                    Customize the welcome message shown when users first open the chat.
+                    配置访客首次展开全屏问答面板时呈现的欢迎标语与介绍。
                 </p>
 
                 <div class="form-group">
-                    <label for="welcome-title">Welcome Title</label>
+                    <label for="welcome-title">欢迎标题</label>
                     <input
                         id="welcome-title"
                         type="text"
                         v-model="customization.welcome_title"
-                        placeholder="e.g., Welcome to our AI Assistant"
+                        placeholder="例如：欢迎咨询 AI 智能助手"
                         class="text-input"
                         maxlength="100"
                     >
                     <small class="input-hint">
-                        Leave empty to use default: "Welcome to {{ props.agent.display_name || props.agent.name }}"
+                        留空将默认使用：“欢迎咨询 {{ props.agent.display_name || props.agent.name }}”
                     </small>
                 </div>
 
                 <div class="form-group">
-                    <label for="welcome-subtitle">Welcome Subtitle</label>
+                    <label for="welcome-subtitle">欢迎副标题说明</label>
                     <textarea
                         id="welcome-subtitle"
                         v-model="customization.welcome_subtitle"
-                        placeholder="e.g., I'm here to help you with anything you need. What can I assist you with today?"
+                        placeholder="例如：我随时在线为您解答关于产品、订单和售后的所有疑问，请问今天有什么想了解的？"
                         class="text-textarea"
                         rows="3"
                         maxlength="250"
                     ></textarea>
                     <small class="input-hint">
-                        Leave empty to use default message
+                        留空将使用系统默认副标题说明
                     </small>
                 </div>
             </div>
@@ -875,30 +875,30 @@ const isSectionExpanded = (sectionId: string) => {
             <!-- Greeting messages Section -->
             <div class="form-section chat-initiation-section" :class="{ 'locked': isChatInitiationsLocked }">
                 <div class="section-head-row">
-                    <h3 class="section-heading">Greeting messages</h3>
+                    <h3 class="section-heading">气泡上方主动气泡问候语</h3>
                     <button
                         v-if="!isChatInitiationsLocked"
                         type="button"
                         class="load-defaults-link"
                         @click="loadDefaultInitiations"
-                    >Load defaults</button>
+                    >恢复默认文案</button>
                     <div v-if="isChatInitiationsLocked" class="premium-badge-small">
                         <font-awesome-icon icon="fa-solid fa-crown" />
-                        <span>Premium</span>
+                        <span>高级专享</span>
                     </div>
                 </div>
                 <p class="section-subtext">
-                    Proactive nudges the agent shows <strong>above the chat launcher</strong> — before a visitor opens the widget.
+                    在访客尚未点击打开客服之前，<strong>在悬浮气泡按钮上方</strong> 弹出的主动破冰问候语。
                 </p>
 
                 <!-- Locked State -->
                 <div v-if="isChatInitiationsLocked" class="locked-overlay-compact">
                     <div class="locked-content-compact">
                         <font-awesome-icon icon="fa-solid fa-lock" class="lock-icon-small" />
-                        <p class="locked-text">Engage visitors with custom messages above the chat bubble.</p>
+                        <p class="locked-text">升级套餐解锁自定义气泡主动破冰问候语，大幅提高访客进线咨询率。</p>
                         <button class="upgrade-btn-compact" @click="handleUpgrade">
                             <font-awesome-icon icon="fa-solid fa-crown" />
-                            <span>Upgrade</span>
+                            <span>立即升级</span>
                         </button>
                     </div>
                 </div>
@@ -910,7 +910,7 @@ const isSectionExpanded = (sectionId: string) => {
                         <input
                             type="text"
                             v-model="newInitiationMessage"
-                            placeholder="👋 Hi! Need help?"
+                            placeholder="👋 您好！有什么可以帮您的？"
                             class="init-input"
                             maxlength="100"
                             @keyup.enter="addInitiationMessage"
@@ -920,7 +920,7 @@ const isSectionExpanded = (sectionId: string) => {
                             class="init-add-btn"
                             @click="addInitiationMessage"
                             :disabled="!newInitiationMessage.trim()"
-                            title="Add message"
+                            title="添加问候语"
                         >+</button>
                     </div>
 
@@ -941,10 +941,10 @@ const isSectionExpanded = (sectionId: string) => {
                                     @keyup.esc="cancelEditInitiationMessage"
                                     ref="editInput"
                                 >
-                                <button type="button" class="init-icon-btn save" @click="saveEditInitiationMessage" title="Save">
+                                <button type="button" class="init-icon-btn save" @click="saveEditInitiationMessage" title="保存">
                                     <font-awesome-icon icon="fa-solid fa-check" />
                                 </button>
-                                <button type="button" class="init-icon-btn cancel" @click="cancelEditInitiationMessage" title="Cancel">
+                                <button type="button" class="init-icon-btn cancel" @click="cancelEditInitiationMessage" title="取消">
                                     <font-awesome-icon icon="fa-solid fa-times" />
                                 </button>
                             </div>
@@ -955,7 +955,7 @@ const isSectionExpanded = (sectionId: string) => {
                                     type="button"
                                     class="init-icon-btn edit"
                                     @click="startEditInitiationMessage(index)"
-                                    title="Edit"
+                                    title="编辑"
                                 >
                                     <font-awesome-icon icon="fa-solid fa-pen" />
                                 </button>
@@ -963,7 +963,7 @@ const isSectionExpanded = (sectionId: string) => {
                                     type="button"
                                     class="init-remove"
                                     @click="removeInitiationMessage(index)"
-                                    title="Remove"
+                                    title="删除"
                                 >✕</button>
                             </template>
                         </div>
@@ -971,41 +971,41 @@ const isSectionExpanded = (sectionId: string) => {
 
                     <div v-else-if="customization.chat_initiation_messages && customization.chat_initiation_messages.length === 0" class="init-empty">
                         <span class="init-empty-icon">ⓘ</span>
-                        <span>No messages yet. Add your first message above.</span>
+                        <span>暂未添加问候语，请在上方输入框添加。</span>
                     </div>
                 </div>
             </div>
 
             <!-- Welcome message + quick actions Section -->
             <div class="form-section">
-                <h3 class="section-heading">Welcome message &amp; quick actions</h3>
+                <h3 class="section-heading">开场欢迎语与快捷推荐选项</h3>
                 <p class="section-subtext">
-                    Shown <strong>inside the chat when it opens</strong> — a greeting bubble and one-tap action buttons. The buttons disappear after the visitor's first message.
+                    在访客<strong>打开聊天窗口内部</strong>后显示 — 包括首条欢迎问候气泡与一键发送的快捷按钮。快捷按钮在访客发送首条消息后自动收起。
                 </p>
 
                 <div class="form-group">
-                    <label for="welcome-message">Welcome message</label>
+                    <label for="welcome-message">开场欢迎语</label>
                     <textarea
                         id="welcome-message"
                         v-model="customization.welcome_message"
-                        placeholder="e.g., Hey! 👋 I can track orders, handle returns, or connect you with a human. What can I help with?"
+                        placeholder="例如：您好！👋 我是您的 AI 智能顾问，支持实时查询订单、办理退换货或为您转接专属人工客服。请问有什么可以协助您？"
                         class="text-textarea"
                         rows="3"
                         maxlength="300"
                     ></textarea>
-                    <small class="input-hint">Leave empty to let the agent's first reply greet the visitor.</small>
+                    <small class="input-hint">留空将由智能客服的首条实时回复进行打招呼。</small>
                 </div>
 
                 <div class="section-head-row">
-                    <h3 class="section-heading">Quick actions</h3>
-                    <button type="button" class="load-defaults-link" @click="loadDefaultQuickActions">Load defaults</button>
+                    <h3 class="section-heading">快捷提问按钮 (Quick Actions)</h3>
+                    <button type="button" class="load-defaults-link" @click="loadDefaultQuickActions">恢复默认按钮</button>
                 </div>
 
                 <div class="init-add-row">
                     <input
                         type="text"
                         v-model="newQuickAction"
-                        placeholder="Track my order"
+                        placeholder="📦 查询我的订单物流"
                         class="init-input"
                         maxlength="60"
                         @keyup.enter="addQuickAction"
@@ -1015,7 +1015,7 @@ const isSectionExpanded = (sectionId: string) => {
                         class="init-add-btn"
                         @click="addQuickAction"
                         :disabled="!newQuickAction.trim()"
-                        title="Add quick action"
+                        title="添加快捷按钮"
                     >+</button>
                 </div>
 
@@ -1034,26 +1034,26 @@ const isSectionExpanded = (sectionId: string) => {
                                 @keyup.enter="saveEditQuickAction"
                                 @keyup.esc="cancelEditQuickAction"
                             >
-                            <button type="button" class="init-icon-btn save" @click="saveEditQuickAction" title="Save">
+                            <button type="button" class="init-icon-btn save" @click="saveEditQuickAction" title="保存">
                                 <font-awesome-icon icon="fa-solid fa-check" />
                             </button>
-                            <button type="button" class="init-icon-btn cancel" @click="cancelEditQuickAction" title="Cancel">
+                            <button type="button" class="init-icon-btn cancel" @click="cancelEditQuickAction" title="取消">
                                 <font-awesome-icon icon="fa-solid fa-times" />
                             </button>
                         </div>
                         <template v-else>
                             <span class="init-handle">☰</span>
                             <span class="init-text">{{ action }}</span>
-                            <button type="button" class="init-icon-btn edit" @click="startEditQuickAction(index)" title="Edit">
+                            <button type="button" class="init-icon-btn edit" @click="startEditQuickAction(index)" title="编辑">
                                 <font-awesome-icon icon="fa-solid fa-pen" />
                             </button>
-                            <button type="button" class="init-remove" @click="removeQuickAction(index)" title="Remove">✕</button>
+                            <button type="button" class="init-remove" @click="removeQuickAction(index)" title="删除">✕</button>
                         </template>
                     </div>
                 </div>
                 <div v-else class="init-empty">
                     <span class="init-empty-icon">ⓘ</span>
-                    <span>No quick actions yet. Add one above.</span>
+                    <span>暂未设置快捷按钮，请在上方添加。</span>
                 </div>
             </div>
         </div>
@@ -1069,14 +1069,14 @@ const isSectionExpanded = (sectionId: string) => {
             </div>
             
             <div class="button-actions">
-                <button class="cancel-button" @click="emit('cancel')" :disabled="isSaving">Cancel</button>
+                <button class="cancel-button" @click="emit('cancel')" :disabled="isSaving">取消</button>
                 <button class="save-button" @click="handleSave" :disabled="isSaving">
                     <font-awesome-icon 
                         v-if="isSaving" 
                         icon="fa-solid fa-spinner" 
                         class="spinner"
                     />
-                    <span>{{ isSaving ? 'Saving...' : 'Save Changes' }}</span>
+                    <span>{{ isSaving ? '正在保存...' : '保存外观配置' }}</span>
                 </button>
             </div>
         </div>

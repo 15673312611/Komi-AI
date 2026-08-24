@@ -80,7 +80,7 @@ const preview = computed(() =>
 // {{n}} — naming it "Variable 1" would tell the agent nothing.
 const isAuthSelected = computed(() => !!selected.value && isAuthentication(selected.value))
 const fieldLabel = (index: number) =>
-  isAuthSelected.value ? 'Verification code' : `Variable ${index}`
+  isAuthSelected.value ? '验证码' : `变量参数 {{${index}}}`
 
 const select = (template: WhatsAppTemplate) => {
   // Re-clicking the current choice must not wipe what has been typed into it.
@@ -108,7 +108,7 @@ onMounted(async () => {
     // Skip straight past a choice of one — the agent still confirms by sending.
     if (sendable.value.length === 1) select(sendable.value[0])
   } catch (error: any) {
-    loadError.value = error?.response?.data?.detail || 'Could not load templates'
+    loadError.value = error?.response?.data?.detail || '加载消息模板失败'
   } finally {
     loading.value = false
   }
@@ -118,7 +118,7 @@ onMounted(async () => {
 <template>
   <div v-if="loading" class="tps-skeleton" aria-live="polite" aria-busy="true">
     <div v-for="n in 3" :key="n" class="tps-skeleton-row"></div>
-    <span class="tps-visually-hidden">Loading templates</span>
+    <span class="tps-visually-hidden">正在加载模板</span>
   </div>
 
   <div v-else-if="loadError" class="tps-empty">
@@ -127,14 +127,14 @@ onMounted(async () => {
   </div>
 
   <div v-else-if="sendable.length === 0" class="tps-empty">
-    <p>No approved templates yet.</p>
+    <p>暂无已审核通过的可用模板。</p>
     <p class="tps-empty-hint">
-      {{ emptyHint || 'Create one from the WhatsApp card in Settings → Integrations. Meta reviews each template before it can be sent.' }}
+      {{ emptyHint || '您可以在“设置 → 渠道集成”的 WhatsApp 卡片中创建模板。经 Meta 审核通过后方可使用。' }}
     </p>
   </div>
 
   <div v-else class="tps-body">
-    <ul class="tps-list" aria-label="Approved templates">
+    <ul class="tps-list" aria-label="已审核模板列表">
       <!-- Keyed and compared on name+language: one name can have a row per
            language, and keying on the name alone gave Vue duplicate keys and
            lit every sibling up as selected at once. -->
@@ -164,13 +164,13 @@ onMounted(async () => {
           v-model="values[index]"
           type="text"
           class="tps-input"
-          :placeholder="isAuthSelected ? 'The passcode to send' : `Value for {{${index}}}`"
+          :placeholder="isAuthSelected ? '请输入要发送的验证码' : `请输入 {{${index}}} 的变量内容`"
         />
       </label>
     </div>
 
     <div v-if="selected" class="tps-result">
-      <span class="tps-field-label">Preview</span>
+      <span class="tps-field-label">实时内容预览</span>
       <p class="tps-result-text">{{ preview }}</p>
     </div>
   </div>

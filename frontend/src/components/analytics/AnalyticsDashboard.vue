@@ -25,16 +25,15 @@ limitations under the License.
               <font-awesome-icon icon="fa-solid fa-chart-line" class="locked-icon" />
             </div>
           </div>
-          <h2>Analytics Dashboard</h2>
+          <h2>数据分析与洞察看板</h2>
           <div class="locked-badge">
             <font-awesome-icon icon="fa-solid fa-lock" class="badge-icon" />
-            <span>Premium Feature</span>
+            <span>高级特性</span>
           </div>
         </div>
         
         <p class="locked-description">
-          Unlock powerful analytics and insights to track your team's performance, 
-          customer satisfaction, and conversation trends with detailed reports and visualizations.
+          解锁强大的数据分析与全局洞察能力，通过直观的报表与可视化图表全面追踪团队绩效、客户满意度与会话趋势。
         </p>
         
         <div class="locked-features">
@@ -43,8 +42,8 @@ limitations under the License.
               <font-awesome-icon icon="fa-solid fa-chart-bar" class="feature-icon" />
             </div>
             <div class="feature-content">
-              <span class="feature-title">Real-time Analytics</span>
-              <span class="feature-desc">Live conversation metrics and performance tracking</span>
+              <span class="feature-title">实时数据分析</span>
+              <span class="feature-desc">实时对话指标与服务性能追踪</span>
             </div>
           </div>
           <div class="feature-item">
@@ -52,8 +51,8 @@ limitations under the License.
               <font-awesome-icon icon="fa-solid fa-users" class="feature-icon" />
             </div>
             <div class="feature-content">
-              <span class="feature-title">Agent Performance</span>
-              <span class="feature-desc">Individual and team performance insights</span>
+              <span class="feature-title">客服与智能体效能</span>
+              <span class="feature-desc">个人及团队综合服务绩效洞察</span>
             </div>
           </div>
           <div class="feature-item">
@@ -61,8 +60,8 @@ limitations under the License.
               <font-awesome-icon icon="fa-solid fa-heart" class="feature-icon" />
             </div>
             <div class="feature-content">
-              <span class="feature-title">Customer Satisfaction</span>
-              <span class="feature-desc">Rating trends and satisfaction metrics</span>
+              <span class="feature-title">客户满意度 CSAT</span>
+              <span class="feature-desc">评分趋势与满意度多维指标</span>
             </div>
           </div>
           <div class="feature-item">
@@ -70,8 +69,8 @@ limitations under the License.
               <font-awesome-icon icon="fa-solid fa-file-export" class="feature-icon" />
             </div>
             <div class="feature-content">
-              <span class="feature-title">Advanced Reports</span>
-              <span class="feature-desc">Detailed insights and export capabilities</span>
+              <span class="feature-title">高级报表与分析</span>
+              <span class="feature-desc">深度数据钻取与多格式导出能力</span>
             </div>
           </div>
         </div>
@@ -79,7 +78,7 @@ limitations under the License.
         <div class="upgrade-section">
           <button class="upgrade-button" @click="handleUpgrade">
             <font-awesome-icon icon="fa-solid fa-crown" class="upgrade-icon" />
-            <span>Upgrade to Unlock Analytics</span>
+            <span>立即升级解锁数据分析看板</span>
             <font-awesome-icon icon="fa-solid fa-arrow-right" class="arrow-icon" />
           </button>
         </div>
@@ -91,12 +90,12 @@ limitations under the License.
       <div class="analytics-header">
         <div class="time-range-selector">
           <button 
-            v-for="range in ['24h', '7d', '30d', '90d']" 
-            :key="range"
-            :class="{ active: timeRange === range }"
-            @click="handleTimeRangeChange(range)"
+            v-for="range in [{ key: '24h', label: '24小时' }, { key: '7d', label: '近7天' }, { key: '30d', label: '近30天' }, { key: '90d', label: '近90天' }]" 
+            :key="range.key"
+            :class="{ active: timeRange === range.key }"
+            @click="handleTimeRangeChange(range.key)"
           >
-            {{ range }}
+            {{ range.label }}
           </button>
         </div>
       </div>
@@ -107,25 +106,25 @@ limitations under the License.
           :class="{ active: activeTab === 'overview' }"
           @click="activeTab = 'overview'"
         >
-          Overview
+          总览概况
         </button>
         <button 
           :class="{ active: activeTab === 'agent-performance' }"
           @click="activeTab = 'agent-performance'"
         >
-          Agent Performance
+          客服与智能体效能
         </button>
-        <button
+        <button 
           :class="{ active: activeTab === 'customers' }"
           @click="activeTab = 'customers'"
         >
-          Customers
+          客户画像分析
         </button>
-        <button
+        <button 
           :class="{ active: activeTab === 'sentiment' }"
           @click="activeTab = 'sentiment'"
         >
-          Sentiment
+          情绪倾向分析
         </button>
       </div>
     </div>
@@ -137,14 +136,14 @@ limitations under the License.
       </div>
 
       <div v-else-if="isLoading" class="loading-state">
-        Loading analytics data...
+        正在加载分析数据…
       </div>
 
       <div v-else class="analytics-grid">
         <!-- Overview Cards -->
         <div class="metrics-overview">
           <div class="metric-card">
-            <h3>Total Conversations</h3>
+            <h3>对话总数</h3>
             <div class="metric-value">
               {{ analyticsData?.conversations?.total || 0 }}
               <span class="change" :class="{ positive: (analyticsData?.conversations?.change || 0) >= 0 }">
@@ -154,7 +153,7 @@ limitations under the License.
             </div>
           </div>
           <div class="metric-card">
-            <h3>AI Chat Closures</h3>
+            <h3>AI 对话独立结单数</h3>
             <div class="metric-value">
               {{ analyticsData?.aiClosures?.total || 0 }}
               <span class="change" :class="{ positive: (analyticsData?.aiClosures?.change || 0) >= 0 }">
@@ -164,7 +163,7 @@ limitations under the License.
             </div>
           </div>
           <div class="metric-card">
-            <h3>Human Transfers</h3>
+            <h3>人工客服转接数</h3>
             <div class="metric-value">
               {{ analyticsData?.transfers?.total || 0 }}
               <span class="change" :class="{ positive: (analyticsData?.transfers?.change || 0) >= 0 }">
@@ -174,7 +173,7 @@ limitations under the License.
             </div>
           </div>
           <div class="metric-card">
-            <h3>Bot Rating</h3>
+            <h3>AI 机器人平均评分</h3>
             <div class="metric-value">
               {{ (analyticsData?.ratings?.bot_avg || 0).toFixed(1) }}
               <span class="change" :class="{ positive: (analyticsData?.ratings?.bot_change || 0) >= 0 }">
@@ -182,10 +181,10 @@ limitations under the License.
                 <i :class="analyticsData?.ratings?.bot_trend === 'up' ? 'trend-up' : 'trend-down'"></i>
               </span>
             </div>
-            <div class="rating-count">{{ analyticsData?.ratings?.bot_count || 0 }} ratings</div>
+            <div class="rating-count">{{ analyticsData?.ratings?.bot_count || 0 }} 条评价</div>
           </div>
           <div class="metric-card">
-            <h3>Human Rating</h3>
+            <h3>人工客服平均评分</h3>
             <div class="metric-value">
               {{ (analyticsData?.ratings?.human_avg || 0).toFixed(1) }}
               <span class="change" :class="{ positive: (analyticsData?.ratings?.human_change || 0) >= 0 }">
@@ -193,16 +192,16 @@ limitations under the License.
                 <i :class="analyticsData?.ratings?.human_trend === 'up' ? 'trend-up' : 'trend-down'"></i>
               </span>
             </div>
-            <div class="rating-count">{{ analyticsData?.ratings?.human_count || 0 }} ratings</div>
+            <div class="rating-count">{{ analyticsData?.ratings?.human_count || 0 }} 条评价</div>
           </div>
         </div>
 
         <!-- Charts -->
         <div class="charts-grid">
           <div class="chart-container">
-            <h3>Conversations Over Time</h3>
+            <h3>对话量历史趋势</h3>
             <div v-if="!hasData(analyticsData?.conversations)" class="no-data">
-              No conversation data available
+              暂无对话数据
             </div>
             <apexchart
               v-else
@@ -210,15 +209,15 @@ limitations under the License.
               height="300"
               :options="getChartOptions('Conversations', '#C9F24E')"
               :series="[{
-                name: 'Conversations',
+                name: '对话数',
                 data: getChartData(analyticsData?.conversations)
               }]"
             />
           </div>
           <div class="chart-container">
-            <h3>AI Closures vs Human Transfers</h3>
+            <h3>AI 独立结单 vs 人工转接对比</h3>
             <div v-if="!hasData(analyticsData?.aiClosures) && !hasData(analyticsData?.transfers)" class="no-data">
-              No closure/transfer data available
+              暂无结单/转接数据
             </div>
             <apexchart
               v-else
@@ -227,20 +226,20 @@ limitations under the License.
               :options="getComparisonChartOptions()"
               :series="[
                 {
-                  name: 'AI Closures',
+                  name: 'AI 结单数',
                   data: getChartData(analyticsData?.aiClosures)
                 },
                 {
-                  name: 'Human Transfers',
+                  name: '人工转接数',
                   data: getChartData(analyticsData?.transfers)
                 }
               ]"
             />
           </div>
           <div class="chart-container">
-            <h3>Rating Comparison</h3>
+            <h3>满意度评分对比</h3>
             <div v-if="!hasData(analyticsData?.ratings)" class="no-data">
-              No rating data available
+              暂无评分数据
             </div>
             <apexchart
               v-else
@@ -249,11 +248,11 @@ limitations under the License.
               :options="getRatingChartOptions()"
               :series="[
                 {
-                  name: 'Bot Rating',
+                  name: 'AI 机器人评分',
                   data: getChartData(analyticsData?.ratings?.bot)
                 },
                 {
-                  name: 'Human Rating',
+                  name: '人工客服评分',
                   data: getChartData(analyticsData?.ratings?.human)
                 }
               ]"

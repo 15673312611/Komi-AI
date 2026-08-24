@@ -25,12 +25,12 @@ const run = computed(() => props.investigation.run)
 const isActive = computed(() => ['pending', 'running'].includes(run.value?.status || ''))
 
 const RUN_STATUS_META: Record<string, { label: string; color: string }> = {
-  pending: { label: 'Queued', color: 'var(--c-neutral)' },
-  running: { label: 'Investigating', color: 'var(--c-info)' },
-  completed: { label: 'Completed', color: 'var(--c-positive)' },
-  failed: { label: 'Failed', color: 'var(--c-danger)' },
-  cancelled: { label: 'Cancelled', color: 'var(--c-neutral)' },
-  budget_exceeded: { label: 'Partial · budget', color: 'var(--c-warn)' },
+  pending: { label: '排队中', color: 'var(--c-neutral)' },
+  running: { label: '调查中', color: 'var(--c-info)' },
+  completed: { label: '调查完成', color: 'var(--c-positive)' },
+  failed: { label: '调查失败', color: 'var(--c-danger)' },
+  cancelled: { label: '已取消', color: 'var(--c-neutral)' },
+  budget_exceeded: { label: '部分完成 (额度上限)', color: 'var(--c-warn)' },
 }
 const statusMeta = computed(
   () => RUN_STATUS_META[run.value?.status || ''] || RUN_STATUS_META.pending,
@@ -41,9 +41,9 @@ const tickerLine = computed(() => {
   if (!isActive.value) return null
   const events = props.investigation.events
   const latest = events[events.length - 1]
-  if (!latest) return 'Starting the investigation…'
+  if (!latest) return '正在启动 AI 深度调查…'
   if (latest.event_type === 'phase') return latest.label
-  return `Querying ${latest.connector_name || 'connector'} · ${latest.tool_name}`
+  return `正在检索连接器 ${latest.connector_name || '数据源'} · ${latest.tool_name}`
 })
 
 const toolCallCount = computed(
@@ -55,7 +55,7 @@ const toolCallCount = computed(
 const tokenLabel = computed(() => {
   const total = (run.value?.input_tokens || 0) + (run.value?.output_tokens || 0)
   if (!total) return ''
-  return total >= 1000 ? `${(total / 1000).toFixed(1)}k tokens` : `${total} tokens`
+  return total >= 1000 ? `${(total / 1000).toFixed(1)}k Tokens` : `${total} Tokens`
 })
 
 // A run that finished with fewer MCP connectors than configured produced its
@@ -71,18 +71,18 @@ const connectorWarning = computed(() => {
   <div v-if="run" class="investigation-panel">
     <div class="panel-head">
       <div class="head-left">
-        <span class="panel-title">AI investigation</span>
+        <span class="panel-title">AI 深度调查全景 (Glass Box)</span>
         <span class="run-chip" :style="{ color: statusMeta.color, borderColor: statusMeta.color }">
           <span v-if="isActive" class="pulse-dot" :style="{ background: statusMeta.color }"></span>
           {{ statusMeta.label }}
         </span>
       </div>
       <div class="head-meta mono">
-        <span>{{ investigation.hypotheses.length }} hypotheses</span>
+        <span>{{ investigation.hypotheses.length }} 项假设</span>
         <span>·</span>
-        <span>{{ toolCallCount }}/{{ run.max_tool_calls || '—' }} tool calls</span>
-        <span v-if="run.llm_calls">· {{ run.llm_calls }} LLM calls</span>
-        <span v-if="tokenLabel">· {{ tokenLabel }}</span>
+        <span>{{ toolCallCount }}/{{ run.max_tool_calls || '—' }} 次工具检索</span>
+        <span v-if="run.llm_calls">· {{ run.llm_calls }} 次大模型推理</span>
+        <span v-if="tokenLabel">· 消耗 {{ tokenLabel }}</span>
         <span v-if="run.model_name">· {{ run.model_name }}</span>
       </div>
     </div>
@@ -98,8 +98,7 @@ const connectorWarning = computed(() => {
 
     <div v-if="connectorWarning" class="connector-warning">
       <div>
-        Ran with {{ connectorWarning.loaded }} of {{ connectorWarning.configured }} configured
-        connector{{ connectorWarning.configured === 1 ? '' : 's' }} — findings may be missing evidence.
+        本次仅加载了 {{ connectorWarning.loaded }}/{{ connectorWarning.configured }} 个配置的连接器 — 调查结论可能存在缺失证据。
       </div>
       <ul v-if="connectorWarning.failed.length" class="connector-warning__list">
         <li v-for="f in connectorWarning.failed" :key="f.name">
@@ -116,7 +115,7 @@ const connectorWarning = computed(() => {
         :events="investigation.events"
       />
     </div>
-    <p v-else-if="!isActive" class="empty-note">No hypotheses were generated in this run.</p>
+    <p v-else-if="!isActive" class="empty-note">本次调查未生成任何假设。</p>
   </div>
 </template>
 

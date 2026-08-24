@@ -33,12 +33,12 @@ const AUTONOMY_CARDS = [
   {
     level: 1,
     tier: 'L1',
-    title: 'Investigate only',
+    title: '仅辅助调查',
     caps: [
-      { label: 'Triage & investigate', ok: true },
-      { label: 'Propose resolution', ok: false },
-      { label: 'Message customer', ok: false },
-      { label: 'Close ticket', ok: false },
+      { label: '智能分诊与深度调查', ok: true },
+      { label: '提出处置方案', ok: false },
+      { label: '直接发送回复给客户', ok: false },
+      { label: '自动关闭归档工单', ok: false },
     ],
     warn: false,
     disabled: false,
@@ -46,12 +46,12 @@ const AUTONOMY_CARDS = [
   {
     level: 2,
     tier: 'L2',
-    title: 'Propose, human approves',
+    title: '提出预案，人工审批',
     caps: [
-      { label: 'Triage & investigate', ok: true },
-      { label: 'Propose resolution', ok: true },
-      { label: 'Message customer', ok: false },
-      { label: 'Close ticket', ok: false },
+      { label: '智能分诊与深度调查', ok: true },
+      { label: '提出处置方案', ok: true },
+      { label: '直接发送回复给客户', ok: false },
+      { label: '自动关闭归档工单', ok: false },
     ],
     warn: false,
     disabled: false,
@@ -59,12 +59,12 @@ const AUTONOMY_CARDS = [
   {
     level: 3,
     tier: 'L3',
-    title: 'Auto-resolve & notify',
+    title: '自主解决并通知客户',
     caps: [
-      { label: 'Triage & investigate', ok: true },
-      { label: 'Propose resolution', ok: true },
-      { label: 'Message customer', ok: true },
-      { label: 'Close ticket', ok: true },
+      { label: '智能分诊与深度调查', ok: true },
+      { label: '提出处置方案', ok: true },
+      { label: '直接发送回复给客户', ok: true },
+      { label: '自动关闭归档工单', ok: true },
     ],
     warn: true,
     disabled: false,
@@ -82,7 +82,7 @@ function copyWebhookUrl() {
   if (!webhookUrl.value) return
   navigator.clipboard
     .writeText(webhookUrl.value)
-    .then(() => toast.success('Webhook URL copied'))
+    .then(() => toast.success('Webhook 告警接收地址已复制到剪贴板'))
     .catch(() => {})
 }
 
@@ -114,12 +114,12 @@ watch(settings, (next) => {
 })
 
 const defaultCreated =
-  "Hi [customer] — we've opened ticket [ticket] about your issue and our team is on it. We'll keep you posted."
+  "尊敬的 [customer]，您好！我们已为您创建工单 [ticket]，专属技术团队已在加急跟进处理，有最新进展将第一时间通知您。"
 const defaultResolved =
-  "Good news [customer] — ticket [ticket] is resolved. Here's what happened and what we did to fix it. Reply if anything's still off."
+  "尊敬的 [customer]，您好！工单 [ticket] 已处理完成。以上是本次问题的根本原因与解决措施说明。如有任何疑问可随时回复此通知。"
 
 const preview = (template: string) =>
-  template.replace(/\[customer\]/g, 'Northwind').replace(/\[ticket\]/g, 'TKT-2038')
+  template.replace(/\[customer\]/g, '张先生').replace(/\[ticket\]/g, 'TKT-2038')
 
 const isDirty = computed(() => {
   if (!settings.value) return false
@@ -145,22 +145,21 @@ function saveAll() {
   <DashboardLayout>
   <div class="ticketing-settings">
     <div class="page-header">
-      <h1 class="page-title">Ticketing settings</h1>
+      <h1 class="page-title">工单与 AI 自动化设置</h1>
       <p class="page-subtitle">
-        Set exactly what the AI is allowed to do — every action is gated by the autonomy level
-        you choose.
+        精确控制 AI 智能体的自主权限边界 — 所有高危操作均受自治等级与风控规则严格约束。
       </p>
     </div>
 
-    <div v-if="isLoading" class="state-msg">Loading…</div>
+    <div v-if="isLoading" class="state-msg">正在加载配置…</div>
     <div v-else-if="planGated || error" class="state-msg">{{ error }}</div>
 
     <template v-else-if="settings">
       <!-- AUTONOMY -->
       <section class="section">
-        <h2 class="section-title">Autonomy level</h2>
+        <h2 class="section-title">AI 自治等级 (Autonomy Level)</h2>
         <p class="section-hint">
-          The AI never exceeds this level. Higher levels still log every action for audit.
+          AI 绝不会超出设定的权限范围执行动作，所有推理与操作均记录不可篡改的审计日志。
         </p>
         <div class="autonomy-grid">
           <div
@@ -178,7 +177,7 @@ function saveAll() {
                 <span class="radio-dot"></span>
               </span>
               <span class="tier">{{ card.tier }}</span>
-              <span v-if="card.disabled" class="soon-tag">Coming soon</span>
+              <span v-if="card.disabled" class="soon-tag">敬请期待</span>
             </div>
             <div class="card-title">{{ card.title }}</div>
             <div class="caps">
@@ -193,8 +192,7 @@ function saveAll() {
               v-if="card.warn && settings.autonomy_level === card.level"
               class="warn-note"
             >
-              ⚠ The AI can message customers and close tickets without review. Use only for
-              well-scoped, low-risk queues.
+              ⚠ 在此等级下 AI 将直接向客户发送解决答复并自动关单。请仅在流程标准化、低风险的业务队列中开启。
             </div>
           </div>
         </div>
@@ -204,16 +202,16 @@ function saveAll() {
             :checked="settings.auto_investigate_on_create"
             @change="save({ auto_investigate_on_create: ($event.target as HTMLInputElement).checked })"
           />
-          Run AI triage automatically when a ticket is created
+          工单创建后自动启动 AI 智能分诊与深度调查
         </label>
       </section>
 
       <!-- SLA -->
       <section class="section">
-        <h2 class="section-title">SLA targets</h2>
+        <h2 class="section-title">SLA 服务等级承诺考核指标</h2>
         <div class="sla-table">
           <div class="sla-head">
-            <span>Priority</span><span>First response (min)</span><span>Resolution (min)</span>
+            <span>优先级</span><span>首次响应时效目标 (分钟)</span><span>最终解决时效目标 (分钟)</span>
           </div>
           <div v-for="p in PRIORITIES" :key="p" class="sla-row">
             <span class="sla-priority" :style="{ color: priorityMeta(p).color }">
@@ -229,53 +227,52 @@ function saveAll() {
       <!-- CUSTOMER COMMS -->
       <section class="section">
         <div class="section-head-row">
-          <h2 class="section-title">Customer communications</h2>
+          <h2 class="section-title">客户通知与消息模板</h2>
           <label class="toggle-row inline">
             <input
               type="checkbox"
               :checked="settings.csat_enabled"
               @change="save({ csat_enabled: ($event.target as HTMLInputElement).checked })"
             />
-            Collect CSAT after resolution
+            工单解决后自动向客户发起满意度评价 (CSAT)
           </label>
         </div>
         <p class="section-hint">
-          Customer emails are sent from your connected email inbox —
-          <router-link to="/settings/integrations" class="hint-link">connect one under Integrations</router-link>
-          to send from your own domain; otherwise ChatterMate's address is used.
+          邮件通知将通过您已连接的发信邮箱发出 — 可在
+          <router-link to="/settings/integrations" class="hint-link">渠道与集成</router-link>
+          中绑定企业自定义域名邮箱；未配置时将使用平台系统发信地址。
         </p>
         <div class="template-grid">
           <div class="template-card">
-            <div class="card-label">Template · Ticket created</div>
+            <div class="card-label">模板 · 工单创建通知</div>
             <textarea v-model="createdTemplate" class="template-input"></textarea>
-            <div class="card-label">Preview</div>
+            <div class="card-label">效果预览</div>
             <div class="template-preview">{{ preview(createdTemplate) }}</div>
           </div>
           <div class="template-card">
-            <div class="card-label">Template · Ticket resolved</div>
+            <div class="card-label">模板 · 工单解决通知</div>
             <textarea v-model="resolvedTemplate" class="template-input"></textarea>
-            <div class="card-label">Preview</div>
+            <div class="card-label">效果预览</div>
             <div class="template-preview">{{ preview(resolvedTemplate) }}</div>
           </div>
         </div>
         <div class="timeout-row">
           <span class="timeout-label">
-            Auto-close resolved tickets after
+            在客户未回复的情况下，解决后等待
           </span>
           <input v-model.number="confirmationTimeout" type="number" min="1" max="720" class="sla-input" />
-          <span class="timeout-label">hours without a customer reply</span>
+          <span class="timeout-label">小时后自动关闭归档工单</span>
         </div>
       </section>
 
       <!-- CONNECTORS -->
       <section class="section">
         <div class="section-head-row">
-          <h2 class="section-title">Investigation connectors</h2>
-          <span class="mcp-tag">via MCP</span>
+          <h2 class="section-title">遥测与监控数据源连接器</h2>
+          <span class="mcp-tag">基于 MCP 协议</span>
         </div>
         <p class="section-hint">
-          Read-only access to your logs, metrics and errors so the AI can gather evidence during
-          investigations. Selected connectors are attached to every investigation run.
+          为 AI 提供只读访问日志、监控指标与错误堆栈的能力。选中的连接器将在每次 AI 深度调查中自动挂载。
         </p>
         <TicketConnectorsSection
           :selected-ids="settings.investigation_mcp_tool_ids || []"
@@ -286,16 +283,14 @@ function saveAll() {
       <!-- GUARDRAILED DATABASE ACCESS -->
       <section class="section">
         <div class="section-head-row">
-          <h2 class="section-title">Database connector</h2>
+          <h2 class="section-title">业务数据库连接器</h2>
           <span class="lock-chip">
             <font-awesome-icon :icon="['fas', 'lock']" />
-            Read-only — the AI can never write
+            严格只读 — AI 绝无写入或修改权限
           </span>
         </div>
         <p class="section-hint">
-          Let the investigator verify facts directly in your database. Only SELECTs over tables
-          you explicitly allowlist; sensitive columns are masked before the AI ever sees them;
-          every query is validated, row-limited and audited.
+          允许 AI 调查员直接在业务数据库中核验客观事实。仅支持白名单数据表只读 SELECT，敏感字段由脱敏掩码拦截，所有 SQL 均经过 AST 校验、强制 LIMIT 与审计留痕。
         </p>
         <TicketDbConnectorsSection />
       </section>
@@ -303,59 +298,56 @@ function saveAll() {
       <!-- ALERT WEBHOOK -->
       <section class="section">
         <div class="section-head-row">
-          <h2 class="section-title">Alert webhook intake</h2>
+          <h2 class="section-title">监控告警 Webhook 接入</h2>
           <label class="toggle-row inline">
             <input
               type="checkbox"
               :checked="settings.alert_webhook_enabled"
               @change="save({ alert_webhook_enabled: ($event.target as HTMLInputElement).checked })"
             />
-            Enabled
+            已启用
           </label>
         </div>
         <p class="section-hint">
-          Point Grafana, Datadog or CloudWatch alert webhooks here — alerts open tickets and
-          trigger investigation proactively, before a customer reports the issue. Re-fired
-          alerts attach to the existing open ticket.
+          可将 Grafana、Datadog、CloudWatch 等系统的告警 Webhook 指向此处 — 产生告警时将自动创建工单并发起主动调查，在客户报障前先发处置。
         </p>
         <div v-if="webhookUrl" class="webhook-row">
           <code class="webhook-url">{{ webhookUrl }}</code>
-          <button class="copy-webhook" @click="copyWebhookUrl">Copy</button>
+          <button class="copy-webhook" @click="copyWebhookUrl">复制</button>
         </div>
       </section>
 
       <!-- JIRA ESCALATION -->
       <section class="section">
         <div class="section-head-row">
-          <h2 class="section-title">Jira escalation</h2>
+          <h2 class="section-title">Jira 缺陷同步升级</h2>
           <label class="toggle-row inline">
             <input
               type="checkbox"
               :checked="settings.jira_escalation_enabled"
               @change="save({ jira_escalation_enabled: ($event.target as HTMLInputElement).checked })"
             />
-            Enabled
+            已启用
           </label>
         </div>
         <p class="section-hint">
-          One-way sync: tickets at or above the chosen priority also open a Jira issue (using
-          your connected Jira and the agent's project). ChatterMate stays the source of truth.
+          单向同步：达到或超过指定优先级的工单将自动同步创建 Jira Issue 任务。
         </p>
         <div v-if="settings.jira_escalation_enabled" class="jira-row">
-          <span class="timeout-label">Escalate tickets with priority</span>
+          <span class="timeout-label">同步升级触发条件：工单优先级达到</span>
           <select
             class="sla-input jira-select"
             :value="settings.jira_escalation_priority || 'urgent'"
             @change="save({ jira_escalation_priority: ($event.target as HTMLSelectElement).value as TicketPriority })"
           >
-            <option v-for="p in PRIORITIES" :key="p" :value="p">{{ priorityMeta(p).label }} or higher</option>
+            <option v-for="p in PRIORITIES" :key="p" :value="p">{{ priorityMeta(p).label }} 及以上</option>
           </select>
         </div>
       </section>
 
       <div class="save-bar" v-if="isDirty">
         <button class="save-btn" :disabled="isSaving" @click="saveAll">
-          {{ isSaving ? 'Saving…' : 'Save changes' }}
+          {{ isSaving ? '正在保存…' : '保存设置更改' }}
         </button>
       </div>
     </template>

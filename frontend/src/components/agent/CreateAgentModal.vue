@@ -44,28 +44,28 @@ const handleCreateAgent = async () => {
     <div class="modal-overlay">
         <div class="modal-content">
             <div class="modal-header">
-                <h3>Create New Agent</h3>
+                <h3>创建新智能体</h3>
                 <button type="button" class="close-button" @click="$emit('close')">&times;</button>
             </div>
             <div class="modal-body">
                 <form @submit.prevent="handleCreateAgent">
                     <div class="form-group">
-                        <label for="agent-name">Agent Name</label>
+                        <label for="agent-name">智能体名称</label>
                         <input 
                             id="agent-name" 
                             type="text" 
                             v-model="agentName" 
-                            placeholder="e.g., Customer Support Bot"
+                            placeholder="例如：售前导购顾问 / 售后极速客服"
                             :disabled="isCreating"
                             required
                         >
                         <div class="help-text">
-                            Enter a name for your agent. This will be displayed to users.
+                            输入智能体的名称，这将在工作台与访客对话界面中展示。
                         </div>
                     </div>
                     
                     <div class="form-group mode-selection">
-                        <label>Agent Mode</label>
+                        <label>运行模式</label>
                         <div class="mode-options">
                             <div 
                                 class="mode-option" 
@@ -79,8 +79,8 @@ const handleCreateAgent = async () => {
                                     </svg>
                                 </div>
                                 <div class="mode-details">
-                                    <h4>AI Automode</h4>
-                                    <p>Let the AI respond naturally based on instructions</p>
+                                    <h4>AI 智能对话模式</h4>
+                                    <p>由大模型基于人设指令与知识库自由应答客户</p>
                                 </div>
                             </div>
                             
@@ -98,8 +98,8 @@ const handleCreateAgent = async () => {
                                     </svg>
                                 </div>
                                 <div class="mode-details">
-                                    <h4>Workflow Builder</h4>
-                                    <p>Create custom conversation flows with drag-and-drop</p>
+                                    <h4>可视化工作流模式</h4>
+                                    <p>通过拖拽节点灵活编排对话分支与自动化动作</p>
                                 </div>
                             </div>
                         </div>
@@ -116,14 +116,14 @@ const handleCreateAgent = async () => {
                             @click="$emit('close')"
                             :disabled="isCreating"
                         >
-                            Cancel
+                            取消
                         </button>
                         <button 
                             type="submit" 
                             class="create-button"
                             :disabled="isCreating"
                         >
-                            {{ isCreating ? 'Creating...' : 'Create Agent' }}
+                            {{ isCreating ? '正在创建...' : '立即创建' }}
                         </button>
                     </div>
                 </form>

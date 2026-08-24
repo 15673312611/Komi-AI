@@ -49,7 +49,7 @@ onMounted(fetchGroups)
 
 <template>
   <div class="groups-form">
-    <div v-if="loading" class="loading">Loading groups...</div>
+    <div v-if="loading" class="loading">正在加载业务分组...</div>
     <div v-else class="groups-list">
       <div v-for="group in groups" :key="group.id" class="group-item">
         <label class="checkbox-label">

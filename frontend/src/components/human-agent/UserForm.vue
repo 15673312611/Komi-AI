@@ -95,7 +95,7 @@ const handlePasswordInput = (password: string) => {
 
 const handleConfirmPasswordInput = () => {
   if (confirmPassword.value && password.value !== confirmPassword.value) {
-    error.value = 'Passwords do not match'
+    error.value = '两次输入的密码不一致'
   } else {
     error.value = ''
   }
@@ -108,8 +108,8 @@ const fetchRoles = async () => {
     syncScopeFromRole()
   } catch (err) {
     console.error('Error loading roles:', err)
-    toast.error('Error', {
-      description: 'Failed to load roles',
+    toast.error('加载失败', {
+      description: '获取角色列表失败',
       duration: 4000,
       closeButton: true
     })
@@ -123,19 +123,19 @@ onMounted(fetchRoles)
 const handleSubmit = () => {
   if (showPasswordFields.value) {
     if (password.value !== confirmPassword.value) {
-      error.value = 'Passwords do not match'
+      error.value = '两次输入的密码不一致'
       return
     }
     // The initial password an admin picks clears the same bar as a reset —
     // three surfaces used to disagree on what "strong enough" meant.
     if (!meetsPasswordPolicy(passwordStrength.value)) {
-      error.value = 'Password is not strong enough'
+      error.value = '密码强度不足，请包含大小写字母、数字或特殊符号'
       return
     }
   }
 
   if (!selectedRole.value) {
-    error.value = 'Please select a role'
+    error.value = '请选择权限角色'
     return
   }
 
@@ -162,29 +162,31 @@ const handleSubmit = () => {
     </div>
 
     <div class="form-group">
-      <label for="fullName">Full Name</label>
+      <label for="fullName">坐席姓名</label>
       <input
         id="fullName"
         v-model="fullName"
         type="text"
+        placeholder="输入坐席真实姓名或客服昵称"
         required
         class="form-input"
       />
     </div>
 
     <div class="form-group">
-      <label for="email">Email</label>
+      <label for="email">登录邮箱</label>
       <input
         id="email"
         v-model="email"
         type="email"
+        placeholder="agent@company.com"
         required
         class="form-input"
       />
     </div>
 
     <div class="form-group">
-      <label for="role">Role</label>
+      <label for="role">权限角色</label>
       <select 
         id="role"
         v-model="selectedRole"
@@ -192,7 +194,7 @@ const handleSubmit = () => {
         class="form-input"
         :disabled="loadingRoles"
       >
-        <option value="" disabled>Select a role</option>
+        <option value="" disabled>请选择角色</option>
         <option 
           v-for="role in roles" 
           :key="role.id" 
@@ -201,30 +203,30 @@ const handleSubmit = () => {
           {{ role.name }}
         </option>
       </select>
-      <span v-if="loadingRoles" class="loading-text">Loading roles...</span>
+      <span v-if="loadingRoles" class="loading-text">正在加载角色列表...</span>
     </div>
 
     <div v-if="scopeApplies" class="form-group">
-      <label>Which chats can they see?</label>
+      <label>会话查看与接管权限范围</label>
       <label class="checkbox-label">
         <input type="checkbox" v-model="seeAllAiChats" />
         <span>
-          All AI chats
-          <small>Conversations the AI is handling that nobody has picked up.</small>
+          所有 AI 队列会话
+          <small>查看与接管 AI 正在接待且尚未分配给坐席的会话。</small>
         </span>
       </label>
       <label class="checkbox-label">
         <input type="checkbox" v-model="seeAllOrgChats" />
         <span>
-          All chats in the organization
-          <small>Including other people's conversations — useful for covering leave.</small>
+          组织内所有人工会话
+          <small>包括其他坐席正在跟进的会话（适用于主管巡检或代班协助）。</small>
         </span>
       </label>
     </div>
 
     <template v-if="showPasswordFields">
       <div class="form-group">
-        <label for="password">Password</label>
+        <label for="password">设置登录密码</label>
         <input
           id="password"
           v-model="password"
@@ -232,13 +234,14 @@ const handleSubmit = () => {
           required
           class="form-input"
           autocomplete="new-password"
+          placeholder="请输入至少8位安全密码"
           @input="handlePasswordInput(password)"
         />
         <PasswordStrengthMeter v-if="passwordTouched" :strength="passwordStrength" />
       </div>
 
       <div class="form-group">
-        <label for="confirmPassword">Confirm Password</label>
+        <label for="confirmPassword">确认登录密码</label>
         <input
           id="confirmPassword"
           v-model="confirmPassword"
@@ -246,8 +249,9 @@ const handleSubmit = () => {
           required
           class="form-input"
           autocomplete="new-password"
+          placeholder="再次输入以确认"
           @input="handleConfirmPasswordInput"
-          :class="{ 'error': error && error.includes('match') }"
+          :class="{ 'error': error && error.includes('不一致') }"
         />
       </div>
     </template>
@@ -258,16 +262,16 @@ const handleSubmit = () => {
           type="checkbox"
           v-model="isActive"
         />
-        Active User
+        账号处于启用状态 (Active)
       </label>
     </div>
 
     <div class="form-actions">
       <button type="button" class="btn btn-secondary" @click="emit('cancel')">
-        Cancel
+        取消
       </button>
       <button type="submit" class="btn btn-primary">
-        {{ props.user ? 'Update' : 'Create' }}
+        {{ props.user ? '保存修改' : '确认添加' }}
       </button>
     </div>
   </form>

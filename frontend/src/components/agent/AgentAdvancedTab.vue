@@ -115,10 +115,10 @@ const updateAttachmentsSetting = async (enabled: boolean) => {
 
 // Allowed file type categories
 const fileTypeCategories = [
-  { value: 'images', label: 'Images', description: 'JPG, PNG, GIF, WebP' },
-  { value: 'documents', label: 'PDF Documents', description: 'PDF files' },
-  { value: 'office', label: 'Office Files', description: 'DOC, DOCX, XLS, XLSX' },
-  { value: 'text', label: 'Text Files', description: 'TXT, CSV' }
+  { value: 'images', label: '图片格式', description: 'JPG, PNG, GIF, WebP' },
+  { value: 'pdf', label: 'PDF 文档', description: 'PDF 文件' },
+  { value: 'office', label: 'Office 办公文档', description: 'DOC, DOCX, XLS, XLSX' },
+  { value: 'text', label: '纯文本文件', description: 'TXT, CSV' }
 ]
 
 // Check if a category is selected
@@ -144,7 +144,7 @@ const toggleFileTypeCategory = async (category: string) => {
       // Remove category (but ensure at least one remains)
       newTypes = currentTypes.filter(t => t !== category)
       if (newTypes.length === 0) {
-        toast.error('At least one file type must be allowed', { duration: 2000 })
+        toast.error('必须至少允许一种附件文件类型', { duration: 2000 })
         return
       }
     } else {
@@ -162,10 +162,10 @@ const toggleFileTypeCategory = async (category: string) => {
     agentRef.value.allowed_attachment_types = updatedAgent.allowed_attachment_types
     emit('update', updatedAgent)
     
-    toast.success('Allowed file types updated', { duration: 2000 })
+    toast.success('已更新允许上传的文件类型', { duration: 2000 })
   } catch (err) {
     console.error('Failed to update allowed file types:', err)
-    toast.error('Failed to update allowed file types', { duration: 2000 })
+    toast.error('更新允许的文件类型失败', { duration: 2000 })
   }
 }
 
@@ -184,12 +184,12 @@ const updateTokenAuthSetting = async (enabled: boolean) => {
     emit('update', updatedAgent)
     
     // Show success toast
-    toast.success(`Widget token authentication ${enabled ? 'enabled' : 'disabled'}`, {
+    toast.success(`挂件安全令牌认证已${enabled ? '启用' : '停用'}`, {
       duration: 2000
     })
   } catch (err) {
     console.error('Failed to update token auth setting:', err)
-    toast.error('Failed to update token authentication setting', {
+    toast.error('更新令牌认证设置失败', {
       duration: 2000
     })
   }
@@ -199,9 +199,9 @@ const updateTokenAuthSetting = async (enabled: boolean) => {
 <template>
   <div class="advanced-tab">
     <div class="page-header">
-      <h3 class="page-title">Advanced settings</h3>
+      <h3 class="page-title">高级技术与安全配置</h3>
       <p class="page-description">
-        Configure rate limiting, security and other technical options for your agent.
+        配置智能体的防刷频率限制 (Rate Limiting)、服务端挂件安全认证及文件附件传输策略。
       </p>
     </div>
 
@@ -221,8 +221,8 @@ const updateTokenAuthSetting = async (enabled: boolean) => {
               </svg>
             </div>
             <div class="card-meta">
-              <div class="card-title">Rate limiting</div>
-              <div class="card-desc">Protect your agent from abuse by limiting requests per user.</div>
+              <div class="card-title">请求频率限制 (Rate Limiting)</div>
+              <div class="card-desc">按 IP 限制访客提问频率，防止恶意刷量与算力资源耗尽。</div>
             </div>
           </div>
           <label class="switch">
@@ -239,7 +239,7 @@ const updateTokenAuthSetting = async (enabled: boolean) => {
         <div v-if="localSettings.enableRateLimiting" class="card-extra">
           <div class="num-fields">
             <div class="num-field">
-              <label class="num-label">Max requests</label>
+              <label class="num-label">每个 IP 最大请求量</label>
               <input
                 type="number"
                 v-model="localSettings.overallLimitPerIp"
@@ -252,7 +252,7 @@ const updateTokenAuthSetting = async (enabled: boolean) => {
               >
             </div>
             <div class="num-field">
-              <label class="num-label">Per (seconds)</label>
+              <label class="num-label">时间窗口 (秒)</label>
               <input
                 type="number"
                 v-model="localSettings.requestsPerSec"
@@ -278,8 +278,8 @@ const updateTokenAuthSetting = async (enabled: boolean) => {
               </svg>
             </div>
             <div class="card-meta">
-              <div class="card-title">Widget authentication</div>
-              <div class="card-desc">Require server-side token authentication for widget access.</div>
+              <div class="card-title">网页挂件服务端安全认证</div>
+              <div class="card-desc">要求前端挂件必须携带服务端通过 API 签发的安全 Token 才能初始化。</div>
             </div>
           </div>
           <label class="switch">
@@ -301,13 +301,13 @@ const updateTokenAuthSetting = async (enabled: boolean) => {
               </svg>
             </span>
             <span>
-              <strong>Setup:</strong> Create an API key in <strong>Settings → Widget Apps</strong>, then call
-              <code>/api/v1/generate-token</code> from your backend.
+              <strong>接入配置：</strong> 在 <strong>系统设置 → 挂件应用</strong> 中创建 API Key，并在您的后端调用
+              <code>/api/v1/generate-token</code> 生成临时凭证。
             </span>
           </div>
           <div v-else class="info-pill">
             <span class="info-pill-icon">&#9432;</span>
-            <span>Anonymous access allowed</span>
+            <span>允许公开免密匿名访问</span>
           </div>
         </div>
       </div>
@@ -322,8 +322,8 @@ const updateTokenAuthSetting = async (enabled: boolean) => {
               </svg>
             </div>
             <div class="card-meta">
-              <div class="card-title">File attachments</div>
-              <div class="card-desc">Allow users to upload files during human-agent handoff.</div>
+              <div class="card-title">文件与附件上传</div>
+              <div class="card-desc">允许访客与客户在转交人工客服会话中上传图片与文档。</div>
             </div>
           </div>
           <label class="switch">
@@ -353,12 +353,12 @@ const updateTokenAuthSetting = async (enabled: boolean) => {
             </button>
           </div>
           <p class="extra-note">
-            Customers can upload files once a human agent joins the conversation.
+            当人工客服接入会话后，客户可以在聊天框中发送所勾选格式的附件。
           </p>
         </div>
 
         <div v-else class="card-extra">
-          <p class="extra-note">Enable to allow file uploads during human-agent conversations.</p>
+          <p class="extra-note">开启后允许在人工客服接待时发送与接收文件附件。</p>
         </div>
       </div>
     </div>
@@ -371,7 +371,7 @@ const updateTokenAuthSetting = async (enabled: boolean) => {
         @click="handleCancel"
         :disabled="isLoading || !hasUnsavedChanges"
       >
-        Cancel
+        取消
       </button>
       <button
         class="btn-primary"
@@ -379,7 +379,7 @@ const updateTokenAuthSetting = async (enabled: boolean) => {
         @click="handleSaveSettings"
         :disabled="isLoading || !hasUnsavedChanges"
       >
-        Save changes
+        保存修改
       </button>
     </div>
   </div>

@@ -59,9 +59,9 @@ const statusUpdating = ref(false)
 const { logout } = useAuth()
 const { mode: themeMode, toggle: toggleTheme } = useTheme()
 const themeTitle = computed(() =>
-  themeMode.value === 'dark' ? 'Theme: Dark — click for Light'
-    : themeMode.value === 'light' ? 'Theme: Light — click for System'
-    : 'Theme: System — click for Dark'
+  themeMode.value === 'dark' ? '主题：深色模式 (点击切换为浅色)'
+    : themeMode.value === 'light' ? '主题：浅色模式 (点击切换为跟随系统)'
+    : '主题：跟随系统 (点击切换为深色模式)'
 )
 // Attaches push listeners when permission is already granted; the permission
 // request itself only happens from the EnablePushPrompt user gesture.
@@ -69,16 +69,21 @@ const { enableNotifications } = useNotifications()
 const router = useRouter()
 
 const PAGE_TITLES: Record<string, string> = {
-    '/ai-agents': 'AI Agents',
-    '/human-agents': 'Human Agents',
-    '/conversations': 'Inbox',
-    '/analytics': 'Analytics',
-    '/settings/organization': 'Organization',
-    '/settings/subscription': 'Subscription',
-    '/settings/integrations': 'Integrations',
-    '/settings/widget-apps': 'Widget Apps',
-    '/settings/ai-config': 'AI Configuration',
-    '/settings/user': 'User Settings',
+    '/ai-agents': 'AI 智能体',
+    '/human-agents': '人工客服',
+    '/conversations': '会话收件箱',
+    '/tickets': '工单中心',
+    '/people': '团队成员',
+    '/knowledge': '知识库',
+    '/faq': '帮助中心',
+    '/analytics': '数据分析',
+    '/settings/organization': '组织设置',
+    '/settings/subscription': '订阅管理',
+    '/settings/ticketing': '工单配置',
+    '/settings/integrations': '渠道集成',
+    '/settings/widget-apps': '挂件应用',
+    '/settings/ai-config': 'AI 模型配置',
+    '/settings/user': '个人设置',
 }
 const pageTitle = computed(() => PAGE_TITLES[route.path] || '')
 
@@ -250,14 +255,14 @@ const openNotificationsFromSheet = () => {
                             class="action-button"
                             @click="navigateToUpgrade"
                         >
-                            Upgrade Plan
+                            升级套餐
                         </button>
                         <button
                             v-if="canViewAIConfig"
                             class="action-button secondary"
                             @click="router.push('/settings/ai-config')"
                         >
-                            Configure Own Model
+                            配置自有模型
                         </button>
                     </div>
                 </div>
@@ -274,7 +279,7 @@ const openNotificationsFromSheet = () => {
                 <div class="header-content">
                     <div class="left-section">
                         <!-- Hamburger menu for mobile -->
-                        <button class="hamburger-menu" @click="toggleSidebar" aria-label="Toggle menu">
+                        <button class="hamburger-menu" @click="toggleSidebar" aria-label="切换菜单">
                             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                                 <path d="M3 12H21M3 6H21M3 18H21" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                             </svg>
@@ -288,7 +293,7 @@ const openNotificationsFromSheet = () => {
                         <div v-if="hasEnterpriseModule && (isLoadingPlan || isInTrial)" class="plan-display">
                             <div v-if="isLoadingPlan" class="plan-loading">
                                 <span class="loading-spinner"></span>
-                                Loading...
+                                加载中...
                             </div>
                             <div v-else-if="isInTrial" class="trial-info">
                                 <span
@@ -296,13 +301,13 @@ const openNotificationsFromSheet = () => {
                                     :class="{ clickable: canManageSubscription }"
                                     @click="canManageSubscription && navigateToUpgrade()"
                                 >
-                                    Trial ({{ trialDaysLeft }} days left)
+                                    免费试用期 (剩余 {{ trialDaysLeft }} 天)
                                 </span>
                             </div>
                         </div>
                         <div class="user-menu">
-                            <button class="notification-button" @click="showNotifications = !showNotifications">
-                                <img :src="notificationIcon" alt="Notifications" class="notification-icon" />
+                            <button class="notification-button" @click="showNotifications = !showNotifications" title="消息通知">
+                                <img :src="notificationIcon" alt="消息通知" class="notification-icon" />
                                 <span v-if="unreadCount > 0" class="notification-badge">
                                     {{ unreadCount > 99 ? '99+' : unreadCount }}
                                 </span>
@@ -313,7 +318,7 @@ const openNotificationsFromSheet = () => {
                             <div class="user-profile">
                                 <div class="profile-trigger" @click="showUserMenu = !showUserMenu">
                                     <div class="avatar-wrapper">
-                                        <img :src="userAvatarSrc" alt="User" class="avatar" />
+                                        <img :src="userAvatarSrc" alt="用户头像" class="avatar" />
                                         <span 
                                             class="status-indicator" 
                                             :class="{ 'online': currentUser?.is_online }"
@@ -331,19 +336,19 @@ const openNotificationsFromSheet = () => {
                                 </div>
                                 <div class="dropdown-menu" v-if="showUserMenu">
                                     <div class="status-menu-item">
-                                      <span class="status-label">Status:</span>
+                                      <span class="status-label">在线状态：</span>
                                       <button 
                                         class="status-toggle" 
                                         :class="{ 'online': currentUser?.is_online }"
                                         @click="toggleOnlineStatus"
                                         :disabled="statusUpdating"
                                       >
-                                        {{ currentUser?.is_online ? 'Online' : 'Offline' }}
+                                        {{ currentUser?.is_online ? '在线' : '离线' }}
                                       </button>
                                     </div>
                                     <div class="menu-divider"></div>
                                     
-                                    <button class="menu-item" @click="logout">Logout</button>
+                                    <button class="menu-item" @click="logout">退出登录</button>
                                 </div>
                             </div>
                         </div>

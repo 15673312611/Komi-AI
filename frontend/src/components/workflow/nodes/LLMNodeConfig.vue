@@ -118,7 +118,7 @@ const toggleSection = (section: string) => {
   <div class="llm-node-config">
     <div class="form-group">
       <div class="instructions-header">
-        <label for="system-prompt">Instructions *</label>
+        <label for="system-prompt">系统指令 (Prompt) *</label>
         <button 
           class="ai-generate-button" 
           @click="showAIPrompt = true"
@@ -126,7 +126,7 @@ const toggleSection = (section: string) => {
           type="button"
         >
           <span class="ai-icon">✨</span>
-          Generate with AI
+          AI 智能生成
         </button>
       </div>
       <textarea
@@ -135,7 +135,7 @@ const toggleSection = (section: string) => {
         @input="updateField('system_prompt', ($event.target as HTMLInputElement).value)"
         class="form-textarea"
         :class="{ 'error': validationErrors.system_prompt }"
-        placeholder="Enter system prompt for the AI"
+        placeholder="输入该节点的 AI 角色人设与应答指令"
         rows="4"
         required
         @blur="validateFieldOnChange('system_prompt')"
@@ -146,7 +146,7 @@ const toggleSection = (section: string) => {
     </div>
     
     <div class="form-group">
-      <label for="temperature">Temperature</label>
+      <label for="temperature">温度系数 (Temperature)</label>
       <input
         id="temperature"
         :value="localFormData.temperature"
@@ -164,12 +164,12 @@ const toggleSection = (section: string) => {
         {{ validationErrors.temperature }}
       </div>
       <p class="help-text">
-        Controls randomness in responses. Lower values (0.1) are more focused, higher values (1.5) are more creative.
+        控制回答的随机性与发散度。数值越低 (0.1) 越严谨聚焦，数值越高 (1.5) 越富有发散创意。
       </p>
     </div>
 
     <div class="form-group">
-      <label for="exit-condition">Exit Condition *</label>
+      <label for="exit-condition">节点退出条件 (Exit Condition) *</label>
       <select
         id="exit-condition"
         :value="localFormData.exit_condition"
@@ -179,18 +179,18 @@ const toggleSection = (section: string) => {
         required
         @blur="validateFieldOnChange('exit_condition')"
       >
-        <option :value="ExitCondition.SINGLE_EXECUTION">Single Execution</option>
-        <option :value="ExitCondition.CONTINUOUS_EXECUTION">Continuous Execution</option>
+        <option :value="ExitCondition.SINGLE_EXECUTION">单次执行 (Single Execution)</option>
+        <option :value="ExitCondition.CONTINUOUS_EXECUTION">多轮持续对话 (Continuous Execution)</option>
       </select>
       <div v-if="validationErrors.exit_condition" class="error-message">
         {{ validationErrors.exit_condition }}
       </div>
       <p class="help-text">
         <template v-if="localFormData.exit_condition === ExitCondition.SINGLE_EXECUTION">
-          Always moves to the next node after one AI response (default).
+          单次执行：AI 完成一次单轮回复后，自动沿连线流转至下一节点。
         </template>
         <template v-else-if="localFormData.exit_condition === ExitCondition.CONTINUOUS_EXECUTION">
-          Stays on current node for ongoing conversation, until the end chat is requested.
+          多轮持续：停留在当前节点进行多轮交互，直至访客结束对话或触发转人工。
         </template>
       </p>
     </div>
@@ -204,15 +204,15 @@ const toggleSection = (section: string) => {
           type="checkbox"
           class="form-checkbox"
         />
-        <span class="checkbox-label">Enable automatic transfer to human</span>
+        <span class="checkbox-label">允许 AI 自主识别并转交人工客服</span>
       </label>
       <p class="help-text">
-        When enabled, the AI can automatically transfer the conversation to a human agent when it determines human assistance is needed, without ending the chat.
+        开启后，当 AI 判定需要人工介入或客户强烈要求人工时，自动无缝转交人工坐席团队。
       </p>
 
       <!-- Group selection - Only when transfer is enabled -->
       <div v-if="localFormData.auto_transfer_enabled" class="transfer-groups">
-        <label for="transfer-group">Transfer Group</label>
+        <label for="transfer-group">转接目标客服分组</label>
         <div v-if="!loadingGroups">
           <select
             id="transfer-group"
@@ -220,23 +220,23 @@ const toggleSection = (section: string) => {
             @change="updateField('transfer_group_id', ($event.target as HTMLSelectElement).value)"
             class="form-select"
           >
-            <option value="">Select a group</option>
+            <option value="">选择目标客服分组</option>
             <option v-for="group in userGroups" :key="group.id" :value="group.id">
               {{ group.name }}
             </option>
           </select>
           <p v-if="userGroups.length === 0" class="help-text no-groups-message">
-            No groups available. 
+            暂无可用客服分组。 
             <router-link to="/human-agents" class="create-group-link">
-              Create Group
+              前往创建分组
             </router-link>
           </p>
           <p v-else class="help-text">
-            Select the group that should handle transferred conversations.
+            选择负责接待转交会话的目标客服业务组。
           </p>
         </div>
         <div v-else class="loading-groups">
-          Loading groups...
+          正在加载分组列表...
         </div>
       </div>
     </div>
@@ -250,10 +250,10 @@ const toggleSection = (section: string) => {
           type="checkbox"
           class="form-checkbox"
         />
-        <span class="checkbox-label">Ask for rating once chat is ended</span>
+        <span class="checkbox-label">对话结束时邀请客户进行满意度评价</span>
       </label>
       <p class="help-text">
-        When enabled, customers will be asked to rate their experience when the conversation ends.
+        开启后，当会话结束时将自动向访客发送 CSAT 服务满意度评分卡片。
       </p>
     </div>
 
@@ -265,7 +265,7 @@ const toggleSection = (section: string) => {
             <svg class="section-icon" :class="{ 'rotated': collapsedSections.knowledge }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <polyline points="6,9 12,15 18,9"></polyline>
             </svg>
-            <span>Knowledge Sources</span>
+            <span>知识库数据源 (Knowledge Sources)</span>
           </div>
         </div>
         
@@ -284,10 +284,10 @@ const toggleSection = (section: string) => {
     <!-- AI Prompt Modal -->
     <div v-if="showAIPrompt" class="ai-prompt-modal">
       <div class="ai-prompt-content">
-        <h5>Generate Instructions with AI</h5>
+        <h5>AI 智能生成节点提示词</h5>
         <textarea 
           v-model="aiPrompt"
-          placeholder="Describe what you want this AI node to do. For example: 'Create instructions for a customer support assistant that helps with order tracking'"
+          placeholder="描述您期望该 AI 节点执行的任务与职责。例如：“编写一个帮助跨境买家查询订单状态并指引售后流程的客服提示词”"
           rows="4"
           class="ai-prompt-textarea"
         ></textarea>
@@ -299,7 +299,7 @@ const toggleSection = (section: string) => {
             :disabled="aiLoading"
             type="button"
           >
-            Cancel
+            取消
           </button>
           <button 
             class="generate-ai-button" 
@@ -307,7 +307,7 @@ const toggleSection = (section: string) => {
             :disabled="aiLoading || !aiPrompt.trim()"
             type="button"
           >
-            {{ aiLoading ? 'Generating...' : 'Generate' }}
+            {{ aiLoading ? '正在生成...' : '立即生成' }}
           </button>
         </div>
       </div>

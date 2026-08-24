@@ -39,7 +39,7 @@ function onAgentChange(event: Event) {
 
 <template>
   <section class="public">
-    <h2 class="public__heading">Public help center</h2>
+    <h2 class="public__heading">公开帮助中心发布设置</h2>
 
     <div class="public__card">
       <!-- publish row -->
@@ -51,20 +51,20 @@ function onAgentChange(event: Event) {
           </label>
           <span class="status-pill" :class="settings.enabled ? 'status-pill--teal' : 'status-pill--idle'">
             <span class="status-pill__dot" :class="{ 'status-pill__dot--glow': settings.enabled }"></span>
-            {{ settings.enabled ? 'Published' : 'Draft' }}
+            {{ settings.enabled ? '已发布上线' : '草稿 (未公开)' }}
           </span>
-          <span class="publish-row__text">{{ settings.published_count }} published FAQs live at</span>
+          <span class="publish-row__text">共 {{ settings.published_count }} 条已发布问答上线于：</span>
           <a v-if="settings.live_url" class="publish-row__url" :href="settings.live_url" target="_blank" rel="noopener">{{ settings.live_url }}</a>
         </div>
-        <a v-if="settings.live_url" class="btn-ghost" :href="settings.live_url" target="_blank" rel="noopener">Open help center →</a>
+        <a v-if="settings.live_url" class="btn-ghost" :href="settings.live_url" target="_blank" rel="noopener">打开帮助中心前台 →</a>
       </div>
 
       <!-- AI agent + surfaces -->
       <div class="block">
-        <label class="mono-label">AI AGENT</label>
+        <label class="mono-label">关联 AI 客服智能体</label>
         <div class="ai-row">
           <select class="agent-select" :value="settings.agent_id || ''" @change="onAgentChange">
-            <option value="">Choose an agent…</option>
+            <option value="">选择关联的智能体…</option>
             <option v-for="agent in settings.agents" :key="agent.id" :value="agent.id">{{ agent.name }}</option>
           </select>
         </div>
@@ -73,20 +73,20 @@ function onAgentChange(event: Event) {
             <input type="checkbox" :checked="settings.ai_search_enabled" @change="emit('update-ai', { ai_search_enabled: ($event.target as HTMLInputElement).checked })" />
             <span class="switch__track"><span class="switch__knob"></span></span>
             <span class="switch__label">
-              AI quick summary in search
-              <span class="switch__sub">Instant AI answer above search results, grounded in this agent's knowledge.</span>
+              搜索结果顶部 AI 即时摘要
+              <span class="switch__sub">在搜索列表上方直接给出由 AI 基于该智能体知识库生成的精准回答。</span>
             </span>
           </label>
           <label class="switch switch--labelled">
             <input type="checkbox" :checked="settings.chat_widget_enabled" @change="emit('update-ai', { chat_widget_enabled: ($event.target as HTMLInputElement).checked })" />
             <span class="switch__track"><span class="switch__knob"></span></span>
             <span class="switch__label">
-              Chat widget
-              <span class="switch__sub">Embed this agent's chat widget so visitors can start a conversation.</span>
+              右下角在线客服聊天挂件
+              <span class="switch__sub">在帮助中心页面右下角嵌入该智能体的在线对话挂件，便于访客直接发起人工或 AI 对话。</span>
             </span>
           </label>
         </div>
-        <p class="hint">Both surfaces use the agent above — pick one, both, or neither.</p>
+        <p class="hint">上述两项前台 AI 交互能力均由所选智能体提供支持 — 您可选择开启其中一项、全部开启或关闭。</p>
       </div>
 
       <!-- custom domain -->

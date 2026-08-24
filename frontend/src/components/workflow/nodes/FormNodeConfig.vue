@@ -134,38 +134,38 @@ const updateFormData = (field: keyof FormNodeData, value: any) => {
 <template>
   <div class="form-node-config">
     <div class="form-group">
-      <label for="form-title">Form Title</label>
+      <label for="form-title">表单标题 (Form Title)</label>
       <input
         id="form-title"
         :value="formData.form_title"
         @input="updateFormData('form_title', ($event.target as HTMLInputElement).value)"
         type="text"
         class="form-input"
-        placeholder="Enter form title"
+        placeholder="输入表单标题，如：联系客服 / 登记预约"
       />
     </div>
     
     <div class="form-group">
-      <label for="form-description">Form Description</label>
+      <label for="form-description">表单描述说明</label>
       <textarea
         id="form-description"
         :value="formData.form_description"
         @input="updateFormData('form_description', ($event.target as HTMLTextAreaElement).value)"
         class="form-textarea"
-        placeholder="Enter form description (optional)"
+        placeholder="输入表单填写指引说明（可选）"
         rows="3"
       ></textarea>
     </div>
     
     <div class="form-group">
-      <label for="submit-button-text">Submit Button Text</label>
+      <label for="submit-button-text">提交按钮文案</label>
       <input
         id="submit-button-text"
         :value="formData.submit_button_text"
         @input="updateFormData('submit_button_text', ($event.target as HTMLInputElement).value)"
         type="text"
         class="form-input"
-        placeholder="Submit"
+        placeholder="确认提交"
       />
     </div>
     
@@ -177,13 +177,13 @@ const updateFormData = (field: keyof FormNodeData, value: any) => {
           type="checkbox"
           class="form-checkbox"
         />
-        <span class="checkbox-label">Display form in full screen mode</span>
+        <span class="checkbox-label">以全屏模态弹窗形式展示表单</span>
       </label>
-      <p class="help-text">When enabled, the form will be displayed as a full screen overlay instead of within the chat interface</p>
+      <p class="help-text">开启后，表单将以全屏沉浸式覆盖窗口展开，而非嵌入在聊天气泡中</p>
     </div>
     
     <div class="form-group">
-      <label>Form Fields</label>
+      <label>表单字段列表 (Form Fields)</label>
       <div class="form-fields-container" :class="{ 'error': validationErrors.form_fields }">
         <div
           v-for="(field, index) in formData.form_fields"
@@ -198,7 +198,7 @@ const updateFormData = (field: keyof FormNodeData, value: any) => {
               type="button"
               class="remove-field-btn"
               @click="removeFormField(index)"
-              title="Remove field"
+              title="删除此字段"
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <line x1="18" y1="6" x2="6" y2="18"></line>
@@ -210,26 +210,26 @@ const updateFormData = (field: keyof FormNodeData, value: any) => {
           <div class="form-field-config">
             <div class="field-row">
               <div class="field-col">
-                <label class="field-label">Field Name *</label>
+                <label class="field-label">字段变量名 (Field Name) *</label>
                 <input
                   :value="field.name"
                   @input="updateField(index, 'name', ($event.target as HTMLInputElement).value)"
                   @blur="$emit('validate-field', 'form_fields')"
                   type="text"
                   class="field-input"
-                  placeholder="field_name"
+                  placeholder="如：customer_email"
                   required
                 />
               </div>
               <div class="field-col">
-                <label class="field-label">Display Label *</label>
+                <label class="field-label">展示标签名称 (Label) *</label>
                 <input
                   :value="field.label"
                   @input="updateField(index, 'label', ($event.target as HTMLInputElement).value)"
                   @blur="$emit('validate-field', 'form_fields')"
                   type="text"
                   class="field-input"
-                  placeholder="Field Label"
+                  placeholder="如：电子邮箱"
                   required
                 />
               </div>
@@ -237,24 +237,24 @@ const updateFormData = (field: keyof FormNodeData, value: any) => {
             
             <div class="field-row">
               <div class="field-col">
-                <label class="field-label">Field Type</label>
+                <label class="field-label">输入控件类型</label>
                 <select 
                   :value="field.type" 
                   @change="updateField(index, 'type', ($event.target as HTMLSelectElement).value)"
                   class="field-select"
                 >
-                  <option value="text">Text</option>
-                  <option value="email">Email</option>
-                  <option value="number">Number</option>
-                  <option value="tel">Phone</option>
-                  <option value="textarea">Textarea</option>
-                  <option value="select">Select</option>
-                  <option value="checkbox">Checkbox</option>
-                  <option value="radio">Radio</option>
+                  <option value="text">单行文本 (Text)</option>
+                  <option value="email">电子邮箱 (Email)</option>
+                  <option value="number">数字 (Number)</option>
+                  <option value="tel">电话号码 (Phone)</option>
+                  <option value="textarea">多行文本 (Textarea)</option>
+                  <option value="select">下拉单选 (Select)</option>
+                  <option value="checkbox">复选框 (Checkbox)</option>
+                  <option value="radio">单选按钮 (Radio)</option>
                 </select>
               </div>
               <div class="field-col">
-                <label class="field-label">Required</label>
+                <label class="field-label">是否必填</label>
                 <label class="checkbox-label">
                   <input
                     :checked="field.required"
@@ -262,21 +262,21 @@ const updateFormData = (field: keyof FormNodeData, value: any) => {
                     type="checkbox"
                     class="form-checkbox"
                   />
-                  <span>Required field</span>
+                  <span>必填项</span>
                 </label>
               </div>
             </div>
             
             <div class="field-row">
               <div class="field-col-full">
-                <label class="field-label">Placeholder</label>
+                <label class="field-label">输入提示占位符 (Placeholder)</label>
                 <input
                   :value="field.placeholder"
                   @input="updateField(index, 'placeholder', ($event.target as HTMLInputElement).value)"
                   @blur="$emit('validate-field', 'form_fields')"
                   type="text"
                   class="field-input"
-                  placeholder="Enter placeholder text"
+                  placeholder="输入框内浅色提示文本"
                 />
               </div>
             </div>
@@ -284,13 +284,13 @@ const updateFormData = (field: keyof FormNodeData, value: any) => {
             <!-- Options for select/radio fields -->
             <div v-if="field.type === 'select' || field.type === 'radio'" class="field-row">
               <div class="field-col-full">
-                <label class="field-label">Options (one per line)</label>
+                <label class="field-label">可选项列表 (每行一个选项)</label>
                 <textarea
                   :value="Array.isArray(field.options) ? field.options.join('\n') : field.options"
                   @input="updateField(index, 'options', ($event.target as HTMLTextAreaElement).value)"
                   @blur="$emit('validate-field', 'form_fields')"
                   class="field-textarea"
-                  placeholder="Option 1&#10;Option 2&#10;Option 3"
+                  placeholder="选项一&#10;选项二&#10;选项三"
                   rows="3"
                 ></textarea>
               </div>
@@ -299,7 +299,7 @@ const updateFormData = (field: keyof FormNodeData, value: any) => {
             <!-- Validation for text fields -->
             <div v-if="field.type === 'text' || field.type === 'textarea'" class="field-row">
               <div class="field-col">
-                <label class="field-label">Min Length</label>
+                <label class="field-label">最小字符长度</label>
                 <input
                   :value="field.minLength"
                   @input="updateField(index, 'minLength', parseInt(($event.target as HTMLInputElement).value) || 0)"
@@ -311,7 +311,7 @@ const updateFormData = (field: keyof FormNodeData, value: any) => {
                 />
               </div>
               <div class="field-col">
-                <label class="field-label">Max Length</label>
+                <label class="field-label">最大字符长度</label>
                 <input
                   :value="field.maxLength"
                   @input="updateField(index, 'maxLength', parseInt(($event.target as HTMLInputElement).value) || 255)"
@@ -335,7 +335,7 @@ const updateFormData = (field: keyof FormNodeData, value: any) => {
             <line x1="12" y1="5" x2="12" y2="19"></line>
             <line x1="5" y1="12" x2="19" y2="12"></line>
           </svg>
-          Add Form Field
+          + 添加表单字段
         </button>
       </div>
       <div v-if="validationErrors.form_fields" class="error-message">

@@ -41,7 +41,7 @@ const fetchNotifications = async () => {
         isLoading.value = true
         notifications.value = await notificationService.getNotifications()
     } catch (err) {
-        error.value = 'Failed to load notifications'
+        error.value = '加载通知列表失败'
         console.error('Error fetching notifications:', err)
     } finally {
         isLoading.value = false
@@ -100,7 +100,7 @@ const markAllRead = async () => {
         emit('notification-read')
     } catch (err) {
         console.error('Error marking all notifications as read:', err)
-        error.value = 'Could not mark everything as read'
+        error.value = '无法全部标为已读'
     }
 }
 
@@ -114,7 +114,7 @@ const deleteNotification = async (id: number) => {
     } catch (err) {
         console.error('Error deleting notification:', err)
         notifications.value = previous
-        error.value = 'Could not delete that notification'
+        error.value = '删除该通知失败'
     }
 }
 
@@ -127,7 +127,7 @@ const clearAll = async () => {
     } catch (err) {
         console.error('Error clearing notifications:', err)
         notifications.value = previous
-        error.value = 'Could not clear notifications'
+        error.value = '清空通知失败'
     }
 }
 
@@ -138,19 +138,19 @@ const formatTime = (timestamp: string): string => {
 
     // Less than a minute
     if (diff < 60000) {
-        return 'just now'
+        return '刚刚'
     }
 
     // Less than an hour
     if (diff < 3600000) {
         const mins = Math.floor(diff / 60000)
-        return `${mins} min ago`
+        return `${mins} 分钟前`
     }
 
     // Less than a day
     if (diff < 86400000) {
         const hours = Math.floor(diff / 3600000)
-        return `${hours}h ago`
+        return `${hours} 小时前`
     }
 
     // Show date
@@ -163,37 +163,37 @@ onMounted(fetchNotifications)
 <template>
     <div class="notification-drawer" :class="{ open: isOpen }">
         <div class="drawer-header">
-            <h3>Notifications</h3>
+            <h3>消息通知</h3>
             <div class="header-actions">
                 <button
                     class="refresh-button"
                     @click="fetchNotifications"
                     :disabled="isLoading"
                     :class="{ 'loading': isLoading }"
-                    title="Refresh"
+                    title="刷新通知"
                 >
                     <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.3"/>
                     </svg>
                 </button>
-                <button class="close-button" @click="emit('close')" title="Close">&times;</button>
+                <button class="close-button" @click="emit('close')" title="关闭">&times;</button>
             </div>
         </div>
 
         <div class="drawer-filter">
             <div class="filter-tabs">
-                <button class="filter-tab" :class="{ active: activeFilter === 'all' }" @click="activeFilter = 'all'">All</button>
-                <button class="filter-tab" :class="{ active: activeFilter === 'unread' }" @click="activeFilter = 'unread'">Unread</button>
+                <button class="filter-tab" :class="{ active: activeFilter === 'all' }" @click="activeFilter = 'all'">全部</button>
+                <button class="filter-tab" :class="{ active: activeFilter === 'unread' }" @click="activeFilter = 'unread'">未读</button>
             </div>
             <div class="filter-actions">
-                <button class="mark-all" :disabled="!hasUnread" @click="markAllRead">Mark all read</button>
-                <button class="mark-all" :disabled="!notifications.length" @click="clearAll">Clear all</button>
+                <button class="mark-all" :disabled="!hasUnread" @click="markAllRead">全部已读</button>
+                <button class="mark-all" :disabled="!notifications.length" @click="clearAll">清空全部</button>
             </div>
         </div>
 
         <div class="drawer-content">
             <div v-if="isLoading" class="state-message">
-                Loading notifications...
+                正在加载通知列表...
             </div>
 
             <div v-else-if="error" class="state-message">
@@ -201,8 +201,8 @@ onMounted(fetchNotifications)
             </div>
 
             <div v-else-if="!filteredNotifications.length" class="empty-state">
-                <div class="empty-title">You're all caught up</div>
-                <div class="empty-sub">No {{ activeFilter === 'unread' ? 'unread ' : '' }}notifications.</div>
+                <div class="empty-title">一切已就绪</div>
+                <div class="empty-sub">暂无{{ activeFilter === 'unread' ? '未读' : '' }}消息通知。</div>
             </div>
 
             <div v-else class="notifications">
@@ -225,8 +225,8 @@ onMounted(fetchNotifications)
                     <!-- .stop: the row itself deep-links to the conversation -->
                     <button
                         class="delete-notification"
-                        :aria-label="`Delete notification: ${notification.title}`"
-                        title="Delete"
+                        :aria-label="`删除通知: ${notification.title}`"
+                        title="删除通知"
                         @click.stop="deleteNotification(notification.id)"
                     >&times;</button>
                 </div>

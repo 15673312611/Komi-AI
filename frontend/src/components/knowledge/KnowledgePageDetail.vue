@@ -36,10 +36,10 @@ defineEmits<{
 }>()
 
 const statusText: Record<SourceStatus, string> = {
-  queued: 'Pending',
-  crawling: 'Crawling',
-  synced: 'Synced',
-  error: 'Needs sync',
+  queued: '排队中',
+  crawling: '抓取中',
+  synced: '已同步',
+  error: '需重新同步',
 }
 
 const paragraphs = computed(() =>
@@ -55,9 +55,9 @@ const href = computed(() => {
 })
 
 const updatedLabel = computed(() => {
-  if (!props.page.updated_at) return 'unknown'
+  if (!props.page.updated_at) return '未知'
   const d = new Date(props.page.updated_at)
-  return Number.isNaN(d.getTime()) ? 'unknown' : d.toLocaleDateString()
+  return Number.isNaN(d.getTime()) ? '未知' : d.toLocaleDateString()
 })
 </script>
 
@@ -88,9 +88,9 @@ const updatedLabel = computed(() => {
               stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" />
             </svg>
-            Edit
+            编辑内容
           </button>
-          <button class="btn btn--danger" type="button" :disabled="deleting" title="Delete page"
+          <button class="btn btn--danger" type="button" :disabled="deleting" title="删除此页面"
             @click="$emit('delete')">
             <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8"
               stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -102,9 +102,9 @@ const updatedLabel = computed(() => {
       </div>
 
       <div class="meta">
-        <span class="meta__item">{{ page.word_count }} words</span>
+        <span class="meta__item">{{ page.word_count }} 字</span>
         <span class="meta__sep"></span>
-        <span class="meta__item">Updated {{ updatedLabel }}</span>
+        <span class="meta__item">更新于 {{ updatedLabel }}</span>
         <span class="meta__sep"></span>
         <span class="pill" :class="`pill--${status}`">
           <span class="pill__dot"></span>{{ statusText[status] }}
@@ -112,7 +112,7 @@ const updatedLabel = computed(() => {
       </div>
 
       <div v-if="agents && agents.length" class="usedby">
-        <span class="usedby__label">Used by</span>
+        <span class="usedby__label">已挂载智能体</span>
         <span v-for="agent in agents" :key="agent.id" class="agent-chip" :title="agent.name">
           <span class="agent-chip__avatar">{{ initial(agent.name) }}</span>
           <span class="agent-chip__name">{{ agent.name }}</span>
@@ -123,7 +123,7 @@ const updatedLabel = computed(() => {
     <div class="doc">
       <p v-for="(para, i) in paragraphs" :key="i">{{ para }}</p>
       <div v-if="paragraphs.length === 0" class="doc__empty">
-        This page has no content yet. Click <strong>Edit</strong> to add some.
+        此知识页面暂无正文内容。点击上方 <strong>编辑内容</strong> 添加。
       </div>
     </div>
   </div>

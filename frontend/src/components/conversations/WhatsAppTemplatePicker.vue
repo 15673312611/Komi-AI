@@ -50,11 +50,11 @@ const send = async () => {
       language: template.language || DEFAULT_LANGUAGE,
       components,
     })
-    toast.success('Template sent', { description: 'The customer can reply for the next 24 hours.' })
+    toast.success('模板消息已发送', { description: '客户在未来 24 小时内回复即可重新激活实时会话。' })
     emit('sent', template)
   } catch (error: any) {
-    toast.error('Could not send template', {
-      description: error?.response?.data?.detail || 'Please try again',
+    toast.error('发送模板消息失败', {
+      description: error?.response?.data?.detail || '请重试',
       closeButton: true,
     })
   } finally {
@@ -64,15 +64,15 @@ const send = async () => {
 </script>
 
 <template>
-  <BaseModal title="Send a template" @close="emit('close')">
+  <BaseModal title="发送 WhatsApp 模板消息" @close="emit('close')">
     <p class="tpl-intro">
-      This conversation is outside WhatsApp's 24-hour window. An approved template reopens it.
+      当前会话已超出 WhatsApp 官方 24 小时自由应答窗口，发送已审核的模板消息可重新开启与客户的沟通。
     </p>
 
     <WhatsAppTemplateSelect v-model:selection="selection" :account-id="accountId" />
 
     <template #actions>
-      <button class="modal-btn" @click="emit('close')">Cancel</button>
+      <button class="modal-btn" @click="emit('close')">取消</button>
       <button
         class="modal-btn modal-btn-primary"
         :disabled="!canSend"
@@ -80,7 +80,7 @@ const send = async () => {
         @click="send"
       >
         <font-awesome-icon v-if="sending" icon="fa-solid fa-spinner" spin />
-        {{ sending ? 'Sending…' : 'Send template' }}
+        {{ sending ? '正在发送…' : '立即发送模板消息' }}
       </button>
     </template>
   </BaseModal>

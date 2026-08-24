@@ -54,17 +54,17 @@ const onInvite = async () => {
       <!-- Page header -->
       <header class="page-header">
         <div class="title-block">
-          <h1 class="page-title">Human Agents</h1>
-          <p class="page-subtitle">The people behind your AI — who picks up when a conversation needs a human.</p>
+          <h1 class="page-title">人工客服坐席</h1>
+          <p class="page-subtitle">协同 AI 接待的团队成员 — 当访客需要人工介入时负责精准承接与解决问题。</p>
         </div>
         <div class="header-actions">
           <div class="search-box">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="7"></circle><path d="M21 21l-4-4"></path></svg>
-            <input v-model="searchQuery" placeholder="Search people…" />
+            <input v-model="searchQuery" placeholder="搜索坐席成员、分组或角色…" />
           </div>
           <button class="invite-btn" @click="onInvite">
             <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M19 8v6M22 11h-6"></path></svg>
-            Invite agent
+            + 邀请/添加坐席
           </button>
         </div>
       </header>
@@ -72,13 +72,13 @@ const onInvite = async () => {
       <!-- Pill tabs -->
       <nav class="tab-pills">
         <button :class="['tab-pill', { active: activeTab === 'users' }]" @click="activeTab = 'users'">
-          People <span class="tab-badge" v-if="peopleCount !== null">{{ peopleCount }}</span>
+          坐席成员 <span class="tab-badge" v-if="peopleCount !== null">{{ peopleCount }}</span>
         </button>
         <button :class="['tab-pill', { active: activeTab === 'groups' }]" @click="activeTab = 'groups'">
-          Teams <span class="tab-badge" v-if="teamsCount !== null">{{ teamsCount }}</span>
+          业务分组 <span class="tab-badge" v-if="teamsCount !== null">{{ teamsCount }}</span>
         </button>
         <button :class="['tab-pill', { active: activeTab === 'roles' }]" @click="activeTab = 'roles'">
-          Roles <span class="tab-badge" v-if="rolesCount !== null">{{ rolesCount }}</span>
+          权限角色 <span class="tab-badge" v-if="rolesCount !== null">{{ rolesCount }}</span>
         </button>
       </nav>
 

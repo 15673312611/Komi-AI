@@ -100,11 +100,11 @@ const copyVariableToClipboard = async (variable: Variable) => {
 <template>
   <div class="guardrails-node-config">
     <div class="info-box">
-      <p>Configure content guardrails to detect and block inappropriate content.</p>
+      <p>配置内容安全护栏规则，自动识别并拦截敏感数据泄露或恶意提示词越狱攻击。</p>
     </div>
 
     <div class="form-group">
-      <label>Enabled Guardrails *</label>
+      <label>启用的护栏规则 (Enabled Guardrails) *</label>
       <div class="guardrail-options">
         <label class="guardrail-option">
           <input
@@ -116,8 +116,8 @@ const copyVariableToClipboard = async (variable: Variable) => {
           <div class="guardrail-info">
             <span class="guardrail-icon">🔒</span>
             <div>
-              <strong>PII Detection</strong>
-              <p>Detects personally identifiable information (emails, phone numbers, SSNs, etc.)</p>
+              <strong>PII 个人隐私数据检测</strong>
+              <p>识别文本中的个人敏感隐私（如邮箱、电话号码、身份证/社保号、银行卡等）</p>
             </div>
           </div>
         </label>
@@ -132,8 +132,8 @@ const copyVariableToClipboard = async (variable: Variable) => {
           <div class="guardrail-info">
             <span class="guardrail-icon">⚠️</span>
             <div>
-              <strong>Jailbreak Detection</strong>
-              <p>Detects attempts to bypass AI safety guidelines or manipulate system prompts</p>
+              <strong>Prompt 越狱攻击防御</strong>
+              <p>检测试图绕过 AI 安全准则、诱导泄露 Prompt 或操纵系统设定的对抗性攻击</p>
             </div>
           </div>
         </label>
@@ -145,24 +145,24 @@ const copyVariableToClipboard = async (variable: Variable) => {
 
     <!-- PII Action -->
     <div v-if="isGuardrailEnabled('pii')" class="form-group">
-      <label for="pii-action">PII Action</label>
+      <label for="pii-action">PII 处置策略 (Action)</label>
       <select
         id="pii-action"
         :value="formData.pii_action"
         @change="updateFormData('pii_action', ($event.target as HTMLSelectElement).value)"
         class="form-select"
       >
-        <option value="block">Block - Stop processing if PII detected</option>
-        <option value="redact">Redact - Replace PII with placeholders</option>
-        <option value="warning">Warning - Log but allow processing</option>
-        <option value="log">Log - Only log detection</option>
+        <option value="block">拦截阻断 (Block) - 检测到隐私信息时立即终止流程并提示</option>
+        <option value="redact">脱敏替换 (Redact) - 将隐私信息自动替换为掩码占位符</option>
+        <option value="warning">记录警告 (Warning) - 记录审计日志但允许继续执行</option>
+        <option value="log">仅后台日志 (Log) - 仅留存检测记录</option>
       </select>
     </div>
 
     <!-- Jailbreak Sensitivity -->
     <div v-if="isGuardrailEnabled('jailbreak')" class="form-group">
       <label for="jailbreak-sensitivity">
-        Jailbreak Sensitivity: {{ formData.jailbreak_sensitivity?.toFixed(1) || '0.7' }}
+        越狱检测灵敏度：{{ formData.jailbreak_sensitivity?.toFixed(1) || '0.7' }}
       </label>
       <input
         id="jailbreak-sensitivity"
@@ -175,33 +175,33 @@ const copyVariableToClipboard = async (variable: Variable) => {
         class="form-range"
       />
       <div class="range-labels">
-        <span>Less Sensitive (0.1)</span>
-        <span>More Sensitive (1.0)</span>
+        <span>宽松 (0.1)</span>
+        <span>严格 (1.0)</span>
       </div>
       <small class="help-text">
-        Higher sensitivity = more likely to detect potential jailbreak attempts
+        灵敏度越高，越容易判定潜在的越狱尝试并进行拦截
       </small>
     </div>
 
     <div class="form-group">
-      <label for="text-source">Text Source</label>
+      <label for="text-source">检测文本来源 (Text Source)</label>
       <input
         id="text-source"
         type="text"
         :value="formData.text_source"
         @input="updateFormData('text_source', ($event.target as HTMLInputElement).value)"
         class="form-input"
-        placeholder="user_message or user_input_input"
+        placeholder="user_message 或 user_input_input"
       />
       <small class="help-text">
-        Specify what text to check. Use "user_message" for the latest user input, or reference a variable like "user_input_input" or use double curly braces syntax
+        指定需要进行安全检测的文本内容。填 "user_message" 代表检测用户最新发言，或填入上下文变量名
       </small>
     </div>
 
     <!-- Available Variables Section -->
     <div v-if="availableVariables && availableVariables.length > 0" class="variables-section">
       <div class="variables-header">
-        <span class="variables-title">Available Variables</span>
+        <span class="variables-title">可用上下文变量</span>
         <span class="variables-count">{{ availableVariables.length }}</span>
       </div>
       
@@ -211,11 +211,11 @@ const copyVariableToClipboard = async (variable: Variable) => {
           :key="`${variable.nodeId}-${variable.fieldName}`"
           class="variable-item"
           @click="copyVariableToClipboard(variable)"
-          :title="`Click to copy ${getVariableSyntax(variable.fieldName)} to clipboard`"
+          :title="`点击复制 ${getVariableSyntax(variable.fieldName)} 到剪贴板`"
         >
           <div class="variable-info">
             <div class="variable-name">{{ variable.fieldName }}</div>
-            <div class="variable-source">from {{ variable.nodeName }}</div>
+            <div class="variable-source">来源于 {{ variable.nodeName }}</div>
           </div>
           <div class="variable-syntax">
             <code>{{ getVariableSyntax(variable.fieldName) }}</code>
@@ -224,26 +224,24 @@ const copyVariableToClipboard = async (variable: Variable) => {
       </div>
       
       <div class="variables-help">
-        <small>Click on any variable to copy it to clipboard</small>
+        <small>点击任意变量即可复制其引用语法到剪贴板</small>
       </div>
     </div>
 
     <div class="form-group">
-      <label for="block-message">Custom Block Message</label>
+      <label for="block-message">自定义拦截阻断提示语</label>
       <textarea
         id="block-message"
         :value="formData.block_message"
         @input="updateFormData('block_message', ($event.target as HTMLTextAreaElement).value)"
         class="form-textarea"
-        placeholder="Optional: Custom message to show when content is blocked"
+        placeholder="选填：当触发安全阻断时向用户展示的自定义友好提示语"
         rows="3"
       ></textarea>
       <small class="help-text">
-        Leave empty to use default block messages
+        若留空，则使用系统默认的安全拦截提示
       </small>
     </div>
-
-
   </div>
 </template>
 

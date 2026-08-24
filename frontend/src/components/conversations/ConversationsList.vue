@@ -246,28 +246,28 @@ onBeforeUnmount(() => {
           :class="{ active: statusFilter === 'open' }"
           @click="emit('updateFilter', 'open')"
         >
-          Open
+          进行中
         </button>
         <button 
           class="filter-btn" 
           :class="{ active: statusFilter === 'closed' }"
           @click="emit('updateFilter', 'closed')"
         >
-          Closed
+          已关闭
         </button>
       </div>
 
       <div v-if="loading && !loadingMore" class="loading-state">
-        Loading conversations...
+        正在加载会话列表…
       </div>
 
       <div v-else-if="error" class="error-state">
         {{ error }}
-        <button @click="emit('refresh')" class="refresh-button">Retry</button>
+        <button @click="emit('refresh')" class="refresh-button">重试</button>
       </div>
 
       <div v-else-if="conversations.length === 0" class="empty-state">
-        No conversations yet
+        暂无会话记录
       </div>
 
       <div v-else class="conversations-list" ref="listContainer">
@@ -289,7 +289,7 @@ onBeforeUnmount(() => {
             <template v-if="conv.message_type === 'product' && conv.shopify_output?.products?.length">
               <p class="last-message product-preview">
                 <span class="product-icon">🛍️</span>
-                {{ conv.shopify_output.products.length }} product{{ conv.shopify_output.products.length > 1 ? 's' : '' }} shared
+                分享了 {{ conv.shopify_output.products.length }} 个商品
               </p>
             </template>
             <!-- Regular message preview -->
@@ -300,10 +300,10 @@ onBeforeUnmount(() => {
               {{ unreadMessages[conv.session_id] }}
             </div>
           </div>
-          <div class="message-count">{{ conv.message_count }} messages</div>
+          <div class="message-count">{{ conv.message_count }} 条消息</div>
           <div class="conversation-footer">
             <div class="conversation-status" :class="conv.status">
-              {{ conv.status }}
+              {{ conv.status === 'open' ? '进行中' : conv.status === 'transferred' ? '已转接' : '已关闭' }}
             </div>
             <HandlerBadge :chat="conv" :current-user-id="currentUserId" />
           </div>
@@ -317,16 +317,16 @@ onBeforeUnmount(() => {
         >
           <div v-if="loadingMore" class="loading-more">
             <div class="loading-spinner"></div>
-            <span>Loading more conversations...</span>
+            <span>正在加载更多会话…</span>
           </div>
           <div v-else-if="hasMore" class="load-more-container">
-            <span class="load-more-hint">Scroll down to load more</span>
+            <span class="load-more-hint">向下滚动加载更多</span>
             <button 
               class="load-more-button"
               @click="emit('loadMore')"
               :disabled="loadingMore"
             >
-              Load More
+              加载更多
             </button>
           </div>
         </div>
@@ -337,7 +337,7 @@ onBeforeUnmount(() => {
         v-if="showScrollToTop" 
         class="scroll-to-top-btn"
         @click="scrollToTop"
-        aria-label="Scroll to top"
+        aria-label="回到顶部"
       >
         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M18 15l-6-6-6 6"/>
@@ -348,7 +348,7 @@ onBeforeUnmount(() => {
     <!-- Chat view -->
     <div class="chat-view">
       <div v-if="chatLoading" class="loading-state">
-        Loading chat...
+        正在加载会话详情…
       </div>
       <ConversationChat
         v-else-if="selectedChat"
@@ -371,6 +371,9 @@ onBeforeUnmount(() => {
         @back="emit('back')"
         @info="emit('info')"
       />
+      <div v-else class="no-chat-selected">
+        请从左侧列表中选择一个会话进行查看与回复
+      </div>
     </div>
   </div>
 </template>

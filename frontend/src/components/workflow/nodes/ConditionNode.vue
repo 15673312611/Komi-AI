@@ -43,7 +43,7 @@ defineProps<{
       </div>
       
       <div v-if="data.config?.condition" class="node-preview">
-        <div class="preview-label">Condition:</div>
+        <div class="preview-label">判定条件：</div>
         <div class="preview-content">
           {{ data.config.condition.substring(0, 80) }}{{ data.config.condition.length > 80 ? '...' : '' }}
         </div>
@@ -57,7 +57,7 @@ defineProps<{
       :style="{ top: '30%' }"
       class="node-handle true-handle"
     />
-    <div class="handle-label true-label">True</div>
+    <div class="handle-label true-label">True (是)</div>
     
     <Handle
       id="false"
@@ -66,7 +66,7 @@ defineProps<{
       :style="{ top: '70%' }"
       class="node-handle false-handle"
     />
-    <div class="handle-label false-label">False</div>
+    <div class="handle-label false-label">False (否)</div>
   </div>
 </template>
 

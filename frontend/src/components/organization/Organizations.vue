@@ -37,11 +37,11 @@ const timezones = ref(listTz())
 
 // Danger zone — no destructive API yet; route the user to support.
 const onTransferOwnership = () => {
-  window.alert('To transfer ownership, please contact support@chattermate.chat.')
+  window.alert('如需转让企业组织所有权，请联系管理员或技术支持 support@chattermate.chat。')
 }
 const onDeleteOrganization = () => {
-  if (window.confirm('Permanently delete this organization and all its data? This cannot be undone.')) {
-    window.alert('Organization deletion must be completed by support — please contact support@chattermate.chat.')
+  if (window.confirm('永久注销并删除当前企业组织及其所有数据？该操作不可撤回。')) {
+    window.alert('企业组织注销需由技术支持核验处理 — 请联系 support@chattermate.chat。')
   }
 }
 
@@ -92,33 +92,33 @@ onMounted(async () => {
     <div v-else class="org-page">
       <!-- Page header -->
       <header class="org-header">
-        <h1 class="org-title">Organization</h1>
-        <p class="org-subtitle">Your workspace profile, hours of operation and team overview.</p>
+        <h1 class="org-title">企业与工作空间设置</h1>
+        <p class="org-subtitle">配置企业工作空间资料、客服工作时间及团队数据总览。</p>
       </header>
 
       <!-- Stats strip -->
       <div v-if="stats" class="stats-strip">
         <div class="stat-card">
-          <span class="stat-label">MEMBERS</span>
+          <span class="stat-label">团队成员</span>
           <span class="stat-value">{{ stats.members_total ?? stats.total_users ?? 0 }}</span>
-          <span class="stat-sub members">{{ stats.members_admins ?? 0 }} admins · {{ stats.members_agents ?? 0 }} agents</span>
+          <span class="stat-sub members">{{ stats.members_admins ?? 0 }} 名管理员 · {{ stats.members_agents ?? 0 }} 名客服</span>
         </div>
         <div class="stat-card">
-          <span class="stat-label">ACTIVE NOW</span>
+          <span class="stat-label">当前活跃</span>
           <span class="stat-value">{{ stats.active_now ?? 0 }}</span>
-          <span class="stat-sub active">online today</span>
+          <span class="stat-sub active">今日在线</span>
         </div>
         <div class="stat-card">
-          <span class="stat-label">AI AGENTS</span>
+          <span class="stat-label">AI 智能体</span>
           <span class="stat-value">{{ stats.agents_total ?? 0 }}</span>
-          <span class="stat-sub agents">{{ stats.agents_live ?? 0 }} live · {{ stats.agents_draft ?? 0 }} draft</span>
+          <span class="stat-sub agents">{{ stats.agents_live ?? 0 }} 个上线 · {{ stats.agents_draft ?? 0 }} 个草稿</span>
         </div>
         <div class="stat-card">
-          <span class="stat-label">CONVERSATIONS · 30D</span>
+          <span class="stat-label">近30天会话量</span>
           <span class="stat-value">{{ (stats.conversations_30d ?? 0).toLocaleString() }}</span>
           <span class="stat-sub conversations">
             {{ (stats.conversations_change_pct ?? 0) >= 0 ? '▲' : '▼' }}
-            {{ Math.abs(stats.conversations_change_pct ?? 0) }}% vs prev
+            {{ Math.abs(stats.conversations_change_pct ?? 0) }}% 较上一周期
           </span>
         </div>
       </div>
@@ -127,21 +127,21 @@ onMounted(async () => {
         <!-- PROFILE -->
         <section class="card">
           <div class="card-head">
-            <h3 class="card-title">Profile</h3>
-            <p class="card-desc">How your workspace appears to your team and customers.</p>
+            <h3 class="card-title">企业基础资料</h3>
+            <p class="card-desc">用于在团队协作及客户面前展示的企业空间信息。</p>
           </div>
 
           <div class="field-grid">
             <div class="field">
-              <label>Organization name</label>
+              <label>企业/组织名称</label>
               <input
                 type="text"
                 v-model="formData.name"
-                placeholder="Organization name"
+                placeholder="请输入企业或组织名称"
               >
             </div>
             <div class="field">
-              <label>Primary domain</label>
+              <label>主业务域名</label>
               <input
                 type="text"
                 class="mono"
@@ -152,7 +152,7 @@ onMounted(async () => {
           </div>
 
           <div class="field">
-            <label>Timezone</label>
+            <label>企业默认时区</label>
             <select class="select" v-model="formData.timezone">
               <option
                 v-for="tz in timezones"
@@ -162,7 +162,7 @@ onMounted(async () => {
                 {{ tz.label }}
               </option>
             </select>
-            <p class="field-hint">Used for business hours, reports and timestamps across the workspace.</p>
+            <p class="field-hint">用于整个工作空间内工作时间计算、报表汇总与各处时间戳展示。</p>
           </div>
         </section>
 
@@ -170,14 +170,14 @@ onMounted(async () => {
         <section class="card">
           <div class="card-head-row">
             <div>
-              <h3 class="card-title">Business hours</h3>
-              <p class="card-desc">When your human team is available. Outside these hours, AI handles every chat.</p>
+              <h3 class="card-title">人工客服工作时间</h3>
+              <p class="card-desc">设定人工客服在线接线时段。非工作时间内，AI 智能体将全权接管并处理所有咨询。</p>
             </div>
             <div class="presets">
-              <button type="button" class="preset" @click="applyPreset('weekday')">Weekdays 9–5</button>
-              <button type="button" class="preset" @click="applyPreset('everyday')">Every day 9–6</button>
-              <button type="button" class="preset" @click="applyPreset('always')">24/7</button>
-              <button type="button" class="preset preset-ghost" @click="applyPreset('clear')">Clear all</button>
+              <button type="button" class="preset" @click="applyPreset('weekday')">工作日 9:00–17:00</button>
+              <button type="button" class="preset" @click="applyPreset('everyday')">全天周 9:00–18:00</button>
+              <button type="button" class="preset" @click="applyPreset('always')">7×24小时全天候</button>
+              <button type="button" class="preset preset-ghost" @click="applyPreset('clear')">全部清空</button>
             </div>
           </div>
 
@@ -196,7 +196,7 @@ onMounted(async () => {
               <span
                 class="day-label"
                 :class="{ off: !formData.business_hours[day.key].enabled }"
-              >{{ day.label }}</span>
+              >{{ day.label === 'Monday' ? '周一' : day.label === 'Tuesday' ? '周二' : day.label === 'Wednesday' ? '周三' : day.label === 'Thursday' ? '周四' : day.label === 'Friday' ? '周五' : day.label === 'Saturday' ? '周六' : day.label === 'Sunday' ? '周日' : day.label }}</span>
               <select
                 class="time-select"
                 v-model="formData.business_hours[day.key].start"
@@ -204,7 +204,7 @@ onMounted(async () => {
               >
                 <option v-for="time in timeOptions" :key="time" :value="time">{{ time }}</option>
               </select>
-              <span class="time-sep">to</span>
+              <span class="time-sep">至</span>
               <select
                 class="time-select"
                 v-model="formData.business_hours[day.key].end"
@@ -215,27 +215,27 @@ onMounted(async () => {
               <span
                 class="day-state"
                 :class="formData.business_hours[day.key].enabled ? 'open' : 'closed'"
-              >{{ formData.business_hours[day.key].enabled ? 'Open' : 'Closed' }}</span>
+              >{{ formData.business_hours[day.key].enabled ? '接待中' : '休息' }}</span>
             </div>
           </div>
         </section>
 
         <!-- DANGER ZONE -->
         <section class="card danger-card">
-          <h3 class="danger-title">Danger zone</h3>
+          <h3 class="danger-title">危险操作区域</h3>
           <div class="danger-row">
             <div>
-              <div class="danger-row-title">Transfer ownership</div>
-              <div class="danger-row-desc">Hand this workspace to another admin.</div>
+              <div class="danger-row-title">转让组织所有权</div>
+              <div class="danger-row-desc">将当前工作空间的最高所有权移交给其他管理员。</div>
             </div>
-            <button type="button" class="danger-btn" @click="onTransferOwnership">Transfer</button>
+            <button type="button" class="danger-btn" @click="onTransferOwnership">转让所有权</button>
           </div>
           <div class="danger-row last">
             <div>
-              <div class="danger-row-title">Delete organization</div>
-              <div class="danger-row-desc">Permanently remove this workspace and all its data.</div>
+              <div class="danger-row-title">注销并删除企业组织</div>
+              <div class="danger-row-desc">永久删除该工作空间及关联的所有知识、对话与配置数据。</div>
             </div>
-            <button type="button" class="danger-btn delete" @click="onDeleteOrganization">Delete</button>
+            <button type="button" class="danger-btn delete" @click="onDeleteOrganization">注销删除</button>
           </div>
         </section>
 
@@ -247,11 +247,11 @@ onMounted(async () => {
     <!-- Sticky save bar -->
     <Transition name="save-bar">
       <div v-if="hasChanges" class="save-bar">
-        <span class="save-bar-text">You have unsaved changes</span>
+        <span class="save-bar-text">您有未保存的修改</span>
         <div class="save-bar-actions">
-          <button type="button" class="btn-discard" @click="discardChanges" :disabled="loading">Discard</button>
+          <button type="button" class="btn-discard" @click="discardChanges" :disabled="loading">放弃更改</button>
           <button type="button" class="btn-save" @click="updateOrganization" :disabled="loading">
-            {{ loading ? 'Saving…' : 'Save changes' }}
+            {{ loading ? '正在保存…' : '保存设置' }}
           </button>
         </div>
       </div>

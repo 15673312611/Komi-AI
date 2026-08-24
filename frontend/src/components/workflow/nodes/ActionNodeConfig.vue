@@ -51,7 +51,7 @@ const updateFormData = (field: keyof ActionNodeData, value: any) => {
 <template>
   <div class="action-node-config">
     <div class="form-group">
-      <label for="action-type">Action Type *</label>
+      <label for="action-type">动作触发类型 (Action Type) *</label>
       <select
         id="action-type"
         :value="formData.action_type"
@@ -61,10 +61,10 @@ const updateFormData = (field: keyof ActionNodeData, value: any) => {
         :class="{ 'error': validationErrors.action_type }"
         required
       >
-        <option value="">Select action type</option>
-        <option value="webhook">Webhook</option>
-        <option value="email">Send Email</option>
-        <option value="api">API Call</option>
+        <option value="">选择动作类型</option>
+        <option value="webhook">Webhook 回调请求</option>
+        <option value="email">发送通知邮件 (Send Email)</option>
+        <option value="api">外部 REST API 调用</option>
       </select>
       <div v-if="validationErrors.action_type" class="error-message">
         {{ validationErrors.action_type }}
@@ -72,7 +72,7 @@ const updateFormData = (field: keyof ActionNodeData, value: any) => {
     </div>
     
     <div class="form-group">
-      <label for="action-url">URL *</label>
+      <label for="action-url">目标请求 URL *</label>
       <input
         id="action-url"
         :value="formData.action_url"
@@ -81,7 +81,7 @@ const updateFormData = (field: keyof ActionNodeData, value: any) => {
         type="url"
         class="form-input"
         :class="{ 'error': validationErrors.action_url }"
-        placeholder="https://example.com/webhook"
+        placeholder="https://api.example.com/webhook"
         required
       />
       <div v-if="validationErrors.action_url" class="error-message">

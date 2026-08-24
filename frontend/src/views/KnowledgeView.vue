@@ -22,8 +22,7 @@ import { userService } from '@/services/user'
 const organizationId = computed(() => userService.getCurrentUser()?.organization_id ?? '')
 
 const description =
-  'Every page your AI agents learn from. Review and edit the extracted content, add pages of ' +
-  'your own, and choose what stays in your knowledge base.'
+  'AI 智能体学习的所有知识源文档与网页。审查和编辑提取的内容、手动录入自定义页面，并全生命周期管理知识库同步状态。'
 </script>
 
 <template>
@@ -33,7 +32,7 @@ const description =
         v-if="organizationId"
         mode="org"
         variant="page"
-        title="Knowledge base"
+        title="企业知识库管理"
         :description="description"
         :organization-id="organizationId"
         :show-plan-meters="true"

@@ -43,7 +43,7 @@ defineProps<{
       </div>
       
       <div v-if="data.config?.message" class="node-preview">
-        <div class="preview-label">Message:</div>
+        <div class="preview-label">消息内容：</div>
         <div class="preview-content">
           {{ data.config.message.substring(0, 100) }}{{ data.config.message.length > 100 ? '...' : '' }}
         </div>

@@ -43,7 +43,7 @@ const choose = (pageId: string) => {
 
 <template>
   <div class="picker">
-    <p class="picker-intro">Choose the account to connect:</p>
+    <p class="picker-intro">请选择要接入连接的公共主页或账号：</p>
     <ul class="picker-list">
       <li v-for="page in pages" :key="page.id">
         <button

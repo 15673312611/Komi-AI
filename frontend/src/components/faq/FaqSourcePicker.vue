@@ -78,7 +78,7 @@ const overBudget = computed(
 const canGenerate = computed(() => selected.value.size > 0 && !props.submitting && !overBudget.value)
 
 function labelFor(s: GenerationSource): string {
-  const pages = s.pages ? `${s.pages} page${s.pages === 1 ? '' : 's'}` : ''
+  const pages = s.pages ? `${s.pages} 个页面` : ''
   return pages
 }
 
@@ -90,15 +90,15 @@ function submit() {
 
 <template>
   <Modal v-if="open" @close="$emit('close')">
-    <template #title>Generate FAQs</template>
+    <template #title>选择知识源生成 FAQ</template>
     <template #content>
-      <p class="picker-sub">Choose which knowledge sources to generate FAQs from.</p>
+      <p class="picker-sub">勾选需要提取并自动生成 FAQ 问答库的知识源。</p>
 
       <div class="picker-toolbar">
         <button class="link-btn" type="button" @click="toggleAll">
-          {{ allSelected ? 'Clear all' : 'Select all' }}
+          {{ allSelected ? '清空全选' : '全选全部' }}
         </button>
-        <span class="picker-count">{{ selected.size }} of {{ sources.length }} selected</span>
+        <span class="picker-count">已选 {{ selected.size }} / {{ sources.length }} 个知识源</span>
       </div>
 
       <div class="picker-list">
@@ -114,21 +114,21 @@ function submit() {
             <span class="src__meta">
               <span class="src__type">{{ s.source_type }}</span>
               <template v-if="labelFor(s)"> · {{ labelFor(s) }}</template>
-              <span v-if="s.has_faqs" class="src__badge">already generated</span>
+              <span v-if="s.has_faqs" class="src__badge">已生成过</span>
             </span>
           </span>
         </label>
       </div>
 
       <p v-if="metered" class="picker-credits" :class="{ 'picker-credits--over': overBudget }">
-        Uses about {{ selectedCredits }} credit{{ selectedCredits === 1 ? '' : 's' }}<template v-if="remaining !== null"> · {{ remaining }} remaining</template>
-        <template v-if="overBudget"> — not enough credits; upgrade or switch to your own AI model.</template>
+        预计消耗约 {{ selectedCredits }} 点消息额度<template v-if="remaining !== null"> · 剩余 {{ remaining }} 点</template>
+        <template v-if="overBudget"> — 额度不足，请升级套餐或配置自有大模型 API Key。</template>
       </p>
 
       <div class="picker-actions">
-        <button class="btn-cancel" type="button" @click="$emit('close')">Cancel</button>
+        <button class="btn-cancel" type="button" @click="$emit('close')">取消</button>
         <button class="btn-generate" type="button" :disabled="!canGenerate" @click="submit">
-          {{ submitting ? 'Starting…' : `Generate from ${selected.size} source${selected.size === 1 ? '' : 's'}` }}
+          {{ submitting ? '正在启动…' : `从选中的 ${selected.size} 个知识源生成` }}
         </button>
       </div>
     </template>

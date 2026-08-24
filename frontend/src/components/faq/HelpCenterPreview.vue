@@ -53,7 +53,7 @@ const heroStyle = computed(() => ({
       <div class="preview__brand">
         <img v-if="settings.logo_url" class="preview__logo-img" :src="settings.logo_url" alt="Logo" />
         <div v-else class="preview__logo-mark"><div class="preview__logo-diamond"></div></div>
-        <span class="preview__brand-name">{{ settings.title || 'Your company' }}</span>
+        <span class="preview__brand-name">{{ settings.title || '您的企业名称' }}</span>
       </div>
       <div class="preview__nav">
         <span v-for="link in settings.header_links" :key="link.label" class="preview__nav-link">{{ link.label }}</span>
@@ -62,11 +62,11 @@ const heroStyle = computed(() => ({
     </div>
     <!-- hero -->
     <div class="preview__hero" :style="heroStyle">
-      <div class="preview__hero-title">How can we help?</div>
+      <div class="preview__hero-title">我们能为您提供什么帮助？</div>
       <div class="preview__search">
         <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="#9AA0AD" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></svg>
-        <span class="preview__search-hint">Search for answers…</span>
-        <span class="preview__search-btn">Search</span>
+        <span class="preview__search-hint">搜索常见问题与解决方案…</span>
+        <span class="preview__search-btn">搜索</span>
       </div>
     </div>
   </div>

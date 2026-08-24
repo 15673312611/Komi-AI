@@ -296,8 +296,7 @@ async def get_organization(
     except HTTPException as he:
         raise he
     except Exception as e:
-        logger.error(f"Failed to get organization {
-                     org_id}: {str(e)}", exc_info=True)
+        logger.error(f"Failed to get organization {org_id}: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to retrieve organization. Please try again later."

@@ -51,7 +51,7 @@ const updateFormData = (field: keyof WaitNodeData, value: any) => {
 <template>
   <div class="wait-node-config">
     <div class="form-group">
-      <label for="wait-duration">Duration *</label>
+      <label for="wait-duration">等待延时时长 (Duration) *</label>
       <input
         id="wait-duration"
         :value="formData.wait_duration"
@@ -70,7 +70,7 @@ const updateFormData = (field: keyof WaitNodeData, value: any) => {
     </div>
     
     <div class="form-group">
-      <label for="wait-unit">Time Unit *</label>
+      <label for="wait-unit">时间单位 (Time Unit) *</label>
       <select
         id="wait-unit"
         :value="formData.wait_unit"
@@ -80,9 +80,9 @@ const updateFormData = (field: keyof WaitNodeData, value: any) => {
         :class="{ 'error': validationErrors.wait_unit }"
         required
       >
-        <option value="seconds">Seconds</option>
-        <option value="minutes">Minutes</option>
-        <option value="hours">Hours</option>
+        <option value="seconds">秒 (Seconds)</option>
+        <option value="minutes">分钟 (Minutes)</option>
+        <option value="hours">小时 (Hours)</option>
       </select>
       <div v-if="validationErrors.wait_unit" class="error-message">
         {{ validationErrors.wait_unit }}

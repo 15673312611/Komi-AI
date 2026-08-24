@@ -42,18 +42,18 @@ const { hasPermission: hasPushPermission, enableNotifications } = useNotificatio
 const NOTIFICATION_TOGGLES: { key: keyof NotificationSettings; title: string; desc: string }[] = [
   {
     key: 'notify_new_chat',
-    title: 'New chats',
-    desc: 'When a new conversation starts, including ones the AI is handling.'
+    title: '新对话接入通知',
+    desc: '当有新会话开始接入时（包括由 AI 正在处理中的对话）。'
   },
   {
     key: 'notify_chat_transfer',
-    title: 'Chats transferred to my group',
-    desc: 'When an AI agent hands a conversation to a group you belong to.'
+    title: '转接至我所在分组的会话',
+    desc: '当 AI 智能体或同事将对话转接至您所属的技能组时。'
   },
   {
     key: 'notify_chat_assigned',
-    title: 'Chats assigned to me',
-    desc: 'When a teammate reassigns a conversation to you.'
+    title: '指派给我的对话',
+    desc: '当会话被明确分配给您本人处理时。'
   }
 ]
 
@@ -147,12 +147,12 @@ const handleFileSelect = (event: Event) => {
   
   const file = input.files[0]
   if (!file.type.startsWith('image/')) {
-    error.value = 'Please select an image file'
+    error.value = '请选择有效的图片格式文件'
     return
   }
   
   if (file.size > 5 * 1024 * 1024) {
-    error.value = 'Image must be less than 5MB'
+    error.value = '图片大小不能超过 5MB'
     return
   }
   
@@ -162,8 +162,6 @@ const handleFileSelect = (event: Event) => {
   // Set the file and create preview
   profilePicFile.value = file
   profilePicPreview.value = URL.createObjectURL(file)
-  
-
 }
 
 const resetFileInput = () => {
@@ -189,7 +187,7 @@ const uploadProfilePic = async () => {
     formData.append('file', profilePicFile.value)
     
     await userService.uploadProfilePic(formData)
-    message.value = 'Profile picture updated successfully'
+    message.value = '头像上传更新成功'
     
     // Update the current user data with new profile pic and force refresh
     if (user.value) {
@@ -204,11 +202,8 @@ const uploadProfilePic = async () => {
     
     // Reset the file input
     resetFileInput()
-    
-
-    
   } catch (err: any) {
-    error.value = err.message || 'Failed to upload profile picture'
+    error.value = err.message || '上传头像失败'
   } finally {
     loading.value = false
   }
@@ -216,7 +211,7 @@ const uploadProfilePic = async () => {
 
 const updateProfile = async () => {
   if (!hasChanges.value) {
-    message.value = 'No changes to save'
+    message.value = '没有需要保存的修改'
     return
   }
 
@@ -238,26 +233,26 @@ const updateProfile = async () => {
     
     if (formData.value.new_password) {
       if (formData.value.new_password !== formData.value.confirm_password) {
-        throw new Error('New passwords do not match')
+        throw new Error('两次输入的新密码不一致')
       }
       if (!formData.value.current_password) {
-        throw new Error('Current password is required to set new password')
+        throw new Error('修改密码需填写当前旧密码')
       }
       if (!meetsPasswordPolicy(passwordStrength.value)) {
-        throw new Error('Password is not strong enough')
+        throw new Error('新密码未达到安全策略要求（长度至少8位，包含字母和数字）')
       }
       updateData.password = formData.value.new_password
       updateData.current_password = formData.value.current_password
     }
 
     if (Object.keys(updateData).length === 0) {
-      message.value = 'No changes to save'
+      message.value = '没有需要保存的修改'
       return
     }
 
     await userService.updateProfile(updateData)
     user.value = userService.getCurrentUser()
-    message.value = 'Profile updated successfully'
+    message.value = '个人资料修改成功'
     
     // Clear password fields
     formData.value.current_password = ''
@@ -265,7 +260,7 @@ const updateProfile = async () => {
     formData.value.confirm_password = ''
     
   } catch (err: any) {
-    error.value = err.message || 'Failed to update profile'
+    error.value = err.message || '更新个人资料失败'
   } finally {
     loading.value = false
   }
@@ -289,14 +284,14 @@ const handleProfilePicClick = () => {
 <template>
   <div class="settings-page">
     <div class="settings-head">
-      <h1>User Settings</h1>
-      <p>Manage your personal profile, password and notifications.</p>
+      <h1>账号与个人设置</h1>
+      <p>管理您的个人资料、登录密码及桌面消息通知偏好。</p>
     </div>
 
     <form @submit.prevent="updateProfile" class="settings-form">
       <!-- Profile card -->
       <div class="settings-card">
-        <h3 class="card-title">Profile</h3>
+        <h3 class="card-title">个人基本信息</h3>
 
         <div class="profile-row">
           <div class="profile-pic-wrapper" @click="handleProfilePicClick">
@@ -309,7 +304,7 @@ const handleProfilePicClick = () => {
             <span v-else class="avatar-initial">{{ avatarInitial }}</span>
             <div class="profile-pic-overlay">
               <font-awesome-icon icon="fa-solid fa-camera" />
-              <span>Change Photo</span>
+              <span>更换头像</span>
             </div>
           </div>
           <input
@@ -320,8 +315,8 @@ const handleProfilePicClick = () => {
             ref="fileInput"
           >
           <div class="profile-pic-meta">
-            <div class="profile-pic-title">Profile photo</div>
-            <div class="profile-pic-hint">JPG, PNG or GIF. Max 5MB.</div>
+            <div class="profile-pic-title">用户头像</div>
+            <div class="profile-pic-hint">支持 JPG、PNG 或 GIF 格式，文件小于 5MB。</div>
           </div>
           <div class="profile-pic-actions">
             <button
@@ -330,26 +325,26 @@ const handleProfilePicClick = () => {
               @click="handleProfilePicClick"
               :disabled="loading"
             >
-              {{ loading ? 'Uploading...' : 'Upload' }}
+              {{ loading ? '上传中…' : '更换头像' }}
             </button>
           </div>
         </div>
 
         <div class="field-grid">
           <div class="form-group">
-            <label>Full name</label>
+            <label>真实姓名</label>
             <input
               type="text"
               v-model="formData.full_name"
-              placeholder="Your full name"
+              placeholder="请输入您的姓名"
             >
           </div>
           <div class="form-group">
-            <label>Email</label>
+            <label>登录邮箱</label>
             <input
               type="email"
               v-model="formData.email"
-              placeholder="Your email"
+              placeholder="您的登录邮箱"
               class="input-mono"
               disabled
             >
@@ -357,19 +352,19 @@ const handleProfilePicClick = () => {
         </div>
 
         <div class="role-row">
-          <span class="role-label">Role</span>
-          <span class="role-badge">{{ user?.role?.name || 'User' }}</span>
-          <span class="role-note">Contact an admin to change your role.</span>
+          <span class="role-label">当前角色</span>
+          <span class="role-badge">{{ user?.role?.name || '普通成员' }}</span>
+          <span class="role-note">如需变更角色权限，请联系管理员。</span>
         </div>
       </div>
 
       <!-- Change password card -->
       <div class="settings-card">
-        <h3 class="card-title">Change password</h3>
-        <p class="card-subtitle">Use at least 8 characters with a mix of letters and numbers.</p>
+        <h3 class="card-title">修改登录密码</h3>
+        <p class="card-subtitle">密码长度至少 8 位，且包含字母与数字组合。</p>
 
         <div class="form-group">
-          <label>Current password</label>
+          <label>当前密码</label>
           <input
             type="password"
             v-model="formData.current_password"
@@ -379,21 +374,21 @@ const handleProfilePicClick = () => {
 
         <div class="field-grid">
           <div class="form-group">
-            <label>New password</label>
+            <label>新密码</label>
             <input
               type="password"
               v-model="formData.new_password"
               @input="handlePasswordInput(formData.new_password)"
-              placeholder="Enter new password"
+              placeholder="请输入新密码"
               minlength="8"
             >
           </div>
           <div class="form-group">
-            <label>Confirm new password</label>
+            <label>确认新密码</label>
             <input
               type="password"
               v-model="formData.confirm_password"
-              placeholder="Confirm new password"
+              placeholder="请再次输入新密码"
             >
           </div>
         </div>
@@ -408,11 +403,11 @@ const handleProfilePicClick = () => {
 
       <!-- Sticky save bar -->
       <div v-if="hasChanges" class="save-bar">
-        <span class="save-bar-text">You have unsaved changes</span>
+        <span class="save-bar-text">您有未保存的修改</span>
         <div class="save-bar-actions">
-          <button type="button" class="discard-button" @click="discardChanges">Discard</button>
+          <button type="button" class="discard-button" @click="discardChanges">放弃修改</button>
           <button type="submit" class="submit-button" :disabled="loading">
-            {{ loading ? 'Saving...' : 'Save changes' }}
+            {{ loading ? '正在保存…' : '保存修改' }}
           </button>
         </div>
       </div>
@@ -424,18 +419,18 @@ const handleProfilePicClick = () => {
 
     <!-- Notifications: saved on toggle, so deliberately outside the profile form -->
     <div class="settings-card notifications-card">
-      <h3 class="card-title">Notifications</h3>
-      <p class="card-subtitle">Choose which chat events send you a push notification.</p>
+      <h3 class="card-title">消息通知偏好</h3>
+      <p class="card-subtitle">选择哪些客户会话事件需要向您发送浏览器桌面推送通知。</p>
 
       <div v-if="!hasPushPermission" class="permission-notice">
         <font-awesome-icon icon="fa-solid fa-bell-slash" class="permission-icon" />
         <span class="permission-text">
-          Your browser isn't allowed to show notifications yet, so nothing below will reach you.
+          当前浏览器尚未授予通知权限，请先允许权限以便正常接收桌面推送。
         </span>
-        <button type="button" class="upload-button" @click="enableNotifications">Enable</button>
+        <button type="button" class="upload-button" @click="enableNotifications">立即开启权限</button>
       </div>
 
-      <div v-if="notificationsLoading" class="notification-hint">Loading your preferences…</div>
+      <div v-if="notificationsLoading" class="notification-hint">正在加载通知偏好…</div>
 
       <template v-else-if="notificationSettings">
         <div v-for="toggle in NOTIFICATION_TOGGLES" :key="toggle.key" class="notification-row">
@@ -453,7 +448,7 @@ const handleProfilePicClick = () => {
             <span class="slider" :class="{ enabled: notificationSettings[toggle.key] }"></span>
           </label>
         </div>
-        <div class="notification-hint">Saved automatically.</div>
+        <div class="notification-hint">设置将自动保存并立即生效。</div>
       </template>
     </div>
   </div>

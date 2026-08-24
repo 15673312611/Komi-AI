@@ -581,7 +581,7 @@ const handleInitiationClick = () => {
                     <input
                         v-model="currentInput"
                         type="text"
-                        placeholder="Ask me anything..."
+                        placeholder="向智能体提问任何问题…"
                         @keypress="() => {}"
                         :disabled="true"
                         class="welcome-message-field"

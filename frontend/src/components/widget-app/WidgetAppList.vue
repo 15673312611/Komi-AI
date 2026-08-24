@@ -104,7 +104,7 @@ const formatDate = (dateString: string) => {
 
 <template>
   <div v-if="!canManage" class="no-permission">
-    <p>You don't have permission to manage widget apps.</p>
+    <p>您没有管理挂件应用凭证的权限。</p>
   </div>
 
   <div v-else class="widget-app-list">
@@ -122,18 +122,17 @@ const formatDate = (dateString: string) => {
               </svg>
             </div>
           </div>
-          <h2>Widget Apps</h2>
+          <h2>聊天挂件应用凭证</h2>
           <div class="locked-badge">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="badge-icon">
               <path fill-rule="evenodd" d="M12 1.5a5.25 5.25 0 00-5.25 5.25v3a3 3 0 00-3 3v6.75a3 3 0 003 3h10.5a3 3 0 003-3v-6.75a3 3 0 00-3-3v-3c0-2.9-2.35-5.25-5.25-5.25zm3.75 8.25v-3a3.75 3.75 0 10-7.5 0v3h7.5z" clip-rule="evenodd" />
             </svg>
-            <span>Premium Feature</span>
+            <span>高级特性</span>
           </div>
         </div>
 
         <p class="locked-description">
-          Unlock Widget Apps to create secure API keys for authenticating your chat widgets
-          across multiple platforms and applications.
+          解锁挂件应用管理，生成专属的安全 API Key 密钥，以便在多个外部网站、移动端与第三方应用中安全嵌入并认证聊天客服挂件。
         </p>
 
         <div class="locked-features">
@@ -145,8 +144,8 @@ const formatDate = (dateString: string) => {
               </svg>
             </div>
             <div class="feature-content">
-              <span class="feature-title">Secure API Keys</span>
-              <span class="feature-desc">Generate unique keys for each integration</span>
+              <span class="feature-title">安全 API Key 密钥</span>
+              <span class="feature-desc">为每个集成站点生成专属且唯一的认证密钥</span>
             </div>
           </div>
           <div class="feature-item">
@@ -156,8 +155,8 @@ const formatDate = (dateString: string) => {
               </svg>
             </div>
             <div class="feature-content">
-              <span class="feature-title">Access Control</span>
-              <span class="feature-desc">Manage and revoke access anytime</span>
+              <span class="feature-title">访问权限控制</span>
+              <span class="feature-desc">随时启用、禁用或吊销应用访问权限</span>
             </div>
           </div>
           <div class="feature-item">
@@ -167,8 +166,8 @@ const formatDate = (dateString: string) => {
               </svg>
             </div>
             <div class="feature-content">
-              <span class="feature-title">Multi-Platform</span>
-              <span class="feature-desc">Deploy widgets across multiple sites</span>
+              <span class="feature-title">多站点与多平台分发</span>
+              <span class="feature-desc">在多个独立网站和客户端中无缝嵌入聊天挂件</span>
             </div>
           </div>
         </div>
@@ -177,7 +176,7 @@ const formatDate = (dateString: string) => {
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="upgrade-icon">
             <path fill-rule="evenodd" d="M12.516 2.17a.75.75 0 00-1.032 0 11.209 11.209 0 01-7.877 3.08.75.75 0 00-.722.515A12.74 12.74 0 002.25 9.75c0 5.942 4.064 10.933 9.563 12.348a.749.749 0 00.374 0c5.499-1.415 9.563-6.406 9.563-12.348 0-1.39-.223-2.73-.635-3.985a.75.75 0 00-.722-.516l-.143.001c-2.996 0-5.717-1.17-7.734-3.08zm3.094 8.016a.75.75 0 10-1.22-.872l-3.236 4.53L9.53 12.22a.75.75 0 00-1.06 1.06l2.25 2.25a.75.75 0 001.14-.094l3.75-5.25z" clip-rule="evenodd" />
           </svg>
-          Upgrade to Pro
+          升级解锁该功能
         </button>
       </div>
     </div>
@@ -187,15 +186,15 @@ const formatDate = (dateString: string) => {
       <!-- Header -->
       <header class="page-header">
         <div class="page-header-text">
-          <h1>Widget Apps</h1>
+          <h1>聊天挂件应用凭证 (Widget Apps)</h1>
           <p class="subtitle">
-            Generate secure API keys to authenticate your chat widgets.
-            <span v-if="hasAnyApps" class="subtitle-count">{{ apps.length }} {{ apps.length === 1 ? 'app' : 'apps' }}</span>
+            生成安全的 API Key 密钥，用于在外部网站嵌入并认证您的聊天客服挂件。
+            <span v-if="hasAnyApps" class="subtitle-count">共 {{ apps.length }} 个应用</span>
           </p>
         </div>
         <button v-if="hasAnyApps" class="btn btn-primary" @click="showCreateModal = true">
           <PlusIcon class="icon" />
-          Create app
+          + 创建挂件应用
         </button>
       </header>
 
@@ -206,20 +205,20 @@ const formatDate = (dateString: string) => {
           type="checkbox"
           v-model="showInactive"
         />
-        Show inactive apps
+        显示已停用的应用
       </label>
     </div>
 
     <!-- Loading state -->
     <div v-if="loading" class="loading-state">
       <div class="spinner"></div>
-      <p>Loading widget apps...</p>
+      <p>正在加载挂件应用列表…</p>
     </div>
 
     <!-- Error state -->
     <div v-else-if="error" class="error-state">
       <p>{{ error }}</p>
-      <button class="btn btn-secondary" @click="fetchApps">Retry</button>
+      <button class="btn btn-secondary" @click="fetchApps">重试</button>
     </div>
 
     <!-- Empty state (only when no apps at all) -->
@@ -233,14 +232,14 @@ const formatDate = (dateString: string) => {
             <rect x="13" y="13" width="7" height="7" rx="2"/>
           </svg>
         </div>
-        <h2>No widget apps yet</h2>
+        <h2>暂无挂件应用凭证</h2>
         <p class="empty-description">
-          Widget apps let you generate secure API keys for authenticating your chat widgets.
-          Create your first to get started.
+          挂件应用凭证让您可以生成专属的 API Key，安全地将聊天挂件嵌入到任何网站或应用中。
+          立即创建首个挂件应用。
         </p>
         <button class="btn btn-primary create-btn" @click="showCreateModal = true">
           <PlusIcon class="icon" />
-          Create your first app
+          创建首个挂件应用
         </button>
       </div>
     </div>
@@ -248,11 +247,11 @@ const formatDate = (dateString: string) => {
     <!-- Table -->
     <div v-else-if="apps.length > 0" class="table-container">
       <div class="table-head">
-        <span class="col-name">NAME</span>
-        <span class="col-desc">DESCRIPTION</span>
-        <span class="col-created">CREATED</span>
-        <span class="col-updated">UPDATED</span>
-        <span class="col-actions">ACTIONS</span>
+        <span class="col-name">应用名称</span>
+        <span class="col-desc">应用描述</span>
+        <span class="col-created">创建时间</span>
+        <span class="col-updated">更新时间</span>
+        <span class="col-actions">操作</span>
       </div>
       <div
         v-for="app in apps"
@@ -263,7 +262,7 @@ const formatDate = (dateString: string) => {
           <div class="app-name">{{ app.name }}</div>
           <span :class="['status-badge', app.is_active ? 'active' : 'inactive']">
             <span class="status-dot"></span>
-            {{ app.is_active ? 'Active' : 'Inactive' }}
+            {{ app.is_active ? '启用中' : '已停用' }}
           </span>
         </div>
         <div class="cell-desc">{{ app.description || '—' }}</div>
@@ -272,21 +271,21 @@ const formatDate = (dateString: string) => {
         <div class="cell-actions">
           <button
             class="action-btn"
-            title="Edit"
+            title="编辑应用"
             @click="handleEditApp(app)"
           >
             <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
           </button>
           <button
             class="action-btn"
-            title="Regenerate key"
+            title="重新生成密钥"
             @click="handleRegenerateKey(app)"
           >
             <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg>
           </button>
           <button
             class="action-btn action-btn-danger"
-            title="Revoke"
+            title="删除吊销"
             @click="handleDeleteApp(app)"
           >
             <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2"/><path d="M6 6l1 14a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-14"/></svg>
@@ -297,15 +296,15 @@ const formatDate = (dateString: string) => {
 
     <!-- All apps filtered state (all inactive and showInactive is false) -->
     <div v-else-if="hasAnyApps && apps.length === 0" class="filtered-state">
-      <p>All widget apps are currently inactive.</p>
+      <p>所有挂件应用当前均处于停用状态。</p>
       <button class="btn btn-secondary" @click="showInactive = true">
-        Show inactive apps
+        显示已停用的应用
       </button>
     </div>
 
     <!-- Create Modal -->
     <Modal v-if="showCreateModal" @close="showCreateModal = false">
-      <template #title>Create widget app</template>
+      <template #title>创建挂件应用凭证</template>
       <template #content>
         <WidgetAppForm
           @submit="handleCreateApp"
@@ -316,7 +315,7 @@ const formatDate = (dateString: string) => {
 
     <!-- Edit Modal -->
     <Modal v-if="showEditModal && selectedApp" @close="showEditModal = false">
-      <template #title>Edit Widget App</template>
+      <template #title>编辑挂件应用</template>
       <template #content>
         <WidgetAppForm
           :app="selectedApp"
@@ -328,17 +327,17 @@ const formatDate = (dateString: string) => {
 
     <!-- Delete Confirmation Modal -->
     <Modal v-if="showDeleteModal && selectedApp" @close="showDeleteModal = false">
-      <template #title>Delete Widget App</template>
+      <template #title>删除挂件应用凭证</template>
       <template #content>
         <div class="confirm-delete">
-          <p>Are you sure you want to delete <strong>{{ selectedApp.name }}</strong>?</p>
-          <p class="warning">This will invalidate the API key immediately.</p>
+          <p>确定要删除挂件应用 <strong>{{ selectedApp.name }}</strong> 吗？</p>
+          <p class="warning">此操作将导致该应用的 API Key 立即失效，已嵌入该密钥的网站挂件将无法继续连接。</p>
           <div class="modal-actions">
             <button class="btn btn-danger" @click="confirmDeleteApp">
-              Delete
+              确认删除
             </button>
             <button class="btn btn-secondary" @click="showDeleteModal = false">
-              Cancel
+              取消
             </button>
           </div>
         </div>

@@ -22,19 +22,19 @@ import { useUsers } from '@/composables/useUsers'
 defineProps<{ filters: TicketListFilters }>()
 
 const STATUS_PILLS = [
-  { value: 'all', label: 'All' },
-  { value: 'open', label: 'Open' },
-  { value: 'awaiting', label: 'Awaiting' },
-  { value: 'breaching', label: 'SLA breaching' },
-  { value: 'resolved', label: 'Resolved' },
+  { value: 'all', label: '全部状态' },
+  { value: 'open', label: '待处理' },
+  { value: 'awaiting', label: '待审批' },
+  { value: 'breaching', label: 'SLA 即将超时' },
+  { value: 'resolved', label: '已解决' },
 ]
 
 const AI_PILLS = [
-  { value: 'all', label: 'All AI', color: 'var(--muted)' },
-  { value: 'investigating', label: 'Investigating', color: 'var(--c-info)' },
-  { value: 'awaiting', label: 'Awaiting human', color: 'var(--c-warn)' },
-  { value: 'human', label: 'Human-owned', color: 'var(--c-neutral)' },
-  { value: 'resolved', label: 'AI-resolved', color: 'var(--c-positive)' },
+  { value: 'all', label: '全部 AI 阶段', color: 'var(--muted)' },
+  { value: 'investigating', label: '调查中', color: 'var(--c-info)' },
+  { value: 'awaiting', label: '待人工接入', color: 'var(--c-warn)' },
+  { value: 'human', label: '人工跟进中', color: 'var(--c-neutral)' },
+  { value: 'resolved', label: 'AI 已自主解决', color: 'var(--c-positive)' },
 ]
 
 const { users, fetchUsers } = useUsers()
@@ -58,16 +58,16 @@ onMounted(() => {
     </div>
 
     <select v-model="filters.priority" class="filter-select">
-      <option value="all">Priority · All</option>
-      <option value="urgent">Urgent</option>
-      <option value="high">High</option>
-      <option value="medium">Medium</option>
-      <option value="low">Low</option>
+      <option value="all">优先级 · 全部</option>
+      <option value="urgent">紧急</option>
+      <option value="high">高</option>
+      <option value="medium">中</option>
+      <option value="low">低</option>
     </select>
 
     <select v-model="filters.assignee" class="filter-select">
-      <option value="all">Assignee · All</option>
-      <option value="unassigned">Unassigned / AI</option>
+      <option value="all">处理人 · 全部</option>
+      <option value="unassigned">未分配 / AI 智能体</option>
       <option v-for="user in users" :key="user.id" :value="user.id">
         {{ user.full_name || user.email }}
       </option>
@@ -87,13 +87,13 @@ onMounted(() => {
 
     <div class="search-wrap">
       <span class="search-glyph"></span>
-      <input v-model="filters.search" class="search-input" placeholder="Search tickets…" />
+      <input v-model="filters.search" class="search-input" placeholder="搜索工单标题、编号或描述..." />
     </div>
 
     <select v-model="filters.sort" class="filter-select">
-      <option value="updated">Sort · Updated</option>
-      <option value="created">Newest</option>
-      <option value="priority">Priority</option>
+      <option value="updated">排序 · 最近更新</option>
+      <option value="created">最新创建</option>
+      <option value="priority">优先级最高</option>
     </select>
   </div>
 </template>

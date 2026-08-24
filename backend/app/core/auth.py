@@ -473,7 +473,16 @@ async def get_unified_chat_auth(request: Request, db: Session = Depends(get_db))
     from app.services.shopify_session import require_shopify_or_jwt_auth
     
     try:
-        if "/shopify" in str(request.url):
+        # Only the two legacy embedded-chat aliases use an App Bridge session
+        # token.  New dashboard APIs such as /shopify/orders and /copilot-draft
+        # must use the normal JWT/PAT permission path even though their names
+        # contain the word "shopify".
+        path = request.url.path.rstrip("/")
+        is_legacy_shopify_chat = (
+            path.endswith("/chats/recent/shopify")
+            or path.endswith("/shopify") and "/chats/" in path
+        )
+        if is_legacy_shopify_chat:
             # For Shopify endpoints, use the shopify auth
             auth_result = await require_shopify_or_jwt_auth(request, db)
             return {
@@ -509,12 +518,21 @@ async def get_unified_chat_auth(request: Request, db: Session = Depends(get_db))
                             detail="Invalid or revoked access token",
                             headers={"WWW-Authenticate": "Bearer"},
                         )
-                    pat_permissions = {p.name for p in current_user.role.permissions}
+                    pat_permissions = {
+                        permission.name
+                        for permission in ((getattr(current_user, "role", None) and getattr(current_user.role, "permissions", None)) or [])
+                        if getattr(permission, "name", None)
+                    }
                     pat_is_super_admin = "super_admin" in pat_permissions
-                    pat_can_view_all = pat_is_super_admin or "view_all_chats" in pat_permissions
+                    # A manage grant is also a read grant for the scope it can
+                    # mutate. Keep group visibility separate from own-chat
+                    # visibility so manage_assigned_chats does not expose an
+                    # entire group queue by accident.
+                    pat_can_view_all = pat_is_super_admin or bool({"view_all_chats", "manage_all_chats"} & pat_permissions)
                     pat_can_view_assigned = pat_is_super_admin or "view_assigned_chats" in pat_permissions
+                    pat_can_manage_assigned = pat_is_super_admin or "manage_assigned_chats" in pat_permissions
                     pat_can_view_unassigned = pat_is_super_admin or "view_unassigned_chats" in pat_permissions
-                    if not (pat_can_view_all or pat_can_view_assigned or pat_can_view_unassigned):
+                    if not (pat_can_view_all or pat_can_view_assigned or pat_can_manage_assigned or pat_can_view_unassigned):
                         raise HTTPException(status_code=403, detail="Not enough permissions")
                     return {
                         "auth_type": "pat",
@@ -523,6 +541,7 @@ async def get_unified_chat_auth(request: Request, db: Session = Depends(get_db))
                         "current_user": current_user,
                         "can_view_all": pat_can_view_all,
                         "can_view_assigned": pat_can_view_assigned,
+                        "can_manage_assigned": pat_can_manage_assigned,
                         "can_view_unassigned": pat_can_view_unassigned
                     }
 
@@ -558,14 +577,22 @@ async def get_unified_chat_auth(request: Request, db: Session = Depends(get_db))
                     )
 
                 # Check chat permissions
-                user_permissions = {p.name for p in current_user.role.permissions}
+                user_permissions = {
+                    permission.name
+                    for permission in ((getattr(current_user, "role", None) and getattr(current_user.role, "permissions", None)) or [])
+                    if getattr(permission, "name", None)
+                }
                 is_super_admin = "super_admin" in user_permissions
-                can_view_all = is_super_admin or "view_all_chats" in user_permissions
+                # manage_all_chats implies read access to every conversation;
+                # manage_assigned_chats implies read access to the caller's
+                # own assignments, but not to other members of a group.
+                can_view_all = is_super_admin or bool({"view_all_chats", "manage_all_chats"} & user_permissions)
                 can_view_assigned = is_super_admin or "view_assigned_chats" in user_permissions
+                can_manage_assigned = is_super_admin or "manage_assigned_chats" in user_permissions
                 # The unclaimed AI queue — sessions no human has taken yet
                 can_view_unassigned = is_super_admin or "view_unassigned_chats" in user_permissions
 
-                if not (can_view_all or can_view_assigned or can_view_unassigned):
+                if not (can_view_all or can_view_assigned or can_manage_assigned or can_view_unassigned):
                     raise HTTPException(
                         status_code=403,
                         detail="Not enough permissions"
@@ -578,6 +605,7 @@ async def get_unified_chat_auth(request: Request, db: Session = Depends(get_db))
                     "current_user": current_user,
                     "can_view_all": can_view_all,
                     "can_view_assigned": can_view_assigned,
+                    "can_manage_assigned": can_manage_assigned,
                     "can_view_unassigned": can_view_unassigned
                 }
             except HTTPException:

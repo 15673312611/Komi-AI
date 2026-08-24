@@ -60,18 +60,18 @@ const confidencePct = computed(() =>
 
     <div v-if="isExpanded" class="hypo-body">
       <p v-if="hypothesis.rationale" class="hypo-text">
-        <span class="text-label">Rationale · </span>{{ hypothesis.rationale }}
+        <span class="text-label">推理依据 · </span>{{ hypothesis.rationale }}
       </p>
       <p v-if="hypothesis.conclusion" class="hypo-text">
-        <span class="text-label">Conclusion · </span>{{ hypothesis.conclusion }}
+        <span class="text-label">验证结论 · </span>{{ hypothesis.conclusion }}
       </p>
       <template v-if="evidence.length">
-        <div class="evidence-label">Evidence — {{ evidence.length }} tool {{ evidence.length === 1 ? 'call' : 'calls' }}</div>
+        <div class="evidence-label">支撑证据 — 共 {{ evidence.length }} 次工具检索调用</div>
         <div class="evidence-list">
           <EvidenceCitationRow v-for="event in evidence" :key="event.id" :event="event" />
         </div>
       </template>
-      <p v-else class="no-evidence">No tool evidence — tested by reasoning over the ticket context.</p>
+      <p v-else class="no-evidence">无外部工具检索数据 — 基于工单上下文多轮逻辑推演论证。</p>
     </div>
   </div>
 </template>

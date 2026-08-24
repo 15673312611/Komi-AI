@@ -61,7 +61,7 @@ const allSelected = () => props.selectedCount === props.count && props.count > 0
         ><path d="M9 6l6 6-6 6" /></svg>
         <span class="category-group__name">{{ category.toUpperCase() }}</span>
         <span class="category-group__count">
-          {{ count }} {{ count === 1 ? 'answer' : 'answers' }}<template v-if="publishedCount !== undefined"> · {{ publishedCount }} published</template>
+          {{ count }} 条问答<template v-if="publishedCount !== undefined"> · {{ publishedCount }} 条已发布</template>
         </span>
       </button>
       <div class="category-group__rule"></div>

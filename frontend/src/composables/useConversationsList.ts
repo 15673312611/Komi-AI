@@ -1,25 +1,30 @@
-/*
-Copyright 2024-2026 ChatterMate
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-*/
-
 import { ref, computed, watch, onMounted, onBeforeUnmount, reactive } from 'vue'
 import type { Conversation, ChatDetail, Message } from '@/types/chat'
 import { formatDistanceToNow } from 'date-fns'
 import { chatService } from '@/services/chat'
 import { socketService } from '@/services/socket'
 import { userService } from '@/services/user'
+
+interface SocketMessage {
+  message?: string
+  type?: string
+  message_type?: string
+  message_id?: number
+  client_message_id?: string
+  agent_name?: string
+  user_name?: string
+  user_id?: string
+  created_at: string
+  session_id: string
+  attributes?: Record<string, any>
+  attachments?: any[]
+}
+
+interface RoomEvent {
+  type?: string
+  session_id?: string
+  chat?: ChatDetail
+}
 
 export function useConversationsList(props: {
   conversations: Conversation[]
@@ -36,145 +41,125 @@ export function useConversationsList(props: {
 }) {
   const selectedChat = ref<ChatDetail | null>(null)
   const selectedId = ref<string | null>(null)
-  const chatLoading = ref<boolean>(false)
-  const currentUserId = ref(userService.getUserId())
+  const chatLoading = ref(false)
+  const currentUserId = userService.getUserId()
   const unreadMessages = reactive<Record<string, number>>({})
-  const processedMessages = reactive<Set<string>>(new Set())
+  const processedMessages = new Set<string>()
 
-  // Socket event handlers
-  const handleChatReply = (data: {
-    message: string
-    type: string
-    agent_name?: string
-    created_at: string
-    session_id: string
-    attributes?: any
-    attachments?: any[]
-  }) => {
-    // Create unique message identifier
-    const messageKey = `${data.session_id}-${data.created_at}`;
-    // Skip if already processed
-    if (processedMessages.has(messageKey)) return;
-    processedMessages.add(messageKey);
+  const messageKey = (data: SocketMessage) => String(
+    data.message_id ||
+    data.client_message_id ||
+    data.attributes?.client_message_id ||
+    `${data.session_id}-${data.created_at}-${data.message_type || data.type || 'message'}`
+  )
 
-    // Add unread counter if not current chat
-    if (selectedId.value !== data.session_id) {
-      if (!unreadMessages[data.session_id]) {
-        unreadMessages[data.session_id] = 0
-      }
-      unreadMessages[data.session_id]++
+  const rememberMessage = (key: string) => {
+    if (processedMessages.has(key)) return false
+    processedMessages.add(key)
+    if (processedMessages.size > 1000) {
+      const first = processedMessages.values().next().value
+      if (first) processedMessages.delete(first)
     }
-
-    if (selectedChat.value && selectedId.value === data.session_id) {
-      // Ensure created_at is a valid ISO string
-      const created_at = new Date(data.created_at).toISOString()
-
-      // Base message structure
-      const newMessage: Message = {
-        message: data.message,
-        message_type: data.type === 'agent_message' ? 'agent' : data.type,
-        created_at,
-        session_id: data.session_id,
-        attributes: data.attributes || {},
-        agent_name: data.agent_name,
-        attachments: data.attachments || undefined
-      }
-
-      // Check if message has Shopify data in attributes
-      if (data.attributes?.shopify_output && typeof data.attributes.shopify_output === 'object') {
-        newMessage.message_type = 'product'
-        newMessage.shopify_output = data.attributes.shopify_output
-      }
-
-      // Create a completely new chat object with all properties
-      const updatedChat: ChatDetail = {
-        ...selectedChat.value,
-        messages: [...(selectedChat.value.messages || []), newMessage],
-        updated_at: created_at,
-        customer: { ...selectedChat.value.customer },
-        agent: { ...selectedChat.value.agent },
-        status: selectedChat.value.status,
-        user_id: selectedChat.value.user_id,
-        user_name: selectedChat.value.user_name,
-        session_id: selectedChat.value.session_id,
-      }
-
-      // Use Promise.resolve().then() to break the reactive chain
-      // This prevents the recursive update error by deferring the state update
-      Promise.resolve().then(() => {
-        // Update the selected chat with the new object
-        selectedChat.value = updatedChat
-        
-        // Emit chat update event in a separate tick
-        Promise.resolve().then(() => {
-          emit('chatUpdated', updatedChat)
-        })
-      })
-    }
+    return true
   }
 
-  const handleRoomEvent = (data: unknown) => {
-    console.log('Room event received:', data)
-    // You can handle join/leave events here if needed
+  const normalizeMessage = (data: SocketMessage): Message => {
+    const createdAt = new Date(data.created_at).toISOString()
+    const messageType = data.message_type || (data.type === 'agent_message' ? 'agent' : data.type || 'bot')
+    const attributes = { ...(data.attributes || {}) }
+    const clientMessageId = data.client_message_id || attributes.client_message_id
+    if (clientMessageId) attributes.client_message_id = clientMessageId
+    const normalized: Message = {
+      id: data.message_id,
+      client_message_id: clientMessageId,
+      message: data.message || '',
+      message_type: messageType,
+      created_at: createdAt,
+      session_id: data.session_id,
+      attributes,
+      agent_name: data.agent_name,
+      user_name: data.user_name,
+      attachments: data.attachments || undefined,
+    }
+    if (attributes.shopify_output && typeof attributes.shopify_output === 'object') {
+      normalized.message_type = 'product'
+      normalized.shopify_output = attributes.shopify_output
+    }
+    return normalized
+  }
+
+  const findExistingMessageIndex = (messages: Message[], incoming: Message) => {
+    if (incoming.id !== undefined && incoming.id !== null) {
+      const byId = messages.findIndex(message => message.id === incoming.id)
+      if (byId !== -1) return byId
+    }
+    const clientId = incoming.client_message_id || incoming.attributes?.client_message_id
+    if (clientId) {
+      const byClientId = messages.findIndex(message =>
+        message.client_message_id === clientId || message.attributes?.client_message_id === clientId
+      )
+      if (byClientId !== -1) return byClientId
+    }
+    return -1
+  }
+
+  const handleChatReply = (data: SocketMessage) => {
+    if (!data?.session_id || !data.created_at) return
+    const key = messageKey(data)
+    if (!rememberMessage(key)) return
+    const incoming = normalizeMessage(data)
+    const isOwnAgentEcho = Boolean(data.user_id && String(data.user_id) === String(currentUserId))
+
+    if (selectedId.value !== data.session_id && !isOwnAgentEcho) {
+      unreadMessages[data.session_id] = (unreadMessages[data.session_id] || 0) + 1
+    }
+
+    if (!selectedChat.value || selectedId.value !== data.session_id) return
+    const messages = [...(selectedChat.value.messages || [])]
+    const existingIndex = findExistingMessageIndex(messages, incoming)
+    if (existingIndex >= 0) messages.splice(existingIndex, 1, incoming)
+    else messages.push(incoming)
+    const updatedChat: ChatDetail = {
+      ...selectedChat.value,
+      messages,
+      updated_at: incoming.created_at,
+      ai_auto_reply: selectedChat.value.ai_auto_reply,
+    }
+    selectedChat.value = updatedChat
+    emit('chatUpdated', updatedChat)
+  }
+
+  const handleRoomEvent = (data: RoomEvent) => {
+    if (data?.type !== 'conversation_updated' || !data.chat || !data.session_id) return
+    if (selectedId.value === data.session_id) selectedChat.value = data.chat
+    emit('chatUpdated', data.chat)
   }
 
   const setupSocketListeners = () => {
-
     socketService.on('chat_reply', handleChatReply)
     socketService.on('room_event', handleRoomEvent)
   }
-
   const cleanupSocketListeners = () => {
-
     socketService.off('chat_reply', handleChatReply)
     socketService.off('room_event', handleRoomEvent)
   }
-
-  // Handle socket reconnection
   const handleSocketReconnect = () => {
-    console.log('Socket reconnected, re-establishing listeners and room')
     cleanupSocketListeners()
     setupSocketListeners()
-    
-    // Rejoin room if necessary
-
     const userId = userService.getUserId()
-    if (userId) {
-      socketService.emit('join_room', { session_id: `user_${userId}` })
-    }
+    if (userId) socketService.emit('join_room', { session_id: `user_${userId}` })
   }
 
- 
-
-  /**
-   * @param force refetch even when this chat is already open — the Refresh
-   *   button. Live socket updates only arrive once a human takes a chat over;
-   *   while the AI is answering, this is how an agent pulls the latest turns.
-   */
   const loadChatDetail = async (sessionId: string, force = false) => {
+    if (!force && selectedChat.value?.session_id === sessionId) return
     try {
-      // Only load full chat detail if it's a new chat or not loaded yet
-      if (force || !selectedChat.value || selectedChat.value.session_id !== sessionId) {
-        chatLoading.value = true
-        selectedId.value = sessionId
-        const detail = await chatService.getChatDetail(sessionId)
-        
-        // Debug: Log if messages have attachments
-        if (detail && detail.messages) {
-          detail.messages.forEach((msg, idx) => {
-            if (msg.attachments && msg.attachments.length > 0) {
-              console.log(`[API Response] Message ${idx} has ${msg.attachments.length} attachments`)
-            }
-          })
-        }
-        
-        selectedChat.value = detail
-        
-        // Clear unread messages for this chat
-        if (unreadMessages[sessionId]) {
-          delete unreadMessages[sessionId]
-          emit('clearUnread', sessionId)
-        }
+      chatLoading.value = true
+      selectedId.value = sessionId
+      const detail = await chatService.getChatDetail(sessionId)
+      selectedChat.value = detail
+      if (unreadMessages[sessionId]) {
+        delete unreadMessages[sessionId]
+        emit('clearUnread', sessionId)
       }
     } catch (err) {
       console.error('Failed to load chat:', err)
@@ -183,70 +168,38 @@ export function useConversationsList(props: {
     }
   }
 
-  // Watch for conversations changes and load first conversation
-  watch(() => props.conversations, (newConversations) => {
-    if (newConversations.length > 0 && !selectedId.value) {
-      // Use Promise.resolve().then() to break the reactive chain
-      // This prevents the recursive update error
-      Promise.resolve().then(() => {
-        if (!selectedId.value) {
-         // loadChatDetail(newConversations[0].session_id)
-        }
-      })
+  watch(() => props.conversations, (items) => {
+    if (!items.length && selectedId.value) {
+      selectedId.value = null
+      selectedChat.value = null
     }
   }, { immediate: true })
 
   const formattedConversations = computed(() => {
-    // Ensure conversations is an array before mapping
-    if (!Array.isArray(props.conversations)) {
-      return []
-    }
-    
+    if (!Array.isArray(props.conversations)) return []
     return props.conversations.map(conv => ({
       ...conv,
       timeAgo: formatDistanceToNow(new Date(conv.updated_at), { addSuffix: true }),
       message_type: conv.attributes?.message_type || 'text',
-      shopify_output: conv.attributes?.shopify_output
+      shopify_output: conv.attributes?.shopify_output,
     }))
   })
 
-  // Connect to socket and setup listeners on mount
   onMounted(() => {
-    console.log('Connecting to socket')
     socketService.connect()
     setupSocketListeners()
     socketService.onReconnect(handleSocketReconnect)
-    
-    // Join user-specific room
     const userId = userService.getUserId()
-    if (userId) {
-      socketService.emit('join_room', { session_id: `user_${userId}` })
-    }
+    if (userId) socketService.emit('join_room', { session_id: `user_${userId}` })
   })
-
-  // Cleanup on unmount
   onBeforeUnmount(() => {
-    console.log('Disconnecting from socket')
     const userId = userService.getUserId()
-    if (userId) {
-      socketService.emit('leave_room', { session_id: `user_${userId}` })
-    }
+    if (userId) socketService.emit('leave_room', { session_id: `user_${userId}` })
     cleanupSocketListeners()
     socketService.offReconnect(handleSocketReconnect)
   })
 
-  // Add method to clear unreads
-  const clearUnread = (sessionId: string) => {
-    delete unreadMessages[sessionId]
-  }
+  const clearUnread = (sessionId: string) => { delete unreadMessages[sessionId] }
 
-  return {
-    selectedChat,
-    selectedId,
-    chatLoading,
-    formattedConversations,
-    loadChatDetail,
-    unreadMessages,
-    clearUnread
-  }
-} 
+  return { selectedChat, selectedId, chatLoading, formattedConversations, loadChatDetail, unreadMessages, clearUnread }
+}

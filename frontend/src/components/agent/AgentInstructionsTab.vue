@@ -263,7 +263,7 @@ const handleSave = () => {
     <!-- Instructions Section -->
     <section class="detail-section instructions-section">
       <div class="instructions-header">
-        <h4 class="section-title">Instructions</h4>
+        <h4 class="section-title">人设与指令 (System Instructions)</h4>
         <button 
           class="ai-generate-button" 
           @click="showAIPrompt = true"
@@ -271,17 +271,17 @@ const handleSave = () => {
           v-if="isEditing"
         >
           <span class="ai-icon">✨</span>
-          Generate with AI
+          AI 智能生成人设
         </button>
       </div>
       
       <!-- AI Prompt Modal -->
       <div v-if="showAIPrompt" class="ai-prompt-modal">
         <div class="ai-prompt-content">
-          <h5>Generate Instructions with AI</h5>
+          <h5>使用 AI 生成智能体人设与指令</h5>
           <textarea 
             v-model="aiPrompt"
-            placeholder="Describe what you want your agent to do. For example: 'Create a customer support agent that helps with product returns and exchanges'"
+            placeholder="描述您期望智能客服承担的职责。例如：'创建一个专业温和的跨境电商售后客服，负责协助买家处理订单物流追踪、退换货及商品保修咨询'"
             rows="4"
             class="ai-prompt-textarea"
           ></textarea>
@@ -292,14 +292,14 @@ const handleSave = () => {
               @click="showAIPrompt = false"
               :disabled="isLoading"
             >
-              Cancel
+              取消
             </button>
             <button 
               class="generate-ai-button" 
               @click="handleGenerateWithAI"
               :disabled="isLoading || !aiPrompt.trim()"
             >
-              {{ isLoading ? 'Generating...' : 'Generate' }}
+              {{ isLoading ? '正在生成...' : '立即生成' }}
             </button>
           </div>
         </div>
@@ -309,7 +309,7 @@ const handleSave = () => {
         class="instructions-textarea" 
         v-model="localInstructions"
         rows="6" 
-        placeholder="Enter instructions for the agent..."
+        placeholder="输入智能客服的人设设定、回答语气及行为规范..."
         :readonly="!isEditing"
       ></textarea>
     </section>
@@ -317,16 +317,14 @@ const handleSave = () => {
     <!-- Guardrail Section -->
     <section class="detail-section guardrail-section">
       <div class="toggle-header">
-        <h4 class="section-title">Guardrail</h4>
+        <h4 class="section-title">业务防护栏 (Guardrail)</h4>
         <label class="switch">
           <input type="checkbox" v-model="localGuardrailEnabled" :disabled="!isEditing">
           <span class="slider"></span>
         </label>
       </div>
       <p class="helper-text">
-        Keeps the agent on topics related to your business, so visitors can't use it as a
-        general-purpose AI. Protection against prompt injection and against revealing its
-        configuration is always on and isn't affected by this switch.
+        确保智能体仅聚焦于您企业的核心业务话题，防止访客将其作为通用大模型闲聊或越权使用。防御 Prompt 注入与保护系统配置的机制始终默认开启。
       </p>
 
       <template v-if="localGuardrailEnabled">
@@ -335,18 +333,16 @@ const handleSave = () => {
           v-model="localGuardrailPrompt"
           rows="5"
           :readonly="!isEditing"
-          placeholder="Leave empty to use the platform default."
+          placeholder="留空则使用系统内置的通用商业防护栏设定。"
         ></textarea>
         <p class="helper-text">
           <template v-if="isGuardrailDefault">
-            This is the platform default. Edit it to suit your business — for example if you
-            <em>are</em> a tutoring, coding-education or copywriting service, so those requests
-            should be answered.
+            当前采用平台推荐默认规则。您可以根据自身行业特性进行定制。
           </template>
           <template v-else>
-            Your own rule, replacing the platform default. Clear the box to go back to the default.
+            已启用自定义业务防护规则（已覆盖系统默认设置）。清空输入框可恢复默认防护栏。
           </template>
-          Use <code>{org}</code> to refer to your business name.
+          支持在文案中使用 <code>{org}</code> 代表您的企业名称。
         </p>
       </template>
     </section>
@@ -354,12 +350,10 @@ const handleSave = () => {
     <!-- Transfer and Rating Section -->
     <section class="detail-section">
       <div class="transfer-section">
-        <!-- Whether the AI answers at all. Off makes every other automated
-             setting below moot, so they are hidden rather than left to
-             contradict it. -->
+        <!-- AI 应答总开关 -->
         <div class="transfer-toggle">
           <div class="toggle-header">
-            <h4 class="section-title">Let AI Answer</h4>
+            <h4 class="section-title">允许 AI 自动应答</h4>
             <label class="switch">
               <input type="checkbox"
                 v-model="localAiRepliesEnabled"
@@ -369,14 +363,14 @@ const handleSave = () => {
             </label>
           </div>
           <p class="helper-text">
-            Turn this off to send every chat straight to your team. The AI won't reply.
+            关闭此开关后，所有新进入的客户咨询将直接路由至人工客服团队，AI 不会对外发送回复。
           </p>
         </div>
 
-        <!-- Transfer toggle -->
+        <!-- 转人工开关 -->
         <div v-if="localAiRepliesEnabled" class="transfer-toggle">
           <div class="toggle-header">
-            <h4 class="section-title">Transfer to Human</h4>
+            <h4 class="section-title">自动转交人工客服</h4>
             <label class="switch" v-tooltip="tooltipContent">
               <input type="checkbox"
                 v-model="localTransferToHuman"
@@ -385,34 +379,32 @@ const handleSave = () => {
               <span class="slider"></span>
             </label>
           </div>
-          <p class="helper-text">Enable automatic transfer to human agents when needed</p>
+          <p class="helper-text">当客户情绪激动、明确要求人工或 AI 无法妥善回答时，自动触发转人工流程</p>
         </div>
 
-        <!-- Collect contact details at handoff -->
+        <!-- 转人工留资 -->
         <div v-if="localAiRepliesEnabled && localTransferToHuman" class="handoff-collect">
           <div class="toggle-header">
-            <span class="subsection-title">Ask for email at handoff</span>
+            <span class="subsection-title">转人工时向客户收集邮箱</span>
             <label class="switch">
               <input type="checkbox" v-model="localHandoffCollectEmail" :disabled="!isEditing">
               <span class="slider"></span>
             </label>
           </div>
           <div class="toggle-header">
-            <span class="subsection-title">Ask for name at handoff (optional)</span>
+            <span class="subsection-title">转人工时向客户收集姓名 (可选)</span>
             <label class="switch">
               <input type="checkbox" v-model="localHandoffCollectName" :disabled="!isEditing">
               <span class="slider"></span>
             </label>
           </div>
-          <p class="helper-text">Collect contact details when a chat is handed to a human, so your team can follow up.</p>
+          <p class="helper-text">在交接给人工客服前收集联系方式，以便客服人员后续离线跟进。</p>
         </div>
 
-        <!-- Group selection -->
-        <!-- Also shown for a human-only agent: this is the queue its chats
-             land in, so it is the one setting that still matters. -->
+        <!-- 客服分组选择 -->
         <div v-if="localTransferToHuman || !localAiRepliesEnabled" class="transfer-groups">
-          <h4 class="subsection-title">Transfer Groups</h4>
-          <p v-if="userGroups.length" class="helper-text">Select groups that can handle transferred chats</p>
+          <h4 class="subsection-title">接待客服分组</h4>
+          <p v-if="userGroups.length" class="helper-text">选择负责承接该智能体转交会话的人工客服团队</p>
           
           <div v-if="!loadingGroups">
             <div v-if="userGroups.length" class="groups-list">
@@ -427,23 +419,23 @@ const handleSave = () => {
               </label>
             </div>
             <div v-else class="no-groups-message">
-              <p>No groups available.</p>
+              <p>暂无可用客服分组。</p>
               <router-link to="/human-agents" class="create-group-link">
-                Create Group <font-awesome-icon icon="fa-solid fa-arrow-right" />
+                创建客服分组 <font-awesome-icon icon="fa-solid fa-arrow-right" />
               </router-link>
             </div>
           </div>
           
           <div v-else class="loading-groups">
-            Loading groups...
+            正在加载团队分组...
           </div>
         </div>
 
-        <!-- Ask for Rating -->
+        <!-- 满意度评价 -->
         <div class="rating-toggle">
           <div class="toggle-header">
             <h4 class="section-title">
-              Ask for Rating
+              会话结束满意度评价 (CSAT)
               <font-awesome-icon v-if="hasEnterpriseModule && isRatingLocked" icon="fa-solid fa-lock" class="lock-icon" />
             </h4>
             <label class="switch" :class="{ 'locked': isRatingLocked }" v-tooltip="ratingTooltipContent">
@@ -456,15 +448,15 @@ const handleSave = () => {
             </label>
           </div>
           <p class="helper-text">
-            <span v-if="!isRatingLocked || !hasEnterpriseModule">Request customer feedback when chats end</span>
+            <span v-if="!isRatingLocked || !hasEnterpriseModule">在会话结束时主动邀请客户对本次服务进行星级评分与留言反馈</span>
             <span v-else class="locked-text">
               <font-awesome-icon icon="fa-solid fa-crown" class="premium-icon" />
-              Upgrade your plan to enable customer rating collection
+              升级企业套餐以解锁客户满意度星级评价功能
             </span>
           </p>
           <p class="helper-text channel-note">
             <font-awesome-icon icon="fa-solid fa-circle-info" class="info-icon" />
-            Ratings are collected on the built-in chat widget only — not on connected messaging channels (Telegram, WhatsApp, Messenger, Instagram, Slack, Email, SMS, LINE).
+            提示：满意度评价仅在网页内置挂件中触发，第三方集成渠道（WhatsApp/Telegram 等）暂不展示。
           </p>
         </div>
       </div>
@@ -473,7 +465,7 @@ const handleSave = () => {
     <!-- Save Button -->
     <div v-if="isEditing" class="save-section">
       <button class="save-button" @click="handleSave">
-        Save Changes
+        保存人设配置
       </button>
     </div>
 
@@ -484,40 +476,39 @@ const handleSave = () => {
           <div class="upgrade-icon">
             <font-awesome-icon icon="fa-solid fa-star" />
           </div>
-          <h3>Unlock Customer Rating Feature</h3>
+          <h3>解锁客户满意度评价功能</h3>
           <button class="close-button" @click="closeUpgradeModal">×</button>
         </div>
         <div class="upgrade-modal-content">
           <p class="upgrade-description">
-            Enable customer feedback collection to track satisfaction, gather insights, 
-            and improve your service quality with star ratings and comments.
+            开启客户服务反馈收集，追踪客户满意度评分，获取客户真实改进建议并优化智能体与人工接待质量。
           </p>
           <div class="upgrade-features">
             <div class="feature-item">
               <font-awesome-icon icon="fa-solid fa-check" class="feature-icon" />
-              <span>5-star rating system</span>
+              <span>1-5 星级满意度评分体系</span>
             </div>
             <div class="feature-item">
               <font-awesome-icon icon="fa-solid fa-check" class="feature-icon" />
-              <span>Optional customer comments</span>
+              <span>客户自定义文本反馈留言</span>
             </div>
             <div class="feature-item">
               <font-awesome-icon icon="fa-solid fa-check" class="feature-icon" />
-              <span>Satisfaction analytics</span>
+              <span>多维度 CSAT 统计与分析看板</span>
             </div>
             <div class="feature-item">
               <font-awesome-icon icon="fa-solid fa-check" class="feature-icon" />
-              <span>Performance insights</span>
+              <span>人机接待质量综合洞察</span>
             </div>
           </div>
         </div>
         <div class="upgrade-modal-footer">
           <button class="upgrade-button" @click="handleUpgrade">
             <font-awesome-icon icon="fa-solid fa-crown" class="upgrade-icon" />
-            Upgrade to Unlock Ratings
+            升级套餐以解锁评价功能
             <font-awesome-icon icon="fa-solid fa-arrow-right" class="arrow-icon" />
           </button>
-          <button class="cancel-upgrade-button" @click="closeUpgradeModal">Maybe Later</button>
+          <button class="cancel-upgrade-button" @click="closeUpgradeModal">暂不升级</button>
         </div>
       </div>
     </div>

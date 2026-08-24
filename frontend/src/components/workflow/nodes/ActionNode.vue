@@ -43,12 +43,12 @@ defineProps<{
       </div>
       
       <div v-if="data.config?.actionType" class="node-preview">
-        <div class="preview-label">Action Type:</div>
+        <div class="preview-label">动作类型：</div>
         <div class="preview-content">{{ data.config.actionType }}</div>
       </div>
       
       <div v-if="data.config?.url" class="node-preview">
-        <div class="preview-label">URL:</div>
+        <div class="preview-label">目标 URL：</div>
         <div class="preview-content">
           {{ data.config.url.substring(0, 80) }}{{ data.config.url.length > 80 ? '...' : '' }}
         </div>

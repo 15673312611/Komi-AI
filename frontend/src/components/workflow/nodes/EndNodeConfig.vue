@@ -48,13 +48,13 @@ const updateFormData = (field: keyof EndNodeData, value: any) => {
 <template>
   <div class="end-node-config">
     <div class="form-group">
-      <label for="end-message">Final Message</label>
+      <label for="end-message">流程结束语 (Final Message)</label>
       <textarea
         id="end-message"
         :value="formData.final_message"
         @input="updateFormData('final_message', ($event.target as HTMLTextAreaElement).value)"
         class="form-textarea"
-        placeholder="Final message to show when ending conversation"
+        placeholder="输入流程结束时发送给访客的总结或致谢语（选填）"
         rows="3"
       ></textarea>
     </div>

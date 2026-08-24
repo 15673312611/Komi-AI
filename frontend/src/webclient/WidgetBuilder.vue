@@ -1878,7 +1878,7 @@ const askAiHotkey = computed(() => parentDisplay.value?.hotkey !== false)
                     <input
                         v-model="emailInput"
                         type="email"
-                        placeholder="Enter your email address"
+                        placeholder="请输入您的联系邮箱"
                         :disabled="loading || connectionStatus !== 'connected'"
                         :class="{
                             'invalid': emailInput.trim() && !isValidEmail(emailInput.trim()),
@@ -2304,7 +2304,7 @@ const askAiHotkey = computed(() => parentDisplay.value?.hotkey !== false)
                                         <div class="feedback-section">
                                             <input
                                                 v-model="message.feedback"
-                                                placeholder="Please share your feedback (optional)"
+                                                placeholder="请写下您的宝贵评价与建议（选填）"
                                                 :disabled="isSubmittingRating"
                                                 maxlength="500"
                                                 class="feedback-input"
@@ -2317,7 +2317,7 @@ const askAiHotkey = computed(() => parentDisplay.value?.hotkey !== false)
                                             class="submit-rating-button"
                                             :style="{ backgroundColor: customization.accent_color || 'var(--accent-solid)' }"
                                         >
-                                            {{ isSubmittingRating ? 'Submitting...' : 'Submit Rating' }}
+                                            {{ isSubmittingRating ? '正在提交…' : '提交评价' }}
                                         </button>
                                     </div>
 
@@ -2498,7 +2498,7 @@ const askAiHotkey = computed(() => parentDisplay.value?.hotkey !== false)
                                         <textarea
                                             v-model="message.userInputValue"
                                             class="user-input-textarea"
-                                            placeholder="Type your message here..."
+                                            placeholder="在此输入您的回复…"
                                             rows="3"
                                             @keydown.enter.ctrl="handleUserInputSubmit(message)"
                                             @keydown.enter.meta="handleUserInputSubmit(message)"
@@ -2508,13 +2508,13 @@ const askAiHotkey = computed(() => parentDisplay.value?.hotkey !== false)
                                             @click="handleUserInputSubmit(message)"
                                             :disabled="!message.userInputValue || !message.userInputValue.trim()"
                                         >
-                                            Submit
+                                            提交
                                         </button>
                                     </div>
 
                                     <!-- Show submitted value -->
                                     <div v-else class="user-input-submitted">
-                                        <strong>Your input:</strong> {{ message.submittedValue }}
+                                        <strong>您的输入：</strong> {{ message.submittedValue }}
                                         <div
                                             v-if="message.attributes?.confirmation_message && message.attributes.confirmation_message.trim()"
                                             class="user-input-confirmation"
@@ -2838,7 +2838,7 @@ const askAiHotkey = computed(() => parentDisplay.value?.hotkey !== false)
                 </div>
                 <textarea
                     v-model="ratingFeedback"
-                    placeholder="Additional feedback (optional)"
+                    placeholder="更多意见反馈（选填）"
                     class="rating-feedback"
                 ></textarea>
                 <div class="rating-actions">
@@ -2848,13 +2848,13 @@ const askAiHotkey = computed(() => parentDisplay.value?.hotkey !== false)
                         class="submit-button"
                         :style="userBubbleStyles"
                     >
-                        Submit
+                        提交评价
                     </button>
                     <button
                         @click="showRatingDialog = false"
                         class="skip-rating"
                     >
-                        Skip
+                        跳过
                     </button>
                 </div>
             </div>

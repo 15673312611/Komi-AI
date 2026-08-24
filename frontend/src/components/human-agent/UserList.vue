@@ -235,27 +235,27 @@ const displayKpis = computed(() => {
     const pct = k.total_capacity > 0 ? Math.round((k.active_chats / k.total_capacity) * 100) : 0
     return [
       {
-        label: 'TEAM SIZE',
+        label: '团队坐席规模',
         value: String(k.team_size),
-        sub: `${k.admins} admins · ${k.agents} agents`,
+        sub: `${k.admins} 名管理员 · ${k.agents} 名客服`,
         color: 'var(--c-online)',
       },
       {
-        label: 'ONLINE NOW',
+        label: '当前在线坐席',
         value: String(k.online_now),
-        sub: 'available for handoff',
+        sub: '可即时接待人工转交',
         color: 'var(--accent-ink)',
       },
       {
-        label: 'LIVE CHAT LOAD',
+        label: '实时接待负载',
         value: `${k.active_chats} / ${k.total_capacity}`,
-        sub: `${pct}% of capacity used`,
+        sub: `已使用 ${pct}% 容量`,
         color: 'var(--c-pro)',
       },
       {
-        label: 'WAITING HANDOFF',
+        label: '待接入转交会话',
         value: String(k.waiting_handoff),
-        sub: `oldest waiting ${k.oldest_wait_minutes}m`,
+        sub: `最长等待 ${k.oldest_wait_minutes} 分钟`,
         color: 'var(--c-coral)',
       },
     ]
@@ -353,7 +353,7 @@ onMounted(async () => {
       {{ error }}
     </div>
 
-    <div v-if="loading && rows.length === 0" class="loading">Loading people...</div>
+    <div v-if="loading && rows.length === 0" class="loading">正在加载坐席成员...</div>
 
     <template v-else>
       <!-- KPI strip -->
@@ -368,12 +368,12 @@ onMounted(async () => {
       <!-- Agents table -->
       <div class="people-table">
         <div class="table-head rcards-head">
-          <div class="th th-agent">AGENT</div>
-          <div class="th">STATUS</div>
-          <div class="th">ROLE</div>
-          <div class="th">TEAMS</div>
-          <div class="th">LIVE LOAD</div>
-          <div class="th th-center">RESOLVED</div>
+          <div class="th th-agent">坐席成员</div>
+          <div class="th">在线状态</div>
+          <div class="th">权限角色</div>
+          <div class="th">所属分组</div>
+          <div class="th">实时负载</div>
+          <div class="th th-center">已解决</div>
           <div class="th"></div>
         </div>
 
@@ -409,13 +409,13 @@ onMounted(async () => {
           <div class="rcards-badge">
             <span class="status-pill" :class="row.is_online ? 'online' : 'offline'">
               <span class="pill-dot"></span>
-              {{ row.is_online ? 'Available' : 'Offline' }}
+              {{ row.is_online ? '在线就绪' : '离线' }}
             </span>
           </div>
 
           <!-- ROLE -->
           <div class="rcards-meta">
-            <span class="rcards-label">Role</span>
+            <span class="rcards-label">角色</span>
             <span class="role-badge2" :class="{ admin: row.is_admin }">
               {{ row.role || '—' }}
             </span>
@@ -423,7 +423,7 @@ onMounted(async () => {
 
           <!-- TEAMS -->
           <div class="cell-teams rcards-meta">
-            <span class="rcards-label">Teams</span>
+            <span class="rcards-label">分组</span>
             <template v-if="row.groups.length">
               <span v-for="(t, i) in row.groups" :key="i" class="team-chip">{{ t }}</span>
             </template>
@@ -432,7 +432,7 @@ onMounted(async () => {
 
           <!-- LIVE LOAD -->
           <div class="rcards-meta">
-            <span class="rcards-label">Load</span>
+            <span class="rcards-label">接待负载</span>
             <span v-if="!row.capacity" class="load-dash">—</span>
             <div v-else class="load">
               <div class="pips">
@@ -447,36 +447,36 @@ onMounted(async () => {
                 class="load-label"
                 :style="{ color: row.active_chats >= row.capacity ? 'var(--c-warn)' : 'var(--muted)' }"
               >
-                {{ row.active_chats >= row.capacity ? 'Full' : `${row.active_chats}/${row.capacity}` }}
+                {{ row.active_chats >= row.capacity ? '已满载' : `${row.active_chats}/${row.capacity}` }}
               </span>
             </div>
           </div>
 
           <!-- RESOLVED -->
           <div class="cell-resolved rcards-meta">
-            <span class="rcards-label">Resolved</span>
+            <span class="rcards-label">已解决</span>
             <span class="rcards-value">{{ row.resolved_chats }}</span>
           </div>
 
           <!-- MENU -->
           <Menu as="div" class="row-menu">
-            <MenuButton class="menu-btn" title="More">
+            <MenuButton class="menu-btn" title="更多操作">
               <EllipsisVerticalIcon class="h-4 w-4" />
             </MenuButton>
             <MenuItems class="menu-items">
               <MenuItem v-slot="{ active }">
                 <button :class="['menu-item', { active }]" @click="onEditRow(row)">
-                  {{ row.id === currentUser?.id ? 'Edit Profile' : 'Edit' }}
+                  {{ row.id === currentUser?.id ? '修改个人资料' : '编辑坐席' }}
                 </button>
               </MenuItem>
               <MenuItem v-if="row.id !== currentUser?.id" v-slot="{ active }">
                 <button :class="['menu-item', { active }]" @click="onResetPasswordRow(row)">
-                  Reset Password
+                  重置密码
                 </button>
               </MenuItem>
               <MenuItem v-if="row.id !== currentUser?.id" v-slot="{ active }">
                 <button :class="['menu-item', { active }]" @click="onDeleteRow(row)">
-                  Delete
+                  删除坐席
                 </button>
               </MenuItem>
             </MenuItems>
@@ -484,14 +484,14 @@ onMounted(async () => {
         </div>
 
         <div v-if="filteredRows.length === 0" class="empty-row">
-          No people match “{{ props.searchQuery }}”.
+          未找到匹配 “{{ props.searchQuery }}” 的坐席成员。
         </div>
       </div>
     </template>
 
     <!-- Edit User Modal -->
     <Modal v-if="showEditModal" persistent @close="showEditModal = false">
-      <template #title>Edit User</template>
+      <template #title>编辑坐席信息</template>
       <template #content>
         <UserForm 
           :user="selectedUser"
@@ -503,7 +503,7 @@ onMounted(async () => {
 
     <!-- Reset Password Modal -->
     <Modal v-if="showResetPasswordModal && selectedUser" persistent @close="showResetPasswordModal = false">
-      <template #title>Reset Password</template>
+      <template #title>重置坐席密码</template>
       <template #content>
         <ResetPasswordForm
           :user="selectedUser"
@@ -516,21 +516,21 @@ onMounted(async () => {
 
     <!-- Delete Confirmation Modal -->
     <Modal v-if="showDeleteModal" @close="showDeleteModal = false">
-      <template #title>Delete User</template>
+      <template #title>删除坐席</template>
       <template #content>
-        <p>Are you sure you want to delete this user?</p>
+        <p>确定要删除该坐席成员吗？此操作无法撤销。</p>
         <div class="modal-actions">
           <button
             class="btn btn-danger"
             @click="confirmDeleteUserAndNotify"
           >
-            Delete
+            确认删除
           </button>
           <button 
             class="btn btn-secondary" 
             @click="showDeleteModal = false"
           >
-            Cancel
+            取消
           </button>
         </div>
       </template>
@@ -538,7 +538,7 @@ onMounted(async () => {
 
     <!-- Create User Modal -->
     <Modal v-if="showCreateModal" persistent @close="showCreateModal = false">
-      <template #title>Create New User</template>
+      <template #title>添加新坐席成员</template>
       <template #content>
         <UserForm
           @submit="handleCreateUserAndNotify"
@@ -551,39 +551,39 @@ onMounted(async () => {
     <div v-if="hasEnterpriseModule && showUpgradeModal" class="upgrade-modal-overlay" @click="closeUpgradeModal">
       <div class="upgrade-modal" @click.stop>
         <div class="upgrade-modal-header">
-          <h3>User Limit Reached</h3>
+          <h3>坐席席位已达上限</h3>
           <button class="close-button" @click="closeUpgradeModal">×</button>
         </div>
         <div class="upgrade-modal-content">
           <p class="upgrade-description">
-            You've reached your plan's user limit ({{ currentUserCount }}/{{ currentSubscription?.quantity }}). 
-            Upgrade your plan to add more users and unlock additional features.
+            当前套餐的坐席席位配额已满 ({{ currentUserCount }}/{{ currentSubscription?.quantity }} 席)。
+            请升级套餐以添加更多坐席席位并解锁更高级的企业协作功能。
           </p>
           <div class="upgrade-features">
             <div class="feature-item">
               <font-awesome-icon icon="fa-solid fa-check" class="feature-icon" />
-              <span>More user seats for your team</span>
+              <span>为团队扩充更多坐席席位数</span>
             </div>
             <div class="feature-item">
               <font-awesome-icon icon="fa-solid fa-check" class="feature-icon" />
-              <span>Advanced user management features</span>
+              <span>高级团队权限分级与多业务组管理</span>
             </div>
             <div class="feature-item">
               <font-awesome-icon icon="fa-solid fa-check" class="feature-icon" />
-              <span>Enhanced collaboration tools</span>
+              <span>多坐席会话协同转接与内部便签</span>
             </div>
             <div class="feature-item">
               <font-awesome-icon icon="fa-solid fa-check" class="feature-icon" />
-              <span>Priority support</span>
+              <span>专属技术支持与企业级 SLA 保障</span>
             </div>
           </div>
         </div>
         <div class="upgrade-modal-footer">
           <button class="upgrade-button primary" @click="handleUpgrade">
-            Upgrade Plan
+            立即升级方案
           </button>
           <button class="upgrade-button secondary" @click="closeUpgradeModal">
-            Maybe Later
+            暂不需要
           </button>
         </div>
       </div>

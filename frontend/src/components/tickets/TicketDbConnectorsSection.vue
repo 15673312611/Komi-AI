@@ -194,21 +194,21 @@ async function saveConnector() {
     }
     if (editingConnector.value) {
       await dbConnectorService.update(editingConnector.value.id, policy)
-      toast.success('Connector updated')
+      toast.success('已成功更新数据库连接器')
     } else {
       await dbConnectorService.create({
         name: form.name, engine: form.engine, host: form.host, port: form.port,
         database: form.database, username: form.username, password: form.password,
         enabled: true, ...sshPayload(), ...policy,
       })
-      toast.success('Database connector created')
+      toast.success('已成功创建数据库连接器')
     }
     showForm.value = false
     editingConnector.value = null
     resetPicker()
     await fetchConnectors()
   } catch (err: any) {
-    toast.error(err.response?.data?.detail || 'Failed to save the connector')
+    toast.error(err.response?.data?.detail || '保存数据库连接器失败')
   } finally {
     isSaving.value = false
   }
@@ -231,18 +231,18 @@ async function toggleEnabled(connector: DbConnector, enabled: boolean) {
     await dbConnectorService.update(connector.id, { enabled })
     await fetchConnectors()
   } catch (err: any) {
-    toast.error(err.response?.data?.detail || 'Failed to update the connector')
+    toast.error(err.response?.data?.detail || '更新数据库连接器状态失败')
   }
 }
 
 async function removeConnector(connector: DbConnector) {
-  if (!confirm(`Delete connector "${connector.name}"? The AI loses this database access.`)) return
+  if (!confirm(`确认删除连接器 "${connector.name}"？删除后 AI 将无法再查询该数据库。`)) return
   try {
     await dbConnectorService.remove(connector.id)
     await fetchConnectors()
-    toast.success('Connector deleted')
+    toast.success('连接器已删除')
   } catch (err: any) {
-    toast.error(err.response?.data?.detail || 'Failed to delete the connector')
+    toast.error(err.response?.data?.detail || '删除连接器失败')
   }
 }
 
@@ -251,7 +251,7 @@ onMounted(fetchConnectors)
 
 <template>
   <div class="db-connectors">
-    <div v-if="isLoading" class="state-note">Loading…</div>
+    <div v-if="isLoading" class="state-note">正在加载数据库连接器…</div>
     <div v-else-if="loadError" class="state-note">{{ loadError }}</div>
 
     <template v-else>
@@ -266,14 +266,14 @@ onMounted(fetchConnectors)
                 class="test-tag mono"
                 :class="{ ok: connector.last_test_ok }"
               >
-                {{ connector.last_test_ok ? 'connected' : 'connection failed' }}
+                {{ connector.last_test_ok ? '已连通' : '连接失败' }}
               </span>
             </div>
             <div class="connector-sub mono">
               {{ connector.username }}@{{ connector.host }}:{{ connector.port }}/{{ connector.database }}
-              · {{ (connector.allowed_tables || []).length }} tables allowed
-              · {{ (connector.masked_columns || []).length }} masked columns
-              · {{ Object.keys(connector.row_scope || {}).length }} customer-scoped
+              · 允许查询 {{ (connector.allowed_tables || []).length }} 张表
+              · {{ (connector.masked_columns || []).length }} 个脱敏字段
+              · {{ Object.keys(connector.row_scope || {}).length }} 张客户行隔离表
             </div>
           </div>
           <label class="enable-toggle">
@@ -282,26 +282,26 @@ onMounted(fetchConnectors)
               :checked="connector.enabled"
               @change="toggleEnabled(connector, ($event.target as HTMLInputElement).checked)"
             />
-            Active
+            已启用
           </label>
-          <button class="small-btn" @click="editTables(connector)">Edit tables</button>
-          <button class="small-btn danger" @click="removeConnector(connector)">Delete</button>
+          <button class="small-btn" @click="editTables(connector)">配置数据表权限</button>
+          <button class="small-btn danger" @click="removeConnector(connector)">删除</button>
         </div>
       </div>
 
       <button v-if="!showForm" class="add-connector" @click="openCreateForm">
-        ＋ Connect a database
+        ＋ 连接业务数据库
       </button>
 
       <div v-if="showForm" class="create-form">
         <template v-if="!editingConnector">
           <div class="form-grid">
             <label class="form-field">
-              <span class="field-label">Name</span>
-              <input v-model="form.name" class="field-input" placeholder="Production replica" />
+              <span class="field-label">连接名称</span>
+              <input v-model="form.name" class="field-input" placeholder="例如：生产环境只读从库" />
             </label>
             <label class="form-field">
-              <span class="field-label">Engine</span>
+              <span class="field-label">数据库引擎</span>
               <select
                 v-model="form.engine"
                 class="field-input"
@@ -312,27 +312,27 @@ onMounted(fetchConnectors)
               </select>
             </label>
             <label class="form-field">
-              <span class="field-label">Host</span>
+              <span class="field-label">主机地址 (Host)</span>
               <input v-model="form.host" class="field-input mono" placeholder="db-replica.internal" />
             </label>
             <label class="form-field">
-              <span class="field-label">Port</span>
+              <span class="field-label">端口 (Port)</span>
               <input v-model.number="form.port" type="number" class="field-input mono" />
             </label>
             <label class="form-field">
-              <span class="field-label">Database</span>
+              <span class="field-label">数据库名 (Database)</span>
               <input v-model="form.database" class="field-input mono" />
             </label>
             <label class="form-field">
-              <span class="field-label">Username</span>
+              <span class="field-label">用户名 (Username)</span>
               <input v-model="form.username" class="field-input mono" placeholder="readonly_user" />
             </label>
             <label class="form-field">
-              <span class="field-label">Password</span>
+              <span class="field-label">密码 (Password)</span>
               <input v-model="form.password" type="password" class="field-input mono" />
             </label>
             <label class="form-field">
-              <span class="field-label">Max rows per query</span>
+              <span class="field-label">单次查询最大行数限制</span>
               <input v-model.number="form.max_rows" type="number" min="1" max="1000" class="field-input mono" />
             </label>
           </div>
@@ -341,41 +341,41 @@ onMounted(fetchConnectors)
             <label class="ssh-toggle">
               <input v-model="form.ssh_enabled" type="checkbox" />
               <span>
-                Connect through an SSH tunnel
-                <span class="ssh-hint">— for databases behind a bastion / jump host (typical in production)</span>
+                通过 SSH 堡垒机/跳板机隧道连接
+                <span class="ssh-hint">— 适用于位于私有 VPC 内网的生产数据库</span>
               </span>
             </label>
             <div v-if="form.ssh_enabled" class="ssh-fields">
               <p class="ssh-note">
-                The host and port above are resolved from the SSH host's network.
+                上方的数据库主机与端口将由 SSH 堡垒机内网环境进行寻址解析。
               </p>
               <div class="form-grid">
                 <label class="form-field">
-                  <span class="field-label">SSH host</span>
+                  <span class="field-label">SSH 堡垒机主机</span>
                   <input v-model="form.ssh_host" class="field-input mono" placeholder="bastion.example.com" />
                 </label>
                 <label class="form-field">
-                  <span class="field-label">SSH port</span>
+                  <span class="field-label">SSH 端口</span>
                   <input v-model.number="form.ssh_port" type="number" class="field-input mono" />
                 </label>
                 <label class="form-field">
-                  <span class="field-label">SSH username</span>
+                  <span class="field-label">SSH 用户名</span>
                   <input v-model="form.ssh_username" class="field-input mono" placeholder="ec2-user" />
                 </label>
                 <label class="form-field">
-                  <span class="field-label">Authentication</span>
+                  <span class="field-label">认证方式</span>
                   <select v-model="form.ssh_auth" class="field-input">
-                    <option value="key">Private key</option>
-                    <option value="password">Password</option>
+                    <option value="key">私钥证书 (Private Key)</option>
+                    <option value="password">账号密码 (Password)</option>
                   </select>
                 </label>
                 <label v-if="form.ssh_auth === 'password'" class="form-field wide">
-                  <span class="field-label">SSH password</span>
+                  <span class="field-label">SSH 登录密码</span>
                   <input v-model="form.ssh_password" type="password" class="field-input mono" />
                 </label>
                 <template v-else>
                   <label class="form-field wide">
-                    <span class="field-label">Private key (PEM / OpenSSH)</span>
+                    <span class="field-label">私钥文本 (PEM / OpenSSH 格式)</span>
                     <textarea
                       v-model="form.ssh_private_key"
                       class="field-input mono key-input"
@@ -384,7 +384,7 @@ onMounted(fetchConnectors)
                     ></textarea>
                   </label>
                   <label class="form-field">
-                    <span class="field-label">Key passphrase (optional)</span>
+                    <span class="field-label">私钥密码短语 Passphrase (选填)</span>
                     <input v-model="form.ssh_private_key_passphrase" type="password" class="field-input mono" />
                   </label>
                 </template>
@@ -393,12 +393,11 @@ onMounted(fetchConnectors)
           </div>
 
           <p class="tip-note">
-            Tip: use a read-only replica and a database user with SELECT-only grants — a second
-            fence beneath ChatterMate's own guardrails.
+            建议：使用只读副本库 (Read-only Replica) 及仅授予 SELECT 权限的专用数据库账号 — 与系统的安全围栏形成双重防护。
           </p>
         </template>
         <div v-else class="editing-note">
-          Editing table access for <strong>{{ editingConnector.name }}</strong>
+          正在配置 <strong>{{ editingConnector.name }}</strong> 的数据表白名单与字段权限
         </div>
 
         <div class="discover-row">
@@ -407,31 +406,29 @@ onMounted(fetchConnectors)
             :disabled="isDiscovering"
             @click="discover"
           >
-            {{ isDiscovering ? 'Connecting…' : discoveredTables ? 'Re-test connection' : 'Test connection' }}
+            {{ isDiscovering ? '正在连接…' : discoveredTables ? '重新测试连接' : '测试连通性并获取数据字典' }}
           </button>
           <span v-if="discoveredTables" class="discover-result">
             <font-awesome-icon :icon="['fas', 'check']" />
-            {{ discoveredTables.length }} tables discovered — select what the AI may query
+            成功发现 {{ discoveredTables.length }} 张数据表 — 请勾选允许 AI 只读查询的表
           </span>
           <span v-else-if="discoverError" class="discover-error">{{ discoverError }}</span>
         </div>
 
         <div v-if="discoveredTables && scopedTableCount" class="scope-key-row">
           <label class="scope-label">
-            Match the customer by
+            客户身份匹配依据字段
             <select v-model="rowScopeKey" class="scope-select">
-              <option value="email">Email address</option>
-              <option value="phone">Phone number</option>
+              <option value="email">客户邮箱地址 (Email)</option>
+              <option value="phone">客户联系电话 (Phone)</option>
             </select>
           </label>
           <span class="scope-key-hint">
             <template v-if="rowScopeKey === 'email'">
-              The ticket customer's email is matched against the column you pick per
-              table, ignoring case.
+              将工单客户的邮箱与所选数据表字段进行不区分大小写的匹配过滤。
             </template>
             <template v-else>
-              The ticket customer's phone is matched exactly against the column you pick
-              per table, so store it in the same format on both sides.
+              将工单客户的电话号码与所选数据表字段进行精确匹配过滤。
             </template>
           </span>
         </div>
@@ -449,7 +446,7 @@ onMounted(fetchConnectors)
                     @change="toggleTable(table, ($event.target as HTMLInputElement).checked)"
                   />
                   <span class="table-name mono">{{ table.table }}</span>
-                  <span class="col-count">{{ table.columns.length }} cols</span>
+                  <span class="col-count">{{ table.columns.length }} 列</span>
                   <span v-if="rowScope[tableKey(table)]" class="scope-chip mono">
                     <font-awesome-icon :icon="['fas', 'user-shield']" />
                     {{ rowScope[tableKey(table)] }}
@@ -460,7 +457,7 @@ onMounted(fetchConnectors)
                   class="mask-toggle"
                   @click="expandedTable = expandedTable === tableKey(table) ? null : tableKey(table)"
                 >
-                  {{ expandedTable === tableKey(table) ? 'Hide columns' : 'Column masking' }}
+                  {{ expandedTable === tableKey(table) ? '收起字段' : '字段脱敏配置' }}
                 </button>
               </div>
               <div v-if="expandedTable === tableKey(table)" class="column-list">
@@ -472,33 +469,29 @@ onMounted(fetchConnectors)
                     :class="{ masked: maskedColumns.has(column.name.toLowerCase()) }"
                     @click="toggleMask(column.name, !maskedColumns.has(column.name.toLowerCase()))"
                   >
-                    {{ maskedColumns.has(column.name.toLowerCase()) ? 'Masked' : 'Visible' }}
+                    {{ maskedColumns.has(column.name.toLowerCase()) ? '已脱敏' : '只读可见' }}
                   </button>
                 </div>
                 <p class="mask-hint">
-                  Masked columns are hidden before the AI ever sees them — queries referencing
-                  them are rejected outright. Masking applies by column name across this connector.
+                  脱敏字段将在数据返回给 AI 前自动掩码隐藏 — 涉及该字段的直接查询也将被拒绝。
                 </p>
 
                 <div class="scope-row">
                   <label class="scope-label">
-                    Restrict to the ticket's customer
+                    按工单客户进行行级数据隔离 (Row-Level Security)
                     <select
                       class="scope-select mono"
                       :value="rowScope[tableKey(table)] || ''"
                       @change="setRowScope(table, ($event.target as HTMLSelectElement).value)"
                     >
-                      <option value="">Not restricted — all rows readable</option>
+                      <option value="">不限行范围 — 允许读取整张表的只读行</option>
                       <option v-for="column in table.columns" :key="column.name" :value="column.name">
                         {{ column.name }}
                       </option>
                     </select>
                   </label>
                   <p class="mask-hint">
-                    Pick the column holding the customer's identity. The AI's queries are
-                    rewritten to read only that customer's rows — it cannot widen them, and
-                    a ticket with no known customer can't query this table at all. Leave
-                    unrestricted for reference data that belongs to nobody in particular.
+                    选择存储客户唯一标识的列。AI 查询将被底层改写为仅读取当前工单客户的数据行 — 无法越权查询其他客户数据。公共基础字典表可保持不限制。
                   </p>
                 </div>
               </div>
@@ -507,14 +500,14 @@ onMounted(fetchConnectors)
         </div>
 
         <div class="form-actions">
-          <button class="cancel-btn" @click="showForm = false; editingConnector = null">Cancel</button>
+          <button class="cancel-btn" @click="showForm = false; editingConnector = null">取消</button>
           <button
             v-if="discoveredTables"
             class="save-btn"
             :disabled="isSaving"
             @click="saveConnector"
           >
-            {{ isSaving ? 'Saving…' : editingConnector ? 'Save changes' : 'Save connector' }}
+            {{ isSaving ? '正在保存…' : editingConnector ? '保存权限更改' : '确认添加并保存' }}
           </button>
         </div>
       </div>

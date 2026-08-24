@@ -41,18 +41,18 @@ const preserveUrls = ref(true)
 const MODES: { value: FaqImportMode; title: string; description: string }[] = [
   {
     value: 'qa',
-    title: 'Q&A page',
-    description: 'AI reads one page and extracts each question & answer. Uses AI credits.',
+    title: '单页 Q&A 问答',
+    description: 'AI 自动读取该单页并拆分提取问答对。消耗 AI 点数。',
   },
   {
     value: 'articles',
-    title: 'Article pages',
-    description: 'Imports every article linked from the page as-is — text, images and links. No AI.',
+    title: '多篇文章/站点',
+    description: '完整迁移页面引用的所有帮助文章（含格式、图片与超链接）。不消耗 AI 点数。',
   },
   {
     value: 'pdf',
-    title: 'PDF document',
-    description: 'AI extracts questions & answers from an uploaded PDF. Uses AI credits.',
+    title: 'PDF 文档文件',
+    description: 'AI 自动解析上传的 PDF 并提取问答对。消耗 AI 点数。',
   },
 ]
 
@@ -82,10 +82,10 @@ const canSubmit = computed(() => {
 
 const hint = computed(() => {
   if (mode.value === 'articles')
-    return 'ChatterMate follows the article links on that page and imports each article verbatim as a draft — formatting and images included.'
+    return '系统将顺着该页面上的文章链接逐篇抓取，完整保留排版与图片，导入为待审核草稿。'
   if (mode.value === 'pdf')
-    return 'ChatterMate reads the PDF, extracts each question and answer, and adds them here as drafts for you to review before publishing.'
-  return 'ChatterMate crawls the page, extracts each question and answer, and adds them here as drafts for you to review before publishing.'
+    return '系统将解析该 PDF 文档，提取其中的问题与标准答案，并添加为草稿供您审核后发布。'
+  return '系统将抓取该单页，智能提取问答对并存为草稿供您审核后发布。'
 })
 
 const fileSize = computed(() => {
@@ -99,7 +99,7 @@ const dragOver = ref(false)
 
 function setPdf(file: File | null | undefined) {
   if (file && file.type === 'application/pdf') pdfFile.value = file
-  else if (file) toast.error('Please choose a PDF file')
+  else if (file) toast.error('请选择 PDF 格式的文件')
 }
 
 function onPdfChange(event: Event) {
@@ -124,11 +124,11 @@ function submit() {
 
 <template>
   <Modal v-if="open" @close="$emit('close')">
-    <template #title>Migrate an existing help center</template>
+    <template #title>迁移已有帮助中心或 FAQ</template>
     <template #content>
-      <p class="import-sub">Paste a help-center or FAQ URL and choose how to bring the content in.</p>
+      <p class="import-sub">输入帮助中心或 FAQ 网址/文件，并选择合适的内容提取方式。</p>
 
-      <div class="mode-cards" role="radiogroup" aria-label="Import mode">
+      <div class="mode-cards" role="radiogroup" aria-label="导入模式">
         <label
           v-for="option in MODES"
           :key="option.value"
@@ -142,7 +142,7 @@ function submit() {
       </div>
 
       <template v-if="mode !== 'pdf'">
-        <label class="import-label" for="faq-import-url">{{ mode === 'articles' ? 'HELP CENTER INDEX URL' : 'FAQ PAGE URL' }}</label>
+        <label class="import-label" for="faq-import-url">{{ mode === 'articles' ? '帮助中心主页/索引地址' : 'FAQ 页面地址 URL' }}</label>
         <div class="import-input">
           <span class="import-input__prefix">https://</span>
           <input
@@ -155,7 +155,7 @@ function submit() {
         </div>
       </template>
       <template v-else>
-        <label class="import-label" for="faq-import-pdf">PDF FILE (MAX 25MB)</label>
+        <label class="import-label" for="faq-import-pdf">PDF 文档文件 (最大 25MB)</label>
         <label
           class="pdf-drop"
           :class="{ 'pdf-drop--filled': pdfFile, 'pdf-drop--drag': dragOver }"
@@ -170,11 +170,11 @@ function submit() {
           <span class="pdf-drop__text">
             <template v-if="pdfFile">
               <span class="pdf-drop__name">{{ pdfFile.name }}</span>
-              <span class="pdf-drop__meta">{{ fileSize }} · Choose a different file</span>
+              <span class="pdf-drop__meta">{{ fileSize }} · 更换其他文件</span>
             </template>
             <template v-else>
-              <span class="pdf-drop__name">Choose a PDF or drop it here</span>
-              <span class="pdf-drop__meta">PDF only, up to 25 MB</span>
+              <span class="pdf-drop__name">选择 PDF 文件或直接拖拽至此</span>
+              <span class="pdf-drop__meta">支持 PDF 格式，单文件最大 25 MB</span>
             </template>
           </span>
         </label>
@@ -182,11 +182,9 @@ function submit() {
       <label v-if="mode === 'articles'" class="preserve">
         <input v-model="preserveUrls" class="preserve__box" type="checkbox" />
         <span class="preserve__text">
-          <span class="preserve__title">Keep the original article URLs</span>
+          <span class="preserve__title">保留原始文章 URL 路径</span>
           <span class="preserve__desc">
-            Each article stays at the URL path it has today, so search rankings and
-            existing links survive the move. Point your old domain here and nothing
-            changes for visitors.
+            每篇文章将保留原有的 URL 相对路径，确保原有的搜索引擎权重 SEO 与外链不失效。
           </span>
         </span>
       </label>
@@ -196,10 +194,10 @@ function submit() {
         <div>{{ hint }}</div>
       </div>
       <div class="import-actions">
-        <button class="btn-cancel" type="button" @click="$emit('close')">Cancel</button>
+        <button class="btn-cancel" type="button" @click="$emit('close')">取消</button>
         <button class="btn-import" type="button" :disabled="!canSubmit" @click="submit">
           <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12" /><path d="M8 11l4 4 4-4" /><path d="M5 21h14" /></svg>
-          {{ submitting ? 'Importing…' : mode === 'articles' ? 'Import articles' : mode === 'pdf' ? 'Import PDF' : 'Import FAQs' }}
+          {{ submitting ? '正在导入…' : mode === 'articles' ? '导入文章列表' : mode === 'pdf' ? '导入 PDF 问答' : '导入 FAQ 问答' }}
         </button>
       </div>
     </template>

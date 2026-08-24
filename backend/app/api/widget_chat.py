@@ -41,7 +41,9 @@ from app.services.file_upload_service import FileUploadService
 from app.core.config import settings
 from app.core.s3 import get_s3_signed_url
 
-from app.models.session_to_agent import SessionStatus
+from app.models.session_to_agent import SessionStatus, EndChatReasonType
+from app.models.user import User
+from app.core.auth import CHAT_MANAGE_PERMISSIONS, CHAT_VIEW_PERMISSIONS, has_any_permission
 from app.agents.transfer_agent import get_agent_availability_response
 from app.repositories.agent import AgentRepository
 from app.services.chat_notifications import notify_new_chat
@@ -53,6 +55,7 @@ from app.services.human_routing import (
 )
 from app.services.lead_capture import record_lead_from_response
 from app.services.message_delivery import deliver_to_customer
+from app.channels.constants import is_widget_channel
 from app.repositories.rating import RatingRepository
 from app.services.ticket_csat import record_conversation_rating
 from app.repositories.jira import JiraRepository
@@ -492,8 +495,13 @@ async def handle_widget_chat(sid, data):
         # the message to fall through to the plain store-and-relay at the end,
         # exactly like a chat a human already holds. notify_new_chat above has
         # already told the team it is waiting.
-        # Older sessions predate the cached flag, so default to answering.
-        ai_replies_enabled = session.get('ai_replies_enabled', True)
+        # A per-conversation override takes precedence over the agent default
+        # cached when this socket connected. This keeps a live widget session
+        # in sync when an operator pauses or restores AI replies from inbox.
+        ai_replies_enabled = ChatRepository.effective_ai_auto_reply(
+            active_session,
+            session.get('ai_replies_enabled', True),
+        )
 
         # Check if agent uses workflow and no human agent has taken over
         if ai_replies_enabled and active_session.workflow_id and active_session.user_id is None:
@@ -1107,8 +1115,7 @@ async def agent_connect(sid, environ, auth):
         access_token, user_id, org_id = await authenticate_socket(sid, environ)
         if not access_token:
             raise ValueError("Authentication failed")
-        logger.info(f"Authenticated connection for user {
-                    user_id} org {org_id}")
+        logger.info(f"Authenticated connection for user {user_id} org {org_id}")
 
         # Store session data
         session_data = {
@@ -1128,44 +1135,142 @@ async def agent_connect(sid, environ, auth):
 # Add new socket event handler for agent messages
 @sio.on('agent_message', namespace='/agent')
 async def handle_agent_message(sid, data):
+    """Persist and fan out an authenticated human-agent message.
+
+    Dashboard clients use this one event for customer replies, internal notes,
+    and the closing system notice.  It is intentionally stricter than the
+    widget event: a socket identity alone is not enough; the selected session
+    must belong to that user *and* organisation before any file is accepted or
+    message is stored.
+    """
     db = None
     try:
         session = await sio.get_session(sid, namespace='/agent')
-        session_id = data['session_id']
-        
-        logger.info(f"Session ID: {session_id}")
-        if not session_id:
+        if not isinstance(data, dict):
+            raise ValueError("Invalid message payload")
+
+        session_id = data.get('session_id')
+        socket_user_id = (session or {}).get('user_id')
+        socket_org_id = (session or {}).get('organization_id')
+        if not session_id or not socket_user_id or not socket_org_id:
             raise ValueError("No active session")
+
+        message_type = data.get('message_type', 'agent')
+        if message_type not in {'agent', 'private_note', 'system'}:
+            raise ValueError("Unsupported message type")
 
         db = next(get_db())
         session_repo = SessionToAgentRepository(db)
         chat_repo = ChatRepository(db)
-        
-        # Verify session and agent permissions
-        session_data = session_repo.get_session(session_id)
-        if not session_data or str(session_data.user_id) != session.get('user_id'):
+
+        # Socket authentication proves who owns the token, but it does not
+        # encode the role's current grants. Resolve the live user on every
+        # state-changing send so a revoked/inactive agent cannot continue
+        # sending through an already-open dashboard socket.
+        socket_user = (
+            db.query(User)
+            .filter(
+                User.id == socket_user_id,
+                User.organization_id == socket_org_id,
+            )
+            .first()
+        )
+        if (
+            not socket_user
+            or not socket_user.is_active
+            or not has_any_permission(socket_user, CHAT_MANAGE_PERMISSIONS)
+        ):
             raise ValueError("Unauthorized")
 
-        # Upload files if provided
+        # The assigned user and tenant must both match the authenticated socket.
+        # Checking only user_id allowed a UUID collision/forged session payload to
+        # cross the organisation boundary.
+        session_data = session_repo.get_session(session_id)
+        if (
+            not session_data
+            or str(session_data.user_id) != str(socket_user_id)
+            or str(session_data.organization_id) != str(socket_org_id)
+        ):
+            raise ValueError("Unauthorized")
+        if session_data.status == SessionStatus.CLOSED:
+            raise ValueError("This chat is closed")
+
+        agent_repo = AgentRepository(db)
+        agent = (
+            agent_repo.get_agent_in_org(session_data.agent_id, socket_org_id)
+            if session_data.agent_id else None
+        )
+
+        original_agent_message = data.get('message', '')
+        if not isinstance(original_agent_message, str):
+            raise ValueError("Message must be text")
+        agent_message = sanitize_message(original_agent_message)
+        if original_agent_message and not agent_message.strip():
+            logger.warning("Blocked unsafe agent message from user %s", socket_user_id)
+            await sio.emit('error', {
+                'error': 'Your message contains unsafe content and cannot be sent.',
+                'type': 'validation_error'
+            }, to=sid, namespace='/agent')
+            return
+
         files = data.get('files', [])
+        if not isinstance(files, list):
+            raise ValueError("Files must be a list")
+        if files and not (agent and agent.allow_attachments):
+            await sio.emit('error', {
+                'error': 'Attachments are disabled for this AI agent.',
+                'type': 'validation_error'
+            }, to=sid, namespace='/agent')
+            return
+        if not agent_message.strip() and not files:
+            await sio.emit('error', {
+                'error': 'Enter a message or attach a file before sending.',
+                'type': 'validation_error'
+            }, to=sid, namespace='/agent')
+            return
+
+        client_message_id = data.get('client_message_id')
+        if client_message_id is not None:
+            if not isinstance(client_message_id, str) or not client_message_id.strip():
+                raise ValueError("Invalid client message ID")
+            client_message_id = client_message_id.strip()[:128]
+
+        # Server-owned attributes prevent a browser client from marking an
+        # ordinary reply as private or smuggling Shopify/product data into a
+        # customer channel.
+        is_end_chat = bool(data.get('end_chat')) and message_type != 'private_note'
+        end_reason = None
+        end_description = None
+        if is_end_chat:
+            try:
+                end_reason = EndChatReasonType(str(data.get('end_chat_reason') or EndChatReasonType.ISSUE_RESOLVED.value))
+            except (TypeError, ValueError):
+                end_reason = EndChatReasonType.ISSUE_RESOLVED
+            end_description = sanitize_message(str(data.get('end_chat_description') or 'Agent manually ended the chat'))[:2000]
+        attributes = {
+            'end_chat': is_end_chat,
+            'request_rating': bool(data.get('request_rating')) and bool(is_end_chat and is_widget_channel(getattr(session_data, 'channel', None))),
+            'end_chat_reason': end_reason.value if end_reason else None,
+            'end_chat_description': end_description,
+        }
+        if client_message_id:
+            attributes['client_message_id'] = client_message_id
+        if message_type == 'private_note':
+            attributes['is_private'] = True
+
         uploaded_files = []
         if files:
-            org_id = session.get('organization_id')
-            user_id = session.get('user_id')
-            
-            # Get agent and allowed attachment types
-            agent_repo = AgentRepository(db)
-            agent = agent_repo.get_agent(session_data.agent_id) if session_data.agent_id else None
             allowed_types = FileUploadService.get_allowed_types_for_agent(
-                agent.allowed_attachment_types if agent else None
+                agent.allowed_attachment_types
             )
-            
             for file_data in files:
+                if not isinstance(file_data, dict):
+                    raise ValueError("Invalid attachment payload")
                 try:
                     uploaded_file = await FileUploadService.upload_file(
                         file_data=file_data,
-                        org_id=org_id,
-                        user_id=user_id,
+                        org_id=str(socket_org_id),
+                        user_id=str(socket_user_id),
                         allowed_types=allowed_types
                     )
                     uploaded_files.append(uploaded_file)
@@ -1184,41 +1289,18 @@ async def handle_agent_message(sid, data):
                     }, to=sid, namespace='/agent')
                     return
 
-        # Store the agent's message
-        original_agent_message = data.get('message', '')
-        
-        # Sanitize message to prevent XSS attacks
-        agent_message = sanitize_message(original_agent_message)
-        
-        # If message was stripped to empty but had content before, it was malicious
-        if original_agent_message and not agent_message.strip():
-            logger.warning(f"Blocked malicious message from agent {session.get('user_id')}")
-            await sio.emit('error', {
-                'error': 'Your message contains unsafe content and cannot be sent.',
-                'type': 'validation_error'
-            }, to=sid, namespace='/agent')
-            return
-        
-        message_data = {
+        created_message = chat_repo.create_message({
             "message": agent_message,
-            "message_type": data.get('message_type', "agent"),
+            "message_type": message_type,
             "session_id": session_id,
-            "organization_id": session.get('organization_id'),
+            "organization_id": socket_org_id,
             "agent_id": session_data.agent_id if session_data.agent_id else None,
             "customer_id": session_data.customer_id,
-            "user_id": session_data.user_id,
-            "attributes":{
-                "end_chat": data.get('end_chat', False),
-                "request_rating": data.get('request_rating', False),
-                "end_chat_reason": data.get('end_chat_reason', None),
-                "end_chat_description": data.get('end_chat_description', None),
-                "shopify_output": data.get('shopify_output', None)
-            }
-        }
-        
-        created_message = chat_repo.create_message(message_data)
-        
-        # Attach uploaded files to the message
+            "user_id": socket_user_id,
+            "attributes": attributes,
+        })
+
+        attachments = []
         if uploaded_files:
             from app.models import FileAttachment
             for file_info in uploaded_files:
@@ -1228,68 +1310,68 @@ async def handle_agent_message(sid, data):
                     content_type=file_info['content_type'],
                     file_size=file_info['size'],
                     chat_history_id=created_message.id,
-                    organization_id=session.get('organization_id'),
-                    uploaded_by_user_id=session.get('user_id')
+                    organization_id=socket_org_id,
+                    uploaded_by_user_id=socket_user_id
                 )
                 db.add(file_attachment)
-            db.commit()
-            logger.info(f"Attached {len(uploaded_files)} files to agent message {created_message.id}")
-        
-        # Check if this is an end chat message
-        if data.get('end_chat') is True:
-            logger.info(f"Agent ended chat session {session_id}")
-            # Update session status to closed
-            session_repo.update_session_status(session_id, "CLOSED")
-            
-        
-        # Emit to widget clients
-        response_payload = {
-            'message': data['message'],
-            'type': 'agent_message',
-            'message_type': data.get('message_type', 'agent'),
-            'end_chat': data.get('end_chat', False),
-            'request_rating': data.get('request_rating', False),
-            'end_chat_reason': data.get('end_chat_reason', None),
-            'end_chat_description': data.get('end_chat_description', None),
-            'shopify_output': data.get('shopify_output', False)
-        }
-        
-        # Add individual product fields if shopify_output is true
-        if response_payload['shopify_output']:
-            response_payload.update({
-                'product_id': data.get('product_id'),
-                'product_title': data.get('product_title'),
-                'product_description': data.get('product_description'),
-                'product_handle': data.get('product_handle'),
-                'product_inventory': data.get('product_inventory'),
-                'product_price': data.get('product_price'),
-                'product_currency': data.get('product_currency'),
-                'product_image': data.get('product_image'),
-            })
-        
-        # Add attachments to response if files were uploaded
-        if uploaded_files:
-            attachments_data = []
-            for file_info in uploaded_files:
-                file_url = file_info['file_url']
-
-                # Generate S3 signed URL if S3 storage is enabled
-                if settings.S3_FILE_STORAGE:
-                    try:
-                        file_url = await get_s3_signed_url(file_url)
-                    except Exception as e:
-                        logger.error(f"Error generating signed URL for attachment: {str(e)}")
-
-                attachments_data.append({
+                attachments.append({
                     'filename': file_info['filename'],
-                    'file_url': file_url,
+                    'file_url': file_info.get('signed_url') or file_info['file_url'],
                     'content_type': file_info['content_type'],
-                    'file_size': file_info['size']
+                    'file_size': file_info['size'],
                 })
-            response_payload['attachments'] = attachments_data
-            response_payload['message_id'] = created_message.id
+            db.commit()
+            logger.info("Attached %s files to agent message %s", len(uploaded_files), created_message.id)
 
-        delivery = await deliver_to_customer(db, session_data, response_payload)
+        from app.models.user import User
+        sender = db.query(User).filter(User.id == socket_user_id).first()
+        sender_name = sender.full_name if sender else None
+        canonical_payload = {
+            'message_id': created_message.id,
+            'client_message_id': client_message_id,
+            'user_id': str(socket_user_id),
+            'message': agent_message,
+            'message_type': message_type,
+            'type': 'agent_message',
+            'session_id': str(session_data.session_id),
+            'created_at': created_message.created_at.isoformat(),
+            'user_name': sender_name,
+            'attachments': attachments,
+            'attributes': attributes,
+            # The widget historically consumes end-chat metadata from the
+            # top-level Socket.IO payload. Keep it in sync with attributes so
+            # both the REST close endpoint and the legacy agent_message path
+            # trigger the close acknowledgement and rating prompt.
+            'end_chat': is_end_chat,
+            'request_rating': attributes['request_rating'],
+            'end_chat_reason': attributes['end_chat_reason'],
+            'end_chat_description': attributes['end_chat_description'],
+        }
+
+        # Private notes are a dashboard-only record. Never hand them to the
+        # widget or an external channel adapter.
+        if message_type == 'private_note':
+            await sio.emit('chat_reply', canonical_payload, room=str(session_data.session_id), namespace='/agent')
+            await sio.emit('chat_reply', canonical_payload, room=f"user_{socket_user_id}", namespace='/agent')
+            return
+
+        if is_end_chat:
+            logger.info("Agent ended chat session %s", session_id)
+            if not session_repo.close_session(
+                session_id,
+                reason=end_reason,
+                description=end_description,
+            ):
+                raise ValueError("Failed to close chat")
+
+        delivery = await deliver_to_customer(db, session_data, canonical_payload)
+
+        # Echo the stored message back into the inbox namespace. This replaces
+        # the optimistic browser copy by stable IDs and also updates any other
+        # authorised tab without exposing it to unrelated staff.
+        await sio.emit('chat_reply', canonical_payload, room=str(session_data.session_id), namespace='/agent')
+        await sio.emit('chat_reply', canonical_payload, room=f"user_{socket_user_id}", namespace='/agent')
+
         if not delivery.ok:
             if delivery.reason == 'window_expired':
                 error_message = (
@@ -1305,6 +1387,7 @@ async def handle_agent_message(sid, data):
                 'error': error_message,
                 'type': 'delivery_error',
                 'session_id': session_id,
+                'client_message_id': client_message_id,
                 # Lets the inbox offer the template action only when sending one
                 # would actually reopen the conversation.
                 'can_template': delivery.can_template,
@@ -1336,6 +1419,27 @@ async def handle_join_room(sid, data):
             user_id = session_id.split('_')[1]
             if str(session.get('user_id')) != user_id:
                 raise ValueError("Unauthorized to join user room")
+            # A socket can remain open after an administrator revokes a role
+            # or deactivates the account. Re-check the live grants before
+            # joining the room that receives conversation snapshots.
+            db = next(get_db())
+            socket_user = (
+                db.query(User)
+                .filter(
+                    User.id == session.get('user_id'),
+                    User.organization_id == session.get('organization_id'),
+                )
+                .first()
+            )
+            if (
+                not socket_user
+                or not socket_user.is_active
+                or not has_any_permission(
+                    socket_user,
+                    tuple(CHAT_VIEW_PERMISSIONS) + tuple(CHAT_MANAGE_PERMISSIONS),
+                )
+            ):
+                raise ValueError("Unauthorized to join user room")
             await sio.enter_room(sid, session_id, namespace='/agent')
             logger.info(f"Agent {user_id} joined their user room")
             return
@@ -1345,20 +1449,64 @@ async def handle_join_room(sid, data):
             org_id = session_id.removeprefix('org_tickets_')
             if str(session.get('organization_id')) != org_id:
                 raise ValueError("Unauthorized to join org ticket room")
+            db = next(get_db())
+            socket_user = (
+                db.query(User)
+                .filter(
+                    User.id == session.get('user_id'),
+                    User.organization_id == session.get('organization_id'),
+                )
+                .first()
+            )
+            if (
+                not socket_user
+                or not socket_user.is_active
+                or not has_any_permission(socket_user, ('view_tickets', 'manage_tickets', 'super_admin'))
+            ):
+                raise ValueError("Unauthorized to join org ticket room")
             await sio.enter_room(sid, session_id, namespace='/agent')
             logger.info(f"Agent {session.get('user_id')} joined ticket room for org {org_id}")
             return
 
-        # Verify this agent has permission to join this room
+        # Verify the session belongs to the authenticated tenant and that this
+        # user can see it. Unassigned queue sessions have no user room, so the
+        # visibility check is what safely permits authorised agents to join.
         db = next(get_db())
         session_repo = SessionToAgentRepository(db)
         session_data = session_repo.get_session(session_id)
         
-        if not session_data:
+        if not session_data or str(session_data.organization_id) != str(session.get('organization_id')):
             raise ValueError("Invalid session")
-            
-        if str(session_data.user_id) != str(session.get('user_id')):
+        socket_user = (
+            db.query(User)
+            .filter(
+                User.id == session.get('user_id'),
+                User.organization_id == session.get('organization_id'),
+            )
+            .first()
+        )
+        if not socket_user or not socket_user.is_active:
             raise ValueError("Unauthorized to join this room")
+
+        permissions = {
+            permission.name
+            for permission in ((getattr(socket_user, 'role', None) and getattr(socket_user.role, 'permissions', None)) or [])
+            if getattr(permission, 'name', None)
+        }
+        if not has_any_permission(socket_user, tuple(CHAT_VIEW_PERMISSIONS) + tuple(CHAT_MANAGE_PERMISSIONS)):
+            raise ValueError("Unauthorized to join this room")
+
+        is_super_admin = 'super_admin' in permissions
+        can_view_all = is_super_admin or bool({'view_all_chats', 'manage_all_chats'} & permissions)
+        if not can_view_all:
+            has_access = await ChatRepository(db).check_session_access(
+                session_id=session_data.session_id,
+                user_id=socket_user.id if ({'view_assigned_chats', 'manage_assigned_chats'} & permissions) else None,
+                user_groups=[str(group.id) for group in (getattr(socket_user, 'groups', None) or [])] if 'view_assigned_chats' in permissions else [],
+                include_unassigned=is_super_admin or 'view_unassigned_chats' in permissions,
+            )
+            if not has_access:
+                raise ValueError("Unauthorized to join this room")
 
         # Join the room
         await sio.enter_room(sid, session_id, namespace='/agent')

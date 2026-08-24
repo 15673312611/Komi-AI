@@ -120,8 +120,7 @@ class OrganizationRepository:
             return organization
 
         except Exception as e:
-            logger.error(f"Failed to update settings for org {
-                         org_id}: {str(e)}")
+            logger.error(f"Failed to update settings for org {org_id}: {str(e)}")
             self.db.rollback()
             raise
 

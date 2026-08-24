@@ -55,6 +55,18 @@ class ChatRepository:
             ChatHistory.message_type == 'user'
         ).first() is not None
 
+    @staticmethod
+    def effective_ai_auto_reply(session: Optional[SessionToAgent], agent_default: bool = True) -> bool:
+        """Return the session override when one exists, otherwise the agent default.
+
+        ``workflow_state`` predates this setting and is user/configuration data,
+        so only a real boolean is accepted.  Treating strings such as ``"false"``
+        as truthy would silently re-enable automated replies.
+        """
+        state = getattr(session, 'workflow_state', None) or {}
+        override = state.get('ai_auto_reply') if isinstance(state, dict) else None
+        return override if isinstance(override, bool) else bool(agent_default)
+
     def get_message_count_for_period(
         self,
         org_id: UUID | str,
@@ -97,8 +109,13 @@ class ChatRepository:
             logger.error(f"Error getting message count: {str(e)}")
             return 0
 
-    def create_message(self, message_data: Dict[str, Any]) -> ChatHistory:
-        """Create a new chat message."""
+    def create_message(self, message_data: Dict[str, Any], *, commit: bool = True) -> ChatHistory:
+        """Create a new chat message.
+
+        ``commit=False`` is used by state transitions that must persist the
+        message and session update in one transaction (notably ending a chat).
+        Existing callers keep the historical commit-on-success behaviour.
+        """
         try:
             # Convert any Pydantic models in attributes to dict
             if 'attributes' in message_data:
@@ -132,11 +149,14 @@ class ChatRepository:
 
             message = ChatHistory(**message_data)
             self.db.add(message)
-            self.db.commit()
+            self.db.flush()
             self.db.refresh(message)
 
+            if commit:
+                self.db.commit()
+
             # Update session-level sentiment after saving a customer message
-            if message_data.get('message_type') == 'user' and message_data.get('session_id'):
+            if commit and message_data.get('message_type') == 'user' and message_data.get('session_id'):
                 try:
                     self._update_session_sentiment(message_data['session_id'])
                 except Exception as e:
@@ -167,6 +187,34 @@ class ChatRepository:
         failure reason — the inbox treats its presence as "not delivered".
         """
         self.update_message_attributes(message_id, {'delivery_status': reason or 'failed'})
+
+    def find_message_by_client_id(
+        self,
+        session_id: UUID | str,
+        client_message_id: str,
+    ) -> Optional[ChatHistory]:
+        """Find a message by the dashboard's idempotency key.
+
+        The key lives in the existing JSON attributes column, so this small
+        Python-side scan keeps the lookup portable across PostgreSQL and the
+        SQLite test database. A session normally has only a few hundred rows,
+        and this path is used only for retries of state-changing sends.
+        """
+        if isinstance(session_id, str):
+            session_id = UUID(session_id)
+        if not isinstance(client_message_id, str) or not client_message_id:
+            return None
+        rows = (
+            self.db.query(ChatHistory)
+            .filter(ChatHistory.session_id == session_id)
+            .order_by(ChatHistory.id.desc())
+            .all()
+        )
+        for row in rows:
+            attributes = row.attributes if isinstance(row.attributes, dict) else {}
+            if attributes.get("client_message_id") == client_message_id:
+                return row
+        return None
 
     def _channel_account_id(self, channel: Optional[str], session_id) -> Optional[str]:
         """Which connected account a channel conversation belongs to, so the
@@ -464,7 +512,7 @@ class ChatRepository:
                 'id': r.agent_id,
                 'name': r.agent_name,
                 'display_name': r.agent_display_name,
-                'ai_replies_enabled': r.agent_ai_replies_enabled
+                'ai_replies_enabled': r.agent_ai_replies_enabled,
             },
             'last_message': last_messages.get(r.session_id),
             'updated_at': r.updated_at,
@@ -537,6 +585,8 @@ class ChatRepository:
                 Agent.name.label('agent_name'),
                 Agent.display_name.label('agent_display_name'),
                 Agent.ai_replies_enabled.label('agent_ai_replies_enabled'),
+                Agent.allow_attachments.label('agent_allow_attachments'),
+                Agent.allowed_attachment_types.label('agent_allowed_attachment_types'),
                 SessionToAgent.status.label('status'),
                 SessionToAgent.channel.label('channel'),
                 SessionToAgent.group_id.label('group_id'),
@@ -567,6 +617,7 @@ class ChatRepository:
                 Agent.name,
                 Agent.display_name,
                 Agent.ai_replies_enabled,
+                Agent.allow_attachments,
                 SessionToAgent.status,
                 SessionToAgent.channel,
                 SessionToAgent.group_id,
@@ -586,11 +637,17 @@ class ChatRepository:
         # Build messages list with attachments
         messages_list = []
         for msg in messages:
+            attributes = msg.attributes or {}
             msg_dict = {
+                'id': msg.id,
                 'message': msg.message,
                 'message_type': msg.message_type,
                 'created_at': msg.created_at,
-                'attributes': msg.attributes
+                'session_id': msg.session_id,
+                'client_message_id': attributes.get('client_message_id'),
+                'attributes': attributes,
+                'user_name': msg.user.full_name if msg.user else None,
+                'agent_name': msg.agent.display_name or msg.agent.name if msg.agent else None,
             }
             
             # Add attachments with file info if they exist
@@ -608,6 +665,8 @@ class ChatRepository:
                 msg_dict['attachments'] = attachments
             
             messages_list.append(msg_dict)
+
+        session = self.get_session_by_id(session_id, org_id)
         
         # Convert result to dict
         return {
@@ -621,7 +680,9 @@ class ChatRepository:
                 'id': result.agent_id,
                 'name': result.agent_name,
                 'display_name': result.agent_display_name,
-                'ai_replies_enabled': result.agent_ai_replies_enabled
+                'ai_replies_enabled': result.agent_ai_replies_enabled,
+                'allow_attachments': bool(result.agent_allow_attachments),
+                'allowed_attachment_types': result.agent_allowed_attachment_types,
             },
             'status': result.status,
             'channel': result.channel,
@@ -630,7 +691,93 @@ class ChatRepository:
             'session_id': result.session_id,
             'user_id': result.user_id,
             'user_name': result.user_name,
+            'ai_auto_reply': self.effective_ai_auto_reply(
+                session, result.agent_ai_replies_enabled
+            ),
             'created_at': result.created_at,
             'updated_at': result.updated_at,
             'messages': messages_list
         }
+
+    def get_session_by_id(
+        self,
+        session_id: UUID,
+        org_id: UUID
+    ) -> Optional[SessionToAgent]:
+        """Fetch a single SessionToAgent row scoped to the organisation.
+
+        Returns None when the session does not exist or belongs to a different
+        organisation (caller should surface this as a 404 rather than a 403
+        so as not to reveal whether the id exists elsewhere).
+        """
+        return (
+            self.db.query(SessionToAgent)
+            .filter(
+                SessionToAgent.session_id == session_id,
+                SessionToAgent.organization_id == org_id,
+            )
+            .first()
+        )
+
+    def set_ai_auto_reply(
+        self,
+        session_id: UUID,
+        org_id: UUID,
+        enabled: bool,
+    ) -> bool:
+        """Persist the AI auto-reply toggle for *session_id*.
+
+        The setting is stored inside the session's ``workflow_state`` JSON
+        column under the key ``"ai_auto_reply"``.  This avoids a schema
+        migration while still being durable and queryable.
+
+        TODO: once a dedicated ``ai_auto_reply`` boolean column is added to
+        ``session_to_agents``, write directly to that column instead.
+
+        Returns True on success, False when the session was not found.
+        """
+        session = self.get_session_by_id(session_id, org_id)
+        if not session:
+            return False
+        try:
+            # workflow_state may be None if never written before
+            state: dict = dict(session.workflow_state or {})
+            state["ai_auto_reply"] = enabled
+            session.workflow_state = state
+            self.db.commit()
+            return True
+        except Exception as e:
+            logger.error(f"Error setting ai_auto_reply for session {session_id}: {e}")
+            self.db.rollback()
+            raise
+
+    def get_open_counts_by_channel(self, org_id: UUID | str) -> dict:
+        """Return open/transferred session counts grouped by channel name.
+
+        Used by the Inbox page to display per-channel badges without an
+        expensive per-channel query.  The dict has the shape::
+
+            {"web": 3, "whatsapp": 1, ...}
+
+        Both OPEN and TRANSFERRED sessions are counted — a transferred chat
+        still needs attention even though a human is nominally on it.
+        """
+        if isinstance(org_id, str):
+            org_id = UUID(org_id)
+
+        from app.models.session_to_agent import SessionStatus as _SS
+
+        rows = (
+            self.db.query(
+                SessionToAgent.channel,
+                func.count(SessionToAgent.session_id).label("cnt"),
+            )
+            .filter(
+                SessionToAgent.organization_id == org_id,
+                SessionToAgent.status.in_([_SS.OPEN, _SS.TRANSFERRED]),
+            )
+            .group_by(SessionToAgent.channel)
+            .all()
+        )
+        return {row.channel: row.cnt for row in rows}
+

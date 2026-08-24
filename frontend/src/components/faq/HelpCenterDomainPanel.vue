@@ -50,16 +50,16 @@ const phase = computed<'empty' | 'pending' | 'connected'>(() => {
 })
 
 const statusPill = computed(() => {
-  if (phase.value === 'connected') return { label: 'Connected', cls: 'status-pill--teal' }
-  if (phase.value === 'pending') return { label: 'Pending verification', cls: 'status-pill--warn' }
-  return { label: 'Not configured', cls: 'status-pill--idle' }
+  if (phase.value === 'connected') return { label: '已连通生效', cls: 'status-pill--teal' }
+  if (phase.value === 'pending') return { label: '待 DNS 验证', cls: 'status-pill--warn' }
+  return { label: '未配置', cls: 'status-pill--idle' }
 })
 
 const sslPill = computed(() => {
   const status = props.domain?.ssl_status
-  if (status === 'active') return { label: 'Active', cls: 'record-pill--teal' }
-  if (status === 'failed') return { label: 'Failed', cls: 'record-pill--coral' }
-  return { label: 'Provisioning', cls: 'record-pill--idle' }
+  if (status === 'active') return { label: '证书生效中', cls: 'record-pill--teal' }
+  if (status === 'failed') return { label: '证书签发失败', cls: 'record-pill--coral' }
+  return { label: '证书签发中', cls: 'record-pill--idle' }
 })
 
 const liveUrl = computed(() => `https://${currentDomain.value}`)
@@ -72,9 +72,9 @@ function addDomain() {
 async function copy(text: string) {
   try {
     await navigator.clipboard.writeText(text)
-    toast.success('Copied')
+    toast.success('已复制到剪贴板')
   } catch {
-    toast.error('Could not copy — select and copy manually')
+    toast.error('复制失败 — 请手动选中文本复制')
   }
 }
 </script>
@@ -82,7 +82,7 @@ async function copy(text: string) {
 <template>
   <div>
     <div class="domain-head">
-      <h3 class="domain-head__title">Custom domain</h3>
+      <h3 class="domain-head__title">独立自定义域名</h3>
       <span class="status-pill" :class="statusPill.cls">
         <span class="status-pill__dot"></span>
         {{ statusPill.label }}
@@ -92,8 +92,8 @@ async function copy(text: string) {
     <!-- Step 1: enter a domain -->
     <template v-if="phase === 'empty'">
       <p class="domain-copy">
-        Serve your help center from your own subdomain instead of the ChatterMate URL.
-        Enter it below and we'll show you the two DNS records to add.
+        使用您企业的独立域名（如 help.yourbrand.com）提供帮助中心访问。
+        在下方输入域名后，系统将为您生成需要配置的两条 DNS 解析记录。
       </p>
       <div class="domain-form">
         <div class="domain-input">
@@ -106,7 +106,7 @@ async function copy(text: string) {
           />
         </div>
         <button class="btn-primary" type="button" :disabled="busy || !normalizedInput" @click="addDomain">
-          {{ busy ? 'Working…' : 'Add domain' }}
+          {{ busy ? '正在处理…' : '绑定域名' }}
         </button>
       </div>
     </template>
@@ -119,13 +119,13 @@ async function copy(text: string) {
           <a v-if="phase === 'connected'" :href="liveUrl" target="_blank" rel="noopener" class="domain-current__name domain-current__name--link">{{ currentDomain }}</a>
           <span v-else class="domain-current__name">{{ currentDomain }}</span>
         </div>
-        <button class="link-btn" type="button" :disabled="busy" @click="$emit('remove-domain')">Remove</button>
+        <button class="link-btn" type="button" :disabled="busy" @click="$emit('remove-domain')">解绑域名</button>
       </div>
 
       <template v-if="phase === 'pending'">
         <ol class="steps">
-          <li>Add these two records at your DNS provider.</li>
-          <li>Come back and click <strong>Verify domain</strong> — DNS changes can take a few minutes.</li>
+          <li>在您的域名 DNS 解析商处添加下方两条解析记录。</li>
+          <li>配置完成后点击 <strong>验证域名解析</strong> — DNS 全球生效通常需要数分钟。</li>
         </ol>
 
         <div class="records">
@@ -133,23 +133,23 @@ async function copy(text: string) {
             <div class="record__top">
               <span class="record__type">{{ record.type }}</span>
               <span class="record-pill" :class="record.verified ? 'record-pill--teal' : 'record-pill--warn'">
-                {{ record.verified ? 'Detected' : 'Waiting' }}
+                {{ record.verified ? '已检测到' : '等待解析' }}
               </span>
             </div>
             <div class="record__field">
-              <span class="record__label">Name / Host</span>
+              <span class="record__label">主机记录 (Host)</span>
               <div class="record__value">
                 <code>{{ record.host }}</code>
-                <button class="copy-btn" type="button" title="Copy" @click="copy(record.host)">
+                <button class="copy-btn" type="button" title="复制" @click="copy(record.host)">
                   <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2" /><path d="M5 15V5a2 2 0 0 1 2-2h10" /></svg>
                 </button>
               </div>
             </div>
             <div class="record__field">
-              <span class="record__label">Value</span>
+              <span class="record__label">记录值 (Value)</span>
               <div class="record__value">
                 <code>{{ record.value }}</code>
-                <button class="copy-btn" type="button" title="Copy" @click="copy(record.value)">
+                <button class="copy-btn" type="button" title="复制" @click="copy(record.value)">
                   <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2" /><path d="M5 15V5a2 2 0 0 1 2-2h10" /></svg>
                 </button>
               </div>
@@ -159,18 +159,18 @@ async function copy(text: string) {
 
         <div class="verify-row">
           <button class="btn-primary" type="button" :disabled="busy" @click="$emit('verify-domain')">
-            {{ busy ? 'Checking…' : 'Verify domain' }}
+            {{ busy ? '正在验证…' : '验证域名解析' }}
           </button>
           <span class="ssl-note">
             <span class="record-pill" :class="sslPill.cls">SSL {{ sslPill.label }}</span>
-            issued automatically once verified
+            域名验证成功后将自动免费签发 SSL 证书
           </span>
         </div>
       </template>
 
       <template v-else>
         <p class="domain-copy domain-copy--ok">
-          Your help center is live at <a :href="liveUrl" target="_blank" rel="noopener">{{ currentDomain }}</a>.
+          您的帮助中心已在以下域名上线运行：<a :href="liveUrl" target="_blank" rel="noopener">{{ currentDomain }}</a>。
           <span class="record-pill" :class="sslPill.cls">SSL {{ sslPill.label }}</span>
         </p>
       </template>

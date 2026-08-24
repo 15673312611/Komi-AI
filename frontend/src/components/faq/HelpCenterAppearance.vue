@@ -71,7 +71,7 @@ function commitHex() {
   const body = raw.replace(/^#/, '')
   // Accept 3, 6 or 8 hex digits (matches the backend validator).
   if (!/^[0-9a-fA-F]{3}$|^[0-9a-fA-F]{6}$|^[0-9a-fA-F]{8}$/.test(body)) {
-    toast.error('Enter a hex color like #4338CA')
+    toast.error('请输入有效的十六进制颜色值，例如 #4338CA')
     hexDraft.value = props.settings.brand_color
     return
   }
@@ -81,9 +81,9 @@ function commitHex() {
 }
 
 const saveStateLabel = computed(() => {
-  if (props.saveState === 'saving') return 'Saving…'
-  if (props.saveState === 'saved') return 'Saved'
-  if (props.saveState === 'error') return "Couldn't save — edit again to retry"
+  if (props.saveState === 'saving') return '正在保存…'
+  if (props.saveState === 'saved') return '已保存'
+  if (props.saveState === 'error') return '保存失败 — 请重新编辑以重试'
   return ''
 })
 
@@ -97,7 +97,7 @@ function onText(field: 'cta_text' | 'cta_url', event: Event) {
 // Header link rows are mutated in place — the settings engine deep-watches
 // header_links and debounce-saves.
 function addLink() {
-  props.settings.header_links.push({ label: 'New link', url: '' })
+  props.settings.header_links.push({ label: '导航链接', url: '' })
 }
 
 function removeLink(index: number) {
@@ -108,8 +108,8 @@ function removeLink(index: number) {
 <template>
   <section class="appearance">
     <div class="section-head">
-      <h2 class="section-head__title">Help center appearance</h2>
-      <span class="section-head__sub">logo, color &amp; header links</span>
+      <h2 class="section-head__title">帮助中心外观定制</h2>
+      <span class="section-head__sub">品牌 Logo、主题色与顶部导航</span>
       <span v-if="saveStateLabel" class="section-head__save" :class="`is-${saveState}`">{{ saveStateLabel }}</span>
     </div>
 
@@ -117,7 +117,7 @@ function removeLink(index: number) {
       <!-- controls -->
       <div class="controls">
         <div>
-          <label class="mono-label">LOGO</label>
+          <label class="mono-label">品牌 LOGO</label>
           <HelpCenterLogoField
             :image-url="settings.logo_url"
             kind="logo"
@@ -127,7 +127,7 @@ function removeLink(index: number) {
         </div>
 
         <div>
-          <label class="mono-label">FAVICON</label>
+          <label class="mono-label">网页标签图标 FAVICON</label>
           <HelpCenterLogoField
             :image-url="settings.favicon_url"
             kind="favicon"
@@ -140,7 +140,7 @@ function removeLink(index: number) {
         </div>
 
         <div>
-          <label class="mono-label">BRAND COLOR</label>
+          <label class="mono-label">品牌主色调</label>
           <div class="swatches">
             <button
               v-for="color in BRAND_SWATCHES"
@@ -158,7 +158,7 @@ function removeLink(index: number) {
               class="swatch swatch--custom"
               :class="{ 'swatch--selected': !isPreset }"
               :style="!isPreset ? { background: settings.brand_color, boxShadow: `0 0 0 2px ${settings.brand_color}` } : {}"
-              title="Custom color"
+              title="自定义颜色"
             >
               <input type="color" class="swatch__picker" :value="pickerValue" @change="onPicker" />
               <svg v-if="isPreset" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14" /></svg>
@@ -172,47 +172,47 @@ function removeLink(index: number) {
               maxlength="8"
               spellcheck="false"
               placeholder="4338CA"
-              aria-label="Brand color hex code"
+              aria-label="品牌色 Hex 代码"
               @input="hexDraft = ($event.target as HTMLInputElement).value"
               @keydown.enter="commitHex"
               @blur="commitHex"
             />
           </div>
 
-          <p class="hint">Recolors buttons, links, search and highlights across your help center.</p>
+          <p class="hint">应用于帮助中心前台的所有按钮、超链接、搜索框及高亮强调色。</p>
         </div>
 
         <div>
-          <label class="mono-label">HEADER LINKS</label>
-          <p class="hint hint--tight">Links shown in your help center header — point them back to your website.</p>
+          <label class="mono-label">顶部导航链接</label>
+          <p class="hint hint--tight">展示在帮助中心顶部的快捷外链 — 可链接回您的官方网站或产品。</p>
           <div class="link-rows">
             <div v-for="(link, index) in settings.header_links" :key="index" class="link-row">
-              <input v-model="link.label" class="text-input text-input--label" type="text" placeholder="Label" />
+              <input v-model="link.label" class="text-input text-input--label" type="text" placeholder="链接名称" />
               <div class="url-input">
                 <span class="url-input__prefix">https://</span>
                 <input v-model="link.url" type="text" placeholder="yoursite.com" />
               </div>
-              <button class="remove-btn" type="button" title="Remove" @click="removeLink(index)">
+              <button class="remove-btn" type="button" title="删除链接" @click="removeLink(index)">
                 <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
               </button>
             </div>
           </div>
           <button class="add-link" type="button" @click="addLink">
             <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14" /></svg>
-            Add link
+            + 添加链接
           </button>
 
           <div class="divider"></div>
 
           <div class="row-head">
-            <label class="mono-label mono-label--inline">PRIMARY BUTTON</label>
+            <label class="mono-label mono-label--inline">右上角行动按钮 (CTA)</label>
             <label class="switch switch--sm">
               <input type="checkbox" :checked="settings.cta_enabled" @change="$emit('save-now', { cta_enabled: ($event.target as HTMLInputElement).checked })" />
               <span class="switch__track"><span class="switch__knob"></span></span>
             </label>
           </div>
           <div class="link-row" :class="{ 'link-row--off': !settings.cta_enabled }">
-            <input class="text-input text-input--label" type="text" placeholder="Label" :disabled="!settings.cta_enabled" :value="settings.cta_text || ''" @input="onText('cta_text', $event)" />
+            <input class="text-input text-input--label" type="text" placeholder="按钮文案" :disabled="!settings.cta_enabled" :value="settings.cta_text || ''" @input="onText('cta_text', $event)" />
             <div class="url-input">
               <span class="url-input__prefix">https://</span>
               <input type="text" placeholder="app.yoursite.com" :disabled="!settings.cta_enabled" :value="settings.cta_url || ''" @input="onText('cta_url', $event)" />
@@ -223,11 +223,11 @@ function removeLink(index: number) {
 
       <!-- live preview -->
       <div class="preview-col">
-        <label class="mono-label">LIVE PREVIEW</label>
+        <label class="mono-label">前台实时预览</label>
         <HelpCenterPreview :settings="settings" />
         <p class="preview-note">
-          Changes apply instantly to your published help center at
-          <span class="preview-note__url">{{ settings.live_url }}</span>.
+          更改将实时同步生效至您已公开的帮助中心页面：
+          <span class="preview-note__url">{{ settings.live_url }}</span>。
         </p>
       </div>
     </div>

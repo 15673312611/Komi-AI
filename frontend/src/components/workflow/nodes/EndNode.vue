@@ -43,12 +43,12 @@ defineProps<{
       </div>
       
       <div v-if="data.config?.endType" class="node-preview">
-        <div class="preview-label">End Type:</div>
+        <div class="preview-label">结束类型：</div>
         <div class="preview-content">{{ data.config.endType }}</div>
       </div>
       
       <div v-if="data.config?.finalMessage" class="node-preview">
-        <div class="preview-label">Final Message:</div>
+        <div class="preview-label">结束语：</div>
         <div class="preview-content">
           {{ data.config.finalMessage.substring(0, 80) }}{{ data.config.finalMessage.length > 80 ? '...' : '' }}
         </div>

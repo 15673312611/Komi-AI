@@ -68,7 +68,7 @@ const load = async () => {
     templates.value = result
   } catch (error: any) {
     if (token !== loadToken) return
-    loadError.value = error?.response?.data?.detail || 'Could not load templates'
+    loadError.value = error?.response?.data?.detail || '加载消息模板列表失败'
     templates.value = []
   } finally {
     if (token === loadToken) loading.value = false
@@ -110,14 +110,13 @@ watch(accountId, () => {
 </script>
 
 <template>
-  <BaseModal title="WhatsApp templates" width="620px" @close="emit('close')">
+  <BaseModal title="WhatsApp 消息模板管理" width="620px" @close="emit('close')">
     <p class="wtm-intro">
-      Templates reopen a conversation after the customer's 24-hour window closes. You write them
-      in WhatsApp Manager; once Meta approves one, it appears here and your agents can send it.
+      当客户距离上一条消息超过 24 小时服务窗口关闭后，需通过官方模板消息重新唤醒会话。您可以在 WhatsApp 管理后台创建模板；经 Meta 审核通过后将同步显示在此处，供客服与智能体选用发送。
     </p>
 
     <label v-if="accounts.length > 1" class="wtm-field">
-      <span class="wtm-label">Number</span>
+      <span class="wtm-label">关联号码</span>
       <select v-model="accountId" class="wtm-input">
         <option v-for="account in accounts" :key="account.id" :value="account.id">
           {{ account.display_name || account.external_account_id }}
@@ -136,7 +135,7 @@ watch(accountId, () => {
       </div>
 
       <div v-else-if="templates.length === 0" class="wtm-empty">
-        <p>No templates yet.</p>
+        <p>暂无已审核通过的消息模板。</p>
       </div>
 
       <ul v-else class="wtm-list">
@@ -163,13 +162,12 @@ watch(accountId, () => {
     <!-- Meta's Template Library is where these get written: ~150 pre-written,
          pre-localised templates, already shaped to pass its review. -->
     <div v-if="accountId && !loading" class="wtm-create-guide">
-      <h4 class="wtm-guide-title">Add a template</h4>
+      <h4 class="wtm-guide-title">如何添加新消息模板</h4>
       <ol class="wtm-steps">
-        <li>Open WhatsApp Manager and go to <strong>Template library</strong>.</li>
-        <li>Pick a ready-made template, or choose <strong>Create template</strong> to write one.</li>
+        <li>打开 WhatsApp Manager 管理后台并前往 <strong>模板库 (Template library)</strong>。</li>
+        <li>选择官方预置的精选模板，或点击 <strong>创建模板 (Create template)</strong> 自定义文本。</li>
         <li>
-          Come back and <button type="button" class="wtm-link" @click="load">refresh</button>
-          once Meta approves it.
+          经 Meta 审核通过后，返回此处并点击 <button type="button" class="wtm-link" @click="load">刷新列表</button> 即可直接调用。
         </li>
       </ol>
       <a
@@ -179,7 +177,7 @@ watch(accountId, () => {
         target="_blank"
         rel="noopener noreferrer"
       >
-        Open WhatsApp Manager
+        打开 WhatsApp 管理后台
         <font-awesome-icon icon="fa-solid fa-arrow-up-right-from-square" />
       </a>
     </div>

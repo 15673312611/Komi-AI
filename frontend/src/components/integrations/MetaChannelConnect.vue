@@ -41,31 +41,31 @@ const META_APPS_URL = 'https://developers.facebook.com/apps/'
 // rather than carrying markup, so it renders as escaped text.
 const META_FORMS = {
   whatsapp: {
-    title: 'Connect WhatsApp',
-    introBefore: 'From your Meta app (',
-    introAfter: ' → WhatsApp → API Setup), copy the phone number ID and a permanent access token.',
+    title: '连接 WhatsApp Business',
+    introBefore: '在您的 Meta 开发者应用后台 (',
+    introAfter: ' → WhatsApp → API 设置) 中，复制电话号码 ID 与永久访问令牌。',
     fields: [
-      { key: 'phone_number_id', label: 'Phone number ID', placeholder: '1234567890', secret: false },
-      { key: 'access_token', label: 'Access token', placeholder: 'EAAG…', secret: true },
-      { key: 'waba_id', label: 'WhatsApp Business Account ID (optional)', placeholder: 'for webhook auto-subscribe', secret: false },
+      { key: 'phone_number_id', label: '电话号码 ID (Phone Number ID)', placeholder: '1234567890', secret: false },
+      { key: 'access_token', label: '访问令牌 (Access Token)', placeholder: 'EAAG…', secret: true },
+      { key: 'waba_id', label: '商业账号 ID (WABA ID，选填)', placeholder: '用于 Webhook 自动订阅', secret: false },
     ],
   },
   messenger: {
-    title: 'Connect Messenger',
-    introBefore: 'From your Meta app (',
-    introAfter: ' → Messenger → Settings), generate a page access token for the Facebook Page you want to connect.',
+    title: '连接 Facebook Messenger',
+    introBefore: '在您的 Meta 开发者应用后台 (',
+    introAfter: ' → Messenger → 设置) 中，为您要绑定的 Facebook 公共主页生成主页访问令牌。',
     fields: [
-      { key: 'page_id', label: 'Facebook Page ID', placeholder: '1234567890', secret: false },
-      { key: 'page_access_token', label: 'Page access token', placeholder: 'EAAG…', secret: true },
+      { key: 'page_id', label: '公共主页 ID (Page ID)', placeholder: '1234567890', secret: false },
+      { key: 'page_access_token', label: '主页访问令牌 (Page Access Token)', placeholder: 'EAAG…', secret: true },
     ],
   },
   instagram: {
-    title: 'Connect Instagram',
-    introBefore: 'Your Instagram account must be a professional account linked to a Facebook Page. Use the linked page’s access token, from ',
-    introAfter: ' → Instagram.',
+    title: '连接 Instagram Direct',
+    introBefore: '您的 Instagram 账号需为已关联 Facebook 公共主页的商业账户。请使用该关联主页的访问令牌，前往 ',
+    introAfter: ' → Instagram 查看配置。',
     fields: [
-      { key: 'ig_id', label: 'Instagram account ID', placeholder: '17841400000000000', secret: false },
-      { key: 'page_access_token', label: 'Linked page access token', placeholder: 'EAAG…', secret: true },
+      { key: 'ig_id', label: 'Instagram 账号 ID', placeholder: '17841400000000000', secret: false },
+      { key: 'page_access_token', label: '关联主页访问令牌 (Page Access Token)', placeholder: 'EAAG…', secret: true },
     ],
   },
 } as const
@@ -107,9 +107,9 @@ onMounted(async () => {
 })
 
 const connect = async () => {
-  const missing = form.value.fields.filter(f => !f.label.includes('optional') && !values.value[f.key]?.trim())
+  const missing = form.value.fields.filter(f => !f.label.includes('选填') && !f.label.includes('optional') && !values.value[f.key]?.trim())
   if (missing.length > 0) {
-    toast.error(`Please fill in: ${missing.map(f => f.label).join(', ')}`)
+    toast.error(`请填写必要项：${missing.map(f => f.label).join(', ')}`)
     return
   }
   try {
@@ -126,9 +126,9 @@ const connect = async () => {
     } else {
       account.value = await channelsService.connectInstagram(payload)
     }
-    toast.success(`Connected ${account.value.display_name || form.value.title.replace('Connect ', '')}`)
+    toast.success(`已成功连接 ${account.value.display_name || form.value.title.replace('连接 ', '')}`)
   } catch (error: any) {
-    toast.error(error?.response?.data?.detail || `Failed to connect ${props.channel}`)
+    toast.error(error?.response?.data?.detail || `连接 ${props.channel} 失败`)
   } finally {
     connecting.value = false
   }
@@ -139,10 +139,10 @@ const saveAgent = async () => {
   try {
     savingAgent.value = true
     const updated = await channelsService.setAccountAgent(account.value.id, selectedAgentId.value)
-    toast.success('Agent assigned — this channel is live!')
+    toast.success('已指定接待智能体 — 该渠道已正式上线！')
     emit('connected', updated)
   } catch (error: any) {
-    toast.error(error?.response?.data?.detail || 'Failed to assign agent')
+    toast.error(error?.response?.data?.detail || '指定接待智能体失败')
   } finally {
     savingAgent.value = false
   }
@@ -174,10 +174,10 @@ const saveAgent = async () => {
           <p class="meta-intro">{{ signupCopy.intro }}</p>
           <button class="meta-btn meta-btn-primary meta-signup-btn" :disabled="signingUp" @click="startSignup">
             <font-awesome-icon v-if="signingUp" icon="fa-solid fa-spinner" spin />
-            {{ signingUp ? 'Waiting for Meta…' : signupCopy.cta }}
+            {{ signingUp ? '等待 Meta 授权中…' : signupCopy.cta }}
           </button>
           <button class="meta-link-btn" @click="showManualForm = true">
-            Enter credentials manually instead
+            改为手动输入凭证配置
           </button>
         </div>
 
@@ -203,9 +203,9 @@ const saveAgent = async () => {
           />
         </div>
         <div class="meta-actions">
-          <button class="meta-btn meta-btn-secondary" @click="emit('close')">Cancel</button>
+          <button class="meta-btn meta-btn-secondary" @click="emit('close')">取消</button>
           <button class="meta-btn meta-btn-primary" :disabled="connecting" @click="connect">
-            {{ connecting ? 'Connecting…' : 'Connect' }}
+            {{ connecting ? '正在连接…' : '立即连接' }}
           </button>
         </div>
         </template>
@@ -214,19 +214,19 @@ const saveAgent = async () => {
       <!-- Step 2: route to an agent -->
       <div v-else class="meta-modal-body">
         <p class="meta-intro">
-          <strong>{{ account.display_name }}</strong> is connected.
-          Choose which AI agent answers its messages:
+          <strong>{{ account.display_name }}</strong> 已成功连接。
+          请选择由哪位 AI 智能体负责答复客户消息：
         </p>
-        <label class="meta-label" for="meta-agent">AI agent</label>
+        <label class="meta-label" for="meta-agent">接待 AI 智能体</label>
         <select id="meta-agent" v-model="selectedAgentId" class="meta-input">
           <option v-for="agent in agents" :key="String(agent.id)" :value="String(agent.id)">
             {{ agent.display_name || agent.name }}
           </option>
         </select>
         <div class="meta-actions">
-          <button class="meta-btn meta-btn-secondary" @click="emit('connected', account)">Skip for now</button>
+          <button class="meta-btn meta-btn-secondary" @click="emit('connected', account)">稍后指定</button>
           <button class="meta-btn meta-btn-primary" :disabled="savingAgent || !selectedAgentId" @click="saveAgent">
-            {{ savingAgent ? 'Saving…' : 'Assign agent' }}
+            {{ savingAgent ? '正在保存…' : '确认指定智能体' }}
           </button>
         </div>
       </div>

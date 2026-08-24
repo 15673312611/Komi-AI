@@ -39,13 +39,13 @@ const EXTENSION_TO_MIME: Record<string, string> = {
 // Validate extension matches MIME type
 function validateExtension(filename: string, mimeType: string): { valid: boolean; error?: string } {
   const ext = filename.toLowerCase().substring(filename.lastIndexOf('.'))
-  if (!ext || ext === '.') return { valid: false, error: 'File must have an extension' }
+  if (!ext || ext === '.') return { valid: false, error: '文件必须包含扩展名' }
   if (!(ext in EXTENSION_TO_MIME)) {
-    return { valid: false, error: `File type not allowed. Allowed: ${Object.keys(EXTENSION_TO_MIME).map(e => e.replace('.', '').toUpperCase()).join(', ')}` }
+    return { valid: false, error: `不支持该文件类型。支持的格式：${Object.keys(EXTENSION_TO_MIME).map(e => e.replace('.', '').toUpperCase()).join(', ')}` }
   }
   const expectedMime = EXTENSION_TO_MIME[ext]
   if ((mimeType === 'image/jpeg' || mimeType === 'image/jpg') && (expectedMime === 'image/jpeg' || expectedMime === 'image/jpg')) return { valid: true }
-  if (expectedMime !== mimeType) return { valid: false, error: `File extension ${ext} does not match content type` }
+  if (expectedMime !== mimeType) return { valid: false, error: `文件扩展名 ${ext} 与文件内容类型不符` }
   return { valid: true }
 }
 
@@ -57,7 +57,7 @@ async function validateMagicBytes(file: File): Promise<{ valid: boolean; error?:
     const buffer = await file.slice(0, 4).arrayBuffer()
     const bytes = new Uint8Array(buffer)
     if ((bytes[0] === 0x50 && bytes[1] === 0x4b) || (bytes[0] === 0xd0 && bytes[1] === 0xcf)) return { valid: true }
-    return { valid: false, error: 'File content does not match Office document format' }
+    return { valid: false, error: '文件内容与 Office 文档格式不符' }
   }
   const MAGIC_BYTES: Record<string, number[][]> = {
     'image/jpeg': [[0xff, 0xd8, 0xff, 0xe0], [0xff, 0xd8, 0xff, 0xe1], [0xff, 0xd8, 0xff, 0xdb]],
@@ -72,14 +72,14 @@ async function validateMagicBytes(file: File): Promise<{ valid: boolean; error?:
   if (mimeType === 'image/webp') {
     if (fileBytes[0] === 0x52 && fileBytes[1] === 0x49 && fileBytes[2] === 0x46 && fileBytes[3] === 0x46 &&
         fileBytes[8] === 0x57 && fileBytes[9] === 0x45 && fileBytes[10] === 0x42 && fileBytes[11] === 0x50) return { valid: true }
-    return { valid: false, error: 'File content does not match WebP format' }
+    return { valid: false, error: '文件内容与 WebP 图片格式不符' }
   }
   for (const sig of signatures) {
     let match = true
     for (let i = 0; i < sig.length; i++) { if (fileBytes[i] !== sig[i]) { match = false; break } }
     if (match) return { valid: true }
   }
-  return { valid: false, error: `File content does not match ${mimeType} format` }
+  return { valid: false, error: `文件内容与 ${mimeType} 格式不符` }
 }
 
 const props = defineProps<{
@@ -224,7 +224,7 @@ const compressImage = async (file: File, maxSizeKB: number = 500): Promise<{blob
 
 const uploadFiles = async (files: File[]) => {
   if (!canUploadMore.value) {
-    emit('error', `Maximum ${maxFiles.value} files allowed`)
+    emit('error', `最多只能上传 ${maxFiles.value} 个文件`)
     return
   }
   
@@ -232,7 +232,7 @@ const uploadFiles = async (files: File[]) => {
   const filesToUpload = files.slice(0, remainingSlots)
   
   if (files.length > remainingSlots) {
-    emit('error', `Only ${remainingSlots} more file(s) can be uploaded`)
+    emit('error', `最多还能再上传 ${remainingSlots} 个文件`)
   }
   
   const TARGET_SIZE_KB = 500 // Target 500KB after compression
@@ -244,28 +244,28 @@ const uploadFiles = async (files: File[]) => {
       const isDuplicate = uploadedFiles.value.some(f => f.filename === file.name)
       if (isDuplicate) {
         console.warn(`File ${file.name} is already selected`)
-        emit('error', `File "${file.name}" is already selected`)
+        emit('error', `文件 "${file.name}" 已被添加`)
         continue
       }
       
       // SECURITY: Validate file type is allowed
       if (!ALLOWED_FILE_TYPES.has(file.type)) {
         const allowed = Object.keys(EXTENSION_TO_MIME).map(e => e.toUpperCase().replace('.', '')).join(', ')
-        emit('error', `File type "${file.type}" is not allowed. Allowed: ${allowed}`)
+        emit('error', `不支持文件格式 "${file.type}"。支持的格式：${allowed}`)
         continue
       }
       
       // SECURITY: Validate extension matches MIME type
       const extValidation = validateExtension(file.name, file.type)
       if (!extValidation.valid) {
-        emit('error', `Security check failed: ${extValidation.error}`)
+        emit('error', `安全校验失败：${extValidation.error}`)
         continue
       }
       
       // SECURITY: Validate magic bytes
       const magicValidation = await validateMagicBytes(file)
       if (!magicValidation.valid) {
-        emit('error', `Security check failed: ${magicValidation.error}`)
+        emit('error', `安全校验失败：${magicValidation.error}`)
         continue
       }
       
@@ -351,7 +351,7 @@ const uploadFiles = async (files: File[]) => {
       }
     } catch (error) {
       console.error('File read error:', error)
-      emit('error', `Failed to read ${file.name}`)
+      emit('error', `读取文件 ${file.name} 失败`)
     }
   }
 }
@@ -431,7 +431,7 @@ defineExpose({
       class="upload-button"
       :disabled="uploading"
       @click="openFilePicker"
-      :title="'Attach files (or paste screenshots)'"
+      :title="'添加附件（或直接粘贴截图）'"
     >
       <svg
         width="20"
@@ -469,7 +469,7 @@ defineExpose({
           <polyline points="17 8 12 3 7 8"></polyline>
           <line x1="12" y1="3" x2="12" y2="15"></line>
         </svg>
-        <p>Drop files here</p>
+        <p>松开鼠标上传文件</p>
       </div>
     </div>
     
@@ -509,7 +509,7 @@ defineExpose({
           type="button"
           class="file-preview-remove"
           @click="removeFile(index)"
-          :title="'Remove file'"
+          :title="'移除文件'"
         >
           ×
         </button>
@@ -519,7 +519,7 @@ defineExpose({
     <!-- Upload progress -->
     <div v-if="uploading" class="upload-progress">
       <div class="upload-spinner"></div>
-      <span>Uploading...</span>
+      <span>正在上传…</span>
     </div>
   </div>
 </template>

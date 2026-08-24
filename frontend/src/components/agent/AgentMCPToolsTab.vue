@@ -164,10 +164,10 @@ onMounted(() => {
         <div class="empty-icon">
           <span v-for="i in 4" :key="i" class="empty-icon-dot"></span>
         </div>
-        <h4>No MCP Tools Connected</h4>
-        <p>Connect MCP tools to extend your agent's capabilities with external services and APIs.</p>
+        <h4>暂未连接 MCP 扩展工具</h4>
+        <p>连接标准 MCP (Model Context Protocol) 服务端，为智能体扩展私有数据库查询、实时搜索及自定义 API 工具能力。</p>
         <button class="primary-button" @click="openCreateModal">
-          Create Your First Tool
+          创建第一个 MCP 工具
         </button>
       </div>
 
@@ -187,23 +187,23 @@ onMounted(() => {
                   <span class="tool-name-text">{{ tool.name }}</span>
                   <span class="transport-chip">{{ getTransportTypeInfo(tool.transport_type).label }}</span>
                 </div>
-                <div class="tool-desc">{{ tool.description || 'Custom MCP tool' }}</div>
+                <div class="tool-desc">{{ tool.description || '自定义 MCP 协议工具' }}</div>
               </div>
             </div>
             <div class="tool-card-actions">
               <span class="tool-status">
-                <span class="status-dot"></span>{{ tool.enabled ? 'connected' : 'disabled' }}
+                <span class="status-dot"></span>{{ tool.enabled ? '已连接运行' : '已停用' }}
               </span>
               <button
                 class="test-button"
                 :disabled="testingToolId !== null"
                 @click="testMCPTool(tool.id)"
-                title="Connect to the server and list its tools"
+                title="连接服务端并列出其可用函数工具"
               >
-                {{ testingToolId === tool.id ? 'Testing…' : 'Test' }}
+                {{ testingToolId === tool.id ? '正在检测…' : '测试连通' }}
               </button>
-              <button class="remove-button" @click="confirmDelete(tool.id)" title="Remove tool">
-                Remove
+              <button class="remove-button" @click="confirmDelete(tool.id)" title="移除此工具">
+                移除
               </button>
             </div>
           </div>
@@ -213,7 +213,7 @@ onMounted(() => {
             :class="testResults[tool.id].success ? 'test-result--ok' : 'test-result--fail'"
           >
             <template v-if="testResults[tool.id].success">
-              ✓ Connected — {{ testResults[tool.id].functions.length }} tool{{ testResults[tool.id].functions.length === 1 ? '' : 's' }} available:
+              ✓ 服务端连接成功 — 发现 {{ testResults[tool.id].functions.length }} 个可用函数工具:
               {{ testResults[tool.id].functions.join(', ') }}
             </template>
             <template v-else>
@@ -228,14 +228,14 @@ onMounted(() => {
     <div v-if="showCreateModal" class="modal-overlay" @click.self="showCreateModal = false">
       <div class="modal-content large">
         <div class="modal-header">
-          <h3>Create MCP tool</h3>
+          <h3>新建 MCP 扩展工具</h3>
           <button class="close-button" @click="showCreateModal = false">✕</button>
         </div>
 
         <div class="modal-body">
           <!-- Presets -->
           <div class="form-section">
-            <h4>Quick start presets</h4>
+            <h4>快速预设模板</h4>
             <div class="presets-grid">
               <button
                 v-for="preset in mcpPresets"
@@ -252,25 +252,25 @@ onMounted(() => {
 
           <!-- Basic Info -->
           <div class="form-section">
-            <h4>Basic information</h4>
+            <h4>基础信息</h4>
             <div class="form-grid">
               <div class="form-group">
-                <label for="tool-name">Tool name <span class="req">*</span></label>
+                <label for="tool-name">工具名称 <span class="req">*</span></label>
                 <input 
                   id="tool-name"
                   v-model="createForm.name" 
                   type="text" 
-                  placeholder="Enter tool name"
+                  placeholder="输入工具名称，如 Database-Search"
                   required
                 >
               </div>
               <div class="form-group">
-                <label for="tool-description">Description</label>
+                <label for="tool-description">功能描述</label>
                 <input 
                   id="tool-description"
                   v-model="createForm.description" 
                   type="text" 
-                  placeholder="What does this tool do?"
+                  placeholder="该工具提供哪些函数能力？"
                 >
               </div>
             </div>
@@ -278,7 +278,7 @@ onMounted(() => {
 
           <!-- Transport Type -->
           <div class="form-section">
-            <h4>Transport type</h4>
+            <h4>传输协议 (Transport Type)</h4>
             <div class="transport-types">
               <label
                 v-for="type in transportTypes"
@@ -302,15 +302,15 @@ onMounted(() => {
 
           <!-- STDIO Configuration -->
           <div v-if="createForm.transport_type === 'stdio'" class="form-section">
-            <h4>STDIO Configuration</h4>
+            <h4>STDIO 命令行进程配置</h4>
             <div class="form-grid">
               <div class="form-group">
-                <label for="command">Command *</label>
+                <label for="command">执行命令 *</label>
                 <input 
                   id="command"
                   v-model="createForm.command" 
                   type="text" 
-                  placeholder="e.g., uvx, npx, node"
+                  placeholder="例如：uvx, npx, node, python"
                   required
                 >
               </div>
@@ -318,16 +318,16 @@ onMounted(() => {
 
             <!-- Arguments -->
             <div class="form-group">
-              <label>Arguments</label>
+              <label>启动参数 (Arguments)</label>
               <div class="input-list">
                 <div class="input-add">
                   <input 
                     v-model="newArg" 
                     type="text" 
-                    placeholder="Add argument"
+                    placeholder="输入启动参数"
                     @keyup.enter="handleAddArg"
                   >
-                  <button type="button" @click="handleAddArg">Add</button>
+                  <button type="button" @click="handleAddArg">添加</button>
                 </div>
                 <div v-if="createForm.args && createForm.args.length" class="list-items">
                   <div v-for="(arg, index) in createForm.args" :key="index" class="list-item">
@@ -340,22 +340,22 @@ onMounted(() => {
 
             <!-- Environment Variables -->
             <div class="form-group">
-              <label>Environment Variables</label>
+              <label>环境变量 (Environment Variables)</label>
               <div class="input-list">
                 <div class="input-add dual">
                   <input 
                     v-model="newEnvKey" 
                     type="text" 
-                    placeholder="Variable name"
+                    placeholder="变量名 (KEY)"
                     @keyup.enter="handleAddEnvVar"
                   >
                   <input 
                     v-model="newEnvValue" 
                     type="text" 
-                    placeholder="Variable value"
+                    placeholder="变量值 (VALUE)"
                     @keyup.enter="handleAddEnvVar"
                   >
-                  <button type="button" @click="handleAddEnvVar">Add</button>
+                  <button type="button" @click="handleAddEnvVar">添加</button>
                 </div>
                 <div v-if="createForm.env_vars && Object.keys(createForm.env_vars).length" class="list-items">
                   <div v-for="(value, key) in createForm.env_vars" :key="key" class="list-item">
@@ -369,10 +369,10 @@ onMounted(() => {
 
           <!-- HTTP/SSE Configuration -->
           <div v-else-if="createForm.transport_type === 'http' || createForm.transport_type === 'sse'" class="form-section">
-            <h4>{{ createForm.transport_type.toUpperCase() }} Configuration</h4>
+            <h4>{{ createForm.transport_type.toUpperCase() }} 远程服务端配置</h4>
             <div class="form-grid">
               <div class="form-group">
-                <label for="url">Server URL *</label>
+                <label for="url">服务端 Endpoint URL *</label>
                 <input 
                   id="url"
                   v-model="createForm.url" 
@@ -382,7 +382,7 @@ onMounted(() => {
                 >
               </div>
               <div class="form-group">
-                <label for="timeout">Timeout (seconds)</label>
+                <label for="timeout">请求超时时间 (秒)</label>
                 <input 
                   id="timeout"
                   v-model.number="createForm.timeout" 
@@ -396,7 +396,7 @@ onMounted(() => {
 
             <div v-if="createForm.transport_type === 'sse'" class="form-grid">
               <div class="form-group">
-                <label for="sse-timeout">SSE Read Timeout (seconds)</label>
+                <label for="sse-timeout">SSE 流式读取超时 (秒)</label>
                 <input 
                   id="sse-timeout"
                   v-model.number="createForm.sse_read_timeout" 
@@ -410,22 +410,22 @@ onMounted(() => {
 
             <!-- Headers -->
             <div class="form-group">
-              <label>HTTP Headers</label>
+              <label>自定义 HTTP 请求头 (Headers)</label>
               <div class="input-list">
                 <div class="input-add dual">
                   <input 
                     v-model="newHeaderKey" 
                     type="text" 
-                    placeholder="Header name"
+                    placeholder="请求头 Header 名称"
                     @keyup.enter="handleAddHeader"
                   >
                   <input 
                     v-model="newHeaderValue" 
                     type="text" 
-                    placeholder="Header value"
+                    placeholder="请求头 Header 值"
                     @keyup.enter="handleAddHeader"
                   >
-                  <button type="button" @click="handleAddHeader">Add</button>
+                  <button type="button" @click="handleAddHeader">添加</button>
                 </div>
                 <div v-if="createForm.headers && Object.keys(createForm.headers).length" class="list-items">
                   <div v-for="(value, key) in createForm.headers" :key="key" class="list-item">
@@ -440,7 +440,7 @@ onMounted(() => {
 
         <div class="modal-footer">
           <button type="button" class="secondary-button" @click="showCreateModal = false">
-            Cancel
+            取消
           </button>
           <button 
             type="button" 
@@ -448,7 +448,7 @@ onMounted(() => {
             @click="handleCreateTool"
             :disabled="!createForm.name.trim()"
           >
-            Create Tool
+            创建工具
           </button>
         </div>
       </div>
@@ -458,25 +458,25 @@ onMounted(() => {
     <div v-if="showLinkModal" class="modal-overlay" @click.self="showLinkModal = false">
       <div class="modal-content">
         <div class="modal-header">
-          <h3>Link existing tools</h3>
+          <h3>关联已有 MCP 工具</h3>
           <button class="close-button" @click="showLinkModal = false">✕</button>
         </div>
 
         <div class="modal-body">
           <div v-if="isLoadingAvailable" class="loading-state">
             <div class="loading-spinner"></div>
-            <p>Loading available tools...</p>
+            <p>正在加载已有工具...</p>
           </div>
 
           <div v-else-if="!availableMCPTools.length" class="empty-state modal-empty">
-            <p>No tools available to link. Create a new tool first.</p>
+            <p>暂无可关联的工具，请先创建新的 MCP 工具。</p>
           </div>
 
           <div v-else class="tools-list modal-tools-list">
             <div class="list-header">
-              <div class="header-cell name-cell">Tool</div>
-              <div class="header-cell type-cell">Type</div>
-              <div class="header-cell actions-cell">Action</div>
+              <div class="header-cell name-cell">工具名称</div>
+              <div class="header-cell type-cell">协议类型</div>
+              <div class="header-cell actions-cell">操作</div>
             </div>
 
             <div v-for="tool in availableMCPTools" :key="tool.id" class="tool-row">
@@ -503,7 +503,7 @@ onMounted(() => {
                     <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
                     <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
                   </svg>
-                  Link
+                  关联
                 </button>
                 <button 
                   v-else
@@ -514,7 +514,7 @@ onMounted(() => {
                     <path d="M18 6L6 18"/>
                     <path d="M6 6l12 12"/>
                   </svg>
-                  Unlink
+                  取消关联
                 </button>
               </div>
             </div>
@@ -527,20 +527,20 @@ onMounted(() => {
     <div v-if="showDeleteConfirm" class="modal-overlay" @click.self="cancelDelete">
       <div class="modal-content small">
         <div class="modal-header">
-          <h3>Confirm Deletion</h3>
+          <h3>确认移除工具</h3>
           <button class="close-button" @click="cancelDelete">✕</button>
         </div>
         
         <div class="modal-body">
-          <p class="confirm-text">Are you sure you want to remove this MCP tool from the agent? This action cannot be undone.</p>
+          <p class="confirm-text">确定要将该 MCP 工具从当前智能体中解除关联或移除吗？此操作不会影响外部实际运行的服务端。</p>
         </div>
         
         <div class="modal-footer">
           <button type="button" class="secondary-button" @click="cancelDelete">
-            Cancel
+            取消
           </button>
           <button type="button" class="danger-button" @click="deleteMCPTool">
-            Remove Tool
+            确认移除
           </button>
         </div>
       </div>

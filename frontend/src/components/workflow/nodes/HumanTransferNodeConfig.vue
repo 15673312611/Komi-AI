@@ -51,7 +51,7 @@ const updateFormData = (field: keyof HumanTransferNodeData, value: any) => {
 <template>
   <div class="human-transfer-node-config">
     <div class="form-group">
-      <label for="transfer-department">Department *</label>
+      <label for="transfer-department">转接客服部门 (Department) *</label>
       <select
         id="transfer-department"
         :value="formData.transfer_department"
@@ -61,10 +61,10 @@ const updateFormData = (field: keyof HumanTransferNodeData, value: any) => {
         :class="{ 'error': validationErrors.transfer_department }"
         required
       >
-        <option value="">Select department</option>
-        <option value="general">General Support</option>
-        <option value="sales">Sales</option>
-        <option value="technical">Technical Support</option>
+        <option value="">选择目标部门</option>
+        <option value="general">综合客服支持 (General Support)</option>
+        <option value="sales">售前销售团队 (Sales)</option>
+        <option value="technical">售后技术支持 (Technical Support)</option>
       </select>
       <div v-if="validationErrors.transfer_department" class="error-message">
         {{ validationErrors.transfer_department }}
@@ -72,13 +72,13 @@ const updateFormData = (field: keyof HumanTransferNodeData, value: any) => {
     </div>
     
     <div class="form-group">
-      <label for="transfer-message">Transfer Message</label>
+      <label for="transfer-message">转接过渡提示语 (Transfer Message)</label>
       <textarea
         id="transfer-message"
         :value="formData.transfer_message"
         @input="updateFormData('transfer_message', ($event.target as HTMLTextAreaElement).value)"
         class="form-textarea"
-        placeholder="Message to show when transferring to human agent"
+        placeholder="输入转接人工客服时展示给用户的提示语，如：“正在为您转接人工坐席，请稍候...”"
         rows="3"
       ></textarea>
     </div>

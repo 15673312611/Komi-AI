@@ -56,7 +56,7 @@ watch(() => props.sessionId, load)
       <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="var(--accent-ink)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
         <path d="M4 9a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2 2 2 0 0 0 0 4 2 2 0 0 1-2 2H6a2 2 0 0 1-2-2 2 2 0 0 0 0-4z"></path>
       </svg>
-      <span class="card-title">Linked ticket</span>
+      <span class="card-title">关联工单</span>
     </div>
     <div class="card-body">
       <div class="chip-row">
@@ -66,7 +66,7 @@ watch(() => props.sessionId, load)
       <div class="ticket-title">{{ ticket.title }}</div>
       <TicketAiStateChip :state="ticket.ai_state" class="ai-line" />
       <button class="view-btn" @click="router.push(`/tickets/${ticket.id}`)">
-        View ticket →
+        查看工单详情 →
       </button>
     </div>
   </div>

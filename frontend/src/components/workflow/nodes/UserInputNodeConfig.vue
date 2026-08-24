@@ -53,13 +53,13 @@ const confirmationMessage = computed({
 <template>
   <div class="user-input-config">
     <div class="form-group">
-      <label for="prompt-message">Prompt Message</label>
+      <label for="prompt-message">引导提问文案 (Prompt Message)</label>
       <textarea
         id="prompt-message"
         v-model="promptMessage"
         class="form-textarea"
         :class="{ 'error': validationErrors.prompt_message }"
-        placeholder="Enter message to prompt user for input (optional)"
+        placeholder="输入引导用户提供输入的提示问题（可选）"
         rows="3"
         @blur="$emit('validateField', 'prompt_message')"
         @input="$emit('validateField', 'prompt_message')"
@@ -68,21 +68,21 @@ const confirmationMessage = computed({
         {{ validationErrors.prompt_message }}
       </div>
       <div class="help-text">
-        Optional message shown to the user to prompt for input. If left empty, no message will be displayed.
+        向用户发送的引导提问消息。如果留空，工作流将直接在界面静默等待用户输入。
       </div>
     </div>
 
     <div class="form-group">
-      <label for="confirmation-message">Confirmation Message</label>
+      <label for="confirmation-message">输入后确认反馈文案</label>
       <textarea
         id="confirmation-message"
         v-model="confirmationMessage"
         class="form-textarea"
-        placeholder="Optional message to show after user provides input (e.g., 'Thank you for your input!')"
+        placeholder="用户提交输入后的感谢或反馈文案（如：“收到您的反馈，正在为您处理！”）"
         rows="2"
       ></textarea>
       <div class="help-text">
-        Optional message displayed after the user submits their input. Leave empty to proceed silently to the next node.
+        用户输入完成后展示的确认消息。若留空则直接流转至下一个节点。
       </div>
     </div>
 
@@ -93,14 +93,14 @@ const confirmationMessage = computed({
           <path d="M9,9h0a3,3,0,0,1,6,0c0,2-3,3-3,3"></path>
           <path d="M12,17h0"></path>
         </svg>
-        <span>User Input Node Behavior</span>
+        <span>用户输入节点运行机制</span>
       </div>
       <div class="info-content">
         <ul>
-          <li>The workflow will pause at this node and wait for user input</li>
-          <li>The prompt message will be displayed to the user</li>
-          <li>After the user provides input, the workflow continues to the next node</li>
-          <li>User input can be referenced in subsequent nodes using variables</li>
+          <li>工作流运行至此节点将暂停，并等待访客回复</li>
+          <li>若配置了引导文案，将自动展示给访客</li>
+          <li>访客发送文本消息后，工作流自动继续流转至下一节点</li>
+          <li>输入的内容会自动暂存为变量，供后续节点及条件分支直接引用</li>
         </ul>
       </div>
     </div>

@@ -44,9 +44,9 @@ const timeAgo = (iso?: string | null) =>
 
 function actorName(activity: TicketActivity): string {
   if (activity.actor_name) return activity.actor_name
-  if (activity.actor_type === 'ai') return 'ChatterMate AI'
-  if (activity.actor_type === 'customer') return 'Customer'
-  return 'System'
+  if (activity.actor_type === 'ai') return 'AI 智能体'
+  if (activity.actor_type === 'customer') return '客户'
+  return '系统'
 }
 
 function avatarText(activity: TicketActivity): string {
@@ -58,9 +58,9 @@ function avatarText(activity: TicketActivity): string {
 
 <template>
   <div class="activity-feed">
-    <div class="feed-header">Activity</div>
+    <div class="feed-header">工单活动流与协作记录</div>
     <div class="feed-body">
-      <div v-if="!activities.length" class="feed-empty">No activity yet.</div>
+      <div v-if="!activities.length" class="feed-empty">暂无活动记录。</div>
       <div v-for="activity in activities" :key="activity.id" class="feed-item">
         <span
           class="avatar"
@@ -76,14 +76,14 @@ function avatarText(activity: TicketActivity): string {
               v-if="activity.activity_type === 'comment' && !activity.is_internal"
               class="visible-tag"
             >
-              sent to customer
+              已发送给客户
             </span>
             <span
               v-if="activity.activity_type === 'customer_replied'
                 && activity.activity_metadata?.channel === 'email'"
               class="visible-tag"
             >
-              replied by email
+              客户已通过邮件回复
             </span>
             <span class="time">{{ timeAgo(activity.created_at) }}</span>
           </div>
@@ -97,18 +97,18 @@ function avatarText(activity: TicketActivity): string {
       <textarea
         v-model="draft"
         class="composer-input"
-        :placeholder="customerVisible ? 'Reply to the customer…' : 'Add an internal comment…'"
+        :placeholder="customerVisible ? '直接向客户发送说明消息…' : '添加团队内部协作备注…'"
         @keydown.meta.enter="submit"
         @keydown.ctrl.enter="submit"
       ></textarea>
       <div class="composer-actions">
         <label v-if="canMessageCustomer" class="visibility-toggle">
           <input v-model="customerVisible" type="checkbox" />
-          Send to customer
+          同步发送给客户
         </label>
-        <span v-else class="no-customer-note">Internal note — no customer linked</span>
+        <span v-else class="no-customer-note">内部备注 — 未关联客户联系方式</span>
         <button class="post-btn" :disabled="!draft.trim() || isSaving" @click="submit">
-          {{ isSaving ? 'Posting…' : 'Comment' }}
+          {{ isSaving ? '发布中…' : '发表备注' }}
         </button>
       </div>
     </div>

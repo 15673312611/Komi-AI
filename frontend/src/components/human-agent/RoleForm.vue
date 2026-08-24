@@ -48,7 +48,7 @@ const fetchPermissions = async () => {
     permissions.value = await listPermissions()
   } catch (err) {
     console.error('Failed to load permissions:', err)
-    error.value = 'Failed to load permissions'
+    error.value = '加载权限列表失败'
   } finally {
     loading.value = false
   }
@@ -56,7 +56,7 @@ const fetchPermissions = async () => {
 
 const handleSubmit = () => {
   if (!selectedPermissions.value.length) {
-    error.value = 'Please select at least one permission'
+    error.value = '请至少勾选一项权限'
     return
   }
 
@@ -86,29 +86,31 @@ onMounted(fetchPermissions)
     </div>
 
     <div class="form-group">
-      <label for="name">Name</label>
+      <label for="name">角色名称</label>
       <input
         id="name"
         v-model="name"
         type="text"
+        placeholder="如：售前客服主管 / 质检巡检专员"
         required
         class="form-input"
       />
     </div>
 
     <div class="form-group">
-      <label for="description">Description</label>
+      <label for="description">角色说明</label>
       <textarea
         id="description"
         v-model="description"
+        placeholder="简要说明该角色的职责与职权范围（选填）"
         class="form-input"
         rows="3"
       />
     </div>
 
     <div class="form-group">
-      <label>Permissions</label>
-      <div v-if="loading" class="loading">Loading permissions...</div>
+      <label>分配权限项</label>
+      <div v-if="loading" class="loading">正在加载权限列表...</div>
       <div v-else class="permissions-list">
         <label 
           v-for="permission in permissions" 
@@ -138,10 +140,10 @@ onMounted(fetchPermissions)
 
     <div class="form-actions">
       <button type="button" class="btn btn-secondary" @click="emit('cancel')">
-        Cancel
+        取消
       </button>
       <button type="submit" class="btn btn-primary">
-        {{ props.role ? 'Update' : 'Create' }}
+        {{ props.role ? '保存修改' : '确认创建' }}
       </button>
     </div>
   </form>

@@ -66,7 +66,7 @@ function onCategoryInput(event: Event) {
   emit('update:draftCategory', (event.target as HTMLInputElement).value)
 }
 
-const sourceLabel = () => props.faq.source_label || 'Generated'
+const sourceLabel = () => props.faq.source_label || 'AI 自动生成'
 
 // Mirrors the category column width in app/models/faq.py — the API 422s
 // anything longer, so this only stops the user typing past the limit.
@@ -91,11 +91,11 @@ function answerPreview(md: string): string {
   <div class="faq-card" :class="{ 'faq-card--editing': editing, 'faq-card--selecting': selectable, 'faq-card--selected': selected }">
     <!-- Edit mode -->
     <div v-if="editing">
-      <div class="edit-label">{{ isNew ? 'NEW FAQ' : 'EDITING' }}</div>
+      <div class="edit-label">{{ isNew ? '新建 FAQ 问答' : '编辑中' }}</div>
       <input
         class="edit-question"
         type="text"
-        placeholder="Question"
+        placeholder="输入问题标题…"
         :value="draftQuestion"
         @input="onQuestionInput"
       />
@@ -104,22 +104,22 @@ function answerPreview(md: string): string {
         :model-value="draftAnswer"
         @update:model-value="$emit('update:draftAnswer', $event)"
       />
-      <p class="edit-hint">Markdown supported — headings, <strong>bold</strong>, lists, links and images.</p>
+      <p class="edit-hint">支持 Markdown 语法 — 标题、<strong>粗体</strong>、列表、超链接与图片。</p>
       <label class="edit-topic">
-        <span class="edit-topic__label">Topic</span>
+        <span class="edit-topic__label">分类主题</span>
         <input
           type="text"
           class="edit-topic__input"
           list="faq-topic-options"
           :maxlength="MAX_TOPIC"
-          :placeholder="isNew ? 'General' : 'Keeps the current topic if left empty'"
+          :placeholder="isNew ? '常规问题' : '留空则保持当前分类'"
           :value="draftCategory"
           @input="onCategoryInput"
         />
         <datalist id="faq-topic-options">
           <option v-for="c in categories" :key="c" :value="c" />
         </datalist>
-        <span class="edit-topic__hint">Pick an existing topic or type a new one to create it.</span>
+        <span class="edit-topic__hint">从下拉列表中选择已有分类主题，或直接输入以创建新分类。</span>
       </label>
       <FaqSeoFields
         :slug="draftSlug"
@@ -134,9 +134,9 @@ function answerPreview(md: string): string {
       />
       <div class="edit-actions">
         <button class="btn-save" type="button" :disabled="saving" @click="$emit('save')">
-          {{ saving ? 'Saving…' : 'Save' }}
+          {{ saving ? '正在保存…' : '保存修改' }}
         </button>
-        <button class="btn-cancel" type="button" :disabled="saving" @click="$emit('cancel')">Cancel</button>
+        <button class="btn-cancel" type="button" :disabled="saving" @click="$emit('cancel')">取消</button>
       </div>
     </div>
 
@@ -147,7 +147,7 @@ function answerPreview(md: string): string {
         class="faq-card__check"
         type="checkbox"
         :checked="selected"
-        :aria-label="`Select ${faq.question}`"
+        :aria-label="`选择 ${faq.question}`"
         @change="$emit('toggle-select')"
       />
       <div class="faq-card__body">
@@ -159,7 +159,7 @@ function answerPreview(md: string): string {
           <span
             v-if="(faq.helpful_yes || 0) + (faq.helpful_no || 0) > 0"
             class="faq-card__fb"
-            :title="`${faq.helpful_yes || 0} found this helpful, ${faq.helpful_no || 0} did not`"
+            :title="`${faq.helpful_yes || 0} 人认为有帮助，${faq.helpful_no || 0} 人认为无帮助`"
           >
             <span class="faq-card__fb-item faq-card__fb-item--up">
               <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M7 11v9H4a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1z" /><path d="M7 11l4-8a2 2 0 0 1 3 1.8V9h4.5a2 2 0 0 1 2 2.4l-1.4 7A2 2 0 0 1 17 20H7" /></svg>
@@ -181,12 +181,12 @@ function answerPreview(md: string): string {
           @click="$emit('toggle-status')"
         >
           <span class="pill__dot"></span>
-          {{ faq.status === 'published' ? 'Published' : 'Draft' }}
+          {{ faq.status === 'published' ? '已发布' : '草稿' }}
         </button>
-        <button v-if="!locked" class="icon-btn icon-btn--edit" type="button" title="Edit" @click="$emit('edit')">
+        <button v-if="!locked" class="icon-btn icon-btn--edit" type="button" title="编辑" @click="$emit('edit')">
           <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" /></svg>
         </button>
-        <button v-if="!locked" class="icon-btn icon-btn--delete" type="button" title="Delete" @click="$emit('delete')">
+        <button v-if="!locked" class="icon-btn icon-btn--delete" type="button" title="删除" @click="$emit('delete')">
           <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16" /><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" /><path d="M6 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13" /></svg>
         </button>
       </div>

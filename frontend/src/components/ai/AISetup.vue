@@ -148,20 +148,20 @@ const currentPlan = computed(() => currentSubscription.value?.plan)
 const currentPlanMessageLimit = computed(() => {
   const plan = currentPlan.value
   if (!plan || !plan.max_messages) {
-    return 'Unlimited messages/month'
+    return '每月无限量消息'
   }
   
   // Format the number with commas for better readability
   const formattedLimit = plan.max_messages.toLocaleString()
   
   // Don't show "per seat" if max_agents is 1 (single agent plan)
-  const perSeatText = plan.max_agents === 1 ? '' : ' per seat'
-  return `${formattedLimit} messages/month${perSeatText}`
+  const perSeatText = plan.max_agents === 1 ? '' : ' 每客服坐席'
+  return `${formattedLimit} 条消息/月${perSeatText}`
 })
 
 const currentPlanName = computed(() => {
   const plan = currentPlan.value
-  return plan?.name || 'Current Plan'
+  return plan?.name || '当前套餐'
 })
 
 // Check available plans and upgrade options
@@ -263,7 +263,7 @@ const nextUpgradePlan = computed(() => {
 const rateLimitText = computed(() => {
   // Default rate limit - this could be made dynamic in the future
   const rateLimit = 100
-  return `Rate limit: ${rateLimit} messages/minute`
+  return `速率限制：${rateLimit} 条消息/分钟`
 })
 
 // Clear the model + custom-mode whenever the user switches provider, so a stale
@@ -352,12 +352,12 @@ const setupChatterMateAI = async () => {
 
 // Button text based on whether we're creating or updating
 const submitButtonText = computed(() => {
-  if (isLoading.value) return 'Saving...'
-  return hasExistingConfig.value ? 'Update Configuration' : 'Save Configuration'
+  if (isLoading.value) return '正在保存…'
+  return hasExistingConfig.value ? '更新模型配置' : '保存模型配置'
 })
 
 const chatterMateButtonText = computed(() => {
-  return hasExistingConfig.value ? 'Update to ChatterMate AI' : 'Proceed with ChatterMate AI'
+  return hasExistingConfig.value ? '切换为默认内置 AI' : '使用默认内置 AI'
 })
 </script>
 
@@ -373,8 +373,8 @@ const chatterMateButtonText = computed(() => {
       </div>
 
       <header class="page-header">
-        <h1 class="page-title">AI Configuration</h1>
-        <p class="page-subtitle">Your agents already run on ChatterMate AI. Switch to your own model any time — this is optional.</p>
+        <h1 class="page-title">大模型与 AI 引擎配置</h1>
+        <p class="page-subtitle">智能体默认由系统内置的高性能 AI 引擎提供支持。您也可以随时接入自备的大模型 API Key — 此项为可选配置。</p>
       </header>
 
       <div class="tabs-container">
@@ -390,7 +390,7 @@ const chatterMateButtonText = computed(() => {
                 <circle cx="12" cy="12" r="8"></circle>
               </svg>
             </span>
-            <span class="tab-label">ChatterMate AI</span>
+            <span class="tab-label">默认内置全托管 AI</span>
           </div>
           <div
             class="tab"
@@ -406,7 +406,7 @@ const chatterMateButtonText = computed(() => {
                 <path d="M8 11V8a4 4 0 0 1 8 0v3"></path>
               </svg>
             </span>
-            <span class="tab-label">Advanced — Bring Your Own Model</span>
+            <span class="tab-label">高级 — 自定义接入大模型 (BYOM)</span>
             <span v-if="hasEnterpriseModule && isCustomModelsLocked" class="lock-icon">
               <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
@@ -423,10 +423,10 @@ const chatterMateButtonText = computed(() => {
               <div class="provider-header">
                 <span class="active-pill">
                   <span class="active-dot"></span>
-                  <span class="active-text">ACTIVE</span>
+                  <span class="active-text">当前使用中</span>
                 </span>
-                <h4>ChatterMate AI</h4>
-                <p class="provider-tagline">Zero setup. Managed models, ready instantly — this is the default.</p>
+                <h4>ChatterMate AI 官方托管引擎</h4>
+                <p class="provider-tagline">零配置门槛，开箱即用的高性能大模型服务 — 系统默认方案。</p>
               </div>
 
               <div class="plan-table">
@@ -436,7 +436,7 @@ const chatterMateButtonText = computed(() => {
                 </div>
                 <div class="plan-divider"></div>
                 <div class="plan-row rate-limit-row">
-                  <div class="plan-cell plan-label">Rate limit</div>
+                  <div class="plan-cell plan-label">请求速率限制</div>
                   <div class="plan-cell rate-limit-value">{{ rateLimitText }}</div>
                 </div>
               </div>
@@ -446,16 +446,16 @@ const chatterMateButtonText = computed(() => {
                 <div class="upgrade-info">
                   <div class="upgrade-icon">⚡</div>
                   <div class="upgrade-text">
-                    <div class="upgrade-title">Want more messages?</div>
+                    <div class="upgrade-title">需要更多消息调用配额？</div>
                     <div class="upgrade-description">
-                      Upgrade to {{ nextUpgradePlan.name }} for 
-                      {{ nextUpgradePlan.max_messages ? nextUpgradePlan.max_messages.toLocaleString() : 'unlimited' }} 
-                      messages/month{{ nextUpgradePlan.max_agents === 1 ? '' : ' per seat' }}
+                      升级至 {{ nextUpgradePlan.name }} 获取每月 
+                      {{ nextUpgradePlan.max_messages ? nextUpgradePlan.max_messages.toLocaleString() : '无限量' }} 
+                      条消息额度{{ nextUpgradePlan.max_agents === 1 ? '' : ' 每客服坐席' }}
                     </div>
                   </div>
                 </div>
                 <button class="upgrade-button" @click="handleUpgrade">
-                  Upgrade Plan
+                  升级套餐计划
                 </button>
               </div>
               
@@ -479,20 +479,19 @@ const chatterMateButtonText = computed(() => {
                       </svg>
                     </div>
                   </div>
-                  <h3>Bring Your Own Model</h3>
+                  <h3>自备大模型接入 (BYOM)</h3>
                   <div class="locked-badge">
                     <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="badge-icon">
                       <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
                       <circle cx="12" cy="7" r="4"></circle>
                       <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
                     </svg>
-                    <span>Premium Feature</span>
+                    <span>高级特性</span>
                   </div>
                 </div>
                 
                 <p class="locked-description">
-                  Unlock the ability to use your own AI models from providers like OpenAI, Groq, and more. 
-                  Configure custom API keys and select from a wide range of models to power your agents.
+                  支持接入 OpenAI、DeepSeek、Claude、Groq 等主流大模型厂商 API Key。使用自有模型和账单，完全掌控对话体验与成本。
                 </p>
                 
                 <div class="locked-features">
@@ -503,8 +502,8 @@ const chatterMateButtonText = computed(() => {
                       </svg>
                     </div>
                     <div class="feature-content">
-                      <span class="feature-title">Multiple AI Providers</span>
-                      <span class="feature-desc">Support for OpenAI, Groq, and other leading AI providers</span>
+                      <span class="feature-title">多大模型厂商支持</span>
+                      <span class="feature-desc">支持 OpenAI、DeepSeek、Claude、Groq 等主流模型</span>
                     </div>
                   </div>
                   <div class="feature-item">
@@ -516,8 +515,8 @@ const chatterMateButtonText = computed(() => {
                       </svg>
                     </div>
                     <div class="feature-content">
-                      <span class="feature-title">Custom API Keys</span>
-                      <span class="feature-desc">Use your own API keys for full control and cost management</span>
+                      <span class="feature-title">使用自有 API Key</span>
+                      <span class="feature-desc">直接配置您自己的 API Key，全掌控成本与调用配额</span>
                     </div>
                   </div>
                   <div class="feature-item">
@@ -531,8 +530,8 @@ const chatterMateButtonText = computed(() => {
                       </svg>
                     </div>
                     <div class="feature-content">
-                      <span class="feature-title">Model Selection</span>
-                      <span class="feature-desc">Choose from the latest and most powerful AI models</span>
+                      <span class="feature-title">自由指定模型规格</span>
+                      <span class="feature-desc">自由切换并指定性能卓越的前沿大模型</span>
                     </div>
                   </div>
                   <div class="feature-item">
@@ -544,8 +543,8 @@ const chatterMateButtonText = computed(() => {
                       </svg>
                     </div>
                     <div class="feature-content">
-                      <span class="feature-title">Advanced Configuration</span>
-                      <span class="feature-desc">Fine-tune model parameters and settings for optimal performance</span>
+                      <span class="feature-title">高级参数与模型 ID</span>
+                      <span class="feature-desc">微调参数或输入自定义模型 ID，满足各类专业需求</span>
                     </div>
                   </div>
                 </div>
@@ -555,7 +554,7 @@ const chatterMateButtonText = computed(() => {
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="upgrade-icon">
                       <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"></path>
                     </svg>
-                    <span>Upgrade to Unlock Custom Models</span>
+                    <span>升级解锁自定义大模型接入</span>
                     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="arrow-icon">
                       <line x1="5" y1="12" x2="19" y2="12"></line>
                       <polyline points="12,5 19,12 12,19"></polyline>
@@ -568,13 +567,13 @@ const chatterMateButtonText = computed(() => {
             <!-- Custom Models Form (when unlocked) -->
             <div v-else>
               <form @submit.prevent="handleSubmit" class="setup-form">
-                <h4 class="setup-title">Bring your own model</h4>
+                <h4 class="setup-title">接入自备大模型 (BYOM)</h4>
                 <p class="setup-description">
-                  {{ hasExistingConfig ? 'Update your AI provider settings' : 'Connect a provider with your own API key. Full control, your rates.' }}
+                  {{ hasExistingConfig ? '修改您的大模型服务商与 API Key 配置' : '通过您自己的 API Key 连接模型服务商，完全掌控调用与成本。' }}
                 </p>
 
                 <div class="form-group">
-                  <label>AI Provider</label>
+                  <label>大模型服务商</label>
                   <div class="provider-grid" role="radiogroup">
                     <button
                       v-for="provider in providers"
@@ -595,7 +594,7 @@ const chatterMateButtonText = computed(() => {
                 </div>
 
                 <div class="form-group">
-                  <label for="model">Model Name</label>
+                  <label for="model">模型名称 (Model)</label>
                   <select
                     id="model"
                     v-model="modelDropdown"
@@ -603,7 +602,7 @@ const chatterMateButtonText = computed(() => {
                     class="form-control"
                     :disabled="!setupConfig.provider || modelOptions.length === 0"
                   >
-                    <option value="" disabled>Select Model</option>
+                    <option value="" disabled>请选择模型</option>
                     <option
                       v-for="model in modelOptions"
                       :key="model.value"
@@ -618,19 +617,19 @@ const chatterMateButtonText = computed(() => {
                     type="text"
                     v-model="setupConfig.model"
                     required
-                    placeholder="Enter the exact model ID (e.g. gpt-4o)"
+                    placeholder="输入准确的模型标识 ID (例如 gpt-4o, deepseek-chat)"
                     class="form-control form-control-mono custom-model-input"
                   />
                   <p v-if="useCustomModel" class="key-hint">
-                    Enter any model ID your provider supports — we'll validate it with your API key.
+                    输入该服务商支持的任意模型 ID — 系统将使用您的 API Key 进行连通性校验。
                   </p>
                   <p v-if="useCustomModel" class="model-warning">
-                    ⚠️ Custom models aren't verified by ChatterMate. Smaller or older models may not reliably support tool calling and structured output, which can affect knowledge search, lead capture, and ending chats. Prefer a larger, tool-calling-capable model.
+                    ⚠️ 自定义模型未经过系统预校验。小型或较早期的模型可能无法可靠支持工具调用 (Tool Calling) 与结构化输出，从而影响知识库检索、线索收集和自动结单能力。建议选用具备强 Tool-Calling 能力的主流模型。
                   </p>
                 </div>
 
                 <div v-if="showApiKey" class="form-group">
-                  <label for="apiKey">API Key</label>
+                  <label for="apiKey">API 密钥 (API Key)</label>
                   <input
                     id="apiKey"
                     type="password"
@@ -640,12 +639,12 @@ const chatterMateButtonText = computed(() => {
                     class="form-control form-control-mono"
                   />
                   <p class="key-hint">
-                    Your API key will be encrypted and stored securely.<template v-if="selectedProvider?.api_key_url">&nbsp;&nbsp;<a
+                    您的 API 密钥将全程使用工业级加密算法安全存储。<template v-if="selectedProvider?.api_key_url">&nbsp;&nbsp;<a
                       :href="selectedProvider.api_key_url"
                       target="_blank"
                       rel="noopener noreferrer"
                       class="key-help-link"
-                    >Get your {{ selectedProvider.label }} API key ↗</a></template>
+                    >获取 {{ selectedProvider.label }} API 密钥 ↗</a></template>
                   </p>
                 </div>
 

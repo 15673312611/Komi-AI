@@ -3,9 +3,9 @@
 // in a page self === window, so window.APP_CONFIG still works.
 self.APP_CONFIG = {
   // API URLs
-  API_URL: "http://localhost:8000/api/v1",
-  WS_URL: "ws://localhost:8000",
-  WIDGET_URL: "http://localhost:8000",
+  API_URL: "http://localhost:8001/api/v1",
+  WS_URL: "ws://localhost:8001",
+  WIDGET_URL: "http://localhost:8001",
   
   // Firebase Configuration
   FIREBASE_API_KEY: "",

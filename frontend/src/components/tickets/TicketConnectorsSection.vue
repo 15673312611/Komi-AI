@@ -41,7 +41,7 @@ const PRESETS = [
     key: 'grafana',
     name: 'Grafana',
     logo: grafanaLogo,
-    desc: 'Loki, Prometheus, Elastic & CloudWatch via your Grafana data sources',
+    desc: '通过 Grafana 数据源查询 Loki、Prometheus、Elastic 与 CloudWatch',
     transport: 'http' as MCPTransportType,
     url: 'http://your-mcp-grafana-host:8000/mcp',
     envLines: '',
@@ -53,7 +53,7 @@ const PRESETS = [
     key: 'elasticsearch',
     name: 'Elasticsearch',
     logo: elasticsearchLogo,
-    desc: 'Query indices, mappings and logs directly',
+    desc: '直接检索 Elasticsearch 索引、日志映射与集群指标',
     transport: 'stdio' as MCPTransportType,
     url: '',
     headerLines: '',
@@ -65,7 +65,7 @@ const PRESETS = [
     key: 'sentry',
     name: 'Sentry',
     logo: sentryLogo,
-    desc: 'Errors, issues and traces',
+    desc: '异常报错堆栈、Issue 聚合与分布式链路追踪',
     transport: 'http' as MCPTransportType,
     url: 'https://mcp.sentry.dev/mcp',
     headerLines: 'Authorization=Bearer <sentry-token>',
@@ -77,7 +77,7 @@ const PRESETS = [
     key: 'cloudwatch',
     name: 'CloudWatch',
     logo: cloudwatchLogo,
-    desc: 'AWS logs, metrics and alarms',
+    desc: 'AWS CloudWatch 日志流、监控指标与告警事件',
     transport: 'stdio' as MCPTransportType,
     url: '',
     headerLines: '',
@@ -129,7 +129,7 @@ async function fetchConnectors() {
     loadError.value = null
   } catch (err: any) {
     loadError.value =
-      err.response?.data?.detail || 'Failed to load connectors — MCP tools may not be available on your plan.'
+      err.response?.data?.detail || '获取连接器列表失败 — 您的套餐可能未开通 MCP 工具支持。'
   } finally {
     isLoading.value = false
   }
@@ -155,9 +155,9 @@ async function createConnector() {
     // New investigation connectors are opted in immediately.
     emit('update:selected-ids', [...props.selectedIds, created.id])
     showForm.value = false
-    toast.success(`${created.name} connected`)
+    toast.success(`已成功连接 ${created.name}`)
   } catch (err: any) {
-    toast.error(err.response?.data?.detail || 'Failed to create the connector')
+    toast.error(err.response?.data?.detail || '创建连接器失败')
   } finally {
     isCreating.value = false
   }
@@ -182,65 +182,65 @@ onMounted(fetchConnectors)
         class="preset-tile"
         @click="applyPreset(preset)"
       >
-        <img :src="preset.logo" :alt="`${preset.name} logo`" class="preset-logo" />
+        <img :src="preset.logo" :alt="`${preset.name} 图标`" class="preset-logo" />
         <span class="preset-name">{{ preset.name }}</span>
         <span class="preset-desc">{{ preset.desc }}</span>
       </button>
       <button class="preset-tile custom" @click="applyPreset(null)">
         <span class="preset-icon"><font-awesome-icon :icon="['fas', 'plus']" /></span>
-        <span class="preset-name">Add MCP connector</span>
-        <span class="preset-desc">Any platform with an MCP server — Splunk, Datadog, New Relic, your own</span>
+        <span class="preset-name">添加自定义 MCP 连接器</span>
+        <span class="preset-desc">支持任何实现 MCP 协议的数据源 — Splunk、Datadog、自研监控等</span>
       </button>
     </div>
 
     <div v-if="showForm" class="create-form">
       <div class="form-grid">
         <label class="form-field">
-          <span class="field-label">Name</span>
-          <input v-model="form.name" class="field-input" placeholder="Grafana production" />
+          <span class="field-label">连接器名称</span>
+          <input v-model="form.name" class="field-input" placeholder="例如：Grafana 生产环境" />
         </label>
         <label class="form-field">
-          <span class="field-label">Transport</span>
+          <span class="field-label">协议传输方式</span>
           <select v-model="form.transport" class="field-input">
-            <option value="http">HTTP (streamable)</option>
-            <option value="sse">SSE</option>
-            <option value="stdio">STDIO (local command)</option>
+            <option value="http">HTTP (流式接口)</option>
+            <option value="sse">SSE (服务器推送事件)</option>
+            <option value="stdio">STDIO (本地命令行进程)</option>
           </select>
         </label>
         <template v-if="form.transport !== 'stdio'">
           <label class="form-field wide">
-            <span class="field-label">Server URL</span>
+            <span class="field-label">服务端 URL</span>
             <input v-model="form.url" class="field-input mono" placeholder="https://host/mcp" />
           </label>
           <label class="form-field wide">
-            <span class="field-label">Headers (one per line, KEY=value)</span>
+            <span class="field-label">请求头 Headers (每行一项，KEY=value)</span>
             <textarea v-model="form.headerLines" class="field-input mono" rows="2"></textarea>
           </label>
         </template>
         <template v-else>
           <label class="form-field">
-            <span class="field-label">Command</span>
+            <span class="field-label">执行命令 (Command)</span>
             <input v-model="form.command" class="field-input mono" placeholder="npx" />
           </label>
           <label class="form-field">
-            <span class="field-label">Arguments</span>
+            <span class="field-label">命令参数 (Arguments)</span>
             <input v-model="form.args" class="field-input mono" placeholder="-y @elastic/mcp-server-elasticsearch" />
           </label>
           <label class="form-field wide">
-            <span class="field-label">Environment (one per line, KEY=value)</span>
+            <span class="field-label">环境变量 (每行一项，KEY=value)</span>
             <textarea v-model="form.envLines" class="field-input mono" rows="3"></textarea>
           </label>
         </template>
       </div>
       <div class="form-actions">
-        <button class="cancel-btn" @click="showForm = false">Cancel</button>
+        <button class="cancel-btn" @click="showForm = false">取消</button>
         <button class="connect-btn" :disabled="isCreating || !form.name.trim()" @click="createConnector">
-          {{ isCreating ? 'Connecting…' : 'Connect' }}
+          {{ isCreating ? '正在连接…' : '连接此数据源' }}
         </button>
       </div>
     </div>
 
-    <div v-if="isLoading" class="state-note">Loading connectors…</div>
+    <div v-if="isLoading" class="state-note">正在加载连接器列表…</div>
     <div v-else-if="loadError" class="state-note">{{ loadError }}</div>
     <div v-else-if="connectors.length" class="connector-list">
       <label v-for="connector in connectors" :key="connector.id" class="connector-row">
@@ -254,23 +254,22 @@ onMounted(fetchConnectors)
           <div class="connector-name">
             {{ connector.name }}
             <span class="transport-tag mono">{{ connector.transport_type }}</span>
-            <span v-if="!connector.enabled" class="disabled-tag mono">disabled</span>
+            <span v-if="!connector.enabled" class="disabled-tag mono">已停用</span>
           </div>
           <div class="connector-sub mono">
             {{ connector.url || [connector.command, ...(connector.args || [])].join(' ') }}
           </div>
         </div>
-        <span class="use-label">Use in investigations</span>
+        <span class="use-label">用于工单调查</span>
       </label>
     </div>
     <div v-else class="state-note">
-      No connectors yet — connect one above so the AI can gather evidence from your logs and metrics.
+      暂无连接器 — 点击上方卡片连接数据源，让 AI 从日志与监控中主动检索调查证据。
     </div>
 
     <div class="lock-note">
       <font-awesome-icon :icon="['fas', 'lock']" />
-      Read-only — connectors attach to the <strong>investigation agent only</strong>, never the
-      customer-facing chat agent.
+      严格只读隔离 — 连接器仅挂载于 <strong>工单后台调查智能体</strong>，绝不会向面向客户的前台对话机器人开放。
     </div>
   </div>
 </template>

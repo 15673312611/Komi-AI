@@ -739,17 +739,17 @@ watch(() => props.selectedNode, (newNode) => {
 // Get node type display name
 const getNodeTypeName = (type: string) => {
   const names = {
-    landingPage: 'Landing Page',
-    message: 'Message',
-    llm: 'LLM',
-    condition: 'Condition',
-    form: 'Form',
-    action: 'Action',
-    humanTransfer: 'Human Transfer',
-    wait: 'Wait',
-    end: 'End',
-    userInput: 'User Input',
-    guardrails: 'Guardrails'
+    landingPage: '引导落地页',
+    message: '固定消息',
+    llm: 'AI 大模型',
+    condition: '条件分支',
+    form: '信息表单',
+    action: '触发动作',
+    humanTransfer: '转人工客服',
+    wait: '等待延时',
+    end: '结束流程',
+    userInput: '用户输入',
+    guardrails: '安全护栏'
   }
   return names[type as keyof typeof names] || type
 }
@@ -980,13 +980,13 @@ const handleDelete = () => {
   <div class="properties-panel">
     <div class="properties-header">
       <div class="header-left">
-        <h3>Node Properties</h3>
+        <h3>节点属性配置</h3>
         <span class="node-type-badge" :style="{ backgroundColor: selectedNode.data.color }">
           {{ selectedNode.data.icon }} {{ getNodeTypeName(selectedNode.data.nodeType) }}
         </span>
       </div>
       <div class="header-actions">
-        <button class="header-icon-btn delete-btn" @click="handleDelete" title="Delete Node">
+        <button class="header-icon-btn delete-btn" @click="handleDelete" title="删除此节点">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <polyline points="3,6 5,6 21,6"></polyline>
             <path d="M19,6v14a2,2 0 0,1 -2,2H7a2,2 0 0,1 -2,-2V6m3,0V4a2,2 0 0,1 2,-2h4a2,2 0 0,1 2,2v2"></path>
@@ -994,7 +994,7 @@ const handleDelete = () => {
             <line x1="14" y1="11" x2="14" y2="17"></line>
           </svg>
         </button>
-        <button class="header-icon-btn close-btn" @click="handleClose" title="Close">
+        <button class="header-icon-btn close-btn" @click="handleClose" title="关闭面板">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <line x1="18" y1="6" x2="6" y2="18"></line>
             <line x1="6" y1="6" x2="18" y2="18"></line>
@@ -1012,20 +1012,20 @@ const handleDelete = () => {
               <svg class="section-icon" :class="{ 'rotated': collapsedSections.basic }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <polyline points="6,9 12,15 18,9"></polyline>
               </svg>
-              <span>Basic Information</span>
+              <span>基础信息 (Basic)</span>
             </div>
           </div>
           
           <div class="section-content" :class="{ 'collapsed': collapsedSections.basic }">
             <div class="form-group">
-              <label for="node-name">Node Name *</label>
+              <label for="node-name">节点名称 *</label>
               <input
                 id="node-name"
                 v-model="nodeForm.name"
                 type="text"
                 class="form-input"
                 :class="{ 'error': validationErrors.name }"
-                placeholder="Enter node name"
+                placeholder="输入节点名称"
                 required
                 @blur="validateFieldOnChange('name')"
                 @input="validateFieldOnChange('name')"
@@ -1036,12 +1036,12 @@ const handleDelete = () => {
             </div>
 
             <div class="form-group">
-              <label for="node-description">Description</label>
+              <label for="node-description">描述说明</label>
               <textarea
                 id="node-description"
                 v-model="nodeForm.description"
                 class="form-textarea"
-                placeholder="Enter node description (optional)"
+                placeholder="简要说明该节点的功能与业务逻辑（可选）"
                 rows="3"
                 @blur="autoSaveToCache"
                 @input="autoSaveToCache"
@@ -1057,7 +1057,7 @@ const handleDelete = () => {
               <svg class="section-icon" :class="{ 'rotated': collapsedSections.nodeSettings }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <polyline points="6,9 12,15 18,9"></polyline>
               </svg>
-              <span>{{ getNodeTypeName(selectedNode.data.nodeType) }} Settings</span>
+              <span>{{ getNodeTypeName(selectedNode.data.nodeType) }} 参数设置</span>
             </div>
           </div>
           
@@ -1103,26 +1103,26 @@ const handleDelete = () => {
           <template v-if="selectedNode.data.nodeType === 'condition'">
             <!-- Connection Status -->
             <div class="form-group">
-              <label>Connection Status</label>
+              <label>连线出口状态</label>
               <div class="connection-status">
                 <div class="connection-info" :class="{ 'error': validationErrors.condition_connections }">
                   <div class="connection-item">
-                    <span class="connection-label true">True Path:</span>
+                    <span class="connection-label true">True 分支 (条件满足):</span>
                     <span class="connection-value">
                       {{ (() => {
                         const edgesVal = Array.isArray(currentEdges) ? currentEdges : (currentEdges as any).value
                         const trueConnection = edgesVal.find((edge: any) => edge.source === selectedNode.id && edge.label === 'true')
-                        return trueConnection ? '✓ Connected' : '✗ Not connected'
+                        return trueConnection ? '✓ 已连接' : '✗ 未连接'
                       })() }}
                     </span>
                   </div>
                   <div class="connection-item">
-                    <span class="connection-label false">False Path:</span>
+                    <span class="connection-label false">False 分支 (条件不满足):</span>
                     <span class="connection-value">
                       {{ (() => {
                         const edgesVal = Array.isArray(currentEdges) ? currentEdges : (currentEdges as any).value
                         const falseConnection = edgesVal.find((edge: any) => edge.source === selectedNode.id && edge.label === 'false')
-                        return falseConnection ? '✓ Connected' : '✗ Not connected'
+                        return falseConnection ? '✓ 已连接' : '✗ 未连接'
                       })() }}
                     </span>
                   </div>
@@ -1131,7 +1131,7 @@ const handleDelete = () => {
                   {{ validationErrors.condition_connections }}
                 </div>
                 <div class="help-text">
-                  Drag connections from this node to other nodes. The first connection will be labeled "true" and the second "false".
+                  从该节点向其他节点拖拽两条连线，第一条默认为 True 分支，第二条默认为 False 分支。
                 </div>
               </div>
             </div>
@@ -1267,15 +1267,15 @@ const handleDelete = () => {
               <svg class="section-icon" :class="{ 'rotated': collapsedSections.variables }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <polyline points="6,9 12,15 18,9"></polyline>
               </svg>
-              <span>Available Variables</span>
+              <span>可用上下文变量 (Variables)</span>
               <span v-if="availableVariables.length > 0" class="variables-count">{{ availableVariables.length }}</span>
             </div>
           </div>
           
           <div class="section-content" :class="{ 'collapsed': collapsedSections.variables }">
             <div v-if="availableVariables.length === 0" class="no-variables">
-              <p>No variables available</p>
-              <small>Add form or user input nodes to create variables</small>
+              <p>暂无可用变量</p>
+              <small>在工作流中添加「表单收集」或「等待用户输入」节点即可生成变量</small>
             </div>
             
             <div v-else class="variables-list">
@@ -1284,11 +1284,11 @@ const handleDelete = () => {
                 :key="`${variable.nodeId}-${variable.fieldName}`"
                 class="variable-item"
                 @click="copyVariableToClipboard(variable)"
-                :title="`Click to copy {{${variable.fieldName}}} to clipboard`"
+                :title="`点击复制 {{${variable.fieldName}}} 到剪贴板`"
               >
                 <div class="variable-info">
                   <div class="variable-name">{{ variable.fieldName }}</div>
-                  <div class="variable-source">from {{ variable.nodeName }}</div>
+                  <div class="variable-source">来源于 {{ variable.nodeName }}</div>
                   <div class="variable-type">{{ variable.fieldType }}</div>
                 </div>
                 <div class="variable-syntax">
@@ -1299,9 +1299,9 @@ const handleDelete = () => {
             
             <div v-if="availableVariables.length > 0" class="variables-help">
               <small>
-                <strong>Usage:</strong><br>
-                • <code>{{ getVariableSyntax('field_name') }}</code> - Latest value<br>
-                • <code>{{ getVariableSyntax('node_id.field_name') }}</code> - Specific node
+                <strong>变量引用语法：</strong><br>
+                • <code>{{ getVariableSyntax('field_name') }}</code> - 获取该变量最新值<br>
+                • <code>{{ getVariableSyntax('node_id.field_name') }}</code> - 获取指定节点的变量值
               </small>
             </div>
           </div>
@@ -1318,7 +1318,7 @@ const handleDelete = () => {
             <polyline points="17,21 17,13 7,13 7,21"></polyline>
             <polyline points="7,3 7,8 15,8"></polyline>
           </svg>
-          Auto-saves changes
+          修改已实时自动保存
         </span>
       </div>
     </div>

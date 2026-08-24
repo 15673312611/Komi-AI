@@ -77,7 +77,6 @@ const whatsappAccounts = ref<ChannelAccount[]>([])
 const showNewConversation = ref(false)
 
 const loadWhatsAppAccounts = async () => {
-  // Resolves to [] on failure — a hidden button, not a broken page.
   whatsappAccounts.value = await channelsService.listActiveWhatsAppAccounts()
 }
 
@@ -201,7 +200,6 @@ const handleApplyFilters = () => {
   hasMore.value = true
   totalCount.value = null
   loadConversations(1)
-  // Auto-close filter panel after applying
   showFilters.value = false
 }
 
@@ -225,9 +223,6 @@ const loadUsers = async () => {
 
   loadingUsers.value = true
   try {
-    // /users/teammates, not /users: the latter needs manage_users, so this
-    // 403'd on every inbox mount for an agent and left the assignee filter and
-    // the Reassign dropdown empty.
     users.value = await listTeammates()
   } catch (error) {
     console.error('Failed to load teammates:', error)
@@ -241,8 +236,6 @@ const loadAgents = async () => {
   
   loadingAgents.value = true
   try {
-    // The roster, not the full agent list: filtering needs names, and
-    // getOrganizationAgents needs manage_agents.
     agents.value = await agentService.getAgentRoster()
   } catch (error) {
     console.error('Failed to load agents:', error)
@@ -259,35 +252,28 @@ onMounted(() => {
 })
 
 const handleChatUpdated = (chatDetail: ChatDetail) => {
-  // Update the conversation in the list if it exists
   const index = conversations.value.findIndex(c => c.session_id === chatDetail.session_id)
   if (index !== -1) {
-    // Create a new conversation object with updated data
     const updatedConversation: Conversation = {
       ...conversations.value[index],
       last_message: chatDetail.messages[chatDetail.messages.length - 1]?.message || '',
       updated_at: chatDetail.updated_at,
       message_count: chatDetail.messages.length,
       status: chatDetail.status,
-      // Who holds the chat drives the row's handler badge. Leaving it out kept
-      // the row saying "AI" after a takeover until the next full refresh.
       user_id: chatDetail.user_id,
       user_name: chatDetail.user_name,
       group_id: chatDetail.group_id
     }
     
-    // Create a new array with the updated conversation
     const updatedConversations = [...conversations.value]
     updatedConversations[index] = updatedConversation
     conversations.value = updatedConversations
   }
   
-  // Update chat info panel if this is the selected chat
   if (selectedChatInfo.value && selectedChatInfo.value.session_id === chatDetail.session_id) {
     selectedChatInfo.value = chatDetail
   }
   
-  // Update the selected chat in ConversationsList to refresh ConversationChat
   if (conversationsListRef.value) {
     conversationsListRef.value.updateSelectedChat(chatDetail)
   }
@@ -295,7 +281,6 @@ const handleChatUpdated = (chatDetail: ChatDetail) => {
 
 const handleChatSelected = (chatDetail: ChatDetail) => {
   selectedChatInfo.value = chatDetail
-  // Only auto-show if not already visible
   if (!showChatInfo.value) {
     showChatInfo.value = true
   }
@@ -307,7 +292,6 @@ const closeChatInfo = () => {
     return
   }
   showChatInfo.value = false
-  // Don't clear selectedChatInfo so we can reopen it
 }
 
 const toggleChatInfo = () => {
@@ -319,17 +303,12 @@ const toggleChatInfo = () => {
   }
 }
 
-// Full-screen info page on mobile, pushed so the back button closes it
 const openMobileInfo = () => {
   if (selectedChatInfo.value && !mobileInfoOpen.value) {
     router.push({ query: { ...route.query, info: '1' } })
   }
 }
 
-// Back from the full-screen chat pane — always lands on the conversations
-// list. router.back() only when the previous entry IS the list (normal tap
-// flow); otherwise (push deep link, analytics link, external entry) clear the
-// query in place so the chevron doesn't leave the Inbox.
 const handleChatBack = () => {
   const previous = window.history.state?.back
   if (typeof previous === 'string' && previous.startsWith('/conversations') && !previous.includes('session=')) {
@@ -339,7 +318,6 @@ const handleChatBack = () => {
   }
 }
 
-// Handle chat closed from ChatInfoPanel
 const handleChatClosed = (_sessionId?: string) => {
   showChatInfo.value = false
   selectedChatInfo.value = null
@@ -350,98 +328,97 @@ const handleChatClosed = (_sessionId?: string) => {
     router.replace({ query: { ...route.query, session: undefined, info: undefined } })
   }
 }
-
-
 </script>
 
 <template>
   <DashboardLayout :hideHeader="true">
     <div class="conversations-page" :class="{ 'mobile-chat-open': mobileChatOpen }">
-    <header class="page-header">
-      <div class="header-content">
-        <h1>Conversations</h1>
-        <div class="header-actions">
-          <button
-            v-if="whatsappAccounts.length"
-            class="new-conversation-btn"
-            @click="showNewConversation = true"
-          >
-            <font-awesome-icon :icon="['fab', 'whatsapp']" />
-            New conversation
-          </button>
-          <ConversationFilters
-            :showFilters="showFilters"
-            :filterValues="filterValues"
-            :users="users"
-            :agents="agents"
-            :loadingUsers="loadingUsers"
-            :loadingAgents="loadingAgents"
-            @toggle="toggleFilters"
-            @apply="handleApplyFilters"
-            @clear="handleClearFilters"
-            @update:filterValues="filterValues = $event"
-          />
-          
-          <button 
-            @click="toggleChatInfo" 
-            class="info-toggle-btn"
-            :class="{ active: showChatInfo }"
-            aria-label="Toggle chat information"
-            :disabled="!selectedChatInfo"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="12" cy="12" r="10"/>
-              <line x1="12" y1="16" x2="12" y2="12"/>
-              <line x1="12" y1="8" x2="12.01" y2="8"/>
-            </svg>
-          </button>
+      <header class="page-header">
+        <div class="header-content">
+          <h1>会话中心</h1>
+          <div class="header-actions">
+            <button
+              v-if="whatsappAccounts.length"
+              class="new-conversation-btn"
+              @click="showNewConversation = true"
+            >
+              <font-awesome-icon :icon="['fab', 'whatsapp']" />
+              新建对话
+            </button>
+            <ConversationFilters
+              :showFilters="showFilters"
+              :filterValues="filterValues"
+              :users="users"
+              :agents="agents"
+              :loadingUsers="loadingUsers"
+              :loadingAgents="loadingAgents"
+              @toggle="toggleFilters"
+              @apply="handleApplyFilters"
+              @clear="handleClearFilters"
+              @update:filterValues="filterValues = $event"
+            />
+            
+            <button 
+              @click="toggleChatInfo" 
+              class="info-toggle-btn"
+              :class="{ active: showChatInfo }"
+              aria-label="Toggle chat information"
+              :disabled="!selectedChatInfo"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"/>
+                <line x1="12" y1="16" x2="12" y2="12"/>
+                <line x1="12" y1="8" x2="12.01" y2="8"/>
+              </svg>
+            </button>
+          </div>
         </div>
+      </header>
+
+      <NewWhatsAppConversation
+        v-if="showNewConversation"
+        :accounts="whatsappAccounts"
+        @close="showNewConversation = false"
+        @started="onConversationStarted"
+      />
+
+      <div class="main-content">
+        <ConversationsList
+          ref="conversationsListRef"
+          :conversations="conversations"
+          :loading="loading"
+          :error="error"
+          :status-filter="statusFilter"
+          :has-more="hasMore"
+          :loading-more="loading && currentPage > 1"
+          :loaded-count="loadedCount"
+          :total-count="totalItems"
+          :show-chat-info="showChatInfo && !!selectedChatInfo"
+          :initial-session-id="initialSessionId"
+          :mobile-pane="mobileChatOpen ? 'chat' : 'list'"
+          @refresh="loadConversations(1)"
+          @update-filter="updateFilter"
+          @load-more="loadMoreConversations"
+          @chat-updated="handleChatUpdated"
+          @chat-selected="handleChatSelected"
+          @select="openSession"
+          @back="handleChatBack"
+          @info="openMobileInfo"
+          @clear-unread="() => {}"
+        />
+
+        <ChatInfoPanel
+          v-if="isMobile ? mobileInfoOpen : showChatInfo"
+          :class="{ 'mobile-fullscreen': mobileInfoOpen }"
+          :chatInfo="selectedChatInfo"
+          :users="users"
+          @close="closeChatInfo"
+          @refresh="loadConversations(1)"
+          @chatUpdated="handleChatUpdated"
+          @chatClosed="handleChatClosed"
+          @switchSession="openSession"
+        />
       </div>
-    </header>
-
-    <NewWhatsAppConversation
-      v-if="showNewConversation"
-      :accounts="whatsappAccounts"
-      @close="showNewConversation = false"
-      @started="onConversationStarted"
-    />
-
-    <div class="main-content">
-      <ConversationsList
-        ref="conversationsListRef"
-        :conversations="conversations"
-        :loading="loading"
-        :error="error"
-        :status-filter="statusFilter"
-        :has-more="hasMore"
-        :loading-more="loading && currentPage > 1"
-        :loaded-count="loadedCount"
-        :total-count="totalItems"
-        :show-chat-info="showChatInfo && !!selectedChatInfo"
-        :initial-session-id="initialSessionId"
-        :mobile-pane="mobileChatOpen ? 'chat' : 'list'"
-        @refresh="loadConversations(1)"
-        @update-filter="updateFilter"
-        @load-more="loadMoreConversations"
-        @chat-updated="handleChatUpdated"
-        @chat-selected="handleChatSelected"
-        @select="openSession"
-        @back="handleChatBack"
-        @info="openMobileInfo"
-        @clear-unread="() => {}"
-      />
-
-      <ChatInfoPanel
-        v-if="isMobile ? mobileInfoOpen : showChatInfo"
-        :class="{ 'mobile-fullscreen': mobileInfoOpen }"
-        :chatInfo="selectedChatInfo"
-        :users="users"
-        @close="closeChatInfo"
-        @refresh="loadConversations(1)"
-        @chatUpdated="handleChatUpdated"
-        @chatClosed="handleChatClosed"
-      />
-    </div>
     </div>
   </DashboardLayout>
 </template>
@@ -455,9 +432,7 @@ const handleChatClosed = (_sessionId?: string) => {
 
 .main-content {
   display: grid;
-  grid-template-columns: 1fr 350px;
-  /* Bound the implicit row: an auto row is content-sized, so the list/chat
-     panes inherit no height limit and their inner overflow never scrolls. */
+  grid-template-columns: 1fr 360px;
   grid-template-rows: minmax(0, 1fr);
   flex: 1;
   min-height: 0;
@@ -465,7 +440,7 @@ const handleChatClosed = (_sessionId?: string) => {
   overflow: hidden;
   position: relative;
   background: var(--bg);
-  transition: all 0.3s ease;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .main-content:not(:has(.chat-info-sidebar)) {
@@ -473,21 +448,23 @@ const handleChatClosed = (_sessionId?: string) => {
 }
 
 .page-header {
-  padding: calc(14px + var(--safe-top)) var(--space-lg) 14px;
+  padding: calc(12px + var(--safe-top)) 24px 12px;
   border-bottom: 1px solid var(--o08);
   background: var(--bg2);
+  backdrop-filter: blur(20px);
 }
 
 .header-content {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 16px;
 }
 
 .header-content h1 {
   margin: 0;
   font-family: var(--font-display);
-  font-size: 22px;
+  font-size: 19px;
   font-weight: 700;
   letter-spacing: -0.02em;
   color: var(--text);
@@ -496,20 +473,33 @@ const handleChatClosed = (_sessionId?: string) => {
 .new-conversation-btn {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 9px 14px;
+  gap: 7px;
+  padding: 7px 14px;
   border-radius: var(--radius-btn, 8px);
   border: none;
-  background: var(--accent-solid);
-  color: var(--on-accent-solid);
-  font-size: 13.5px;
+  background: #25D366;
+  color: #0B0C10;
+  font-family: var(--font-sans);
+  font-size: 12.5px;
   font-weight: 600;
   cursor: pointer;
+  box-shadow: 0 0 12px rgba(37, 211, 102, 0.2);
+  transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.new-conversation-btn:hover {
+  background: #2ee070;
+  transform: translateY(-0.5px);
+  box-shadow: 0 0 18px rgba(37, 211, 102, 0.35);
+}
+
+.new-conversation-btn:active {
+  transform: translateY(0);
 }
 
 .header-actions {
   display: flex;
-  gap: var(--space-sm);
+  gap: 8px;
   align-items: center;
 }
 
@@ -518,40 +508,43 @@ const handleChatClosed = (_sessionId?: string) => {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 38px;
-  height: 38px;
+  width: 34px;
+  height: 34px;
   border: 1px solid var(--o10);
-  border-radius: 10px;
-  background: var(--o05);
+  border-radius: var(--radius-sm, 7px);
+  background: var(--surface);
   color: var(--muted);
   cursor: pointer;
-  transition: all var(--transition-fast);
+  transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .info-toggle-btn:hover {
-  background: var(--o10);
+  background: var(--o08);
   color: var(--text);
+  border-color: var(--o18);
+  transform: translateY(-0.5px);
 }
 
 .info-toggle-btn.active {
-  background: rgba(201,242,78,.12);
+  background: rgba(201, 242, 78, 0.12);
   color: var(--accent-ink);
-  border-color: rgba(201,242,78,.3);
+  border-color: rgba(201, 242, 78, 0.35);
 }
 
 .info-toggle-btn:disabled {
-  opacity: 0.4;
+  opacity: 0.35;
   cursor: not-allowed;
 }
 
 .info-toggle-btn:disabled:hover {
-  background: var(--o05);
+  background: var(--surface);
   color: var(--muted);
   border-color: var(--o10);
+  transform: none;
 }
 
 /* Responsive design */
-@media (max-width: 768px) {
+@media (max-width: 900px) {
   .header-content {
     flex-direction: column;
     gap: var(--space-sm);
@@ -566,24 +559,12 @@ const handleChatClosed = (_sessionId?: string) => {
     grid-template-columns: 1fr !important;
   }
 
-  /* Full-screen chat pane: the chat's own header replaces the page header */
   .conversations-page.mobile-chat-open .page-header {
     display: none;
   }
 
-  /* The desktop info toggle lives in the page header; on mobile it's in the chat */
   .info-toggle-btn {
     display: none;
   }
 }
-
-@media (max-width: 480px) {
-  .page-header {
-    padding: var(--space-md);
-  }
-  
-  .header-content h1 {
-    font-size: 20px;
-  }
-}
-</style> 
+</style>

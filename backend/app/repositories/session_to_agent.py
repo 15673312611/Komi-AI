@@ -117,6 +117,18 @@ class SessionToAgentRepository:
             if not session:
                 return False
 
+            # Closing is intentionally idempotent: widget retries and duplicate
+            # Socket.IO events should not turn a successful close into an error.
+            if session.status == SessionStatus.CLOSED:
+                return True
+
+            if reason is not None:
+                try:
+                    reason = reason if isinstance(reason, EndChatReasonType) else EndChatReasonType(str(reason))
+                except (TypeError, ValueError):
+                    logger.warning("Ignoring invalid end-chat reason %r for %s", reason, session_id)
+                    reason = EndChatReasonType.ISSUE_RESOLVED
+
             session.status = SessionStatus.CLOSED
             session.closed_at = datetime.utcnow()
             if reason is not None:

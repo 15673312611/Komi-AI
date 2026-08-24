@@ -21,7 +21,7 @@ limitations under the License.
     </div>
 
     <div v-else-if="isLoading" class="loading-state">
-      Loading agent performance data...
+      正在加载效能分析数据…
     </div>
 
     <div v-else class="agent-performance-tabs">
@@ -30,13 +30,13 @@ limitations under the License.
           :class="{ active: activeTab === 'bot' }"
           @click="activeTab = 'bot'"
         >
-          Bot Agents
+          AI 智能体客服
         </button>
         <button 
           :class="{ active: activeTab === 'human' }"
           @click="activeTab = 'human'"
         >
-          Human Agents
+          人工客服坐席
         </button>
       </div>
 
@@ -44,17 +44,17 @@ limitations under the License.
         <!-- Bot Agents Tab -->
         <div v-if="activeTab === 'bot'" class="agents-table-container">
           <div v-if="!performanceData?.bot_agents?.length" class="no-data">
-            No bot agent data available
+            暂无 AI 智能体效能数据
           </div>
           <table v-else class="agents-table">
             <thead>
               <tr>
-                <th>Agent Name</th>
-                <th>Total Chats</th>
-                <th>Closed Chats</th>
-                <th>Closure Rate</th>
-                <th>Avg. Rating</th>
-                <th>Rating Count</th>
+                <th>智能体名称</th>
+                <th>接待会话数</th>
+                <th>结单会话数</th>
+                <th>结单率</th>
+                <th>平均评分</th>
+                <th>评价次数</th>
               </tr>
             </thead>
             <tbody>
@@ -80,17 +80,17 @@ limitations under the License.
         <!-- Human Agents Tab -->
         <div v-if="activeTab === 'human'" class="agents-table-container">
           <div v-if="!performanceData?.human_agents?.length" class="no-data">
-            No human agent data available
+            暂无人工客服效能数据
           </div>
           <table v-else class="agents-table">
             <thead>
               <tr>
-                <th>Agent Name</th>
-                <th>Total Chats</th>
-                <th>Closed Chats</th>
-                <th>Closure Rate</th>
-                <th>Avg. Rating</th>
-                <th>Rating Count</th>
+                <th>客服坐席姓名</th>
+                <th>接待会话数</th>
+                <th>结单会话数</th>
+                <th>结单率</th>
+                <th>平均评分</th>
+                <th>评价次数</th>
               </tr>
             </thead>
             <tbody>

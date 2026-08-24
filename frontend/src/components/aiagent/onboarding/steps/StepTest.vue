@@ -130,26 +130,25 @@ const formatMessage = (content: string) => sanitizeHtml(marked(content) as strin
 <template>
   <div class="step">
     <header class="step-head">
-      <h2 class="step-title">Try it out</h2>
-      <p class="step-sub">Ask a question the way a customer would. This is exactly how it'll answer.</p>
+      <h2 class="step-title">测试对话效果</h2>
+      <p class="step-sub">以真实客户的口吻提问，预览智能体的应答与服务表现。</p>
     </header>
 
     <!-- Knowledge indexing status -->
     <div v-if="knowledgeProcessing" class="kb-note processing">
       <span class="kb-spinner" aria-hidden="true"></span>
       <span>
-        Your knowledge is still being indexed in the background. Your agent can answer
-        <strong>general questions</strong> now — knowledge-based answers will kick in once it's done,
-        and we'll notify you.
+        知识库文档正在后台加速构建索引。智能体当前可答复
+        <strong>通用咨询</strong> — 索引完成后将自动基于专属知识库提供精准解答。
       </span>
     </div>
     <div v-else-if="knowledgeJustFinished" class="kb-note done">
       <span class="kb-check" aria-hidden="true">✓</span>
-      <span>Knowledge indexed — your agent can now answer from it.</span>
+      <span>知识库索引构建完成 — 智能体已可根据专属文档提供专业解答。</span>
     </div>
 
     <div class="test-chat">
-      <div v-if="connecting" class="chat-state">Connecting to your agent…</div>
+      <div v-if="connecting" class="chat-state">正在连接智能体…</div>
       <div v-else-if="setupError || connectionError" class="chat-state error">
         {{ setupError || connectionError }}
       </div>
@@ -176,17 +175,17 @@ const formatMessage = (content: string) => sanitizeHtml(marked(content) as strin
         v-model="input"
         class="text-input"
         type="text"
-        placeholder="Ask your agent anything…"
+        placeholder="向您的智能体提问任意问题…"
         :disabled="connecting || !!setupError"
         @keydown.enter.prevent="handleSend"
       />
-      <button type="button" class="send-btn" :disabled="connecting || loading || !!setupError" @click="handleSend" aria-label="Send">↑</button>
+      <button type="button" class="send-btn" :disabled="connecting || loading || !!setupError" @click="handleSend" aria-label="发送">↑</button>
     </div>
 
     <div class="step-actions">
-      <button type="button" class="btn-ghost" @click="emit('back')">Back</button>
+      <button type="button" class="btn-ghost" @click="emit('back')">返回上一步</button>
       <button type="button" class="btn-accent" @click="emit('next')">
-        Looks good <span class="arrow">→</span>
+        效果满意，下一步 <span class="arrow">→</span>
       </button>
     </div>
   </div>

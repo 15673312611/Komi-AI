@@ -83,7 +83,7 @@ initModal()
   <div class="ticket-modal">
     <div class="ticket-modal-content">
       <div class="ticket-modal-header">
-        <h3>Create Jira Ticket</h3>
+        <h3>创建 Jira 缺陷工单</h3>
         <button class="close-modal-btn" @click="handleClose">
           <font-awesome-icon icon="fa-solid fa-times" />
         </button>
@@ -91,22 +91,22 @@ initModal()
 
       <div v-if="jiraLoading" class="ticket-loading">
         <font-awesome-icon icon="fa-solid fa-spinner" spin />
-        Checking Jira connection...
+        正在检查 Jira 连接状态…
       </div>
 
       <div v-else-if="!jiraConnected" class="ticket-not-connected">
         <font-awesome-icon icon="fa-solid fa-exclamation-triangle" />
-        <p>Jira is not connected. Please connect Jira in the settings.</p>
+        <p>当前尚未连接 Jira 实例。请先前往设置中完成授权连接。</p>
         <router-link to="/settings/integrations" class="connect-jira-btn">
-          Connect Jira
+          去连接 Jira
         </router-link>
       </div>
 
       <div v-else class="ticket-form">
         <div class="form-group">
-          <label for="ticket-project">Project *</label>
+          <label for="ticket-project">所属项目 (Project) *</label>
           <div v-if="loadingProjects" class="loading-indicator">
-            <font-awesome-icon icon="fa-solid fa-spinner" spin /> Loading projects...
+            <font-awesome-icon icon="fa-solid fa-spinner" spin /> 正在加载项目列表…
           </div>
           <select 
             v-else
@@ -114,7 +114,7 @@ initModal()
             v-model="selectedProject"
             @change="handleProjectChange(selectedProject)"
           >
-            <option value="">Select a project</option>
+            <option value="">请选择所属项目</option>
             <option 
               v-for="project in jiraProjects" 
               :key="project.id" 
@@ -126,9 +126,9 @@ initModal()
         </div>
 
         <div class="form-group">
-          <label for="ticket-issue-type">Issue Type *</label>
+          <label for="ticket-issue-type">问题类型 (Issue Type) *</label>
           <div v-if="loadingIssueTypes" class="loading-indicator">
-            <font-awesome-icon icon="fa-solid fa-spinner" spin /> Loading issue types...
+            <font-awesome-icon icon="fa-solid fa-spinner" spin /> 正在加载问题类型…
           </div>
           <select 
             v-else
@@ -137,7 +137,7 @@ initModal()
             :disabled="!selectedProject"
             @change="handleIssueTypeChange(selectedIssueType)"
           >
-            <option value="">Select an issue type</option>
+            <option value="">请选择问题类型</option>
             <option 
               v-for="issueType in jiraIssueTypes" 
               :key="issueType.id" 
@@ -150,20 +150,20 @@ initModal()
 
         <div v-if="selectedProject && selectedIssueType" class="form-group">
           <div v-if="checkingPriorityAvailability" class="loading-indicator">
-            <font-awesome-icon icon="fa-solid fa-spinner" spin /> Checking priority availability...
+            <font-awesome-icon icon="fa-solid fa-spinner" spin /> 正在检查优先级字段…
           </div>
           
           <template v-else-if="priorityAvailable">
-            <label for="ticket-priority">Priority</label>
+            <label for="ticket-priority">优先级 (Priority)</label>
             <div v-if="loadingPriorities" class="loading-indicator">
-              <font-awesome-icon icon="fa-solid fa-spinner" spin /> Loading priorities...
+              <font-awesome-icon icon="fa-solid fa-spinner" spin /> 正在加载优先级…
             </div>
             <select 
               v-else
               id="ticket-priority" 
               v-model="selectedPriority"
             >
-              <option value="">Select a priority</option>
+              <option value="">请选择优先级</option>
               <option 
                 v-for="priority in jiraPriorities" 
                 :key="priority.id" 
@@ -176,45 +176,45 @@ initModal()
           
           <div v-else class="priority-unavailable">
             <font-awesome-icon icon="fa-solid fa-info-circle" />
-            Priority field is not available for this project/issue type
+            当前项目/类型不支持设置优先级字段
           </div>
         </div>
 
         <div class="form-group">
-          <label for="ticket-summary">Summary *</label>
+          <label for="ticket-summary">工单标题 (Summary) *</label>
           <input 
             type="text" 
             id="ticket-summary" 
             v-model="ticketSummary"
-            placeholder="Enter a summary for the ticket"
+            placeholder="请输入工单简要标题概述"
           >
         </div>
 
         <div class="form-group">
-          <label for="ticket-description">Description</label>
+          <label for="ticket-description">详细描述 (Description)</label>
           <textarea 
             id="ticket-description" 
             v-model="ticketDescription"
-            placeholder="Enter a description for the ticket"
+            placeholder="请输入工单详细描述或复现步骤"
             rows="4"
           ></textarea>
         </div>
 
         <div class="ticket-actions">
-          <button class="cancel-btn" @click="handleClose">Cancel</button>
+          <button class="cancel-btn" @click="handleClose">取消</button>
           <button 
             class="create-btn" 
             @click="handleSubmit"
             :disabled="!isFormValid || creatingTicket"
           >
             <font-awesome-icon v-if="creatingTicket" icon="fa-solid fa-spinner" spin />
-            {{ creatingTicket ? 'Creating...' : 'Create Ticket' }}
+            {{ creatingTicket ? '正在创建…' : '立即创建工单' }}
           </button>
         </div>
 
         <div v-if="createdTicketKey" class="ticket-created">
           <font-awesome-icon icon="fa-solid fa-check-circle" />
-          Ticket created: <strong>{{ createdTicketKey }}</strong>
+          工单创建成功：<strong>{{ createdTicketKey }}</strong>
         </div>
       </div>
     </div>

@@ -51,7 +51,7 @@ const updateFormData = (field: keyof MessageNodeData, value: any) => {
 <template>
   <div class="message-node-config">
     <div class="form-group">
-      <label for="message-text">Message Text *</label>
+      <label for="message-text">消息内容 (Message Text) *</label>
       <textarea
         id="message-text"
         :value="formData.message_text"
@@ -59,7 +59,7 @@ const updateFormData = (field: keyof MessageNodeData, value: any) => {
         @blur="$emit('validate-field', 'message_text')"
         class="form-textarea"
         :class="{ 'error': validationErrors.message_text }"
-        placeholder="Enter the message to send to users"
+        placeholder="输入发送给用户的预设消息文本"
         rows="4"
         required
       ></textarea>
@@ -77,7 +77,7 @@ const updateFormData = (field: keyof MessageNodeData, value: any) => {
             @change="updateFormData('show_typing', ($event.target as HTMLInputElement).checked)"
             class="form-checkbox"
           />
-          <span>Show typing indicator</span>
+          <span>发送前模拟「正在输入中...」动画效果</span>
         </label>
       </div>
     </div>

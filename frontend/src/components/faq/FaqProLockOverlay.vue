@@ -25,7 +25,7 @@ const props = defineProps<{
   planAllowed?: boolean | null
 }>()
 
-const PRO_PRICE_NOTE = 'Included in Pro · $39/agent/mo'
+const PRO_PRICE_NOTE = '包含于专业版 Pro 套餐中'
 
 const router = useRouter()
 const { hasEnterpriseModule } = useEnterpriseFeatures()
@@ -54,17 +54,16 @@ function goToSubscription() {
         <div class="lock-card__icon">
           <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="var(--c-purple)" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="10" rx="2.2" /><path d="M8 11V8a4 4 0 0 1 8 0v3" /></svg>
         </div>
-        <h3 class="lock-card__title">Auto-generate FAQs with Pro</h3>
+        <h3 class="lock-card__title">升级专业版解锁 FAQ 智能生成</h3>
         <p class="lock-card__copy">
-          ChatterMate reads every knowledge source and drafts clear, ready-to-publish FAQs — grouped
-          by topic and kept in sync as your docs change.
+          AI 读取并深度解析知识库，自动起草结构清晰、可直接发布的 FAQ 问答 — 智能归类，并在文档更新时实时同步。
         </p>
         <div class="lock-card__actions">
           <button class="btn-upgrade" type="button" @click="goToSubscription">
             <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor" stroke="none"><path d="M13 2 4 14h6l-1 8 9-12h-6z" /></svg>
-            Upgrade to Pro
+            升级至专业版 Pro
           </button>
-          <button class="btn-compare" type="button" @click="goToSubscription">Compare plans</button>
+          <button class="btn-compare" type="button" @click="goToSubscription">查看套餐对比</button>
         </div>
         <div class="lock-card__note">{{ PRO_PRICE_NOTE }}</div>
       </div>

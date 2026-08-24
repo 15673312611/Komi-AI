@@ -54,7 +54,7 @@ const subpagesOver = computed(
   <div class="meters">
     <div class="meter" :class="{ 'meter--over': sourcesOver }">
       <div class="meter__head">
-        <span class="meter__label">Knowledge sources</span>
+        <span class="meter__label">知识源配额</span>
         <span class="meter__value">
           {{ sourceCount }}<template v-if="maxSources !== null"> / {{ maxSources }}</template>
         </span>
@@ -63,17 +63,17 @@ const subpagesOver = computed(
         <div class="meter__fill" :style="{ width: pct(sourceCount, maxSources) + '%' }"></div>
       </div>
       <div class="meter__note">
-        <template v-if="sourcesOver">You’ve exceeded your plan’s source limit. Upgrade to connect more.</template>
-        <template v-else-if="maxSources !== null">{{ sourceCount }} of {{ maxSources }} sources connected.</template>
-        <template v-else>{{ sourceCount }} sources connected.</template>
+        <template v-if="sourcesOver">已超出当前套餐的知识源上限。请升级套餐以接入更多知识。</template>
+        <template v-else-if="maxSources !== null">已接入 {{ sourceCount }} / {{ maxSources }} 个知识源。</template>
+        <template v-else>已接入 {{ sourceCount }} 个知识源。</template>
       </div>
     </div>
 
     <div class="meter" :class="{ 'meter--over': subpagesOver }">
       <div class="meter__head">
-        <span class="meter__label">Sub-pages per source</span>
+        <span class="meter__label">单个知识源子页面配额</span>
         <span class="meter__value">
-          <template v-if="maxSubpages !== null">up to {{ maxSubpages }}</template>
+          <template v-if="maxSubpages !== null">上限 {{ maxSubpages }} 页</template>
           <template v-else>—</template>
         </span>
       </div>
@@ -83,9 +83,9 @@ const subpagesOver = computed(
       </div>
       <div class="meter__note">
         <template v-if="largestSourceName">
-          Largest source: {{ largestSourceName }} — {{ largestSubpageCount }}<template v-if="maxSubpages !== null"> / {{ maxSubpages }}</template> sub-pages
+          最大知识源：{{ largestSourceName }} — 包含 {{ largestSubpageCount }}<template v-if="maxSubpages !== null"> / {{ maxSubpages }}</template> 个子页面
         </template>
-        <template v-else>No sources yet.</template>
+        <template v-else>暂无知识源。</template>
       </div>
     </div>
   </div>

@@ -34,16 +34,16 @@ const copyToClipboard = async () => {
   try {
     await navigator.clipboard.writeText(props.apiKey)
     copied.value = true
-    toast.success('Copied!', {
-      description: 'API key copied to clipboard',
+    toast.success('复制成功！', {
+      description: 'API 密钥已复制到剪贴板',
       duration: 2000
     })
     setTimeout(() => {
       copied.value = false
     }, 2000)
   } catch (err) {
-    toast.error('Failed to copy', {
-      description: 'Please copy manually',
+    toast.error('复制失败', {
+      description: '请手动选中文本复制',
       duration: 2000
     })
   }
@@ -52,22 +52,22 @@ const copyToClipboard = async () => {
 
 <template>
   <Modal @close="emit('close')">
-    <template #title>API Key Created</template>
+    <template #title>API 密钥已生成</template>
     <template #content>
       <div class="api-key-modal">
         <div class="warning-banner">
-          <strong>⚠️ Save this key now!</strong>
-          <p>This is the only time you'll see this API key. It cannot be retrieved later.</p>
+          <strong>⚠️ 请立即妥善保存此密钥！</strong>
+          <p>出于安全原因，此 API 密钥仅完整展示这一次，后续系统将无法再次查看。</p>
         </div>
 
         <div class="key-container">
-          <label>API Key:</label>
+          <label>API 密钥 (API Key)：</label>
           <div class="key-display">
             <code class="api-key">{{ apiKey }}</code>
             <button
               class="copy-button"
               @click="copyToClipboard"
-              :title="copied ? 'Copied!' : 'Copy to clipboard'"
+              :title="copied ? '已复制！' : '复制到剪贴板'"
             >
               <CheckIcon v-if="copied" class="icon success" />
               <ClipboardIcon v-else class="icon" />
@@ -76,17 +76,17 @@ const copyToClipboard = async () => {
         </div>
 
         <div class="instructions">
-          <h4>Next Steps:</h4>
+          <h4>后续接入指引：</h4>
           <ol>
-            <li>Copy this API key and store it securely</li>
-            <li>Use it to authenticate widget token generation requests</li>
-            <li>Include it in the Authorization header: <code>Bearer {{ apiKey.substring(0, 20) }}...</code></li>
+            <li>复制并安全保存此 API 密钥至您的业务服务端环境中</li>
+            <li>用于调用接口以生成聊天挂件认证会话 Token</li>
+            <li>在 HTTP 请求头中添加认证：<code>Authorization: Bearer {{ apiKey.substring(0, 20) }}...</code></li>
           </ol>
         </div>
 
         <div class="modal-actions">
           <button class="btn btn-primary" @click="emit('close')">
-            I've saved the key
+            我已妥善保存密钥
           </button>
         </div>
       </div>

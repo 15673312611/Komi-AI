@@ -17,6 +17,40 @@ limitations under the License.
 import api from './api'
 import type { Conversation, ChatDetail } from '@/types/chat'
 
+export interface ShopifyLineItem {
+  id?: number | string
+  title?: string
+  quantity?: number
+  price?: string | number
+  sku?: string
+}
+
+export interface ShopifyFulfillment {
+  id?: number | string
+  status?: string
+  shipment_status?: string
+  tracking_company?: string
+  tracking_numbers?: string[]
+  tracking_urls?: string[]
+}
+
+export interface ShopifyOrder {
+  id: string | number
+  name: string
+  created_at?: string
+  financial_status?: string
+  fulfillment_status?: string
+  total_price?: string | number
+  currency?: string
+  line_items?: ShopifyLineItem[]
+  fulfillments?: ShopifyFulfillment[]
+}
+
+export interface ShopifyOrdersResponse {
+  status?: string
+  orders: ShopifyOrder[]
+}
+
 interface ChatParams {
   skip?: number
   limit?: number
@@ -30,7 +64,6 @@ interface ChatParams {
 
 export const chatService = {
   async getRecentChats(params?: ChatParams) {
-    // Check if we're in a Shopify context
     const urlParams = new URLSearchParams(window.location.search)
     const hasShopParam = urlParams.has('shop') || urlParams.has('host')
     
@@ -40,7 +73,6 @@ export const chatService = {
   },
 
   async getChatDetail(sessionId: string) {
-    // Check if we're in a Shopify context
     const urlParams = new URLSearchParams(window.location.search)
     const hasShopParam = urlParams.has('shop') || urlParams.has('host')
     
@@ -60,8 +92,28 @@ export const chatService = {
     return response.data as ChatDetail
   },
 
+  async handBackToAI(sessionId: string): Promise<ChatDetail> {
+    const response = await api.post(`/sessions/${sessionId}/hand-back-to-ai`)
+    return response.data as ChatDetail
+  },
+
+  async toggleAIAutoReply(sessionId: string, enabled: boolean): Promise<ChatDetail> {
+    const response = await api.post(`/sessions/${sessionId}/toggle-ai-auto-reply`, { enabled })
+    return response.data as ChatDetail
+  },
+
   async reassignChat(sessionId: string, toUserId: string) {
     const response = await api.post(`/sessions/${sessionId}/reassign`, null, { params: { to_user_id: toUserId } })
     return response.data as ChatDetail
+  },
+
+  async getShopifyOrders(sessionId: string): Promise<ShopifyOrdersResponse> {
+    const response = await api.get<ShopifyOrdersResponse>(`/sessions/${sessionId}/shopify-orders`)
+    return response.data
+  },
+
+  async generateCopilotDraft(sessionId: string, params: { draft: string; mode: string }): Promise<{ draft: string }> {
+    const response = await api.post<{ draft: string }>(`/sessions/${sessionId}/copilot-draft`, params)
+    return response.data
   }
-} 
+}

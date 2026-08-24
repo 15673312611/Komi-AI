@@ -1,0 +1,28 @@
+services:
+  frontend:
+    ports: !override
+      - "3001:3000"
+    environment:
+      VITE_API_URL: http://localhost:8001/api/v1
+      VITE_WS_URL: ws://localhost:8001
+      VITE_WIDGET_URL: http://localhost:8001
+      FRONTEND_URL: http://localhost:3001
+
+  backend:
+    ports: !override
+      - "8001:8000"
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      FRONTEND_URL: http://localhost:3001
+      BACKEND_URL: http://localhost:8001
+      VITE_WIDGET_URL: http://localhost:8001
+      CORS_ORIGINS: '["http://localhost:3001","http://127.0.0.1:3001","http://localhost:8001","http://127.0.0.1:8001"]'
+    command: bash -c "alembic upgrade head && python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+
+  db:
+    ports: !override
+      - "15432:5432"
+
+  redis:
+    ports: !override
+      - "16379:6379"

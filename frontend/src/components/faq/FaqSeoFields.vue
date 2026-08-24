@@ -86,49 +86,47 @@ function onInput(event: Event): string {
       >
         <path d="M9 6l6 6-6 6" />
       </svg>
-      SEO &amp; URL
-      <span v-if="hasValues" class="seo__badge">customised</span>
+      SEO 搜索引擎优化与 URL 配置
+      <span v-if="hasValues" class="seo__badge">已自定义</span>
     </button>
 
     <div v-if="expanded" class="seo__fields">
       <label class="seo__field">
-        <span class="seo__label">URL slug</span>
+        <span class="seo__label">URL 路径别名 (Slug)</span>
         <span class="seo__slug">
           <span class="seo__prefix">/a/</span>
           <input
             type="text"
             class="seo__input seo__input--slug"
             :maxlength="MAX_SLUG"
-            placeholder="auto-generated from the question"
+            placeholder="默认根据问题标题自动生成"
             :value="slug"
             @input="emit('update:slug', onInput($event))"
           />
         </span>
         <span class="seo__hint">
-          Changing this breaks existing links to the article. Spaces and symbols become hyphens.
+          修改此项将变更文章的访问链接。空格和特殊符号将自动转换为连字符。
         </span>
       </label>
 
       <label class="seo__field">
-        <span class="seo__label">Custom URL path</span>
+        <span class="seo__label">自定义历史 URL 路径</span>
         <input
           type="text"
           class="seo__input seo__input--path"
           :maxlength="MAX_URL_PATH"
-          placeholder="/hc/en-us/articles/360012-reset-password"
+          placeholder="/hc/zh-cn/articles/360012-reset-password"
           :value="urlPath"
           @input="emit('update:urlPath', onInput($event))"
         />
         <span class="seo__hint">
-          Serve this article at a URL it already has on another help center, so its
-          search ranking and inbound links survive the move. Paste the old URL or path.
-          Leave empty to use the slug above.
+          绑定原帮助中心的完整路径，避免迁移造成外链失效或 SEO 权重丢失。留空则默认使用上方的 /a/ 别名。
         </span>
       </label>
 
       <label class="seo__field">
         <span class="seo__label">
-          Meta title
+          网页元标题 (Meta Title)
           <span class="seo__count" :class="{ 'seo__count--over': titleCount > RECOMMENDED_TITLE }">
             {{ titleCount }}/{{ RECOMMENDED_TITLE }}
           </span>
@@ -137,7 +135,7 @@ function onInput(event: Event): string {
           type="text"
           class="seo__input"
           :maxlength="MAX_TITLE"
-          :placeholder="question || 'Defaults to the question'"
+          :placeholder="question || '默认使用问题标题'"
           :value="metaTitle"
           @input="emit('update:metaTitle', onInput($event))"
         />
@@ -145,7 +143,7 @@ function onInput(event: Event): string {
 
       <label class="seo__field">
         <span class="seo__label">
-          Meta description
+          网页元描述 (Meta Description)
           <span
             class="seo__count"
             :class="{ 'seo__count--over': descriptionCount > RECOMMENDED_DESCRIPTION }"
@@ -157,7 +155,7 @@ function onInput(event: Event): string {
           class="seo__input seo__textarea"
           rows="2"
           :maxlength="MAX_DESCRIPTION"
-          placeholder="Defaults to the start of the answer"
+          placeholder="默认自动截取回答正文前段内容"
           :value="metaDescription"
           @input="emit('update:metaDescription', onInput($event))"
         ></textarea>

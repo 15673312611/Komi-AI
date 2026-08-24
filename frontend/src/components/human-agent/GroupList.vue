@@ -108,7 +108,7 @@ onMounted(fetchGroups)
       {{ error }}
     </div>
 
-    <div v-if="loading" class="loading">Loading groups...</div>
+    <div v-if="loading" class="loading">正在加载业务分组...</div>
 
     <div v-else class="teams-grid">
       <div v-for="group in filteredGroups" :key="group.id" class="team-card">
@@ -116,12 +116,12 @@ onMounted(fetchGroups)
           <div class="team-name">{{ group.name }}</div>
           <span class="online-badge" :class="{ active: onlineCount(group) > 0 }">
             <span class="online-dot"></span>
-            <span class="online-text">{{ onlineCount(group) }} online</span>
+            <span class="online-text">{{ onlineCount(group) }} 在线</span>
           </span>
         </div>
 
         <p v-if="group.description" class="team-desc">{{ group.description }}</p>
-        <p v-else class="team-desc no-desc">No description</p>
+        <p v-else class="team-desc no-desc">暂无描述说明</p>
 
         <div class="card-footer">
           <div class="members">
@@ -137,16 +137,16 @@ onMounted(fetchGroups)
               </div>
             </div>
             <span class="member-count">
-              {{ memberCount(group) }} {{ memberCount(group) === 1 ? 'agent' : 'agents' }}
+              {{ memberCount(group) }} 位坐席成员
             </span>
           </div>
-          <button class="manage-btn" @click="handleManageMembers(group)">Manage</button>
+          <button class="manage-btn" @click="handleManageMembers(group)">成员管理</button>
         </div>
 
         <!-- Hidden edit/delete affordances preserved on the card via context actions -->
         <div class="card-actions">
-          <button class="card-action" title="Edit team" @click="handleEditGroup(group)">Edit</button>
-          <button class="card-action delete" title="Delete team" @click="handleDeleteGroup(group)">Delete</button>
+          <button class="card-action" title="编辑分组" @click="handleEditGroup(group)">编辑</button>
+          <button class="card-action delete" title="删除分组" @click="handleDeleteGroup(group)">删除</button>
         </div>
       </div>
 
@@ -158,14 +158,14 @@ onMounted(fetchGroups)
             <path d="M12 5v14M5 12h14" />
           </svg>
         </span>
-        <span class="create-title">Create a team</span>
-        <span class="create-sub">Group agents by skill or channel</span>
+        <span class="create-title">+ 创建业务分组</span>
+        <span class="create-sub">按专业技能、业务条线或接待渠道聚合坐席</span>
       </button>
     </div>
 
     <!-- Create Group Modal -->
     <Modal v-if="showCreateModal" @close="showCreateModal = false">
-      <template #title>Create Group</template>
+      <template #title>新建业务分组</template>
       <template #content>
         <GroupForm
           @submit="onCreateGroup"
@@ -176,7 +176,7 @@ onMounted(fetchGroups)
 
     <!-- Edit Group Modal -->
     <Modal v-if="showEditModal" @close="showEditModal = false">
-      <template #title>Edit Group</template>
+      <template #title>编辑分组信息</template>
       <template #content>
         <GroupForm
           :group="selectedGroup"
@@ -188,7 +188,7 @@ onMounted(fetchGroups)
 
     <!-- Manage Members Modal -->
     <Modal v-if="showMembersModal" @close="showMembersModal = false">
-      <template #title>Manage Members</template>
+      <template #title>管理组内成员</template>
       <template #content>
         <div class="members-list">
           <div v-for="user in users" :key="user.id" class="member-item">
@@ -211,17 +211,17 @@ onMounted(fetchGroups)
 
     <!-- Delete Confirmation Modal -->
     <Modal v-if="showDeleteModal" @close="showDeleteModal = false">
-      <template #title>Delete Group</template>
+      <template #title>删除业务组</template>
       <template #content>
         <div class="delete-confirmation">
-          <p>Are you sure you want to delete "{{ selectedGroup?.name }}"?</p>
-          <p class="warning">This action cannot be undone.</p>
+          <p>确定要删除业务组 “{{ selectedGroup?.name }}” 吗？</p>
+          <p class="warning">删除后组内坐席归属关系将被解除，此操作无法撤销。</p>
           <div class="form-actions">
             <button class="btn btn-secondary" @click="showDeleteModal = false">
-              Cancel
+              取消
             </button>
             <button class="btn btn-danger" @click="onDeleteConfirm">
-              Delete
+              确认删除
             </button>
           </div>
         </div>

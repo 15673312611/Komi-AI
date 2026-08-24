@@ -65,28 +65,27 @@ function submitReject() {
       <div class="banner-head">
         <font-awesome-icon :icon="['fas', 'hourglass-half']" class="banner-icon pending" />
         <div>
-          <div class="banner-title">AI proposes a resolution — awaiting your approval</div>
+          <div class="banner-title">AI 提出了处置预案 — 等待您人工审批</div>
           <div class="banner-sub">
-            Approving resolves the ticket and sends the customer message below. ChatterMate never
-            executes infrastructure changes — any fix stays with your team.
+            审批通过后将标记工单为解决并向客户推送下方消息。系统不会擅自操作您的生产基础设施 — 任何环境变更均需团队核准。
           </div>
         </div>
         <span v-if="proposal.confidence != null" class="confidence-chip mono">
-          {{ proposal.confidence.toFixed(2) }}
+          置信度 {{ proposal.confidence.toFixed(2) }}
         </span>
       </div>
 
       <div class="proposal-body">
-        <div class="block-label">Proposed resolution</div>
+        <div class="block-label">推荐解决方案</div>
         <p class="proposal-text">{{ proposal.summary }}</p>
         <template v-if="proposal.customer_message">
-          <div class="block-label">Message to the customer</div>
+          <div class="block-label">拟发送给客户的说明</div>
           <p class="proposal-text customer">{{ proposal.customer_message }}</p>
         </template>
         <button v-if="bestHypothesis" class="reasoning-link" @click="jumpToHypothesis">
-          Reasoning: H{{ bestHypothesis.idx }} · Validated
+          推理依据：H{{ bestHypothesis.idx }} · 已证实成立
           <template v-if="bestHypothesis.confidence != null">
-            · confidence {{ bestHypothesis.confidence.toFixed(2) }}
+            · 置信度 {{ bestHypothesis.confidence.toFixed(2) }}
           </template>
           <font-awesome-icon :icon="['fas', 'arrow-down']" />
         </button>
@@ -95,33 +94,33 @@ function submitReject() {
       <div v-if="canApprove" class="banner-actions">
         <template v-if="!isRejecting">
           <button class="reject-btn" :disabled="isSubmitting" @click="isRejecting = true">
-            Reject…
+            驳回预案…
           </button>
           <button class="approve-btn" :disabled="isSubmitting" @click="approve">
             <font-awesome-icon :icon="['fas', 'check']" />
-            Approve &amp; resolve
+            审批通过并解决
           </button>
         </template>
         <div v-else class="reject-form">
           <textarea
             v-model="rejectReason"
             class="reject-input"
-            placeholder="Why is this wrong? Your reason guides the next investigation…"
+            placeholder="说明驳回理由？您的反馈将直接指导下一次 AI 重新调查…"
           ></textarea>
           <label class="reinvestigate-row">
             <input v-model="reinvestigate" type="checkbox" />
-            Re-run the investigation with this feedback
+            结合此反馈要求 AI 立即重新发起深度调查
           </label>
           <div class="reject-actions">
-            <button class="cancel-btn" @click="isRejecting = false">Cancel</button>
+            <button class="cancel-btn" @click="isRejecting = false">取消</button>
             <button class="reject-confirm" :disabled="isSubmitting" @click="submitReject">
-              Reject proposal
+              确认驳回预案
             </button>
           </div>
         </div>
       </div>
       <div v-else class="banner-sub">
-        You don't have permission to approve AI actions on tickets.
+        您当前没有审批工单 AI 处置预案的操作权限。
       </div>
     </template>
 
@@ -130,11 +129,10 @@ function submitReject() {
       <div class="banner-head">
         <font-awesome-icon :icon="['fas', 'circle-check']" class="banner-icon approved" />
         <div>
-          <div class="banner-title">Proposal approved</div>
+          <div class="banner-title">解决预案已审批通过</div>
           <div class="banner-sub">
-            <template v-if="proposal.decided_by_name">By {{ proposal.decided_by_name }} — </template>
-            the ticket was resolved and the customer notified. Any infrastructure change is
-            performed by your team, not ChatterMate.
+            <template v-if="proposal.decided_by_name">审批人：{{ proposal.decided_by_name }} — </template>
+            工单已完成解决并已通知客户。
           </div>
         </div>
       </div>
@@ -144,9 +142,9 @@ function submitReject() {
       <div class="banner-head">
         <font-awesome-icon :icon="['fas', 'circle-xmark']" class="banner-icon rejected" />
         <div>
-          <div class="banner-title">Proposal rejected</div>
+          <div class="banner-title">解决预案已驳回</div>
           <div class="banner-sub">
-            <template v-if="proposal.decided_by_name">By {{ proposal.decided_by_name }}. </template>
+            <template v-if="proposal.decided_by_name">驳回人：{{ proposal.decided_by_name }}。 </template>
             <template v-if="proposal.reject_reason">“{{ proposal.reject_reason }}”</template>
           </div>
         </div>

@@ -36,6 +36,10 @@ class AgentInfo(BaseModel):
     # False means this agent never answers with AI, so an unclaimed chat of its
     # is waiting for a person rather than being handled.
     ai_replies_enabled: bool = True
+    # Composer capabilities are part of the conversation contract so the
+    # dashboard can disable controls before the server rejects a send.
+    allow_attachments: bool = False
+    allowed_attachment_types: Optional[List[str]] = None
 
 class TransferReasonType(str, Enum):
     UNABLE_TO_ANSWER = "UNABLE_TO_ANSWER"
@@ -136,9 +140,14 @@ class ShopifyOutputData(BaseModel):
         return self.dict()
 
 class Message(BaseModel):
+    # Persistent message identifiers let dashboard clients reconcile an
+    # optimistic send with the Socket.IO echo without comparing timestamps.
+    id: Optional[int] = None
     message: str
     message_type: str
     created_at: datetime
+    session_id: Optional[UUID] = None
+    client_message_id: Optional[str] = None
     attributes: Optional[dict] = None
     shopify_output: Optional[ShopifyOutputData] = None
     end_chat: Optional[bool] = None
@@ -193,6 +202,9 @@ class ChatDetailResponse(BaseModel):
     session_id: UUID
     user_id: Optional[UUID]
     user_name: Optional[str]
+    # The effective per-conversation setting.  It falls back to the agent
+    # default when no session override has been saved.
+    ai_auto_reply: bool = True
     created_at: datetime
     updated_at: datetime
 

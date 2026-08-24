@@ -58,11 +58,11 @@ const badgeText = computed(() => formatBadgeCount(props.unreadCount))
             type="button"
             class="bottom-nav-item"
             :class="{ active: moreActive }"
-            aria-label="More"
+            aria-label="更多"
             @click="emit('more')"
         >
             <span class="bottom-nav-icon" v-html="navIconSvg('more', 24)"></span>
-            <span class="bottom-nav-label">More</span>
+            <span class="bottom-nav-label">更多</span>
             <span v-if="unreadCount" class="bottom-nav-badge">{{ badgeText }}</span>
         </button>
     </nav>

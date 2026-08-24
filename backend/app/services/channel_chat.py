@@ -107,7 +107,10 @@ async def process_channel_message(account_id, inbound: InboundMessage) -> None:
         ai_replies_enabled = True
         if session_record.user_id is None and session_record.status == SessionStatus.OPEN:
             agent = AgentRepository(db).get_agent(agent_id)
-            ai_replies_enabled = agent.ai_replies_enabled if agent else True
+            ai_replies_enabled = ChatRepository.effective_ai_auto_reply(
+                session_record,
+                agent.ai_replies_enabled if agent else True,
+            )
 
         # Human is handling (or a transfer is pending, or this agent never uses
         # AI): store + relay to the agent dashboard, never run the bot.
@@ -116,8 +119,7 @@ async def process_channel_message(account_id, inbound: InboundMessage) -> None:
                 or not ai_replies_enabled):
             stored = _store_customer_message(db, inbound, session_record, agent_id,
                                              customer_id, org_id, account)
-            await _relay_to_human(session_record, inbound,
-                                  created_at=getattr(stored, 'created_at', None))
+            await _relay_to_human(session_record, inbound, stored_message=stored)
 
             # Nothing will answer this on its own, so acknowledge once — on a
             # channel an unanswered message reads as a dead number. Only on the
@@ -420,18 +422,23 @@ def _store_customer_message(db: Session, inbound: InboundMessage, session_record
 
 
 async def _relay_to_human(session_record, inbound: InboundMessage,
-                          created_at: Optional[datetime] = None) -> None:
+                          stored_message=None) -> None:
     """Forward a customer message to the handling agent's dashboard rooms,
     mirroring the widget's chat_reply events."""
     session_id = str(session_record.session_id)
     payload = {
         'message': inbound.text or "",
+        'message_id': getattr(stored_message, 'id', None),
+        'message_type': 'user',
         'type': 'user_message',
         'transfer_to_human': False,
         'session_id': session_id,
         # The inbox appends the message live off this field; without it the
         # handler builds an invalid Date and the message only shows on refetch.
-        'created_at': (created_at or datetime.now(timezone.utc)).isoformat(),
+        'created_at': (
+            getattr(stored_message, 'created_at', None) or datetime.now(timezone.utc)
+        ).isoformat(),
+        'attributes': getattr(stored_message, 'attributes', None) or {},
     }
     if session_record.user_id is not None:
         await sio.emit('chat_reply', payload, room=f"user_{session_record.user_id}", namespace='/agent')

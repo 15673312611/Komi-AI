@@ -272,7 +272,7 @@ const createAgent = async () => {
 
 const handleContinue = async () => {
   if (!agentName.value.trim()) {
-    error.value = 'Please give your agent a name.'
+    error.value = '请为您的智能体输入一个名称。'
     return
   }
   error.value = ''
@@ -282,7 +282,7 @@ const handleContinue = async () => {
     if (!ready) return // OSS gate is now showing; createAgent runs after it completes
     await createAgent()
   } catch (err: any) {
-    error.value = err?.response?.data?.detail || 'Failed to create your agent. Please try again.'
+    error.value = err?.response?.data?.detail || '创建智能体失败，请稍后重试。'
   } finally {
     isSubmitting.value = false
   }
@@ -295,7 +295,7 @@ const onAiConfigured = async () => {
   try {
     await createAgent()
   } catch (err: any) {
-    error.value = err?.response?.data?.detail || 'Failed to create your agent. Please try again.'
+    error.value = err?.response?.data?.detail || '创建智能体失败，请稍后重试。'
   } finally {
     isSubmitting.value = false
   }
@@ -306,31 +306,31 @@ const onAiConfigured = async () => {
   <div class="step">
     <!-- OSS provider-key gate -->
     <div v-if="showAiGate" class="ai-gate">
-      <p class="ai-gate-note">Connect an AI provider to power your agent, then we'll create it.</p>
+      <p class="ai-gate-note">请先配置并连接 AI 模型提供商以赋能智能体，配置完成后将立即创建。</p>
       <AISetup @ai-setup-complete="onAiConfigured" />
     </div>
 
     <template v-else>
       <header class="step-head">
-        <h2 class="step-title">Create your agent</h2>
-        <p class="step-sub">Give it a name and a personality. You can refine everything later.</p>
+        <h2 class="step-title">创建您的 AI 智能体</h2>
+        <p class="step-sub">为智能体设置专属名称与个性定位，后续可在配置中心随时微调。</p>
       </header>
 
       <div class="field">
-        <label class="field-label" for="onb-agent-name">Agent name</label>
+        <label class="field-label" for="onb-agent-name">智能体名称</label>
         <input
           id="onb-agent-name"
           v-model="agentName"
           class="text-input"
           type="text"
-          placeholder="e.g. Customer Support Agent"
+          placeholder="例如：电商金牌客服小助手"
           :disabled="isSubmitting"
           @keydown.enter.prevent="handleContinue"
         />
       </div>
 
       <div class="field">
-        <label class="field-label">Type</label>
+        <label class="field-label">类型定位</label>
         <div class="type-picker">
           <button
             v-for="type in agentTypes"
@@ -347,7 +347,7 @@ const onAiConfigured = async () => {
       </div>
 
       <div class="field">
-        <label class="field-label">Profile picture</label>
+        <label class="field-label">头像外观</label>
         <div class="avatar-grid">
           <button
             v-for="(url, i) in presetAvatars"
@@ -357,7 +357,7 @@ const onAiConfigured = async () => {
             :class="{ selected: selectedAvatar === url }"
             :disabled="isSubmitting"
             @click="selectPreset(url)"
-            :aria-label="`Avatar ${i + 1}`"
+            :aria-label="`头像预设 ${i + 1}`"
           >
             <img :src="url" alt="" />
           </button>
@@ -367,8 +367,8 @@ const onAiConfigured = async () => {
             :class="{ selected: !!customAvatarPreview }"
             :disabled="isSubmitting"
             @click="triggerAvatarUpload"
-            title="Upload your own"
-            aria-label="Upload your own picture"
+            title="上传自定义头像"
+            aria-label="上传自定义头像"
           >
             <img v-if="customAvatarPreview" :src="customAvatarPreview" alt="" />
             <span v-else class="upload-plus">+</span>
@@ -379,7 +379,7 @@ const onAiConfigured = async () => {
 
       <div class="field">
         <div class="field-label-row">
-          <label class="field-label" for="onb-instructions">Personality &amp; instructions</label>
+          <label class="field-label" for="onb-instructions">人设定位与指令说明 (Prompt)</label>
           <button
             type="button"
             class="ai-generate-btn"
@@ -387,7 +387,7 @@ const onAiConfigured = async () => {
             @click="generateWithAI"
           >
             <span class="ai-icon">✨</span>
-            {{ isGenerating ? 'Generating…' : 'Generate with AI' }}
+            {{ isGenerating ? '正在生成…' : 'AI 帮我写' }}
           </button>
         </div>
         <textarea
@@ -395,7 +395,7 @@ const onAiConfigured = async () => {
           v-model="instructions"
           class="text-input textarea"
           rows="3"
-          placeholder="Be concise and friendly. Escalate billing questions to a human."
+          placeholder="保持热情礼貌、专业简洁。遇到复杂售后或退款诉求，主动引导客户转接人工客服。"
           :disabled="isSubmitting"
         ></textarea>
       </div>
@@ -403,10 +403,10 @@ const onAiConfigured = async () => {
       <div class="field lead-field">
         <div class="lead-enable-row">
           <div>
-            <label class="field-label">Lead capture <span v-if="leadCaptureLocked" class="lead-pro">Pro</span></label>
+            <label class="field-label">潜客线索收集 <span v-if="leadCaptureLocked" class="lead-pro">Pro</span></label>
             <p class="lead-sub">
-              <template v-if="leadCaptureLocked">Capture and qualify leads in conversation. Upgrade to Pro to enable it.</template>
-              <template v-else>The agent collects contact details in conversation — helps first, then asks at the natural moment.</template>
+              <template v-if="leadCaptureLocked">在对话中智能获取潜客联系方式。升级至 Pro 专业版即可启用。</template>
+              <template v-else>智能体将在对话适当时机礼貌询问并留存联系方式 — 优先解答，顺畅收集。</template>
             </p>
           </div>
           <button
@@ -421,7 +421,7 @@ const onAiConfigured = async () => {
           </button>
         </div>
         <div v-if="leadEnabled && !leadCaptureLocked" class="lead-details">
-          <div class="lead-details-label">Details to collect</div>
+          <div class="lead-details-label">需要收集的信息字段</div>
           <div class="lead-chips">
             <button
               v-for="f in LEAD_FIELDS"
@@ -433,7 +433,7 @@ const onAiConfigured = async () => {
               @click="leadFields[f.key] = !leadFields[f.key]"
             >
               <span class="lead-check">{{ leadFields[f.key] ? '✔' : '' }}</span>{{ f.label }}
-              <span v-if="f.key === 'email'" class="lead-req">required</span>
+              <span v-if="f.key === 'email'" class="lead-req">必填</span>
             </button>
           </div>
         </div>
@@ -442,17 +442,17 @@ const onAiConfigured = async () => {
       <div class="ai-note">
         <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="8" /></svg>
         <span>
-          Powered by ChatterMate AI — ready instantly. Want your own model? Set it later in
-          <strong>AI Configuration → Advanced</strong>.
+          由 ChatterMate AI 强劲驱动 — 开箱即用。如需接入自备模型，可在后续前往
+          <strong>系统设置 → AI 模型配置</strong> 中绑定。
         </span>
       </div>
 
       <p v-if="error" class="step-error" role="alert">{{ error }}</p>
 
       <div class="step-actions">
-        <button type="button" class="btn-text" :disabled="isSubmitting" @click="emit('skip')">Skip for now</button>
+        <button type="button" class="btn-text" :disabled="isSubmitting" @click="emit('skip')">稍后设置</button>
         <button type="button" class="btn-accent" :disabled="isSubmitting" @click="handleContinue">
-          {{ isSubmitting ? 'Creating…' : 'Continue' }}
+          {{ isSubmitting ? '正在创建…' : '继续下一步' }}
           <span v-if="!isSubmitting" class="arrow">→</span>
         </button>
       </div>

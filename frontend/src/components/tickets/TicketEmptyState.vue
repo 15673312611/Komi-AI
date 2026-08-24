@@ -23,16 +23,16 @@ const emit = defineEmits<{ (e: 'clear'): void; (e: 'create'): void }>()
   <div class="empty-state">
     <div class="glyph">∅</div>
     <template v-if="filtered">
-      <div class="title">No tickets match</div>
-      <div class="hint">Try clearing a filter, or open a fresh one.</div>
-      <button class="action" @click="emit('clear')">Clear filters</button>
+      <div class="title">未找到匹配的工单</div>
+      <div class="hint">请尝试清空筛选条件或调整搜索关键词。</div>
+      <button class="action" @click="emit('clear')">清空筛选条件</button>
     </template>
     <template v-else>
-      <div class="title">No tickets yet</div>
+      <div class="title">暂无工单数据</div>
       <div class="hint">
-        Tickets open here when your chat AI escalates an issue — or create one yourself.
+        当对话 AI 判定问题需要升级调查时会自动流转至此，您也可以手动创建工单。
       </div>
-      <button class="action" @click="emit('create')">New ticket</button>
+      <button class="action" @click="emit('create')">+ 新建工单</button>
     </template>
   </div>
 </template>

@@ -155,8 +155,7 @@ class KnowledgeRepository:
                         {"source": knowledge.source}
                     )
                 except Exception as e:
-                    logger.error(f"Error deleting data from {
-                                 knowledge.table_name}: {str(e)}")
+                    logger.error(f"Error deleting data from {knowledge.table_name}: {str(e)}")
                     # Continue with knowledge deletion even if data deletion fails
 
             # Delete the knowledge entry

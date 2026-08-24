@@ -303,7 +303,7 @@ const getOrbStyle = (agent: Agent): Record<string, string> => {
                     <input
                         v-model="searchQuery"
                         type="text"
-                        placeholder="Search agents..."
+                        placeholder="搜索智能体名称或标识..."
                         class="search-input"
                     />
                 </div>
@@ -313,12 +313,12 @@ const getOrbStyle = (agent: Agent): Record<string, string> => {
                     :class="{ 'locked': isAgentCreationLocked }"
                     :disabled="isAgentCreationLocked"
                     @click="handleCreateAgent"
-                    :title="isAgentCreationLocked ? `Agent limit reached (${currentAgentCount}/${planLimits.maxAgents}).` : 'Create a new agent'"
+                    :title="isAgentCreationLocked ? `已达套餐智能体数量上限 (${currentAgentCount}/${planLimits.maxAgents})。` : '创建新 AI 智能体'"
                 >
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
                         <path d="M12 5v14M5 12h14"/>
                     </svg>
-                    Create Agent
+                    创建智能体
                     <font-awesome-icon v-if="hasEnterpriseModule && isAgentCreationLocked" icon="fa-solid fa-lock" class="lock-icon" />
                 </button>
             </div>
@@ -326,24 +326,24 @@ const getOrbStyle = (agent: Agent): Record<string, string> => {
             <!-- KPI Strip -->
             <div class="kpi-strip">
                 <div class="kpi-card">
-                    <div class="kpi-label">ACTIVE AGENTS</div>
+                    <div class="kpi-label">活跃智能体</div>
                     <div class="kpi-value">{{ agents.length }}</div>
-                    <div class="kpi-sub kpi-lime">{{ onlineCount }} online</div>
+                    <div class="kpi-sub kpi-lime">{{ onlineCount }} 在线运行</div>
                 </div>
                 <div class="kpi-card">
-                    <div class="kpi-label">CONVERSATIONS · 30D</div>
+                    <div class="kpi-label">近30天接待会话</div>
                     <div class="kpi-value">—</div>
-                    <div class="kpi-sub kpi-lime">▲ analytics coming soon</div>
+                    <div class="kpi-sub kpi-lime">▲ 统计分析即将上线</div>
                 </div>
                 <div class="kpi-card">
-                    <div class="kpi-label">RESOLUTION RATE</div>
+                    <div class="kpi-label">AI 独立解决率</div>
                     <div class="kpi-value">—</div>
-                    <div class="kpi-sub kpi-teal">self-served by AI</div>
+                    <div class="kpi-sub kpi-teal">AI 自主应答闭环</div>
                 </div>
                 <div class="kpi-card">
-                    <div class="kpi-label">HUMAN HANDOFFS</div>
+                    <div class="kpi-label">转人工会话数</div>
                     <div class="kpi-value">—</div>
-                    <div class="kpi-sub kpi-coral">conversations</div>
+                    <div class="kpi-sub kpi-coral">人机协作分流</div>
                 </div>
             </div>
 
@@ -373,16 +373,16 @@ const getOrbStyle = (agent: Agent): Record<string, string> => {
                                 class="card-menu-btn"
                                 :class="{ active: openMenuId === agent.id }"
                                 @click.stop="toggleMenu(agent.id)"
-                                title="More options"
+                                title="更多操作"
                             >
                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                                     <circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/>
                                 </svg>
                             </button>
                             <div v-if="openMenuId === agent.id" class="card-menu" role="menu">
-                                <button class="card-menu-item" role="menuitem" @click="closeMenu(); handleAgentClick(agent)">Configure</button>
-                                <button class="card-menu-item" role="menuitem" @click="closeMenu(); copyWidgetCode(agent)">Copy widget code</button>
-                                <button class="card-menu-item" role="menuitem" @click="copyAgentId(agent)">Copy agent ID</button>
+                                <button class="card-menu-item" role="menuitem" @click="closeMenu(); handleAgentClick(agent)">配置详情</button>
+                                <button class="card-menu-item" role="menuitem" @click="closeMenu(); copyWidgetCode(agent)">复制挂件代码</button>
+                                <button class="card-menu-item" role="menuitem" @click="copyAgentId(agent)">复制智能体 ID</button>
                                 <div class="card-menu-divider"></div>
                                 <button
                                     class="card-menu-item"
@@ -390,7 +390,7 @@ const getOrbStyle = (agent: Agent): Record<string, string> => {
                                     :disabled="togglingActiveId === agent.id"
                                     @click="toggleAgentActive(agent)"
                                 >
-                                    {{ agent.is_active ? 'Set offline' : 'Set online' }}
+                                    {{ agent.is_active ? '设为离线' : '设为在线' }}
                                 </button>
                             </div>
                         </div>
@@ -400,32 +400,32 @@ const getOrbStyle = (agent: Agent): Record<string, string> => {
                     <div class="badges-row">
                         <span class="badge-status" :class="{ online: agent.is_active }">
                             <span class="status-dot"></span>
-                            {{ agent.is_active ? 'Online' : 'Offline' }}
+                            {{ agent.is_active ? '在线' : '离线' }}
                         </span>
-                        <span class="badge-integration">Web</span>
+                        <span class="badge-integration">Web 网页</span>
                         <span v-if="agent.use_workflow" class="badge-workflow">
                             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 3H5a2 2 0 00-2 2v4m6-6h10a2 2 0 012 2v4M9 3v18m0 0h10a2 2 0 002-2V9M9 21H5a2 2 0 01-2-2V9m0 0h18"/></svg>
-                            Workflow
+                            工作流驱动
                         </span>
                     </div>
 
                     <!-- Description -->
-                    <p class="agent-description">{{ agent.description || 'No description provided.' }}</p>
+                    <p class="agent-description">{{ agent.description || '暂无描述信息。' }}</p>
 
                     <!-- Stats -->
                     <div class="stats-divider"></div>
                     <div class="stats-row">
                         <div class="stat-item">
                             <span class="stat-value">—</span>
-                            <span class="stat-label">CHATS</span>
+                            <span class="stat-label">会话总量</span>
                         </div>
                         <div class="stat-item">
                             <span class="stat-value">—</span>
-                            <span class="stat-label">RESOLVED</span>
+                            <span class="stat-label">已解决</span>
                         </div>
                         <div class="stat-item">
                             <span class="stat-value">{{ agent.knowledge?.length ?? 0 }}</span>
-                            <span class="stat-label">SOURCES</span>
+                            <span class="stat-label">关联知识源</span>
                         </div>
                     </div>
 
@@ -435,17 +435,17 @@ const getOrbStyle = (agent: Agent): Record<string, string> => {
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                 <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/>
                             </svg>
-                            Configure
+                            配置管理
                         </button>
                         <button
                             class="btn-copy-widget"
                             :class="{ loading: widgetLoadingMap[agent.id] }"
                             :disabled="widgetLoadingMap[agent.id]"
                             @click="copyWidgetCode(agent)"
-                            title="Copy widget embed code"
+                            title="复制网页挂件嵌入代码"
                         >
                             <div v-if="widgetLoadingMap[agent.id]" class="loading-spinner"></div>
-                            <template v-else>Copy widget</template>
+                            <template v-else>复制挂件代码</template>
                         </button>
                     </div>
                 </div>
@@ -454,17 +454,17 @@ const getOrbStyle = (agent: Agent): Record<string, string> => {
             <!-- Empty search result -->
             <div v-else-if="searchQuery && agents.length > 0" class="empty-search">
                 <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-                <p>No agents match "<strong>{{ searchQuery }}</strong>"</p>
+                <p>未找到匹配 "<strong>{{ searchQuery }}</strong>" 的智能体</p>
             </div>
 
             <!-- Empty state: no agents at all -->
             <div v-else-if="agents.length === 0" class="empty-state">
                 <div class="empty-orb"></div>
-                <h3>No agents yet</h3>
-                <p>Create your first AI agent to start handling conversations automatically.</p>
+                <h3>暂无 AI 智能体</h3>
+                <p>创建您的第一个 AI 智能客服，开始全天候自动化接待客户咨询。</p>
                 <button v-if="canManageAgents" class="create-agent-button" @click="handleCreateAgent">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
-                    Create Agent
+                    立即创建智能体
                 </button>
             </div>
         </div>
@@ -486,36 +486,36 @@ const getOrbStyle = (agent: Agent): Record<string, string> => {
         <div v-if="hasEnterpriseModule && showUpgradeModal" class="upgrade-modal-overlay" @click="closeUpgradeModal">
             <div class="upgrade-modal" @click.stop>
                 <div class="upgrade-modal-header">
-                    <h3>Agent Limit Reached</h3>
+                    <h3>已达智能体数量上限</h3>
                     <button class="close-button" @click="closeUpgradeModal">×</button>
                 </div>
                 <div class="upgrade-modal-content">
                     <p class="upgrade-description">
-                        You've reached your plan's agent limit ({{ currentAgentCount }}/{{ planLimits.maxAgents }}).
-                        Upgrade your plan to create more agents and unlock additional features.
+                        您当前套餐的智能体配额已用满 ({{ currentAgentCount }}/{{ planLimits.maxAgents }})。
+                        升级套餐以创建更多智能体并解锁更高级的企业级特性。
                     </p>
                     <div class="upgrade-features">
                         <div class="feature-item">
                             <font-awesome-icon icon="fa-solid fa-check" class="feature-icon" />
-                            <span>More agents for your team</span>
+                            <span>创建更多专属智能客服</span>
                         </div>
                         <div class="feature-item">
                             <font-awesome-icon icon="fa-solid fa-check" class="feature-icon" />
-                            <span>Advanced workflow features</span>
+                            <span>多分支高级工作流编排</span>
                         </div>
                         <div class="feature-item">
                             <font-awesome-icon icon="fa-solid fa-check" class="feature-icon" />
-                            <span>Enhanced knowledge management</span>
+                            <span>海量知识库容量与向量检索</span>
                         </div>
                         <div class="feature-item">
                             <font-awesome-icon icon="fa-solid fa-check" class="feature-icon" />
-                            <span>Priority support</span>
+                            <span>专属技术支持与 SLA 保障</span>
                         </div>
                     </div>
                 </div>
                 <div class="upgrade-modal-footer">
-                    <button class="upgrade-button primary" @click="handleUpgrade">Upgrade Plan</button>
-                    <button class="upgrade-button secondary" @click="closeUpgradeModal">Maybe Later</button>
+                    <button class="upgrade-button primary" @click="handleUpgrade">升级套餐</button>
+                    <button class="upgrade-button secondary" @click="closeUpgradeModal">暂不升级</button>
                 </div>
             </div>
         </div>

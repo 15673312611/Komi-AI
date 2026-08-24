@@ -31,11 +31,11 @@ const strengthClass = computed(() => {
 })
 
 const requirements = computed(() => [
-  { label: 'At least 8 characters', met: props.strength.hasMinLength },
-  { label: 'At least one uppercase letter', met: props.strength.hasUpperCase },
-  { label: 'At least one lowercase letter', met: props.strength.hasLowerCase },
-  { label: 'At least one number', met: props.strength.hasNumber },
-  { label: 'At least one special character', met: props.strength.hasSpecialChar },
+  { label: '密码长度至少 8 位', met: props.strength.hasMinLength },
+  { label: '至少包含一个大写字母', met: props.strength.hasUpperCase },
+  { label: '至少包含一个小写字母', met: props.strength.hasLowerCase },
+  { label: '至少包含一个数字', met: props.strength.hasNumber },
+  { label: '至少包含一个特殊字符', met: props.strength.hasSpecialChar },
 ])
 </script>
 

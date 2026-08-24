@@ -40,21 +40,23 @@ const handleSubmit = () => {
 <template>
   <form @submit.prevent="handleSubmit" class="group-form">
     <div class="form-group">
-      <label for="name">Name</label>
+      <label for="name">业务组名称</label>
       <input
         id="name"
         v-model="formData.name"
         type="text"
+        placeholder="如：售前咨询组 / 跨境物流售后组"
         required
         class="form-input"
       />
     </div>
 
     <div class="form-group">
-      <label for="description">Description</label>
+      <label for="description">业务组描述说明</label>
       <textarea
         id="description"
         v-model="formData.description"
+        placeholder="简要说明该业务组负责接待的业务场景（选填）"
         class="form-input"
         rows="3"
       />
@@ -62,10 +64,10 @@ const handleSubmit = () => {
 
     <div class="form-actions">
       <button type="button" class="btn btn-secondary" @click="emit('cancel')">
-        Cancel
+        取消
       </button>
       <button type="submit" class="btn btn-primary">
-        {{ props.group ? 'Update' : 'Create' }}
+        {{ props.group ? '保存修改' : '确认创建' }}
       </button>
     </div>
   </form>

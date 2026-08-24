@@ -56,12 +56,16 @@ const showWorkflowBuilder = ref(false)
 
 // Computed properties
 const workflowStatus = computed(() => {
-  if (!workflow.value) return 'No workflow'
-  return workflow.value.status || 'Draft'
+  if (!workflow.value) return '暂无工作流'
+  const status = (workflow.value.status || 'Draft').toLowerCase()
+  if (status === 'published') return '已发布运行'
+  if (status === 'draft') return '草稿状态'
+  if (status === 'archived') return '已归档'
+  return workflow.value.status
 })
 
 const workflowStatusColor = computed(() => {
-  const status = workflowStatus.value.toLowerCase()
+  const status = (workflow.value?.status || 'Draft').toLowerCase()
   switch (status) {
     case 'published':
       return 'success'
@@ -75,7 +79,7 @@ const workflowStatusColor = computed(() => {
 })
 
 const formatDate = (dateString: string) => {
-  return new Date(dateString).toLocaleDateString('en-US', {
+  return new Date(dateString).toLocaleDateString('zh-CN', {
     year: 'numeric',
     month: 'short',
     day: 'numeric',
@@ -99,35 +103,34 @@ const handleCreateWorkflow = async () => {
     workflowName.value = ''
     workflowDescription.value = ''
     showCreateForm.value = false
+    
+    // Open workflow builder
+    openWorkflowBuilder()
   } catch (error) {
     // Error handling is done in the composable
   }
 }
 
 const handleEditWorkflow = () => {
-  if (!workflow.value) return
-  
-  // Pre-populate form with current values
-  editWorkflowName.value = workflow.value.name
-  editWorkflowDescription.value = workflow.value.description || ''
-  showEditForm.value = true
-  showCreateForm.value = false // Ensure create form is hidden
+  if (workflow.value) {
+    editWorkflowName.value = workflow.value.name
+    editWorkflowDescription.value = workflow.value.description || ''
+    showEditForm.value = true
+    showCreateForm.value = false
+  }
 }
 
 const handleUpdateWorkflow = async () => {
-  if (!workflow.value || !editWorkflowName.value.trim()) {
+  if (!editWorkflowName.value.trim()) {
     return
   }
 
   try {
-    await updateWorkflow(workflow.value.id, {
+    await updateWorkflow({
       name: editWorkflowName.value.trim(),
       description: editWorkflowDescription.value.trim() || undefined
     })
     
-    // Reset form
-    editWorkflowName.value = ''
-    editWorkflowDescription.value = ''
     showEditForm.value = false
   } catch (error) {
     // Error handling is done in the composable
@@ -141,11 +144,9 @@ const cancelEditForm = () => {
 }
 
 const handleDeleteWorkflow = async () => {
-  if (!workflow.value) return
-  
-  if (confirm('Are you sure you want to delete this workflow? This action cannot be undone.')) {
+  if (confirm('确定要删除此工作流吗？此操作无法撤销。')) {
     try {
-      await deleteWorkflow(workflow.value.id)
+      await deleteWorkflow()
     } catch (error) {
       // Error handling is done in the composable
     }
@@ -190,23 +191,23 @@ onMounted(() => {
   <div class="workflow-tab">
     <section class="detail-section">
       <div class="wf-header">
-        <h3 class="section-title">Workflow Builder</h3>
+        <h3 class="section-title">可视化工作流编排</h3>
         <p class="section-description">
-          Create and manage conversation workflows. Design custom chat journeys with a drag-and-drop builder.
+          创建与管理对话流程。通过低代码拖拽式画布，构建精准的客服应答、表单收集、业务分支与条件路由。
         </p>
       </div>
 
       <!-- Loading State -->
       <div v-if="workflowLoading && !hasWorkflow" class="loading-container">
         <div class="loading-spinner"></div>
-        <p class="loading-text">Loading workflow...</p>
+        <p class="loading-text">正在加载工作流...</p>
       </div>
 
       <!-- Error State -->
       <div v-else-if="workflowError && !hasWorkflow" class="error-container">
         <div class="error-icon">⚠️</div>
         <p class="error-message">{{ workflowError }}</p>
-        <button class="retry-button" @click="fetchWorkflow">Try Again</button>
+        <button class="retry-button" @click="fetchWorkflow">重试</button>
       </div>
 
       <!-- No Workflow State -->
@@ -220,45 +221,45 @@ onMounted(() => {
             <path d="M12 15v-3"/>
           </svg>
         </div>
-        <h4 class="no-workflow-title">No workflow created</h4>
+        <h4 class="no-workflow-title">暂未创建工作流</h4>
         <p class="no-workflow-description">
-          Create a workflow to design custom conversation journeys with a drag-and-drop interface.
+          创建工作流后，您可以使用可视化拖拽画布自由编排多轮对话节点与自动化逻辑。
         </p>
         <button class="create-workflow-button" @click="showCreateForm = true; showEditForm = false">
-          + Create workflow
+          + 创建工作流
         </button>
       </div>
 
       <!-- Create Workflow Form -->
       <div v-else-if="showCreateForm" class="create-form-container">
         <div class="form-header">
-          <h4 class="form-title">Create new workflow</h4>
-          <button class="close-form-button" @click="cancelCreateForm" aria-label="Close">
+          <h4 class="form-title">新建对话工作流</h4>
+          <button class="close-form-button" @click="cancelCreateForm" aria-label="关闭">
             ✕
           </button>
         </div>
 
         <form @submit.prevent="handleCreateWorkflow" class="create-form">
           <div class="form-group">
-            <label for="workflow-name" class="form-label">Workflow name <span class="req">*</span></label>
+            <label for="workflow-name" class="form-label">工作流名称 <span class="req">*</span></label>
             <input
               id="workflow-name"
               v-model="workflowName"
               type="text"
               class="form-input"
-              placeholder="Enter workflow name"
+              placeholder="输入工作流名称，如：售后退换货指引"
               required
               :disabled="createWorkflowLoading"
             />
           </div>
 
           <div class="form-group">
-            <label for="workflow-description" class="form-label">Description</label>
+            <label for="workflow-description" class="form-label">描述说明</label>
             <textarea
               id="workflow-description"
               v-model="workflowDescription"
               class="form-textarea"
-              placeholder="Describe what this workflow does (optional)"
+              placeholder="简要说明该工作流适用的业务场景（可选）"
               rows="3"
               :disabled="createWorkflowLoading"
             ></textarea>
@@ -271,7 +272,7 @@ onMounted(() => {
               @click="cancelCreateForm"
               :disabled="createWorkflowLoading"
             >
-              Cancel
+              取消
             </button>
             <button
               type="submit"
@@ -279,7 +280,7 @@ onMounted(() => {
               :disabled="!workflowName.trim() || createWorkflowLoading"
             >
               <div v-if="createWorkflowLoading" class="button-spinner"></div>
-              <span v-else>Create workflow</span>
+              <span v-else>创建并进入画布</span>
             </button>
           </div>
         </form>
@@ -288,33 +289,33 @@ onMounted(() => {
       <!-- Edit Workflow Form -->
       <div v-else-if="showEditForm" class="create-form-container">
         <div class="form-header">
-          <h4 class="form-title">Rename workflow</h4>
-          <button class="close-form-button" @click="cancelEditForm" aria-label="Close">
+          <h4 class="form-title">重命名与修改描述</h4>
+          <button class="close-form-button" @click="cancelEditForm" aria-label="关闭">
             ✕
           </button>
         </div>
 
         <form @submit.prevent="handleUpdateWorkflow" class="create-form">
           <div class="form-group">
-            <label for="edit-workflow-name" class="form-label">Workflow name <span class="req">*</span></label>
+            <label for="edit-workflow-name" class="form-label">工作流名称 <span class="req">*</span></label>
             <input
               id="edit-workflow-name"
               v-model="editWorkflowName"
               type="text"
               class="form-input"
-              placeholder="Enter workflow name"
+              placeholder="输入工作流名称"
               required
               :disabled="workflowLoading"
             />
           </div>
 
           <div class="form-group">
-            <label for="edit-workflow-description" class="form-label">Description</label>
+            <label for="edit-workflow-description" class="form-label">描述说明</label>
             <textarea
               id="edit-workflow-description"
               v-model="editWorkflowDescription"
               class="form-textarea"
-              placeholder="Describe what this workflow does (optional)"
+              placeholder="描述说明（可选）"
               rows="3"
               :disabled="workflowLoading"
             ></textarea>
@@ -327,7 +328,7 @@ onMounted(() => {
               @click="cancelEditForm"
               :disabled="workflowLoading"
             >
-              Cancel
+              取消
             </button>
             <button
               type="submit"
@@ -335,7 +336,7 @@ onMounted(() => {
               :disabled="!editWorkflowName.trim() || workflowLoading"
             >
               <div v-if="workflowLoading" class="button-spinner"></div>
-              <span v-else>Save changes</span>
+              <span v-else>保存修改</span>
             </button>
           </div>
         </form>
@@ -355,23 +356,23 @@ onMounted(() => {
               {{ workflow!.description }}
             </p>
             <div class="workflow-meta">
-              <span class="workflow-date">Created {{ formatDate(workflow!.created_at) }}</span>
+              <span class="workflow-date">创建时间 {{ formatDate(workflow!.created_at) }}</span>
               <span class="workflow-separator">·</span>
-              <span class="workflow-date">Updated {{ formatDate(workflow!.updated_at) }}</span>
+              <span class="workflow-date">最后更新 {{ formatDate(workflow!.updated_at) }}</span>
             </div>
           </div>
 
           <div class="workflow-actions">
             <button class="action-button primary" @click="openWorkflowBuilder">
-              ⛶ Open Builder
+              ⛶ 进入画布编排
             </button>
 
             <button class="action-button secondary" @click="handleEditWorkflow">
-              ✎ Rename
+              ✎ 修改信息
             </button>
 
             <button class="action-button danger" @click="handleDeleteWorkflow">
-              Delete
+              删除
             </button>
           </div>
         </div>

@@ -27,7 +27,7 @@ function copyQuery() {
   if (!props.event.tool_input) return
   navigator.clipboard
     .writeText(props.event.tool_input)
-    .then(() => toast.success('Query copied'))
+    .then(() => toast.success('查询语句已复制到剪贴板'))
     .catch(() => {})
 }
 
@@ -42,7 +42,7 @@ function formatTime(iso?: string | null): string {
     <button class="evidence-head" @click="isExpanded = !isExpanded">
       <span class="tool-badge">{{ event.connector_name || 'MCP' }}</span>
       <span class="tool-name">{{ event.tool_name }}</span>
-      <span v-if="event.error" class="error-tag">error</span>
+      <span v-if="event.error" class="error-tag">执行报错</span>
       <span class="evidence-meta">
         <span v-if="event.duration_ms != null" class="mono">{{ event.duration_ms }}ms</span>
         <span class="mono">{{ formatTime(event.created_at) }}</span>
@@ -52,17 +52,17 @@ function formatTime(iso?: string | null): string {
     <div v-if="isExpanded" class="evidence-body">
       <template v-if="event.tool_input">
         <div class="block-label-row">
-          <span class="block-label">Query</span>
-          <button class="copy-btn" @click="copyQuery">Copy</button>
+          <span class="block-label">调用入参</span>
+          <button class="copy-btn" @click="copyQuery">复制</button>
         </div>
         <pre class="code-block">{{ event.tool_input }}</pre>
       </template>
       <template v-if="event.error">
-        <div class="block-label">Error</div>
+        <div class="block-label">错误详情</div>
         <pre class="code-block error">{{ event.error }}</pre>
       </template>
       <template v-else-if="event.tool_result">
-        <div class="block-label">Result</div>
+        <div class="block-label">执行返回结果</div>
         <pre class="code-block">{{ event.tool_result }}</pre>
       </template>
     </div>

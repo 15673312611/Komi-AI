@@ -37,17 +37,17 @@ const handleSubmit = () => {
   error.value = ''
 
   if (!name.value.trim()) {
-    error.value = 'Name is required'
+    error.value = '应用名称为必填项'
     return
   }
 
   if (name.value.length > 100) {
-    error.value = 'Name must be less than 100 characters'
+    error.value = '应用名称长度不能超过 100 个字符'
     return
   }
 
   if (description.value && description.value.length > 500) {
-    error.value = 'Description must be less than 500 characters'
+    error.value = '应用描述长度不能超过 500 个字符'
     return
   }
 
@@ -61,38 +61,38 @@ const handleSubmit = () => {
 <template>
   <form @submit.prevent="handleSubmit" class="widget-app-form">
     <div class="form-group">
-      <label for="name">Name <span class="required">*</span></label>
+      <label for="name">应用名称 <span class="required">*</span></label>
       <input
         id="name"
         v-model="name"
         type="text"
-        placeholder="e.g. Marketing Site"
+        placeholder="例如：营销官网主站、移动端 H5 挂件"
         maxlength="100"
         required
       />
-      <span class="hint">A descriptive name for this widget app</span>
+      <span class="hint">为该挂件凭证指定一个易于识别的名称</span>
     </div>
 
     <div class="form-group">
-      <label for="description">Description</label>
+      <label for="description">应用描述 (选填)</label>
       <textarea
         id="description"
         v-model="description"
-        placeholder="Where will this widget live?"
+        placeholder="该挂件将嵌入到哪个网站或业务场景？"
         maxlength="500"
         rows="3"
       />
-      <span class="hint">Optional description of this app's purpose</span>
+      <span class="hint">选填，便于团队了解该密钥的应用场景与用途</span>
     </div>
 
     <div v-if="error" class="error-message">{{ error }}</div>
 
     <div class="form-actions">
       <button type="button" class="btn btn-secondary" @click="emit('cancel')">
-        Cancel
+        取消
       </button>
       <button type="submit" class="btn btn-primary">
-        {{ app ? 'Update app' : 'Create app' }}
+        {{ app ? '更新应用' : '立即创建' }}
       </button>
     </div>
   </form>

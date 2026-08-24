@@ -48,17 +48,17 @@ const emit = defineEmits<{
 }>()
 
 const statusLabel: Record<SourceStatus, string> = {
-  queued: 'Pending',
-  crawling: 'Crawling',
-  synced: 'Synced',
-  error: 'Needs sync',
+  queued: '排队中',
+  crawling: '抓取中',
+  synced: '已同步',
+  error: '需重新同步',
 }
 
 // A queued placeholder's error state is a failed crawl, not a source that
 // merely "needs sync".
 function queuedLabel(source: ExplorerSource): string {
   const status = props.statusOf(source)
-  return status === 'error' ? 'Failed' : statusLabel[status]
+  return status === 'error' ? '抓取失败' : statusLabel[status]
 }
 
 function sourceGlyph(type: string): string {
@@ -87,8 +87,8 @@ const MAX_AVATARS = 3
       <input
         :value="query"
         type="search"
-        placeholder="Search pages…"
-        aria-label="Search pages"
+        placeholder="搜索知识页面或文档…"
+        aria-label="搜索页面"
         @input="emit('update:query', ($event.target as HTMLInputElement).value)"
       />
     </div>
@@ -113,14 +113,14 @@ const MAX_AVATARS = 3
             <span class="src__meta">
               <span class="src__name" :title="source.name">{{ source.name }}</span>
               <span class="src__count" :class="{ 'src__count--error': source.queued && statusOf(source) === 'error' }">
-                {{ source.queued ? queuedLabel(source) : (source.pages ?? source.pageStubs).length + ' sub-pages' }}
+                {{ source.queued ? queuedLabel(source) : (source.pages ?? source.pageStubs).length + ' 个子页面' }}
               </span>
             </span>
           </button>
           <span
             v-if="!source.queued && source.agents.length"
             class="agents"
-            :title="`Used by ${source.agents.map((a) => a.name).join(', ')}`"
+            :title="`已挂载至 ${source.agents.map((a) => a.name).join(', ')}`"
           >
             <span
               v-for="agent in source.agents.slice(0, MAX_AVATARS)"
@@ -136,7 +136,7 @@ const MAX_AVATARS = 3
             v-if="!source.queued"
             class="src__add"
             type="button"
-            title="Add a sub-page to this source"
+            title="向此知识源添加子页面"
             @click="emit('add-page', source)"
           >
             <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.4"
@@ -145,7 +145,7 @@ const MAX_AVATARS = 3
           <button
             class="src__del"
             type="button"
-            :title="!source.queued ? 'Delete this source' : (statusOf(source) === 'error' ? 'Dismiss failed source' : 'Cancel crawl')"
+            :title="!source.queued ? '删除此知识源' : (statusOf(source) === 'error' ? '移除失败知识源' : '取消抓取')"
             @click="emit('delete-source', source)"
           >
             <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.9"
@@ -161,7 +161,7 @@ const MAX_AVATARS = 3
         </div>
 
         <div v-if="source.expanded && !source.queued" class="src__pages">
-          <div v-if="source.loadingContent" class="src__hint">Loading pages…</div>
+          <div v-if="source.loadingContent" class="src__hint">正在加载知识页面…</div>
           <div v-else-if="source.contentError" class="src__hint src__hint--error">{{ source.contentError }}</div>
           <template v-else>
             <button
@@ -174,21 +174,21 @@ const MAX_AVATARS = 3
             >
               <span class="pg__dot"></span>
               <span class="pg__title" :title="row.title">{{ row.title }}</span>
-              <span v-if="row.words !== null" class="pg__words">{{ row.words }}w</span>
+              <span v-if="row.words !== null" class="pg__words">{{ row.words }} 字</span>
             </button>
-            <div v-if="(rowsBySource.get(source.id) || []).length === 0" class="src__hint">No pages extracted yet.</div>
+            <div v-if="(rowsBySource.get(source.id) || []).length === 0" class="src__hint">暂无解析出的知识页面。</div>
             <button type="button" class="pg pg--add" @click="emit('add-page', source)">
               <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2"
                 stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
-              Add sub-page
+              + 添加子页面
             </button>
           </template>
         </div>
       </div>
 
       <div v-if="sources.length === 0" class="tree__empty">
-        <template v-if="query">No pages match “{{ query }}”.</template>
-        <template v-else>No knowledge sources yet.</template>
+        <template v-if="query">未找到匹配 “{{ query }}” 的页面。</template>
+        <template v-else>暂无知识源数据。</template>
       </div>
     </div>
   </div>

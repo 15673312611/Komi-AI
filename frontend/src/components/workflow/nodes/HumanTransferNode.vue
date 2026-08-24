@@ -43,12 +43,12 @@ defineProps<{
       </div>
       
       <div v-if="data.config?.department" class="node-preview">
-        <div class="preview-label">Department:</div>
+        <div class="preview-label">目标部门：</div>
         <div class="preview-content">{{ data.config.department }}</div>
       </div>
       
       <div v-if="data.config?.message" class="node-preview">
-        <div class="preview-label">Transfer Message:</div>
+        <div class="preview-label">转接提示语：</div>
         <div class="preview-content">
           {{ data.config.message.substring(0, 80) }}{{ data.config.message.length > 80 ? '...' : '' }}
         </div>

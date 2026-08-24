@@ -43,7 +43,7 @@ defineProps<{
       </div>
       
       <div v-if="data.config?.fields?.length" class="node-preview">
-        <div class="preview-label">Fields ({{ data.config.fields.length }}):</div>
+        <div class="preview-label">表单字段 ({{ data.config.fields.length }} 项):</div>
         <div class="field-list">
           <div
             v-for="field in data.config.fields.slice(0, 3)"
@@ -53,7 +53,7 @@ defineProps<{
             {{ field.name }} ({{ field.type }})
           </div>
           <div v-if="data.config.fields.length > 3" class="field-more">
-            +{{ data.config.fields.length - 3 }} more
+            + 另有 {{ data.config.fields.length - 3 }} 项
           </div>
         </div>
       </div>

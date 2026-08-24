@@ -44,27 +44,27 @@ const filteredSources = computed(() => {
 
 <template>
   <div class="scrim" @click.self="emit('close')">
-    <div class="modal" role="dialog" aria-modal="true" aria-label="Link existing knowledge">
+    <div class="modal" role="dialog" aria-modal="true" aria-label="关联已有知识源">
       <div class="modal__head">
         <div>
-          <h3 class="modal__title">Link existing knowledge</h3>
-          <p class="modal__sub">Attach knowledge from your organization to this agent so it can use it.</p>
+          <h3 class="modal__title">关联已有知识源</h3>
+          <p class="modal__sub">将企业组织现有的知识源直接挂载至当前智能体，使其共享知识问答能力。</p>
         </div>
-        <button class="icon-btn" type="button" aria-label="Close" @click="emit('close')">
+        <button class="icon-btn" type="button" aria-label="关闭" @click="emit('close')">
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"
             stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
         </button>
       </div>
 
       <div class="search">
-        <input v-model="query" class="text-input" type="text" placeholder="Search knowledge sources…" />
+        <input v-model="query" class="text-input" type="text" placeholder="搜索知识源名称或类型…" />
       </div>
 
       <div class="body">
-        <div v-if="loading" class="state">Loading knowledge sources…</div>
+        <div v-if="loading" class="state">正在加载企业知识源列表…</div>
         <div v-else-if="error" class="state state--error">{{ error }}</div>
         <div v-else-if="!filteredSources.length" class="state">
-          {{ query ? 'No sources match your search.' : 'No organization knowledge to link yet.' }}
+          {{ query ? '未找到匹配的知识源。' : '组织知识库中暂无可关联的知识源。' }}
         </div>
         <ul v-else class="list">
           <li v-for="item in filteredSources" :key="item.id" class="row">
@@ -79,7 +79,7 @@ const filteredSources = computed(() => {
               :disabled="busyIds.has(item.id)"
               @click="emit('unlink', item.id)"
             >
-              {{ busyIds.has(item.id) ? 'Removing…' : 'Unlink' }}
+              {{ busyIds.has(item.id) ? '正在解绑…' : '解除关联' }}
             </button>
             <button
               v-else
@@ -88,14 +88,14 @@ const filteredSources = computed(() => {
               :disabled="busyIds.has(item.id)"
               @click="emit('link', item.id)"
             >
-              {{ busyIds.has(item.id) ? 'Linking…' : 'Link' }}
+              {{ busyIds.has(item.id) ? '正在关联…' : '关联此知识' }}
             </button>
           </li>
         </ul>
       </div>
 
       <div class="foot">
-        <button class="btn btn--ghost" type="button" @click="emit('close')">Done</button>
+        <button class="btn btn--ghost" type="button" @click="emit('close')">完成</button>
       </div>
     </div>
   </div>

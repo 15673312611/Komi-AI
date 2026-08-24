@@ -123,16 +123,15 @@ onMounted(() => {
               <font-awesome-icon icon="fa-solid fa-users-gear" class="locked-icon" />
             </div>
           </div>
-          <h2>Role Management</h2>
+          <h2>角色与权限体系</h2>
           <div class="locked-badge">
             <font-awesome-icon icon="fa-solid fa-lock" class="badge-icon" />
-            <span>Premium Feature</span>
+            <span>企业高级功能</span>
           </div>
         </div>
         
         <p class="locked-description">
-          Unlock advanced role management to control user permissions, 
-          create custom roles, and manage team access levels.
+          解锁高级权限体系，支持按组织架构自定义坐席权限、创建专属角色并精细化控制各模块与数据的访问等级。
         </p>
         
         <div class="locked-features">
@@ -141,8 +140,8 @@ onMounted(() => {
               <font-awesome-icon icon="fa-solid fa-user-shield" class="feature-icon" />
             </div>
             <div class="feature-content">
-              <span class="feature-title">Custom Roles</span>
-              <span class="feature-desc">Create and manage custom user roles</span>
+              <span class="feature-title">自定义专属角色</span>
+              <span class="feature-desc">根据团队职责自由创建并管理专属权限角色</span>
             </div>
           </div>
           <div class="feature-item">
@@ -150,8 +149,8 @@ onMounted(() => {
               <font-awesome-icon icon="fa-solid fa-key" class="feature-icon" />
             </div>
             <div class="feature-content">
-              <span class="feature-title">Permission Control</span>
-              <span class="feature-desc">Fine-grained access control management</span>
+              <span class="feature-title">细粒度权限管控</span>
+              <span class="feature-desc">精细化分配知识库、会话处理与系统配置权限</span>
             </div>
           </div>
         </div>
@@ -159,7 +158,7 @@ onMounted(() => {
         <div class="upgrade-section">
           <button class="upgrade-button" @click="handleUpgrade">
             <font-awesome-icon icon="fa-solid fa-crown" class="upgrade-icon" />
-            <span>Upgrade to Unlock Roles</span>
+            <span>立即升级解锁权限体系</span>
             <font-awesome-icon icon="fa-solid fa-arrow-right" class="arrow-icon" />
           </button>
         </div>
@@ -172,7 +171,7 @@ onMounted(() => {
         {{ error }}
       </div>
 
-      <div v-if="loading" class="loading">Loading roles...</div>
+      <div v-if="loading" class="loading">正在加载角色列表...</div>
 
       <div v-else class="roles-grid">
         <div
@@ -182,15 +181,15 @@ onMounted(() => {
         >
           <div class="role-card__header">
             <h3 class="role-card__name">{{ role.name }}</h3>
-            <span v-if="role.is_default" class="role-card__badge">Default</span>
+            <span v-if="role.is_default" class="role-card__badge">默认角色</span>
           </div>
 
           <p class="role-card__desc" :class="{ 'is-muted': !role.description }">
-            {{ role.description || 'No description' }}
+            {{ role.description || '暂无描述说明' }}
           </p>
 
           <template v-if="role.permissions?.length">
-            <div class="role-card__perm-label">PERMISSIONS</div>
+            <div class="role-card__perm-label">已分配权限</div>
             <div class="role-card__perm-chips">
               <span
                 v-for="permission in role.permissions"
@@ -206,9 +205,9 @@ onMounted(() => {
             class="role-card__edit"
             @click="handleEditRole(role)"
             :disabled="role.is_default"
-            :title="role.is_default ? 'Cannot edit default role' : ''"
+            :title="role.is_default ? '系统内置默认角色不可修改' : ''"
           >
-            Edit permissions
+            配置角色权限
           </button>
 
           <button
@@ -216,7 +215,7 @@ onMounted(() => {
             class="role-card__delete"
             @click="handleDeleteRole(role)"
           >
-            Delete role
+            删除角色
           </button>
         </div>
 
@@ -227,15 +226,15 @@ onMounted(() => {
               <path d="M12 5v14M5 12h14" />
             </svg>
           </div>
-          <div class="role-card-add__title">Create a custom role</div>
-          <div class="role-card-add__desc">Pick exactly which permissions a group of agents gets</div>
+          <div class="role-card-add__title">+ 创建自定义角色</div>
+          <div class="role-card-add__desc">为特定坐席群体精准分配功能与数据权限</div>
         </button>
       </div>
 
       <!-- Create/Edit Role Modal -->
       <Modal v-if="showCreateModal || showEditModal"
              @close="showCreateModal ? (showCreateModal = false) : (showEditModal = false)">
-        <template #title>{{ showCreateModal ? 'Create Role' : 'Edit Role' }}</template>
+        <template #title>{{ showCreateModal ? '新建权限角色' : '编辑角色权限' }}</template>
         <template #content>
           <RoleForm
             :role="selectedRole"
@@ -247,24 +246,24 @@ onMounted(() => {
 
       <!-- Delete Confirmation Modal -->
       <Modal v-if="showDeleteModal" @close="showDeleteModal = false">
-        <template #title>Delete Role</template>
+        <template #title>删除权限角色</template>
         <template #content>
           <div class="delete-confirmation">
             <div v-if="deleteError" class="error-message">
               {{ deleteError }}
             </div>
-            <p>Are you sure you want to delete "{{ selectedRole?.name }}"?</p>
-            <p class="warning">This action cannot be undone.</p>
+            <p>确定要删除权限角色 “{{ selectedRole?.name }}” 吗？</p>
+            <p class="warning">删除后归属于该角色的坐席成员将失去相应权限，此操作无法撤销。</p>
             <div class="form-actions">
               <button class="btn btn-secondary" @click="showDeleteModal = false">
-                Cancel
+                取消
               </button>
               <button
                 class="btn btn-danger"
                 @click="deleteRoleAndNotify"
                 :disabled="loading"
               >
-                {{ loading ? 'Deleting...' : 'Delete' }}
+                {{ loading ? '正在删除...' : '确认删除' }}
               </button>
             </div>
           </div>
