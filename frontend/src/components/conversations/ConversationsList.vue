@@ -1,6 +1,6 @@
 <!--
 Copyright 2024-2026 ChatterMate
-左栏：会话导航与 3+2 零滚动状态矩阵 (ConversationsList.vue - 原版经典色调 + 清晰立体微光轮廓)
+左栏：会话导航与卡片列表 (ConversationsList.vue - Linear/Raycast 现代高奢质感重构)
 -->
 
 <script setup lang="ts">
@@ -23,19 +23,19 @@ const showStoreDropdown = ref(false)
 const showFolderDrawer = ref(false)
 const activeId = ref(props.activeSessionId || 'conv-1')
 
-// 多渠道跨境模拟会话列表
+// 多渠道跨境会话列表
 const conversations = ref([
   {
     id: 'conv-1',
     customerName: 'Jessica Miller',
-    avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100&auto=format&fit=crop&q=80',
+    avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=120&auto=format&fit=crop&q=80',
     email: 'jessica.m@outlook.com',
     channel: 'whatsapp',
-    channelColor: 'bg-emerald-500 text-white shadow-[0_0_8px_rgba(16,185,129,0.5)]',
+    channelColor: 'bg-[#25D366] text-white shadow-[0_0_8px_rgba(37,211,102,0.4)]',
     storeId: 'shopify_us',
     storeName: 'SHE-GLOW 美东站',
     storePlatform: 'Shopify',
-    platformBadge: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30',
+    platformBadge: 'bg-emerald-500/10 text-emerald-300 border-emerald-500/20',
     status: 'ai',
     statusText: 'AI 处理中',
     unreadCount: 2,
@@ -45,14 +45,14 @@ const conversations = ref([
   {
     id: 'conv-2',
     customerName: 'Liam Smith',
-    avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&auto=format&fit=crop&q=80',
+    avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=120&auto=format&fit=crop&q=80',
     email: 'liam.tech@gmail.com',
     channel: 'email',
-    channelColor: 'bg-blue-500 text-white shadow-[0_0_8px_rgba(59,130,246,0.5)]',
+    channelColor: 'bg-blue-500 text-white shadow-[0_0_8px_rgba(59,130,246,0.4)]',
     storeId: 'amazon_uk',
     storeName: 'CYBER-TECH 旗舰店',
     storePlatform: 'Amazon',
-    platformBadge: 'bg-amber-500/15 text-amber-300 border-amber-500/30',
+    platformBadge: 'bg-amber-500/10 text-amber-300 border-amber-500/20',
     status: 'queue',
     statusText: '排队待接入',
     unreadCount: 1,
@@ -62,14 +62,14 @@ const conversations = ref([
   {
     id: 'conv-3',
     customerName: 'Elena Rostova',
-    avatar: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=100&auto=format&fit=crop&q=80',
+    avatar: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=120&auto=format&fit=crop&q=80',
     email: 'elena.r@tiktok.com',
     channel: 'tiktok',
-    channelColor: 'bg-cyan-500 text-white shadow-[0_0_8px_rgba(6,182,212,0.5)]',
+    channelColor: 'bg-cyan-500 text-white shadow-[0_0_8px_rgba(6,182,212,0.4)]',
     storeId: 'tiktok_sea',
     storeName: 'AURA 美妆东南亚',
     storePlatform: 'TikTok',
-    platformBadge: 'bg-cyan-500/15 text-cyan-300 border-cyan-500/30',
+    platformBadge: 'bg-cyan-500/10 text-cyan-300 border-cyan-500/20',
     status: 'mine',
     statusText: '人工接管 · Alex',
     unreadCount: 0,
@@ -79,14 +79,14 @@ const conversations = ref([
   {
     id: 'conv-4',
     customerName: 'Maximilian Weber',
-    avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&auto=format&fit=crop&q=80',
+    avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=120&auto=format&fit=crop&q=80',
     email: 'm.weber@berlin-design.de',
     channel: 'telegram',
-    channelColor: 'bg-sky-500 text-white shadow-[0_0_8px_rgba(14,165,233,0.5)]',
+    channelColor: 'bg-sky-500 text-white shadow-[0_0_8px_rgba(14,165,233,0.4)]',
     storeId: 'shopify_us',
     storeName: 'SHE-GLOW 独立站',
     storePlatform: 'Shopify',
-    platformBadge: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30',
+    platformBadge: 'bg-emerald-500/10 text-emerald-300 border-emerald-500/20',
     status: 'mine',
     statusText: '人工接管 · Sarah',
     unreadCount: 0,
@@ -96,14 +96,14 @@ const conversations = ref([
   {
     id: 'conv-5',
     customerName: 'Chloe Dupont',
-    avatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=100&auto=format&fit=crop&q=80',
+    avatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=120&auto=format&fit=crop&q=80',
     email: 'chloe.dupont@paris.fr',
     channel: 'instagram',
-    channelColor: 'bg-pink-500 text-white shadow-[0_0_8px_rgba(236,72,153,0.5)]',
+    channelColor: 'bg-pink-500 text-white shadow-[0_0_8px_rgba(236,72,153,0.4)]',
     storeId: 'shopify_us',
     storeName: 'SHE-GLOW 独立站',
     storePlatform: 'Shopify',
-    platformBadge: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30',
+    platformBadge: 'bg-emerald-500/10 text-emerald-300 border-emerald-500/20',
     status: 'ai',
     statusText: 'AI 处理中',
     unreadCount: 0,
@@ -113,14 +113,14 @@ const conversations = ref([
   {
     id: 'conv-6',
     customerName: 'David Tanaka',
-    avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=100&auto=format&fit=crop&q=80',
+    avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=120&auto=format&fit=crop&q=80',
     email: 'tanaka.d@tokyo.jp',
     channel: 'livechat',
-    channelColor: 'bg-teal-500 text-white shadow-[0_0_8px_rgba(20,184,166,0.5)]',
+    channelColor: 'bg-teal-500 text-white shadow-[0_0_8px_rgba(20,184,166,0.4)]',
     storeId: 'shopify_us',
     storeName: 'SHE-GLOW 独立站',
     storePlatform: 'Shopify',
-    platformBadge: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30',
+    platformBadge: 'bg-emerald-500/10 text-emerald-300 border-emerald-500/20',
     status: 'closed',
     statusText: '已解决关闭',
     unreadCount: 0,
@@ -130,10 +130,10 @@ const conversations = ref([
 ])
 
 const stores = [
-  { id: 'all', name: '全部跨境店铺 (All Stores)', iconClass: 'fa-solid fa-store', badge: '28', color: 'text-emerald-400 bg-emerald-500/20' },
-  { id: 'shopify_us', name: 'SHE-GLOW 女装美东站 (Shopify)', iconClass: 'fa-brands fa-shopify', badge: 'Shopify', color: 'text-rose-400 bg-rose-500/20' },
-  { id: 'amazon_uk', name: 'CYBER-TECH 数码旗舰 (Amazon UK)', iconClass: 'fa-brands fa-amazon', badge: 'Amazon', color: 'text-amber-400 bg-amber-500/20' },
-  { id: 'tiktok_sea', name: 'AURA 美妆个护 (TikTok SEA)', iconClass: 'fa-brands fa-tiktok', badge: 'TikTok', color: 'text-cyan-400 bg-cyan-500/20' },
+  { id: 'all', name: '全部跨境店铺 (All Stores)', iconClass: 'fa-solid fa-store', badge: '28', color: 'text-blue-400 bg-blue-500/15 border border-blue-500/20' },
+  { id: 'shopify_us', name: 'SHE-GLOW 女装美东站 (Shopify)', iconClass: 'fa-brands fa-shopify', badge: 'Shopify', color: 'text-emerald-400 bg-emerald-500/15 border border-emerald-500/20' },
+  { id: 'amazon_uk', name: 'CYBER-TECH 数码旗舰 (Amazon UK)', iconClass: 'fa-brands fa-amazon', badge: 'Amazon', color: 'text-amber-400 bg-amber-500/15 border border-amber-500/20' },
+  { id: 'tiktok_sea', name: 'AURA 美妆个护 (TikTok SEA)', iconClass: 'fa-brands fa-tiktok', badge: 'TikTok', color: 'text-cyan-400 bg-cyan-500/15 border border-cyan-500/20' },
 ]
 
 const selectedStoreObj = computed(() => {
@@ -175,28 +175,30 @@ const selectStore = (id: string) => {
 </script>
 
 <template>
-  <section class="w-[340px] bg-[#0F1523] border-r border-white/[0.08] flex flex-col shrink-0 relative z-20 select-none h-full shadow-2xl">
-    <!-- 顶部标题与快速操作 -->
-    <div class="p-3.5 border-b border-white/[0.08] flex items-center justify-between bg-[#0F1523]/90">
+  <!-- 左栏容器：采用现代高端黑曜炭岩灰背景 (#0D111A)，深邃而不压抑 -->
+  <section class="w-[340px] bg-[#0D111A] border-r border-[#1E2638] flex flex-col shrink-0 relative z-20 select-none h-full shadow-2xl">
+    
+    <!-- 顶部标题栏：高质感磨砂微光背景 -->
+    <div class="p-3.5 border-b border-[#1E2638] flex items-center justify-between bg-[#111724]">
       <div class="flex items-center gap-2">
-        <h1 class="text-sm font-bold text-slate-100 tracking-tight flex items-center gap-2">
+        <h1 class="text-sm font-extrabold text-slate-100 tracking-tight flex items-center gap-2">
           <span>会话中心</span>
-          <span class="px-2 py-0.5 text-[11px] font-bold bg-emerald-500/15 text-emerald-400 rounded-full border border-emerald-500/25 shadow-[0_0_10px_rgba(16,185,129,0.2)]">
+          <span class="px-2 py-0.5 text-[11px] font-bold bg-blue-500/15 text-blue-400 rounded-full border border-blue-500/30 shadow-[0_0_10px_rgba(59,130,246,0.2)]">
             <span class="font-mono">28</span> 待办
           </span>
         </h1>
       </div>
-      <div class="flex items-center gap-1">
+      <div class="flex items-center gap-1.5">
         <button
           @click="showFolderDrawer = !showFolderDrawer"
-          class="w-7 h-7 rounded-lg text-slate-400 hover:text-emerald-400 hover:bg-white/5 flex items-center justify-center transition-colors"
-          title="展开/收起 Intercom 风格大收件箱分组"
+          class="w-7 h-7 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-white/[0.06] border border-transparent hover:border-white/10 flex items-center justify-center transition-all"
+          title="展开/收起收件箱分组视图"
         >
           <i class="fa-solid fa-layer-group text-xs"></i>
         </button>
         <button
           @click="emit('refresh')"
-          class="w-7 h-7 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-white/5 flex items-center justify-center transition-colors"
+          class="w-7 h-7 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-white/[0.06] border border-transparent hover:border-white/10 flex items-center justify-center transition-all"
           title="刷新列表"
         >
           <i class="fa-solid fa-arrow-rotate-right fa-rotate text-xs"></i>
@@ -205,24 +207,24 @@ const selectStore = (id: string) => {
     </div>
 
     <!-- 搜索框 & 店铺筛选器 -->
-    <div class="p-3 space-y-2 border-b border-white/[0.08] bg-[#0C101A]/70">
-      <!-- 搜索框 -->
+    <div class="p-3 space-y-2.5 border-b border-[#1E2638] bg-[#0F1420]/80">
+      <!-- 搜索框：内凹立体高级感 -->
       <div class="relative">
-        <i class="fa-solid fa-magnifying-glass fa-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
+        <i class="fa-solid fa-magnifying-glass fa-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs pointer-events-none"></i>
         <input
           v-model="searchQuery"
           type="text"
           placeholder="搜索客户姓名、邮箱、消息、订单号..."
-          class="w-full bg-[#080B11] text-xs text-slate-200 placeholder-slate-500 rounded-lg pl-8 pr-8 py-2 border border-white/[0.1] focus:border-emerald-500/60 focus:outline-none focus:ring-1 focus:ring-emerald-500/30 transition-all shadow-inner"
+          class="w-full bg-[#151C2C] text-xs text-slate-100 placeholder-slate-500 rounded-lg pl-8 pr-9 py-2 border border-[#222E46] focus:border-blue-500/70 focus:outline-none focus:ring-1 focus:ring-blue-500/30 transition-all shadow-inner"
         />
-        <span class="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] text-slate-400 bg-white/5 px-1 py-0.5 rounded font-mono">⌘K</span>
+        <span class="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] text-slate-400 bg-white/[0.07] px-1.5 py-0.5 rounded font-mono border border-white/[0.06]">⌘K</span>
       </div>
 
-      <!-- 店铺下拉选择器 -->
+      <!-- 店铺选择器 -->
       <div class="relative">
         <button
           @click="showStoreDropdown = !showStoreDropdown"
-          class="w-full flex items-center justify-between px-2.5 py-1.5 bg-[#080B11]/90 hover:bg-white/[0.04] rounded-lg border border-white/[0.1] text-xs text-slate-300 transition-colors shadow-sm"
+          class="w-full flex items-center justify-between px-2.5 py-1.5 bg-[#151C2C] hover:bg-[#1A2336] rounded-lg border border-[#222E46] hover:border-slate-600 text-xs text-slate-200 transition-all shadow-sm"
         >
           <div class="flex items-center gap-2 truncate">
             <span :class="['w-4 h-4 rounded flex items-center justify-center text-[10px] shrink-0', selectedStoreObj.color]">
@@ -236,61 +238,61 @@ const selectStore = (id: string) => {
         <!-- 下拉菜单 -->
         <div
           v-if="showStoreDropdown"
-          class="absolute left-0 right-0 top-full mt-1 bg-[#131B2E] border border-white/15 rounded-xl shadow-2xl p-1.5 z-50 text-xs space-y-1 backdrop-blur-2xl animate-in fade-in zoom-in-95 duration-150"
+          class="absolute left-0 right-0 top-full mt-1.5 bg-[#161E30] border border-slate-700/80 rounded-xl shadow-2xl p-1.5 z-50 text-xs space-y-1 backdrop-blur-2xl animate-in fade-in zoom-in-95 duration-150"
         >
           <div
             v-for="st in stores"
             :key="st.id"
             @click="selectStore(st.id)"
-            class="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-white/5 cursor-pointer text-slate-200 transition-colors"
+            class="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-white/[0.08] cursor-pointer text-slate-200 transition-colors"
           >
             <span :class="['w-5 h-5 rounded flex items-center justify-center text-[10px] shrink-0', st.color]">
               <i :class="st.iconClass"></i>
             </span>
             <span class="flex-1 font-medium truncate">{{ st.name }}</span>
-            <span class="text-[10px] text-slate-400 font-mono px-1 rounded bg-white/5">{{ st.badge }}</span>
+            <span class="text-[10px] text-slate-400 font-mono px-1.5 py-0.5 rounded bg-white/5 border border-white/5">{{ st.badge }}</span>
           </div>
         </div>
       </div>
     </div>
 
-    <!-- 零滚动紧凑自适应状态矩阵 (大厂 3+2 零横向溢出) -->
-    <div class="p-2.5 border-b border-white/[0.08] bg-[#080B11]/40 space-y-1.5">
-      <!-- 第一行：3个常用状态 (全部 · AI · 我的) -->
+    <!-- 零滚动 3+2 筛选矩阵 (清晰利落胶囊) -->
+    <div class="p-2.5 border-b border-[#1E2638] bg-[#0A0E17]/60 space-y-1.5">
+      <!-- 第一行 -->
       <div class="grid grid-cols-3 gap-1.5">
         <button
           @click="currentFilterTab = 'all'"
-          :class="['grid-pill', currentFilterTab === 'all' ? 'active' : '']"
+          :class="['matrix-pill', currentFilterTab === 'all' ? 'active-pill' : '']"
         >
-          <span class="flex items-center gap-1 truncate"><i class="fa-solid fa-inbox text-[11px]"></i> 全部</span>
+          <span class="flex items-center gap-1.5 truncate"><i class="fa-solid fa-inbox text-[11px]"></i> 全部</span>
           <span class="text-[10px] font-mono px-1 rounded bg-white/10 text-slate-200">28</span>
         </button>
 
         <button
           @click="currentFilterTab = 'ai'"
-          :class="['grid-pill', currentFilterTab === 'ai' ? 'active' : '']"
+          :class="['matrix-pill', currentFilterTab === 'ai' ? 'active-pill' : '']"
         >
-          <span class="flex items-center gap-1 truncate"><i class="fa-solid fa-robot text-[11px] text-emerald-400"></i> AI</span>
-          <span class="text-[10px] font-mono px-1 rounded bg-emerald-500/15 text-emerald-400">14</span>
+          <span class="flex items-center gap-1.5 truncate"><i class="fa-solid fa-robot text-[11px] text-emerald-400"></i> AI</span>
+          <span class="text-[10px] font-mono px-1 rounded bg-emerald-500/20 text-emerald-300">14</span>
         </button>
 
         <button
           @click="currentFilterTab = 'mine'"
-          :class="['grid-pill', currentFilterTab === 'mine' ? 'active-blue' : '']"
+          :class="['matrix-pill', currentFilterTab === 'mine' ? 'active-pill-blue' : '']"
         >
-          <span class="flex items-center gap-1 truncate"><i class="fa-solid fa-user-check text-[11px] text-blue-400"></i> 我的</span>
-          <span class="text-[10px] font-mono px-1 rounded bg-blue-500/15 text-blue-400">6</span>
+          <span class="flex items-center gap-1.5 truncate"><i class="fa-solid fa-user-check text-[11px] text-blue-400"></i> 我的</span>
+          <span class="text-[10px] font-mono px-1 rounded bg-blue-500/20 text-blue-300">6</span>
         </button>
       </div>
 
-      <!-- 第二行：2个关键工作流状态 (待人工接入 · 已关闭) -->
+      <!-- 第二行 -->
       <div class="grid grid-cols-2 gap-1.5">
         <button
           @click="currentFilterTab = 'queue'"
-          :class="['grid-pill', currentFilterTab === 'queue' ? 'active-amber' : '']"
+          :class="['matrix-pill', currentFilterTab === 'queue' ? 'active-pill-amber' : '']"
         >
           <span class="flex items-center gap-1.5 truncate">
-            <span class="w-2 h-2 rounded-full bg-amber-400 pulse-subtle shrink-0 shadow-[0_0_8px_rgba(245,158,11,0.5)]"></span>
+            <span class="w-2 h-2 rounded-full bg-amber-400 pulse-subtle shrink-0 shadow-[0_0_8px_rgba(245,158,11,0.6)]"></span>
             <span class="truncate">⏳ 待人工接入</span>
           </span>
           <span class="text-[10px] font-mono font-bold px-1.5 rounded bg-amber-500/20 text-amber-300">5</span>
@@ -298,7 +300,7 @@ const selectStore = (id: string) => {
 
         <button
           @click="currentFilterTab = 'closed'"
-          :class="['grid-pill', currentFilterTab === 'closed' ? 'active-closed' : '']"
+          :class="['matrix-pill', currentFilterTab === 'closed' ? 'active-pill-closed' : '']"
         >
           <span class="flex items-center gap-1.5 truncate">
             <i class="fa-solid fa-lock text-[10px] text-slate-500"></i>
@@ -309,59 +311,59 @@ const selectStore = (id: string) => {
       </div>
     </div>
 
-    <!-- Intercom 风格全景视图折叠树面板 -->
+    <!-- 展开抽屉面板 -->
     <div
       v-if="showFolderDrawer"
-      class="p-2 border-b border-white/[0.08] bg-[#131B2E]/95 space-y-1 text-xs animate-in fade-in duration-150 shadow-lg"
+      class="p-2 border-b border-[#1E2638] bg-[#141C2E] space-y-1 text-xs animate-in fade-in duration-150 shadow-xl"
     >
       <div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-2 py-1 flex items-center justify-between">
-        <span>收件箱视图 (Inbox Views)</span>
+        <span>收件箱全景视图</span>
         <span class="text-emerald-400 font-mono">SLA 正常</span>
       </div>
-      <div @click="currentFilterTab = 'all'" class="flex items-center justify-between p-2 rounded-lg hover:bg-white/5 cursor-pointer text-slate-200">
-        <span class="flex items-center gap-2"><i class="fa-solid fa-inbox text-emerald-400"></i> 全部实时会话</span>
+      <div @click="currentFilterTab = 'all'" class="flex items-center justify-between p-2 rounded-lg hover:bg-white/[0.06] cursor-pointer text-slate-200">
+        <span class="flex items-center gap-2"><i class="fa-solid fa-inbox text-blue-400"></i> 全部实时会话</span>
         <span class="font-mono text-slate-400 font-bold">28</span>
       </div>
-      <div @click="currentFilterTab = 'ai'" class="flex items-center justify-between p-2 rounded-lg hover:bg-white/5 cursor-pointer text-slate-200">
+      <div @click="currentFilterTab = 'ai'" class="flex items-center justify-between p-2 rounded-lg hover:bg-white/[0.06] cursor-pointer text-slate-200">
         <span class="flex items-center gap-2"><i class="fa-solid fa-robot text-emerald-400"></i> 🤖 AI 智能应答中</span>
         <span class="font-mono text-emerald-400 font-bold">14</span>
       </div>
-      <div @click="currentFilterTab = 'mine'" class="flex items-center justify-between p-2 rounded-lg hover:bg-white/5 cursor-pointer text-slate-200">
+      <div @click="currentFilterTab = 'mine'" class="flex items-center justify-between p-2 rounded-lg hover:bg-white/[0.06] cursor-pointer text-slate-200">
         <span class="flex items-center gap-2"><i class="fa-solid fa-user-check text-blue-400"></i> 👤 分配给我的接待</span>
         <span class="font-mono text-blue-400 font-bold">6</span>
       </div>
-      <div @click="currentFilterTab = 'queue'" class="flex items-center justify-between p-2 rounded-lg hover:bg-white/5 cursor-pointer text-slate-200">
+      <div @click="currentFilterTab = 'queue'" class="flex items-center justify-between p-2 rounded-lg hover:bg-white/[0.06] cursor-pointer text-slate-200">
         <span class="flex items-center gap-2"><i class="fa-solid fa-clock text-amber-400"></i> ⏳ 排队等待人工接入</span>
         <span class="font-mono text-amber-400 font-bold pulse-subtle">5</span>
       </div>
-      <div @click="currentFilterTab = 'closed'" class="flex items-center justify-between p-2 rounded-lg hover:bg-white/5 cursor-pointer text-slate-200">
+      <div @click="currentFilterTab = 'closed'" class="flex items-center justify-between p-2 rounded-lg hover:bg-white/[0.06] cursor-pointer text-slate-200">
         <span class="flex items-center gap-2"><i class="fa-solid fa-circle-check text-slate-400"></i> 🔒 已解决/历史归档</span>
         <span class="font-mono text-slate-500">3</span>
       </div>
     </div>
 
-    <!-- 会话卡片列表容器 (原版经典晶体卡片 + 增强立体高光轮廓) -->
-    <div class="flex-1 overflow-y-auto divide-y divide-white/[0.03] p-2 space-y-1.5">
+    <!-- 会话卡片列表容器 (重点：现代高级微立体轮廓卡片) -->
+    <div class="flex-1 overflow-y-auto p-2 space-y-2">
       <div
         v-for="conv in filteredConversations"
         :key="conv.id"
         @click="selectSession(conv.id)"
         :class="[
-          'p-3 rounded-xl cursor-pointer relative transition-all duration-200',
-          activeId === conv.id ? 'crystal-card-active' : 'crystal-card',
+          'p-3 rounded-xl cursor-pointer relative transition-all duration-200 group shadow-sm',
+          activeId === conv.id ? 'modern-card-active' : 'modern-card-default',
         ]"
       >
         <div class="flex items-start gap-3">
-          <!-- 头像与渠道角标 -->
+          <!-- 头像与渠道徽标 -->
           <div class="relative shrink-0 mt-0.5">
             <img
               :src="conv.avatar"
               :alt="conv.customerName"
-              class="w-10 h-10 rounded-xl object-cover border border-white/10 shadow-md"
+              class="w-10 h-10 rounded-xl object-cover ring-1 ring-white/10 shadow-md group-hover:ring-blue-400/30 transition-all"
             />
             <span
               :class="[
-                'absolute -bottom-1 -right-1 w-4 h-4 rounded-full flex items-center justify-center text-[9px] border-2 border-[#0F1523]',
+                'absolute -bottom-1 -right-1 w-4 h-4 rounded-full flex items-center justify-center text-[9px] border-2 border-[#161D2B]',
                 conv.channelColor,
               ]"
             >
@@ -376,15 +378,15 @@ const selectStore = (id: string) => {
             </span>
           </div>
 
-          <!-- 会话主体信息 -->
+          <!-- 卡片主体信息 -->
           <div class="flex-1 min-w-0">
             <!-- 姓名、平台、时间 -->
             <div class="flex items-center justify-between leading-none">
               <div class="flex items-center gap-1.5 truncate">
                 <span
                   :class="[
-                    'font-bold text-xs truncate',
-                    activeId === conv.id ? 'text-emerald-400' : 'text-slate-100',
+                    'font-bold text-xs truncate transition-colors',
+                    activeId === conv.id ? 'text-white' : 'text-slate-100 group-hover:text-blue-300',
                   ]"
                 >
                   {{ conv.customerName }}
@@ -398,45 +400,52 @@ const selectStore = (id: string) => {
                   {{ conv.storePlatform }}
                 </span>
               </div>
-              <span class="text-[10px] text-slate-400 font-mono shrink-0 ml-1">{{ conv.lastTime }}</span>
+              <span class="text-[11px] text-slate-400 font-mono shrink-0 ml-1">{{ conv.lastTime }}</span>
             </div>
 
             <!-- 消息摘要 -->
-            <p class="text-xs text-slate-400 truncate mt-1 leading-snug">
+            <p
+              :class="[
+                'text-xs truncate mt-1 leading-snug transition-colors',
+                conv.unreadCount > 0 ? 'text-slate-200 font-semibold' : 'text-slate-400',
+              ]"
+            >
               {{ conv.lastMessage }}
             </p>
 
-            <!-- 底部状态与未读数 -->
-            <div class="flex items-center justify-between mt-1.5 pt-1 border-t border-white/[0.06]">
+            <!-- 底部状态徽章与未读数 -->
+            <div class="flex items-center justify-between mt-2 pt-1.5 border-t border-white/[0.06]">
               <div>
                 <span
                   v-if="conv.status === 'ai'"
-                  class="inline-flex items-center gap-1 px-1.5 py-0.2 text-[10px] font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/25 rounded-full"
+                  class="inline-flex items-center gap-1.5 px-2 py-0.5 text-[10px] font-semibold bg-emerald-500/10 text-emerald-300 border border-emerald-500/25 rounded-md"
                 >
                   <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 pulse-subtle"></span>AI 处理中
                 </span>
                 <span
                   v-else-if="conv.status === 'queue'"
-                  class="inline-flex items-center gap-1 px-1.5 py-0.2 text-[10px] font-semibold bg-amber-500/15 text-amber-400 border border-amber-500/25 rounded-full"
+                  class="inline-flex items-center gap-1.5 px-2 py-0.5 text-[10px] font-semibold bg-amber-500/10 text-amber-300 border border-amber-500/25 rounded-md"
                 >
                   <span class="w-1.5 h-1.5 rounded-full bg-amber-400 pulse-subtle"></span>待人工接入
                 </span>
                 <span
                   v-else-if="conv.status === 'mine'"
-                  class="inline-flex items-center gap-1 px-1.5 py-0.2 text-[10px] font-semibold bg-blue-500/15 text-blue-400 border border-blue-500/25 rounded-full"
+                  class="inline-flex items-center gap-1.5 px-2 py-0.5 text-[10px] font-semibold bg-blue-500/10 text-blue-300 border border-blue-500/25 rounded-md"
                 >
                   👤 人工接管
                 </span>
                 <span
                   v-else
-                  class="inline-flex items-center gap-1 px-1.5 py-0.2 text-[10px] font-medium bg-slate-800/80 text-slate-400 border border-white/5 rounded-full"
+                  class="inline-flex items-center gap-1.5 px-2 py-0.5 text-[10px] font-medium bg-slate-800/80 text-slate-400 border border-slate-700/50 rounded-md"
                 >
                   🔒 已解决关闭
                 </span>
               </div>
+
+              <!-- 鲜艳高质感红点 -->
               <span
                 v-if="conv.unreadCount > 0"
-                class="px-2 py-0.2 bg-gradient-to-r from-rose-500 to-pink-500 text-white font-extrabold text-[10px] rounded-full shadow-sm"
+                class="px-2 py-0.2 bg-rose-500 text-white font-black text-[10px] rounded-full shadow-[0_0_8px_rgba(244,63,94,0.6)]"
               >
                 {{ conv.unreadCount }}
               </span>
@@ -444,26 +453,26 @@ const selectStore = (id: string) => {
           </div>
         </div>
 
-        <!-- 激活专属 3px 翡翠流光指示条 -->
+        <!-- 激活专属科技蓝青微光指示条 -->
         <div
           v-if="activeId === conv.id"
-          class="absolute left-0 top-2.5 bottom-2.5 w-[3px] bg-gradient-to-b from-emerald-400 to-teal-500 rounded-r-full shadow-[0_0_8px_rgba(16,185,129,0.8)]"
+          class="absolute left-0 top-2 bottom-2 w-1 bg-gradient-to-b from-blue-400 via-cyan-400 to-indigo-500 rounded-r-full shadow-[0_0_10px_rgba(59,130,246,0.8)]"
         ></div>
       </div>
 
       <div
         v-if="filteredConversations.length === 0"
-        class="py-12 text-center text-slate-500 text-xs"
+        class="py-14 text-center text-slate-500 text-xs"
       >
         没有匹配的会话
       </div>
     </div>
 
-    <!-- 列表底部状态 -->
-    <div class="p-2.5 border-t border-white/[0.08] bg-[#080B11]/70 text-[11px] text-slate-400 flex items-center justify-between px-3">
+    <!-- 列表底部状态条 -->
+    <div class="p-2.5 border-t border-[#1E2638] bg-[#0E1422] text-[11px] text-slate-400 flex items-center justify-between px-3">
       <span class="flex items-center gap-1.5">
-        <span class="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.8)] pulse-subtle"></span>
-        <span>AI 自动接单引擎运行中</span>
+        <span class="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)] pulse-subtle"></span>
+        <span>AI 智能客服引擎就绪</span>
       </span>
       <span class="text-slate-400 font-mono text-[10px]">0.6s 极速应答</span>
     </div>
@@ -471,37 +480,35 @@ const selectStore = (id: string) => {
 </template>
 
 <style scoped>
-/* 默认晶体卡片 (原版质感 + 增强清晰立体轮廓) */
-.crystal-card {
-  background: linear-gradient(180deg, rgba(20, 27, 46, 0.85) 0%, rgba(16, 22, 38, 0.95) 100%);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-top: 1px solid rgba(255, 255, 255, 0.18);
-  box-shadow: 0 2px 8px -1px rgba(0, 0, 0, 0.3);
-  transition: all 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+/* 默认未选中卡片：清晰分明的炭曜灰底色 + 明显立体的边框轮廓 */
+.modern-card-default {
+  background: #161D2B;
+  border: 1px solid #253046;
+  border-top: 1px solid #32415E;
 }
-.crystal-card:hover {
-  background: linear-gradient(180deg, rgba(26, 36, 61, 0.92) 0%, rgba(20, 28, 48, 0.98) 100%);
-  border-color: rgba(255, 255, 255, 0.18);
-  border-top: 1px solid rgba(255, 255, 255, 0.3);
+.modern-card-default:hover {
+  background: #1B2436;
+  border-color: #3B4B6E;
+  border-top-color: #4D628F;
   transform: translateY(-1px);
-  box-shadow: 0 4px 14px -2px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 4px 16px -2px rgba(0, 0, 0, 0.5);
 }
 
-/* 激活高定卡片 (原版翡翠绿主题 + 清晰高光轮廓) */
-.crystal-card-active {
-  background: linear-gradient(180deg, rgba(24, 34, 58, 0.98) 0%, rgba(18, 25, 44, 0.98) 100%);
-  border: 1px solid rgba(16, 185, 129, 0.55);
-  border-top: 1px solid rgba(52, 211, 153, 0.8);
-  box-shadow: 0 4px 20px -2px rgba(16, 185, 129, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+/* 激活选中卡片：高定极夜蓝青渐变 + 极具辨识度的清晰高光边框 */
+.modern-card-active {
+  background: linear-gradient(135deg, rgba(30, 58, 138, 0.35) 0%, rgba(22, 29, 43, 0.95) 100%);
+  border: 1px solid rgba(59, 130, 246, 0.65);
+  border-top: 1px solid rgba(147, 197, 253, 0.9);
+  box-shadow: 0 4px 20px -2px rgba(59, 130, 246, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.1);
 }
 
-/* 3+2 紧凑胶囊按钮 (清晰立体微光轮廓) */
-.grid-pill {
+/* 3+2 紧凑胶囊按钮 */
+.matrix-pill {
   padding: 6px 8px;
   border-radius: 8px;
-  background: #131B2E;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-top: 1px solid rgba(255, 255, 255, 0.16);
+  background: #151C2C;
+  border: 1px solid #253046;
+  border-top: 1px solid #32415E;
   color: #94a3b8;
   display: flex;
   align-items: center;
@@ -510,30 +517,30 @@ const selectStore = (id: string) => {
   font-weight: 600;
   transition: all 0.15s ease;
 }
-.grid-pill:hover {
+.matrix-pill:hover {
   color: #fff;
-  border-color: rgba(255, 255, 255, 0.22);
-  background: rgba(255, 255, 255, 0.08);
+  background: #1B2436;
+  border-color: #3B4B6E;
 }
-.grid-pill.active {
-  background: #131B2E;
-  border-color: #10b981;
-  color: #34d399;
-  box-shadow: 0 0 12px -2px rgba(16, 185, 129, 0.35);
+.matrix-pill.active-pill {
+  background: #1B2436;
+  border-color: #3b82f6;
+  color: #93c5fd;
+  box-shadow: 0 0 12px -2px rgba(59, 130, 246, 0.4);
 }
-.grid-pill.active-amber {
-  background: #131B2E;
+.matrix-pill.active-pill-blue {
+  background: #1B2436;
+  border-color: #3b82f6;
+  color: #93c5fd;
+  box-shadow: 0 0 12px -2px rgba(59, 130, 246, 0.4);
+}
+.matrix-pill.active-pill-amber {
+  background: #1B2436;
   border-color: #f59e0b;
-  color: #fbbf24;
+  color: #fde68a;
   box-shadow: 0 0 12px -2px rgba(245, 158, 11, 0.35);
 }
-.grid-pill.active-blue {
-  background: #131B2E;
-  border-color: #3b82f6;
-  color: #60a5fa;
-  box-shadow: 0 0 12px -2px rgba(59, 130, 246, 0.35);
-}
-.grid-pill.active-closed {
+.matrix-pill.active-pill-closed {
   background: rgba(255, 255, 255, 0.08);
   border-color: rgba(255, 255, 255, 0.2);
   color: #f8fafc;
