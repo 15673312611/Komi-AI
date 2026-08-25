@@ -23,7 +23,7 @@ limitations under the License.
  * variables onto one send path and not the other, and both are still paying
  * for the split. The parent owns the send; this owns what to send.
  */
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed, watch } from 'vue'
 import channelsService, {
   type TemplateComponent,
   type WhatsAppTemplate,
@@ -63,6 +63,7 @@ const loading = ref(true)
 const loadError = ref('')
 const selected = ref<WhatsAppTemplate | null>(null)
 const values = ref<Record<number, string>>({})
+let templatesRequestVersion = 0
 
 const sendable = computed(() =>
   templates.value.filter(
@@ -102,17 +103,36 @@ watch([selected, values], () => {
     : null
 }, { deep: true })
 
-onMounted(async () => {
+const loadTemplates = async (accountId: string) => {
+  const requestVersion = ++templatesRequestVersion
+  loading.value = true
+  loadError.value = ''
+  templates.value = []
+  selected.value = null
+  values.value = {}
+
+  if (!accountId) {
+    loading.value = false
+    return
+  }
+
   try {
-    templates.value = await channelsService.listWhatsAppTemplates(props.accountId)
+    const loadedTemplates = await channelsService.listWhatsAppTemplates(accountId)
+    if (requestVersion !== templatesRequestVersion || props.accountId !== accountId) return
+    templates.value = loadedTemplates
     // Skip straight past a choice of one — the agent still confirms by sending.
     if (sendable.value.length === 1) select(sendable.value[0])
   } catch (error: any) {
+    if (requestVersion !== templatesRequestVersion || props.accountId !== accountId) return
     loadError.value = error?.response?.data?.detail || '加载消息模板失败'
   } finally {
-    loading.value = false
+    if (requestVersion === templatesRequestVersion && props.accountId === accountId) loading.value = false
   }
-})
+}
+
+watch(() => props.accountId, (accountId) => {
+  void loadTemplates(accountId)
+}, { immediate: true })
 </script>
 
 <template>

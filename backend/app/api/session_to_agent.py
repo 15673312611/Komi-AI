@@ -16,9 +16,9 @@ limitations under the License.
 
 from uuid import UUID
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.repositories.session_to_agent import SessionToAgentRepository
 from app.repositories.chat import ChatRepository
@@ -43,6 +43,7 @@ from app.services.human_routing import notify_customer, route_session_to_human
 from app.services.message_delivery import deliver_to_customer
 from app.utils.sanitize import sanitize_message
 from app.models.schemas.chat import ChatDetailResponse, TransferReasonType
+from app.models.schemas.user import TeammateResponse
 from app.channels.constants import is_widget_channel
 
 
@@ -59,6 +60,12 @@ class AIAutoReplyToggle(BaseModel):
     enabled: bool
 
 
+class ConversationTagsUpdate(BaseModel):
+    """The complete ordered label set for one conversation."""
+
+    tags: List[str]
+
+
 class EndChatRequest(BaseModel):
     """Validated payload for a human closing a conversation.
 
@@ -73,6 +80,72 @@ class EndChatRequest(BaseModel):
     end_chat_reason: Optional[str] = None
     end_chat_description: Optional[str] = None
     client_message_id: Optional[str] = None
+
+
+class ReassignChatRequest(BaseModel):
+    """Optional JSON body for a reassignment, including its internal handoff note."""
+
+    to_user_id: Optional[str] = None
+    note: Optional[str] = Field(default=None, max_length=2000)
+
+
+def _visible_inbox_users(db: Session, session: SessionToAgent) -> list[User]:
+    """Return active organization users allowed to open ``session``.
+
+    Conversation snapshots and composer mentions must agree on visibility. A
+    mention notification contains a deep link and may originate from a private
+    note, so returning the general organization directory here would leak
+    conversation existence to teammates without inbox access.
+    """
+    users = (
+        db.query(User)
+        .options(
+            joinedload(User.role).joinedload(Role.permissions),
+            selectinload(User.groups),
+        )
+        .filter(
+            User.organization_id == session.organization_id,
+            User.is_active.is_(True),
+        )
+        .all()
+    )
+    result: list[User] = []
+    for user in users:
+        permissions = {
+            permission.name
+            for permission in ((getattr(user, 'role', None) and getattr(user.role, 'permissions', None)) or [])
+            if getattr(permission, 'name', None)
+        }
+        is_super_admin = 'super_admin' in permissions
+        can_view_all = is_super_admin or bool({'view_all_chats', 'manage_all_chats'} & permissions)
+        can_view_assigned = is_super_admin or 'view_assigned_chats' in permissions
+        can_manage_assigned = is_super_admin or 'manage_assigned_chats' in permissions
+        can_view_unassigned = is_super_admin or 'view_unassigned_chats' in permissions
+
+        visible = can_view_all
+        if not visible and session.user_id is not None:
+            visible = (
+                (str(session.user_id) == str(user.id) and (can_view_assigned or can_manage_assigned))
+                or (
+                    session.group_id is not None
+                    and can_view_assigned
+                    and any(str(group.id) == str(session.group_id) for group in (user.groups or []))
+                )
+            )
+        if not visible and session.user_id is None:
+            visible = can_view_unassigned
+            if (
+                not visible
+                and session.group_id is not None
+                and can_view_assigned
+            ):
+                visible = any(
+                    str(group.id) == str(session.group_id)
+                    for group in (user.groups or [])
+                )
+        if visible:
+            result.append(user)
+    return result
 
 
 async def _emit_conversation_updated(
@@ -105,58 +178,21 @@ async def _emit_conversation_updated(
         .filter(SessionToAgent.session_id == chat.session_id)
         .first()
     )
-    recipients = {str(user_id) for user_id in (recipient_user_ids or []) if user_id}
+    explicit_recipients = {str(user_id) for user_id in (recipient_user_ids or []) if user_id}
+    visible_recipients: set[str] = set()
     if session is not None:
-        users = (
-            db.query(User)
-            .options(
-                joinedload(User.role).joinedload(Role.permissions),
-                selectinload(User.groups),
-            )
-            .filter(
-                User.organization_id == session.organization_id,
-                User.is_active.is_(True),
-            )
-            .all()
-        )
-        for user in users:
-            permissions = {
-                permission.name
-                for permission in ((getattr(user, 'role', None) and getattr(user.role, 'permissions', None)) or [])
-                if getattr(permission, 'name', None)
-            }
-            is_super_admin = 'super_admin' in permissions
-            can_view_all = is_super_admin or bool({'view_all_chats', 'manage_all_chats'} & permissions)
-            can_view_assigned = is_super_admin or 'view_assigned_chats' in permissions
-            can_manage_assigned = is_super_admin or 'manage_assigned_chats' in permissions
-            can_view_unassigned = is_super_admin or 'view_unassigned_chats' in permissions
-
-            visible = can_view_all
-            if not visible and session.user_id is not None:
-                visible = (
-                    (str(session.user_id) == str(user.id) and (can_view_assigned or can_manage_assigned))
-                    or (
-                        session.group_id is not None
-                        and can_view_assigned
-                        and any(str(group.id) == str(session.group_id) for group in (user.groups or []))
-                    )
-                )
-            if not visible and session.user_id is None:
-                visible = can_view_unassigned
-                if (
-                    not visible
-                    and session.group_id is not None
-                    and can_view_assigned
-                ):
-                    visible = any(
-                        str(group.id) == str(session.group_id)
-                        for group in (user.groups or [])
-                    )
-            if visible:
-                recipients.add(str(user.id))
+        visible_recipients = {str(user.id) for user in _visible_inbox_users(db, session)}
+    recipients = explicit_recipients | visible_recipients
 
     for user_id in recipients:
-        await sio.emit('room_event', payload, room=f"user_{user_id}", namespace='/agent')
+        # Explicit recipients include the former assignee on a transfer. They
+        # need an event to remove their row, but must not receive the fresh
+        # detail after the reassignment made it inaccessible to them.
+        event = payload if user_id in visible_recipients else {
+            'type': 'conversation_removed',
+            'session_id': str(chat.session_id),
+        }
+        await sio.emit('room_event', event, room=f"user_{user_id}", namespace='/agent')
 
 
 def _is_uuid(value: str) -> bool:
@@ -166,6 +202,36 @@ def _is_uuid(value: str) -> bool:
         return True
     except (ValueError, TypeError, AttributeError):
         return False
+
+
+def _normalise_conversation_tags(tags: List[str]) -> list[str]:
+    """Validate labels before storing them in the session JSON state.
+
+    Tags are operator-authored display text, not arbitrary metadata. Keeping
+    this narrow prevents a label edit from inflating a shared JSON field or
+    preserving markup/control characters that later clients may render.
+    """
+    if not isinstance(tags, list):
+        raise HTTPException(status_code=422, detail="Tags must be a list")
+    if len(tags) > 20:
+        raise HTTPException(status_code=422, detail="A conversation can have at most 20 tags")
+
+    result: list[str] = []
+    seen: set[str] = set()
+    for tag in tags:
+        if not isinstance(tag, str):
+            raise HTTPException(status_code=422, detail="Every tag must be text")
+        value = sanitize_message(tag).strip()
+        value = " ".join(value.split())
+        if not value:
+            continue
+        if len(value) > 64:
+            raise HTTPException(status_code=422, detail="Tags cannot exceed 64 characters")
+        key = value.casefold()
+        if key not in seen:
+            seen.add(key)
+            result.append(value)
+    return result
 
 
 async def _notify_customer_of_handover(db: Session, session, user: User) -> None:
@@ -228,6 +294,45 @@ async def _load_manageable_session(db: Session, session_id: str, current_user: U
             raise HTTPException(status_code=404, detail="Chat session not found")
 
     return session
+
+
+@router.get("/{session_id}/mentionable-teammates", response_model=List[TeammateResponse])
+async def list_mentionable_teammates(
+    session_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """List only teammates who may safely receive a mention for this chat."""
+    session = await _load_manageable_session(db, session_id, current_user)
+    return [user for user in _visible_inbox_users(db, session) if user.id != current_user.id]
+
+
+@router.put("/{session_id}/tags", response_model=ChatDetailResponse)
+async def update_conversation_tags(
+    session_id: str,
+    payload: ConversationTagsUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Replace the labels on a conversation and broadcast its new snapshot.
+
+    The same action/visibility gate as reassignment applies: labels reveal
+    operational context and must not be writable merely because an id is
+    known. Replacing the whole set makes retries naturally idempotent.
+    """
+    session = await _load_manageable_session(db, session_id, current_user)
+    tags = _normalise_conversation_tags(payload.tags)
+    state = dict(session.workflow_state) if isinstance(session.workflow_state, dict) else {}
+    state['conversation_tags'] = tags
+    session.workflow_state = state
+    db.commit()
+
+    detail = await ChatRepository(db).get_chat_detail(session.session_id, current_user.organization_id)
+    if not detail:
+        raise HTTPException(status_code=500, detail="Failed to load chat after updating tags")
+    response = ChatDetailResponse(**detail)
+    await _emit_conversation_updated(db, response, recipient_user_ids=[session.user_id, current_user.id])
+    return response
 
 
 @router.post("/{session_id}/takeover", response_model=ChatDetailResponse)
@@ -566,7 +671,8 @@ async def hand_back_to_ai(
 @router.post("/{session_id}/reassign", response_model=ChatDetailResponse)
 async def reassign_chat(
     session_id: str,
-    to_user_id: str,
+    to_user_id: Optional[str] = None,
+    payload: Optional[ReassignChatRequest] = None,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -575,14 +681,19 @@ async def reassign_chat(
         session_repo = SessionToAgentRepository(db)
         session = await _load_manageable_session(db, session_id, current_user)
 
+        target_user_id = payload.to_user_id if payload and payload.to_user_id else to_user_id
+        if not target_user_id:
+            raise HTTPException(status_code=422, detail="to_user_id is required")
+
         # The new owner must be a real, active member of the same org —
         # otherwise a chat (and its assignment notification) could be pushed
         # onto someone outside it. A 404 here doesn't confirm whether an id
         # exists elsewhere.
-        target_user = UserRepository(db).get_user(to_user_id) if _is_uuid(to_user_id) else None
+        target_user = UserRepository(db).get_user(target_user_id) if _is_uuid(target_user_id) else None
         if (target_user is None
                 or not target_user.is_active
-                or target_user.organization_id != current_user.organization_id):
+                or target_user.organization_id != current_user.organization_id
+                or not has_any_permission(target_user, CHAT_MANAGE_PERMISSIONS)):
             raise HTTPException(status_code=404, detail="User not found")
 
         # Only allow reassignment for open sessions handled by a user (not AI)
@@ -591,17 +702,36 @@ async def reassign_chat(
         if session.user_id is None:
             raise HTTPException(status_code=400, detail="Chat must be handled by a user to reassign")
 
-        # Capture the previous assignee BEFORE reassigning. reassign_session
-        # re-fetches this same row, so within one DB session the identity map
-        # hands back the very object `session` points at — it mutates
-        # session.user_id to the new owner in place. Reading it afterward would
-        # target the new assignee's room, not the previous one's.
+        # Capture the previous assignee before changing the in-memory row so
+        # the snapshot reaches both the person losing the chat and the one
+        # receiving it.
         previous_user_id = session.user_id
 
-        # Update session owner
-        success = session_repo.reassign_session(session_id=session_id, to_user_id=to_user_id)
-        if not success:
-            raise HTTPException(status_code=400, detail="Failed to reassign chat")
+        # Persist the optional note before changing the assignment, within the
+        # same transaction. The old socket-first flow raced with reassignment:
+        # if the reassignment won, the server correctly rejected the note
+        # because its author no longer owned the chat.
+        handoff_note = sanitize_message(payload.note or "")[:2000] if payload else ""
+        if handoff_note:
+            ChatRepository(db).create_message({
+                "message": handoff_note,
+                "message_type": "private_note",
+                "session_id": session.session_id,
+                "organization_id": session.organization_id,
+                "agent_id": session.agent_id,
+                "customer_id": session.customer_id,
+                "user_id": current_user.id,
+                "attributes": {
+                    "is_private": True,
+                    "handoff_to_user_id": str(target_user.id),
+                },
+            }, commit=False)
+
+        session.user_id = target_user.id
+        session.group_id = None
+        session.status = SessionStatus.OPEN
+        session.updated_at = datetime.utcnow()
+        db.commit()
 
         # Fetch updated chat detail
         chat_repo = ChatRepository(db)
@@ -623,12 +753,12 @@ async def reassign_chat(
         await sio.emit('room_event', {
             'type': 'reassigned',
             'session_id': session_id,
-            'assigned_to': to_user_id
-        }, room=f"user_{to_user_id}")
+            'assigned_to': str(target_user.id)
+        }, room=f"user_{target_user.id}")
 
         # Also notify the PREVIOUS assignee that the chat left their queue —
         # unless it was reassigned to themselves (a no-op).
-        if previous_user_id and str(previous_user_id) != str(to_user_id):
+        if previous_user_id and str(previous_user_id) != str(target_user.id):
             await sio.emit('room_event', {
                 'type': 'reassigned_from_you',
                 'session_id': session_id
@@ -636,13 +766,13 @@ async def reassign_chat(
 
         # Push to the new assignee — a socket event only reaches them if the
         # dashboard is already open.
-        await notify_chat_assigned(db, session, to_user_id, assigned_by=current_user.id)
+        await notify_chat_assigned(db, session, str(target_user.id), assigned_by=current_user.id)
 
         response = ChatDetailResponse(**chat)
         await _emit_conversation_updated(
             db,
             response,
-            recipient_user_ids=[previous_user_id, to_user_id, current_user.id],
+            recipient_user_ids=[previous_user_id, target_user.id, current_user.id],
         )
         return response
     except HTTPException:

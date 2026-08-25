@@ -191,6 +191,28 @@ def test_get_recent_chats_preview_is_the_latest_message(chat_repo, test_data, db
     assert chats[0]["last_message"] == "A final reply from the agent"
 
 
+def test_get_recent_chats_preview_excludes_private_notes(chat_repo, test_data, db):
+    """An internal note must not displace customer-visible inbox preview text."""
+    db.add(ChatHistory(
+        organization_id=test_data["org_id"],
+        session_id=test_data["session_id"],
+        customer_id=test_data["customer"].id,
+        agent_id=test_data["agent"].id,
+        user_id=test_data["user"].id,
+        message="Customer escalation details for the internal team only",
+        message_type="private_note",
+    ))
+    db.commit()
+
+    chats = chat_repo.get_recent_chats(
+        organization_id=test_data["org_id"],
+        user_id=test_data["user"].id,
+        user_groups=[str(test_data["group"].id)],
+    )
+
+    assert chats[0]["last_message"] == "Test message 2"
+
+
 def test_get_recent_chats_preview_reads_legacy_plaintext(chat_repo, test_data, db):
     """Rows written before encryption at rest have no prefix and must still show."""
     legacy = ChatHistory(
@@ -290,4 +312,4 @@ async def test_get_chat_detail_includes_customer_meta_data(chat_repo, db, test_d
     assert detail["customer"]["meta_data"] == {
         "student_name": "Aarav Krishnan",
         "center_name": "Special Academy U12"
-    } 
+    }

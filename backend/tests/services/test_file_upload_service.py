@@ -218,7 +218,9 @@ class TestFileUploadServiceUpload:
             
             # Verify result
             assert result['file_url'] == f'/uploads/chat_attachments/{org_id}/test-uuid-456.txt'
-            assert result['signed_url'] == f'/uploads/chat_attachments/{org_id}/test-uuid-456.txt'
+            assert result['signed_url'].startswith(
+                f'/api/v1/files/download/chat_attachments/{org_id}/test-uuid-456.txt?'
+            )
             assert result['filename'] == 'test_file.txt'
             assert result['content_type'] == 'text/plain'
     

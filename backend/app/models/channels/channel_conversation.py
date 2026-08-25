@@ -39,6 +39,10 @@ class ChannelConversation(Base):
             'channel_account_id', 'external_conversation_id', 'session_id',
             name='uq_channel_conversation_session'
         ),
+        UniqueConstraint(
+            'channel_account_id', 'outbound_idempotency_key',
+            name='uq_channel_conversation_outbound_key'
+        ),
     )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -84,6 +88,7 @@ class ChannelConversation(Base):
     last_inbound_at = Column(DateTime(timezone=True), nullable=True)
     # Channel-specific extras (message thread ids, profile snapshots, ...)
     extra = Column(JSON, default=dict)
+    outbound_idempotency_key = Column(String, nullable=True, index=True)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

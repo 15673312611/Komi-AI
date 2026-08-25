@@ -146,6 +146,12 @@ export function useNavItems() {
             show: canAccessPath('/settings/ai-config'),
           },
           {
+            to: '/settings/canned-responses',
+            icon: 'responses',
+            label: '快捷话术',
+            show: canAccessPath('/settings/canned-responses'),
+          },
+          {
             to: '/settings/user',
             icon: 'usersettings',
             label: '个人设置',

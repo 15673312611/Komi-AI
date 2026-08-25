@@ -64,6 +64,12 @@ describe('chatHandler', () => {
     expect(chatHandler({ status: 'open', user_id: null, agent: {} }).kind).toBe('ai')
   })
 
+  it('reads a session with AI auto-reply paused as waiting for a human', () => {
+    const chat = { status: 'open', user_id: null, ai_auto_reply: false }
+    expect(chatHandler(chat)).toEqual({ kind: 'waiting', label: 'Waiting for human' })
+    expect(chatHandler({ ...chat, ai_auto_reply: true }).kind).toBe('ai')
+  })
+
   it('still names the human once someone picks up a human-only chat', () => {
     expect(
       chatHandler({

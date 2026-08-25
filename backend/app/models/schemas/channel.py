@@ -18,7 +18,7 @@ from datetime import datetime
 from typing import Optional
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.channels.constants import DEFAULT_TEMPLATE_LANGUAGE
 
@@ -70,6 +70,7 @@ class TemplateSendRequest(BaseModel):
     template_name: str
     language: str = DEFAULT_TEMPLATE_LANGUAGE
     components: Optional[list] = None
+    idempotency_key: Optional[str] = Field(default=None, min_length=16, max_length=128, pattern=r"^[A-Za-z0-9_-]+$")
 
 
 class OutboundConversationRequest(BaseModel):
@@ -85,6 +86,7 @@ class OutboundConversationRequest(BaseModel):
     components: Optional[list] = None
     customer_id: Optional[UUID] = None
     customer_name: Optional[str] = None
+    idempotency_key: Optional[str] = Field(default=None, min_length=16, max_length=128, pattern=r"^[A-Za-z0-9_-]+$")
 
 
 class OutboundConversationOut(BaseModel):

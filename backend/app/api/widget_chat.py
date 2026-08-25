@@ -38,6 +38,7 @@ import uuid
 from app.services.socket_rate_limit import socket_rate_limit
 from app.services.workflow_chat import WorkflowChatService
 from app.services.file_upload_service import FileUploadService
+from app.utils.attachment_urls import local_attachment_download_url
 from app.core.config import settings
 from app.core.s3 import get_s3_signed_url
 
@@ -46,7 +47,7 @@ from app.models.user import User
 from app.core.auth import CHAT_MANAGE_PERMISSIONS, CHAT_VIEW_PERMISSIONS, has_any_permission
 from app.agents.transfer_agent import get_agent_availability_response
 from app.repositories.agent import AgentRepository
-from app.services.chat_notifications import notify_new_chat
+from app.services.chat_notifications import notify_chat_mentioned, notify_new_chat
 from app.services.contact_capture import retain_unstored_email
 from app.services.human_routing import (
     HUMAN_ONLY_ACK,
@@ -88,6 +89,30 @@ async def _emit_bot_typing(session_id: str) -> None:
     """
     await sio.emit('bot_typing', {'session_id': session_id},
                    room=session_id, namespace='/widget')
+
+
+async def _broadcast_dashboard_conversation_snapshot(db, session_id: str, organization_id) -> None:
+    """Refresh every authorized inbox after an inbound/widget state change.
+
+    Agent rooms only cover the current assignee and the tab viewing a specific
+    session.  The user-room snapshot is what keeps unassigned AI threads and
+    other supervisors' list rows current without exposing a message to a
+    caller who cannot see the session.
+    """
+    try:
+        detail = await ChatRepository(db).get_chat_detail(session_id, organization_id)
+        if not detail:
+            return
+        # Imported lazily: session actions own the visibility fan-out and this
+        # Socket.IO module is also imported by that action module at startup.
+        from app.api.session_to_agent import _emit_conversation_updated
+        from app.models.schemas.chat import ChatDetailResponse
+
+        await _emit_conversation_updated(db, ChatDetailResponse(**detail))
+    except Exception as exc:
+        # Chat delivery has already been persisted; a socket outage must not
+        # turn that successful customer interaction into a handler failure.
+        logger.warning("Failed to broadcast dashboard conversation snapshot for %s: %s", session_id, exc)
 
 # Rating feedback comes from an anonymous widget visitor and is stored, shown
 # to agents and copied onto the linked ticket's activity feed — bound it.
@@ -682,12 +707,14 @@ async def handle_widget_chat(sid, data):
                 for file_info in uploaded_files:
                     file_url = file_info['file_url']
 
-                    # Generate S3 signed URL if S3 storage is enabled
+                    # Generate S3 signed URL if S3 storage is enabled.
                     if settings.S3_FILE_STORAGE:
                         try:
                             file_url = await get_s3_signed_url(file_url)
                         except Exception as e:
                             logger.error(f"Error generating signed URL for attachment: {str(e)}")
+                    else:
+                        file_url = file_info.get('signed_url') or file_url
 
                     attachments_data.append({
                         'filename': file_info['filename'],
@@ -719,6 +746,8 @@ async def handle_widget_chat(sid, data):
                 'timestamp': timestamp,
                 'attachments': attachments_data if attachments_data else None
             }, room=session_id, namespace='/agent')    
+
+            await _broadcast_dashboard_conversation_snapshot(db, session_id, org_id)
 
             return # don't do anything further - human agent handles the conversation
         else:
@@ -759,12 +788,14 @@ async def handle_widget_chat(sid, data):
                 for file_info in uploaded_files:
                     file_url = file_info['file_url']
 
-                    # Generate S3 signed URL if S3 storage is enabled
+                    # Generate S3 signed URL if S3 storage is enabled.
                     if settings.S3_FILE_STORAGE:
                         try:
                             file_url = await get_s3_signed_url(file_url)
                         except Exception as e:
                             logger.error(f"Error generating signed URL for attachment: {str(e)}")
+                    else:
+                        file_url = file_info.get('signed_url') or file_url
 
                     attachments_data.append({
                         'filename': file_info['filename'],
@@ -797,6 +828,8 @@ async def handle_widget_chat(sid, data):
                 'timestamp': timestamp,
                 'attachments': attachments_data if attachments_data else None
             }, room=session_id, namespace='/agent')    
+
+            await _broadcast_dashboard_conversation_snapshot(db, session_id, org_id)
 
             # Nothing is going to answer this on its own, so acknowledge once —
             # otherwise the visitor sends into what looks like a dead widget.
@@ -910,6 +943,8 @@ async def handle_widget_chat(sid, data):
                 except Exception as close_error:
                     logger.error(f"Error closing session {session_id}: {str(close_error)}")
 
+            await _broadcast_dashboard_conversation_snapshot(db, session_id, org_id)
+
     except Exception as e:
         logger.error(f"Widget chat error for sid {sid}: {str(e)}")
         logger.error(traceback.format_exc())
@@ -1001,6 +1036,10 @@ async def get_widget_chat_history(sid):
                         except Exception as e:
                             logger.error(f"Error generating signed URL for attachment {attachment.id}: {str(e)}")
                             # Use original file_url if signing fails
+                    elif attachment.file_url:
+                        att_dict['file_url'] = local_attachment_download_url(
+                            attachment.file_url.lstrip('/').removeprefix('uploads/')
+                        )
                     
                     attachments.append(att_dict)
                 msg_dict['attachments'] = attachments
@@ -1089,6 +1128,7 @@ async def handle_end_chat(sid, data):
                 'session_id': session_id,
                 'message': 'Chat session closed'
             }, room=sid, namespace='/widget')
+            await _broadcast_dashboard_conversation_snapshot(db, session_id, org_id)
 
         except Exception as close_error:
             logger.error(f"Error closing session {session_id}: {str(close_error)}")
@@ -1235,6 +1275,42 @@ async def handle_agent_message(sid, data):
                 raise ValueError("Invalid client message ID")
             client_message_id = client_message_id.strip()[:128]
 
+        # Mentions are collaboration metadata for private notes only. A
+        # customer-visible reply must never expose a teammate name or trigger
+        # an internal notification through a forged Socket.IO payload.
+        raw_mentioned_user_ids = data.get('mentioned_user_ids', []) if message_type == 'private_note' else []
+        if raw_mentioned_user_ids is None:
+            raw_mentioned_user_ids = []
+        if not isinstance(raw_mentioned_user_ids, list) or len(raw_mentioned_user_ids) > 20:
+            raise ValueError("Invalid mentioned users")
+        mentioned_user_ids = []
+        for raw_user_id in raw_mentioned_user_ids:
+            if not isinstance(raw_user_id, str):
+                raise ValueError("Invalid mentioned users")
+            try:
+                user_id = str(uuid.UUID(raw_user_id))
+            except (ValueError, AttributeError):
+                raise ValueError("Invalid mentioned users")
+            if user_id != str(socket_user_id) and user_id not in mentioned_user_ids:
+                mentioned_user_ids.append(user_id)
+
+        # Mention candidates must be able to open this exact conversation. The
+        # browser only receives the filtered directory, and the socket repeats
+        # the check so a forged payload cannot leak a private note through an
+        # in-app notification.
+        mentioned_users = []
+        if mentioned_user_ids:
+            from app.api.session_to_agent import _visible_inbox_users
+            visible_users = {
+                str(user.id): user
+                for user in _visible_inbox_users(db, session_data)
+            }
+            mentioned_users = [
+                visible_users[user_id]
+                for user_id in mentioned_user_ids
+                if user_id in visible_users
+            ]
+
         # Server-owned attributes prevent a browser client from marking an
         # ordinary reply as private or smuggling Shopify/product data into a
         # customer channel.
@@ -1257,6 +1333,14 @@ async def handle_agent_message(sid, data):
             attributes['client_message_id'] = client_message_id
         if message_type == 'private_note':
             attributes['is_private'] = True
+        if mentioned_users:
+            attributes['mentioned_users'] = [
+                {
+                    'id': str(user.id),
+                    'name': user.full_name or user.email,
+                }
+                for user in mentioned_users
+            ]
 
         uploaded_files = []
         if files:
@@ -1326,6 +1410,15 @@ async def handle_agent_message(sid, data):
         from app.models.user import User
         sender = db.query(User).filter(User.id == socket_user_id).first()
         sender_name = sender.full_name if sender else None
+        if mentioned_users:
+            await notify_chat_mentioned(
+                db,
+                session_data,
+                sender_name=sender_name,
+                recipient_ids=[user.id for user in mentioned_users],
+                message_id=created_message.id,
+                is_private_note=message_type == 'private_note',
+            )
         canonical_payload = {
             'message_id': created_message.id,
             'client_message_id': client_message_id,
@@ -1392,6 +1485,12 @@ async def handle_agent_message(sid, data):
                 # would actually reopen the conversation.
                 'can_template': delivery.can_template,
             }, to=sid, namespace='/agent')
+
+        await _broadcast_dashboard_conversation_snapshot(
+            db,
+            str(session_data.session_id),
+            socket_org_id,
+        )
 
     except Exception as e:
         logger.error(f"Agent message error for sid {sid}: {str(e)}")

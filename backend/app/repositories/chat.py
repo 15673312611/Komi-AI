@@ -34,6 +34,7 @@ from pydantic import BaseModel
 from app.core.s3 import get_s3_signed_url
 from app.core.config import settings
 from app.services.sentiment import analyze_sentiment, compute_session_sentiment
+from app.utils.attachment_urls import local_attachment_download_url
 
 logger = get_logger(__name__)
 
@@ -64,6 +65,11 @@ class ChatRepository:
         as truthy would silently re-enable automated replies.
         """
         state = getattr(session, 'workflow_state', None) or {}
+        return ChatRepository.effective_ai_auto_reply_from_state(state, agent_default)
+
+    @staticmethod
+    def effective_ai_auto_reply_from_state(state: Any, agent_default: bool = True) -> bool:
+        """Return the effective setting when only the persisted JSON state is available."""
         override = state.get('ai_auto_reply') if isinstance(state, dict) else None
         return override if isinstance(override, bool) else bool(agent_default)
 
@@ -325,11 +331,12 @@ class ChatRepository:
         return messages
 
     def get_last_messages(self, session_ids: List[UUID]) -> Dict[UUID, str]:
-        """Map each session to its most recent message, decrypted.
+        """Map each session to its most recent customer-visible message, decrypted.
 
         One query for the whole page rather than one per session, and the single
         definition of "most recent" — created_at is transaction time, so messages
-        written together share it exactly and id has to break the tie.
+        written together share it exactly and id has to break the tie. Internal
+        notes never appear in an inbox or customer preview.
         """
         if not session_ids:
             return {}
@@ -343,7 +350,10 @@ class ChatRepository:
                     order_by=(ChatHistory.created_at.desc(), ChatHistory.id.desc()),
                 ).label('rank')
             )
-            .where(ChatHistory.session_id.in_(session_ids))
+            .where(
+                ChatHistory.session_id.in_(session_ids),
+                ChatHistory.message_type != 'private_note',
+            )
             .subquery()
         )
 
@@ -501,12 +511,23 @@ class ChatRepository:
         # correlated subquery would evaluate once per session in the org, since the
         # LIMIT applies after grouping.
         last_messages = self.get_last_messages([r.session_id for r in results])
+        workflow_states = dict(
+            self.db.query(SessionToAgent.session_id, SessionToAgent.workflow_state)
+            .filter(SessionToAgent.session_id.in_([r.session_id for r in results]))
+            .all()
+        ) if results else {}
+        customer_metadata = dict(
+            self.db.query(Customer.id, Customer.meta_data)
+            .filter(Customer.id.in_([r.customer_id for r in results]))
+            .all()
+        ) if results else {}
 
         return [{
             'customer': {
                 'id': r.customer_id,
                 'email': CustomerRepository.display_email(r.customer_email),
-                'full_name': r.customer_full_name
+                'full_name': r.customer_full_name,
+                'meta_data': customer_metadata.get(r.customer_id),
             },
             'agent': {
                 'id': r.agent_id,
@@ -514,6 +535,9 @@ class ChatRepository:
                 'display_name': r.agent_display_name,
                 'ai_replies_enabled': r.agent_ai_replies_enabled,
             },
+            'ai_auto_reply': self.effective_ai_auto_reply_from_state(
+                workflow_states.get(r.session_id), r.agent_ai_replies_enabled
+            ),
             'last_message': last_messages.get(r.session_id),
             'updated_at': r.updated_at,
             'message_count': r.message_count,
@@ -657,7 +681,13 @@ class ChatRepository:
                     att_dict = {
                         'id': attachment.id,
                         'filename': attachment.filename,
-                        'file_url': attachment.file_url,
+                        'file_url': (
+                            attachment.file_url
+                            if settings.S3_FILE_STORAGE
+                            else local_attachment_download_url(
+                                attachment.file_url.lstrip('/').removeprefix('uploads/')
+                            )
+                        ),
                         'content_type': attachment.content_type,
                         'file_size': attachment.file_size
                     }
@@ -667,6 +697,9 @@ class ChatRepository:
             messages_list.append(msg_dict)
 
         session = self.get_session_by_id(session_id, org_id)
+        state = getattr(session, 'workflow_state', None) if session else None
+        raw_tags = state.get('conversation_tags', []) if isinstance(state, dict) else []
+        tags = [tag for tag in raw_tags if isinstance(tag, str)] if isinstance(raw_tags, list) else []
         
         # Convert result to dict
         return {
@@ -694,6 +727,7 @@ class ChatRepository:
             'ai_auto_reply': self.effective_ai_auto_reply(
                 session, result.agent_ai_replies_enabled
             ),
+            'tags': tags,
             'created_at': result.created_at,
             'updated_at': result.updated_at,
             'messages': messages_list

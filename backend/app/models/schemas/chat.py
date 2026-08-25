@@ -188,6 +188,8 @@ class ChatOverviewResponse(BaseModel):
     # the AI still has it — the inbox needs this to label the row.
     user_id: Optional[UUID] = None
     user_name: Optional[str] = None
+    # Effective per-conversation auto-reply state, including any session override.
+    ai_auto_reply: bool = True
     session_id: UUID
 
 class ChatDetailResponse(BaseModel):
@@ -205,6 +207,10 @@ class ChatDetailResponse(BaseModel):
     # The effective per-conversation setting.  It falls back to the agent
     # default when no session override has been saved.
     ai_auto_reply: bool = True
+    # Durable, agent-managed labels for this specific conversation. Kept in
+    # SessionToAgent.workflow_state to avoid coupling support workflow labels
+    # to a customer's organization-wide profile.
+    tags: List[str] = Field(default_factory=list)
     created_at: datetime
     updated_at: datetime
 

@@ -26,6 +26,7 @@ from .agent import Agent
 from .knowledge_to_agent import KnowledgeToAgent
 from .knowledge import Knowledge
 from .chat_history import ChatHistory
+from .chat_read_state import ChatReadState
 from .session_to_agent import SessionToAgent, SessionStatus
 from .rating import Rating
 from app.models.jira import JiraToken
@@ -84,6 +85,7 @@ __all__ = [
     "KnowledgeToAgent",
     "Knowledge",
     "ChatHistory",
+    "ChatReadState",
     "SessionToAgent",
     "SessionStatus",
     "Rating",

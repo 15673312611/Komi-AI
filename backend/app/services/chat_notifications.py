@@ -19,8 +19,9 @@ from typing import Optional
 from sqlalchemy.orm import Session
 
 from app.core.logger import get_logger
+from app.models.notification import NotificationType
 from app.repositories.user import UserRepository
-from app.services.notifications import ChatNotificationEvent, notify_chat_event
+from app.services.notifications import ChatNotificationEvent, notify_chat_event, notify_user
 
 logger = get_logger(__name__)
 
@@ -91,3 +92,43 @@ async def notify_chat_assigned(db: Session, session, user_id, assigned_by: Optio
         )
     except Exception as e:
         logger.error(f"Error notifying chat assignment: {e}")
+
+
+async def notify_chat_mentioned(
+    db: Session,
+    session,
+    *,
+    sender_name: Optional[str],
+    recipient_ids: list,
+    message_id: Optional[int],
+    is_private_note: bool,
+) -> None:
+    """Notify authorized colleagues that a chat message mentioned them.
+
+    Mentions are intentional, actionable collaboration requests, unlike the
+    broad new-chat feed, so they bypass optional queue-notification settings.
+    The text itself is never copied into the notification: a private note can
+    contain sensitive operational context and recipients open the session to
+    read it under the normal visibility guard.
+    """
+    try:
+        recipients = {str(user_id) for user_id in recipient_ids if user_id}
+        for user_id in recipients:
+            await notify_user(
+                db=db,
+                user_id=user_id,
+                type_=NotificationType.CHAT,
+                title="You were mentioned in a conversation",
+                message=(
+                    f"{sender_name or 'A teammate'} mentioned you in an internal note."
+                    if is_private_note
+                    else f"{sender_name or 'A teammate'} mentioned you in a customer reply."
+                ),
+                metadata={
+                    "session_id": str(session.session_id),
+                    "message_id": message_id,
+                    "event": "chat_mention",
+                },
+            )
+    except Exception as e:
+        logger.error(f"Error notifying chat mentions: {e}")

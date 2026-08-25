@@ -53,6 +53,7 @@ export const ROUTE_PERMISSIONS: Record<string, readonly string[]> = {
   '/human-agents': ['manage_users'],
   '/settings/organization': ORGANIZATION_PERMISSIONS,
   '/settings/ai-config': AI_CONFIG_PERMISSIONS,
+  '/settings/canned-responses': ['manage_organization'],
   '/settings/integrations': ['manage_organization'],
   '/settings/widget-apps': ['manage_organization'],
   // Everyone can reach their own profile, and 403 must never deny itself or

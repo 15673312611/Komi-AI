@@ -65,6 +65,30 @@ class ChannelConversationRepository:
             logger.error(f"Error getting channel conversation by session: {str(e)}")
             return None
 
+    def get_by_outbound_idempotency(
+        self,
+        channel_account_id: UUID,
+        idempotency_key: str,
+    ) -> Optional[ChannelConversation]:
+        """Find a previously reserved outbound send for this account.
+
+        ``extra`` is intentionally JSON so channel-specific state remains
+        schema-free. The bounded account query keeps this portable across
+        PostgreSQL and SQLite, whose JSON comparison operators differ.
+        """
+        try:
+            return (
+                self.db.query(ChannelConversation)
+                .filter(
+                    ChannelConversation.channel_account_id == channel_account_id,
+                    ChannelConversation.outbound_idempotency_key == idempotency_key,
+                )
+                .first()
+            )
+        except Exception as e:
+            logger.error(f"Error getting outbound idempotency record: {str(e)}")
+            return None
+
     def get_latest(self, channel_account_id: UUID, external_conversation_id: str) -> Optional[ChannelConversation]:
         """Most recent conversation row regardless of session status — used for
         interactions (rating taps, feedback) that arrive after the chat closed."""
@@ -108,6 +132,7 @@ class ChannelConversationRepository:
         agent_id: Optional[UUID] = None,
         customer_id: Optional[UUID] = None,
         extra: Optional[dict] = None,
+        outbound_idempotency_key: Optional[str] = None,
         last_inbound_at: Optional[datetime] = _INBOUND_NOW,
     ) -> ChannelConversation:
         try:
@@ -122,6 +147,7 @@ class ChannelConversationRepository:
                 organization_id=organization_id,
                 agent_id=agent_id,
                 customer_id=customer_id,
+                outbound_idempotency_key=outbound_idempotency_key,
                 last_inbound_at=last_inbound_at,
                 extra=extra or {},
             )

@@ -125,6 +125,7 @@ async def start_whatsapp_conversation(
             components=request.components,
             customer_id=request.customer_id,
             customer_name=request.customer_name,
+            idempotency_key=request.idempotency_key,
         )
     except OutboundError as e:
         raise HTTPException(status_code=e.status_code, detail=e.detail)
@@ -146,6 +147,36 @@ async def send_whatsapp_template(
     if conversation is None or conversation.channel_account_id != account.id:
         raise HTTPException(status_code=404, detail="Conversation not found for this account")
 
+    if request.idempotency_key:
+        conv_repo = ChannelConversationRepository(db)
+        prior = conv_repo.get_by_outbound_idempotency(account.id, request.idempotency_key)
+        if prior is not None and prior.id != conversation.id:
+            prior_marker = (prior.extra or {}).get("outbound_idempotency") or {}
+            if prior_marker.get("status") == "sent":
+                return {"status": "already_sent", "external_message_id": prior_marker.get("external_message_id")}
+            if prior_marker.get("status") == "pending":
+                raise HTTPException(
+                    status_code=409,
+                    detail="This outbound WhatsApp send is already in progress. Verify its result before retrying.",
+                )
+            raise HTTPException(
+                status_code=409,
+                detail="This idempotency key belongs to a previous WhatsApp send. Start a new request with a new key.",
+            )
+
+        marker = (conversation.extra or {}).get("outbound_idempotency") or {}
+        if marker.get("key") == request.idempotency_key and marker.get("status") == "sent":
+            return {"status": "already_sent", "external_message_id": marker.get("external_message_id")}
+        if marker.get("key") == request.idempotency_key and marker.get("status") == "pending":
+            raise HTTPException(
+                status_code=409,
+                detail="This outbound WhatsApp send is already in progress. Verify its result before retrying.",
+            )
+        updated_extra = dict(conversation.extra or {})
+        conversation.outbound_idempotency_key = request.idempotency_key
+        updated_extra["outbound_idempotency"] = {"key": request.idempotency_key, "status": "pending"}
+        conv_repo.set_extra(conversation, updated_extra)
+
     adapter = get_adapter(ChannelType.WHATSAPP.value)
     result = await adapter.send_template(
         account, conversation,
@@ -154,7 +185,17 @@ async def send_whatsapp_template(
         components=request.components,
     )
     if not result.ok:
+        if request.idempotency_key:
+            ChannelConversationRepository(db).set_extra(conversation, {
+                **(conversation.extra or {}),
+                "outbound_idempotency": {"key": request.idempotency_key, "status": "failed", "error": result.error},
+            })
         raise HTTPException(status_code=502, detail=result.error or "Template send failed")
+    if request.idempotency_key:
+        ChannelConversationRepository(db).set_extra(conversation, {
+            **(conversation.extra or {}),
+            "outbound_idempotency": {"key": request.idempotency_key, "status": "sent", "external_message_id": result.external_message_id},
+        })
     return {"status": "sent", "external_message_id": result.external_message_id}
 
 

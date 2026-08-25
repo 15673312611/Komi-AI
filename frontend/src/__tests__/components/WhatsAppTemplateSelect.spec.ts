@@ -125,4 +125,28 @@ describe('WhatsAppTemplateSelect — filtering and errors', () => {
     await flushPromises()
     expect(wrapper.text()).toContain('Nope')
   })
+
+  it('ignores an old account response after the account changes', async () => {
+    let resolveFirst: (value: WhatsAppTemplate[]) => void = () => undefined
+    let resolveSecond: (value: WhatsAppTemplate[]) => void = () => undefined
+    listWhatsAppTemplates
+      .mockImplementationOnce(() => new Promise(resolve => { resolveFirst = resolve }))
+      .mockImplementationOnce(() => new Promise(resolve => { resolveSecond = resolve }))
+    const wrapper = mount(WhatsAppTemplateSelect, {
+      props: { accountId: 'acc-1' },
+      global: { stubs: { 'font-awesome-icon': true } },
+    })
+
+    await wrapper.setProps({ accountId: 'acc-2' })
+    resolveSecond([{ name: 'new_account', language: 'en_US', status: 'APPROVED', category: 'UTILITY' }])
+    await vi.waitFor(() => expect(wrapper.text()).toContain('new_account'))
+
+    resolveFirst([{ name: 'old_account', language: 'en_US', status: 'APPROVED', category: 'UTILITY' }])
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('new_account')
+    expect(wrapper.text()).not.toContain('old_account')
+    expect(listWhatsAppTemplates).toHaveBeenNthCalledWith(1, 'acc-1')
+    expect(listWhatsAppTemplates).toHaveBeenNthCalledWith(2, 'acc-2')
+  })
 })

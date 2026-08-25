@@ -186,8 +186,9 @@ class ShopifyHelperService:
         if 'hmac' in query_params:
             query_params.pop('hmac')
         
-        logger.info(f"Query params: {query_params}")
-        logger.info(f"HMAC param: {hmac_param}")
+        # OAuth ``code`` and the HMAC are credentials.  Logging either turns a
+        # routine callback into a replayable secret leak.
+        logger.debug("Validating Shopify OAuth callback for shop %s", shop)
         
         # Sort and encode parameters
         sorted_params = "&".join([f"{key}={quote(value)}" for key, value in sorted(query_params.items())])

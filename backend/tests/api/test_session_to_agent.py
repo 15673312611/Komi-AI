@@ -594,6 +594,36 @@ def test_reassign_chat_success(client_with_error_mock, db, user_with_manage_chat
     assert mock_notify.called
 
 
+def test_reassign_persists_handoff_note_before_assignment(
+    client_with_error_mock, db, user_with_manage_chats_permission,
+    user_with_manage_assigned_chats, create_chat_session
+):
+    """A handoff note must survive reassignment instead of racing a socket send."""
+    from unittest.mock import AsyncMock
+
+    session = _assigned_session(db, create_chat_session, user_with_manage_chats_permission)
+    with patch('app.api.session_to_agent.notify_chat_assigned', new=AsyncMock()):
+        response = client_with_error_mock.post(
+            f"/api/v1/session-to-agent/{session.session_id}/reassign",
+            json={
+                "to_user_id": str(user_with_manage_assigned_chats.id),
+                "note": "Customer asked for a delivery update.",
+            },
+        )
+
+    assert response.status_code == status.HTTP_200_OK
+    db.refresh(session)
+    assert session.user_id == user_with_manage_assigned_chats.id
+    note = db.query(ChatHistory).filter(
+        ChatHistory.session_id == session.session_id,
+        ChatHistory.message_type == "private_note",
+    ).one()
+    assert note.message == "Customer asked for a delivery update."
+    assert note.user_id == user_with_manage_chats_permission.id
+    assert note.attributes["is_private"] is True
+    assert note.attributes["handoff_to_user_id"] == str(user_with_manage_assigned_chats.id)
+
+
 def test_reassign_notifies_previous_assignee_not_new_one(
     client_with_error_mock, db, user_with_manage_chats_permission,
     user_with_manage_assigned_chats, create_chat_session
@@ -698,6 +728,24 @@ def test_reassign_chat_unknown_target(client_with_error_mock, db,
         )
         assert response.status_code == status.HTTP_404_NOT_FOUND, target
         assert response.json()["detail"] == "User not found"
+
+
+def test_reassign_chat_rejects_a_read_only_target(
+    client_with_error_mock, db, regular_user,
+    user_with_manage_chats_permission, create_chat_session,
+):
+    """A transfer must not strand a thread on an account that cannot reply."""
+    session = _assigned_session(db, create_chat_session, user_with_manage_chats_permission)
+
+    response = client_with_error_mock.post(
+        f"/api/v1/session-to-agent/{session.session_id}/reassign",
+        params={"to_user_id": str(regular_user.id)},
+    )
+
+    assert response.status_code == status.HTTP_404_NOT_FOUND
+    assert response.json()["detail"] == "User not found"
+    db.refresh(session)
+    assert session.user_id == user_with_manage_chats_permission.id
 
 
 def test_reassign_chat_no_permission(client_with_error_mock, db, regular_user,
@@ -874,3 +922,36 @@ def test_route_to_human_tells_a_channel_customer_someone_is_coming(
     assert response.status_code == status.HTTP_200_OK
     assert mock_deliver.called
     assert mock_deliver.call_args.args[2]['message'] == QUEUED_FOR_HUMAN_NOTICE
+
+
+def test_update_conversation_tags_persists_and_broadcasts(
+    client_with_error_mock, db, create_chat_session
+):
+    """Inbox labels belong to one session and are safe to retry as a set."""
+    from unittest.mock import AsyncMock
+
+    session = create_chat_session()
+    with patch('app.api.session_to_agent.sio.emit', new=AsyncMock()) as emit:
+        response = client_with_error_mock.put(
+            f"/api/v1/session-to-agent/{session.session_id}/tags",
+            json={"tags": ["VIP", "物流催件", "vip", "  售后  "]},
+        )
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.json()['tags'] == ['VIP', '物流催件', '售后']
+    db.refresh(session)
+    assert session.workflow_state['conversation_tags'] == ['VIP', '物流催件', '售后']
+    assert emit.called
+
+
+def test_update_conversation_tags_rejects_an_excessive_label_set(
+    client_with_error_mock, db, create_chat_session
+):
+    session = create_chat_session()
+    response = client_with_error_mock.put(
+        f"/api/v1/session-to-agent/{session.session_id}/tags",
+        json={"tags": [f"tag-{index}" for index in range(21)]},
+    )
+    assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+    db.refresh(session)
+    assert not session.workflow_state

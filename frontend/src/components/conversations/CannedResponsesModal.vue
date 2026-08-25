@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { CANNED_RESPONSES, type CannedResponse } from '@/utils/cannedResponses'
+import { useRouter } from 'vue-router'
+import { cannedResponsesService, type CannedResponse } from '@/services/cannedResponses'
+import { permissionChecks } from '@/utils/permissions'
 
 const props = withDefaults(defineProps<{
   open: boolean
@@ -13,13 +15,19 @@ const emit = defineEmits<{
   (e: 'select', text: string): void
 }>()
 
+const router = useRouter()
 const query = ref('')
 const category = ref('all')
+const responses = ref<CannedResponse[]>([])
+const loading = ref(false)
+const error = ref('')
+const canManageResponses = permissionChecks.canManageOrganization()
+let responsesRequest = 0
 
-const categories = computed(() => ['all', ...Array.from(new Set(CANNED_RESPONSES.map(item => item.category)))])
+const categories = computed(() => ['all', ...Array.from(new Set(responses.value.map(item => item.category)))])
 const filtered = computed(() => {
   const needle = query.value.trim().toLowerCase()
-  return CANNED_RESPONSES.filter((item) => {
+  return responses.value.filter((item) => {
     const categoryMatches = category.value === 'all' || item.category === category.value
     const textMatches = !needle || `${item.title} ${item.content} ${item.shortcut || ''}`.toLowerCase().includes(needle)
     return categoryMatches && textMatches
@@ -28,8 +36,8 @@ const filtered = computed(() => {
 
 const fillVariables = (item: CannedResponse) => {
   let text = item.content
-  if (props.customerName) text = text.replace(/{{\s*name\s*}}/gi, props.customerName)
-  if (props.orderNumber) text = text.replace(/{{\s*order\s*}}/gi, props.orderNumber)
+  if (props.customerName) text = text.replace(/{{\s*(name|customer_name)\s*}}/gi, props.customerName)
+  if (props.orderNumber) text = text.replace(/{{\s*(order|order_number)\s*}}/gi, props.orderNumber)
   return text
 }
 
@@ -38,12 +46,34 @@ const select = (item: CannedResponse) => {
   emit('close')
 }
 
-watch(() => props.open, (open) => {
-  if (open) {
-    query.value = ''
-    category.value = 'all'
+const loadResponses = async () => {
+  const request = ++responsesRequest
+  loading.value = true
+  error.value = ''
+  responses.value = []
+  const isCurrentRequest = () => request === responsesRequest && props.open
+  try {
+    const loadedResponses = await cannedResponsesService.list()
+    if (!isCurrentRequest()) return
+    responses.value = loadedResponses
+  } catch (err: any) {
+    if (!isCurrentRequest()) return
+    error.value = err?.response?.data?.detail || '快捷话术加载失败，请稍后重试。'
+  } finally {
+    if (isCurrentRequest()) loading.value = false
   }
-})
+}
+
+watch(() => props.open, (open) => {
+  if (!open) {
+    responsesRequest += 1
+    loading.value = false
+    return
+  }
+  query.value = ''
+  category.value = 'all'
+  void loadResponses()
+}, { immediate: true })
 </script>
 
 <template>
@@ -54,7 +84,10 @@ watch(() => props.open, (open) => {
           <h2 id="canned-title">快捷话术</h2>
           <p>从已配置的团队话术中选择，插入后仍可编辑。</p>
         </div>
-        <button type="button" class="icon-button" aria-label="关闭" @click="emit('close')">×</button>
+        <div class="header-actions">
+          <button v-if="canManageResponses" type="button" class="manage-button" @click="router.push('/settings/canned-responses'); emit('close')">管理</button>
+          <button type="button" class="icon-button" aria-label="关闭" @click="emit('close')">×</button>
+        </div>
       </header>
       <div class="filters">
         <input v-model="query" type="search" placeholder="搜索标题、内容或快捷指令" autofocus />
@@ -63,12 +96,14 @@ watch(() => props.open, (open) => {
         </select>
       </div>
       <div class="response-list">
+        <p v-if="loading" class="empty">正在加载快捷话术…</p>
+        <p v-else-if="error" class="empty error-text">{{ error }}<button type="button" class="retry-button" @click="loadResponses">重试</button></p>
         <button v-for="item in filtered" :key="item.id" type="button" class="response-item" @click="select(item)">
           <span class="response-item__title">{{ item.title }}</span>
           <span class="response-item__meta">{{ item.category }}<template v-if="item.shortcut"> · {{ item.shortcut }}</template></span>
           <span class="response-item__content">{{ item.content }}</span>
         </button>
-        <p v-if="!filtered.length" class="empty">没有匹配的话术。请在设置中添加或调整团队话术。</p>
+        <p v-if="!loading && !error && !filtered.length" class="empty">没有匹配的话术。</p>
       </div>
     </section>
   </div>
@@ -78,6 +113,9 @@ watch(() => props.open, (open) => {
 .modal-backdrop { position: fixed; inset: 0; z-index: 60; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgba(0,0,0,.68); }
 .modal { width: min(620px, 100%); max-height: min(680px, 90vh); overflow: hidden; display: flex; flex-direction: column; border: 1px solid var(--o12); border-radius: 10px; background: var(--bg2); color: var(--text); box-shadow: 0 24px 80px rgba(0,0,0,.35); }
 .modal-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 16px; border-bottom: 1px solid var(--o08); }
+.header-actions { display: flex; align-items: center; gap: 6px; }
+.manage-button, .retry-button { border: 1px solid var(--o12); border-radius: 6px; background: var(--o06); color: var(--text); cursor: pointer; font-size: 11px; padding: 5px 8px; }
+.retry-button { margin-left: 8px; color: var(--c-teal); }
 .modal-header h2 { margin: 0; font-size: 16px; }
 .modal-header p { margin: 5px 0 0; color: var(--muted); font-size: 12px; }
 .icon-button { width: 30px; height: 30px; border: 0; border-radius: 6px; background: transparent; color: var(--muted); font-size: 22px; cursor: pointer; }
@@ -92,5 +130,6 @@ watch(() => props.open, (open) => {
 .response-item__meta { color: var(--muted); font-size: 10px; }
 .response-item__content { grid-column: 1 / -1; color: var(--muted); font-size: 12px; line-height: 1.5; }
 .empty { padding: 36px 16px; margin: 0; text-align: center; color: var(--muted); font-size: 12px; }
+.error-text { color: var(--c-danger); }
 @media (max-width: 520px) { .filters { grid-template-columns: 1fr; } .response-item { grid-template-columns: 1fr; } }
 </style>

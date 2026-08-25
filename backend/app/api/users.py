@@ -31,7 +31,7 @@ from app.models.session_to_agent import SessionToAgent, SessionStatus
 from app.models.schemas.user import AdminPasswordReset, TeammateResponse, UserCreate, UserStatusUpdate, UserUpdate, UserResponse, TokenResponse
 from datetime import datetime, timezone
 from app.core.security import create_access_token, create_refresh_token, validate_password_strength, verify_token
-from app.core.auth import INBOX_PERMISSIONS, get_current_user, require_any_permission, require_permissions
+from app.core.auth import CHAT_MANAGE_PERMISSIONS, INBOX_PERMISSIONS, get_current_user, require_any_permission, require_permissions
 from app.core.logger import get_logger
 from app.repositories.user import UserRepository
 from app.repositories.fcm_token import FCMTokenRepository
@@ -389,18 +389,21 @@ async def list_teammates(
     current_user: User = Depends(require_any_permission(*INBOX_PERMISSIONS)),
     db: Session = Depends(get_db)
 ):
-    """The colleagues an inbox user can hand a conversation to.
+    """The active colleagues an inbox user can hand a conversation to.
 
     Declared above GET /{user_id}: below it, "teammates" parses as a user id
     and the request lands on the manage_users route — a 403 for exactly the
     agents this exists for.
 
     Deliberately not a relaxation of GET /users, which returns each teammate's
-    role and its full permission list. Reassigning a chat needs a name and a
-    face, so that is all this returns.
+    role and its full permission list. A person who cannot manage an assigned
+    chat is not included: assigning a conversation to a read-only account
+    strands it in an inbox the recipient cannot reply from.
     """
-    users = UserRepository(db).get_users_by_organization(current_user.organization_id)
-    return [user for user in users if user.is_active]
+    return UserRepository(db).get_users_with_any_permission(
+        current_user.organization_id,
+        (*CHAT_MANAGE_PERMISSIONS, "super_admin"),
+    )
 
 
 @router.get("/me/avatar")

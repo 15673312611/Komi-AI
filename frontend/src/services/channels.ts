@@ -251,6 +251,7 @@ const channelsService = {
       components?: TemplateComponent[]
       customer_id?: string
       customer_name?: string
+      idempotency_key?: string
     },
   ): Promise<{ session_id: string }> {
     const response = await api.post(`/channels/meta/whatsapp/${accountId}/conversations`, payload)
@@ -265,6 +266,7 @@ const channelsService = {
       template_name: string
       language?: string
       components?: TemplateComponent[]
+      idempotency_key?: string
     },
   ): Promise<{ status: string; external_message_id?: string }> {
     const response = await api.post(`/channels/meta/whatsapp/${accountId}/send-template`, payload)

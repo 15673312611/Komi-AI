@@ -83,6 +83,7 @@ const PAGE_TITLES: Record<string, string> = {
     '/settings/integrations': '渠道集成',
     '/settings/widget-apps': '挂件应用',
     '/settings/ai-config': 'AI 模型配置',
+    '/settings/canned-responses': '快捷话术',
     '/settings/user': '个人设置',
 }
 const pageTitle = computed(() => PAGE_TITLES[route.path] || '')

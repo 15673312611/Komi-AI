@@ -16,9 +16,9 @@ limitations under the License.
 
 <script setup lang="ts">
 import type { Teammate } from '@/services/users'
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 
-interface FilterValues {
+export interface FilterValues {
   customerEmailFilter: string
   agentFilter: string
   userFilter: string
@@ -48,15 +48,13 @@ const emit = defineEmits<Emits>()
 // Local filter state
 const localFilters = ref<FilterValues>({ ...props.filterValues })
 
-// Update local filters when props change
+// Keep the draft in sync when the parent clears/applies filters while the
+// dropdown stays mounted.
 const updateLocalFilters = () => {
   localFilters.value = { ...props.filterValues }
 }
 
-// Watch for prop changes
-onMounted(() => {
-  updateLocalFilters()
-})
+watch(() => props.filterValues, updateLocalFilters, { deep: true })
 
 const hasActiveFilters = computed(() => {
   return localFilters.value.customerEmailFilter.trim() || 

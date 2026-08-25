@@ -73,6 +73,8 @@ export interface Conversation {
     display_name: string | null
     /** False when this agent never answers with AI — its chats wait for a person. */
     ai_replies_enabled?: boolean
+    allow_attachments?: boolean
+    allowed_attachment_types?: string[] | null
   }
   last_message: string
   updated_at: string
@@ -81,6 +83,8 @@ export interface Conversation {
   user_id: string | null
   /** Human agent holding the chat; absent while the AI still has it. */
   user_name?: string | null
+  /** Effective per-conversation auto-reply state, including any session override. */
+  ai_auto_reply?: boolean
   group_id?: string | null
   status: 'open' | 'closed' | 'transferred'
   channel?: string
@@ -108,6 +112,8 @@ export interface ChatDetail {
     display_name: string | null
     /** False when this agent never answers with AI — its chats wait for a person. */
     ai_replies_enabled?: boolean
+    allow_attachments?: boolean
+    allowed_attachment_types?: string[] | null
   }
   session_id: string
   messages: Message[]
@@ -121,4 +127,6 @@ export interface ChatDetail {
   /** The connected account this conversation arrived on; absent for web chats. */
   channel_account_id?: string | null
   ai_auto_reply?: boolean
+  /** Durable, per-conversation labels managed by inbox agents. */
+  tags?: string[]
 }

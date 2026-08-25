@@ -273,6 +273,92 @@ class TestTemplateSend:
             "session_id": str(uuid4()), "template_name": "hello_world"})
         assert r.status_code == 404
 
+    def test_same_idempotency_key_replays_without_calling_meta(
+        self, client, db, whatsapp_account, test_agent, test_customer, test_organization
+    ):
+        from app.repositories.channels import ChannelConversationRepository
+        from app.repositories.session_to_agent import SessionToAgentRepository
+
+        session = SessionToAgentRepository(db).create_session(
+            session_id=uuid4(), agent_id=test_agent.id, customer_id=test_customer.id,
+            organization_id=test_organization.id, channel="whatsapp")
+        ChannelConversationRepository(db).create(
+            channel_account_id=whatsapp_account.id, channel_type="whatsapp",
+            external_conversation_id="448", external_user_id="448",
+            session_id=session.session_id, organization_id=test_organization.id)
+        send = AsyncMock(return_value=SendResult(ok=True, external_message_id="wamid.IDEMP"))
+        payload = {
+            "session_id": str(session.session_id), "template_name": "hello_world",
+            "idempotency_key": "template-retry-key-001",
+        }
+        with patch("app.api.channels.whatsapp_messaging.get_adapter", return_value=type(
+            "Adapter", (), {"send_template": send}
+        )()):
+            first = client.post(f"{BASE}/whatsapp/{whatsapp_account.id}/send-template", json=payload)
+            second = client.post(f"{BASE}/whatsapp/{whatsapp_account.id}/send-template", json=payload)
+        assert first.status_code == 200
+        assert second.status_code == 200
+        assert second.json() == {"status": "already_sent", "external_message_id": "wamid.IDEMP"}
+        send.assert_awaited_once()
+
+    def test_pending_idempotency_key_is_not_sent_twice(
+        self, client, db, whatsapp_account, test_agent, test_customer, test_organization
+    ):
+        from app.repositories.channels import ChannelConversationRepository
+        from app.repositories.session_to_agent import SessionToAgentRepository
+
+        session = SessionToAgentRepository(db).create_session(
+            session_id=uuid4(), agent_id=test_agent.id, customer_id=test_customer.id,
+            organization_id=test_organization.id, channel="whatsapp")
+        conversation = ChannelConversationRepository(db).create(
+            channel_account_id=whatsapp_account.id, channel_type="whatsapp",
+            external_conversation_id="449", external_user_id="449",
+            session_id=session.session_id, organization_id=test_organization.id,
+            outbound_idempotency_key="template-pending-key-001",
+            extra={"outbound_idempotency": {"key": "template-pending-key-001", "status": "pending"}},
+        )
+        send = AsyncMock(return_value=SendResult(ok=True, external_message_id="wamid.NEVER"))
+        with patch("app.api.channels.whatsapp_messaging.get_adapter", return_value=type(
+            "Adapter", (), {"send_template": send}
+        )()):
+            response = client.post(f"{BASE}/whatsapp/{whatsapp_account.id}/send-template", json={
+                "session_id": str(conversation.session_id), "template_name": "hello_world",
+                "idempotency_key": "template-pending-key-001",
+            })
+        assert response.status_code == 409
+        send.assert_not_awaited()
+
+    def test_failed_idempotency_key_can_be_retried(
+        self, client, db, whatsapp_account, test_agent, test_customer, test_organization
+    ):
+        from app.repositories.channels import ChannelConversationRepository
+        from app.repositories.session_to_agent import SessionToAgentRepository
+
+        session = SessionToAgentRepository(db).create_session(
+            session_id=uuid4(), agent_id=test_agent.id, customer_id=test_customer.id,
+            organization_id=test_organization.id, channel="whatsapp")
+        ChannelConversationRepository(db).create(
+            channel_account_id=whatsapp_account.id, channel_type="whatsapp",
+            external_conversation_id="450", external_user_id="450",
+            session_id=session.session_id, organization_id=test_organization.id)
+        send = AsyncMock(side_effect=[
+            SendResult(ok=False, error="temporary failure"),
+            SendResult(ok=True, external_message_id="wamid.RETRY"),
+        ])
+        payload = {
+            "session_id": str(session.session_id), "template_name": "hello_world",
+            "idempotency_key": "template-failed-key-001",
+        }
+        with patch("app.api.channels.whatsapp_messaging.get_adapter", return_value=type(
+            "Adapter", (), {"send_template": send}
+        )()):
+            first = client.post(f"{BASE}/whatsapp/{whatsapp_account.id}/send-template", json=payload)
+            second = client.post(f"{BASE}/whatsapp/{whatsapp_account.id}/send-template", json=payload)
+        assert first.status_code == 502
+        assert second.status_code == 200
+        assert second.json()["external_message_id"] == "wamid.RETRY"
+        assert send.await_count == 2
+
 
 @pytest.fixture
 def waba_account(db, test_organization):
@@ -1044,6 +1130,139 @@ class TestOutboundConversation:
         r1, _ = self._send(client, routed)
         r2, _ = self._send(client, routed)
         assert r1.json()["session_id"] == r2.json()["session_id"]
+
+    def test_same_outbound_key_replays_without_calling_meta(self, client, db, routed):
+        """A lost HTTP response must not create a second billable message."""
+        from unittest.mock import MagicMock
+        from app.repositories.channels import ChannelConversationRepository
+
+        adapter = MagicMock()
+        adapter.send_template = AsyncMock(return_value=SendResult(
+            ok=True, external_message_id="wamid.OUT-IDEMP"))
+        payload = {"to": "+91 12345 67890", "template_name": "order_update",
+                   "language": "en_US", "components": self.BODY_PARAMS,
+                   "idempotency_key": "outbound-key-001"}
+        with patch("app.services.whatsapp_outbound.fetch_message_templates",
+                   AsyncMock(return_value=(True, self.APPROVED_UTILITY))), \
+             patch("app.services.whatsapp_outbound.get_adapter", lambda _: adapter):
+            first = client.post(self.URL(routed), json=payload)
+            second = client.post(self.URL(routed), json=payload)
+
+        assert first.status_code == 200
+        assert second.status_code == 200
+        assert second.json() == first.json()
+        adapter.send_template.assert_awaited_once()
+        conversation = ChannelConversationRepository(db).get_by_session(first.json()["session_id"])
+        assert conversation.outbound_idempotency_key == "outbound-key-001"
+        assert conversation.extra["outbound_idempotency"]["status"] == "sent"
+
+    def test_failed_outbound_key_can_retry_on_the_same_thread(self, client, db, routed):
+        from unittest.mock import MagicMock
+        from app.models.channels import ChannelConversation
+        from app.models.session_to_agent import SessionToAgent
+
+        adapter = MagicMock()
+        adapter.send_template = AsyncMock(side_effect=[
+            SendResult(ok=False, error="temporary failure"),
+            SendResult(ok=True, external_message_id="wamid.OUT-RETRY"),
+        ])
+        payload = {"to": "+91 12345 67890", "template_name": "order_update",
+                   "language": "en_US", "components": self.BODY_PARAMS,
+                   "idempotency_key": "outbound-key-failed-001"}
+        with patch("app.services.whatsapp_outbound.fetch_message_templates",
+                   AsyncMock(return_value=(True, self.APPROVED_UTILITY))), \
+             patch("app.services.whatsapp_outbound.get_adapter", lambda _: adapter):
+            first = client.post(self.URL(routed), json=payload)
+            second = client.post(self.URL(routed), json=payload)
+
+        assert first.status_code == 502
+        assert second.status_code == 200
+        assert second.json()["session_id"]
+        assert adapter.send_template.await_count == 2
+        assert db.query(ChannelConversation).count() == 1
+        assert db.query(SessionToAgent).count() == 1
+
+    def test_pending_outbound_key_is_rejected_before_meta(self, client, db, routed, test_agent, test_customer):
+        from unittest.mock import MagicMock
+        from app.models.channels import ChannelConversation
+        from app.repositories.session_to_agent import SessionToAgentRepository
+        from app.repositories.channels import ChannelConversationRepository
+
+        session = SessionToAgentRepository(db).create_session(
+            session_id=uuid4(), agent_id=test_agent.id,
+            customer_id=test_customer.id, organization_id=routed.organization_id,
+            channel="whatsapp")
+        # The route normally stores the routed AI agent; the exact agent is not
+        # relevant here because the durable pending marker is checked first.
+        ChannelConversationRepository(db).create(
+            channel_account_id=routed.id, channel_type="whatsapp",
+            external_conversation_id="911234567890", external_user_id="911234567890",
+            session_id=session.session_id, organization_id=routed.organization_id,
+            outbound_idempotency_key="outbound-key-pending-001",
+            extra={"outbound_idempotency": {"key": "outbound-key-pending-001", "status": "pending"}},
+            last_inbound_at=None)
+        adapter = MagicMock()
+        adapter.send_template = AsyncMock()
+        payload = {"to": "+91 12345 67890", "template_name": "order_update",
+                   "language": "en_US", "components": self.BODY_PARAMS,
+                   "idempotency_key": "outbound-key-pending-001"}
+        with patch("app.services.whatsapp_outbound.fetch_message_templates",
+                   AsyncMock(return_value=(True, self.APPROVED_UTILITY))), \
+             patch("app.services.whatsapp_outbound.get_adapter", lambda _: adapter):
+            response = client.post(self.URL(routed), json=payload)
+
+        assert response.status_code == 409
+        adapter.send_template.assert_not_awaited()
+        assert db.query(ChannelConversation).count() == 1
+
+    def test_same_outbound_key_is_scoped_to_the_whatsapp_account(self, client, db, routed, test_agent, test_organization):
+        from unittest.mock import MagicMock
+        from app.repositories.channels import AgentChannelConfigRepository, ChannelAccountRepository
+
+        second_account = ChannelAccountRepository(db).create_account(
+            organization_id=test_organization.id, channel_type="whatsapp",
+            external_account_id="PN456",
+            credentials={"access_token": "EAAG-token", "waba_id": "WABA10"},
+            display_name="Second number")
+        AgentChannelConfigRepository(db).set_agent(second_account.id, test_agent.id)
+        adapter = MagicMock()
+        adapter.send_template = AsyncMock(return_value=SendResult(
+            ok=True, external_message_id="wamid.ACCOUNT-SCOPE"))
+        payload = {"to": "+91 12345 67890", "template_name": "order_update",
+                   "language": "en_US", "components": self.BODY_PARAMS,
+                   "idempotency_key": "same-key-different-accounts"}
+        with patch("app.services.whatsapp_outbound.fetch_message_templates",
+                   AsyncMock(return_value=(True, self.APPROVED_UTILITY))), \
+             patch("app.services.whatsapp_outbound.get_adapter", lambda _: adapter):
+            first = client.post(self.URL(routed), json=payload)
+            second = client.post(self.URL(second_account), json=payload)
+
+        assert first.status_code == 200
+        assert second.status_code == 200
+        assert first.json()["session_id"] != second.json()["session_id"]
+        assert adapter.send_template.await_count == 2
+
+    def test_outbound_key_cannot_be_reused_for_another_recipient(self, client, db, routed):
+        from unittest.mock import MagicMock
+
+        adapter = MagicMock()
+        adapter.send_template = AsyncMock(side_effect=[
+            SendResult(ok=False, error="temporary failure"),
+            SendResult(ok=True, external_message_id="wamid.WRONG-RECIPIENT"),
+        ])
+        payload = {"to": "+91 12345 67890", "template_name": "order_update",
+                   "language": "en_US", "components": self.BODY_PARAMS,
+                   "idempotency_key": "recipient-bound-key-001"}
+        with patch("app.services.whatsapp_outbound.fetch_message_templates",
+                   AsyncMock(return_value=(True, self.APPROVED_UTILITY))), \
+             patch("app.services.whatsapp_outbound.get_adapter", lambda _: adapter):
+            first = client.post(self.URL(routed), json=payload)
+            second = client.post(self.URL(routed), json={**payload, "to": "+91 11111 11111"})
+
+        assert first.status_code == 502
+        assert second.status_code == 409
+        assert "another WhatsApp recipient" in second.json()["detail"]
+        adapter.send_template.assert_awaited_once()
 
     def test_attaches_to_an_existing_person_by_phone(self, client, db, routed, test_organization):
         from app.models.customer import Customer

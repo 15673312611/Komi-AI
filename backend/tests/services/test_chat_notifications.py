@@ -28,7 +28,7 @@ from app.models.role import Role
 from app.models.user import User
 from app.repositories.chat import ChatRepository
 from app.repositories.session_to_agent import SessionToAgentRepository
-from app.services.chat_notifications import notify_chat_assigned, notify_new_chat
+from app.services.chat_notifications import notify_chat_assigned, notify_chat_mentioned, notify_new_chat
 from app.services.notifications import ChatNotificationEvent, notify_chat_event
 
 
@@ -251,3 +251,42 @@ async def test_self_assignment_notifies_nobody(
         await notify_chat_assigned(db, session, test_user.id, assigned_by=test_user.id)
 
     assert _notifications_for(db, test_user.id) == []
+
+
+@pytest.mark.asyncio
+async def test_chat_mention_creates_a_deep_link_notification(
+    db, test_organization, test_agent, test_customer, test_user, second_user
+):
+    session = _new_session(db, test_organization, test_agent, test_customer)
+
+    with patch("app.services.notifications.send_fcm_notification", new=AsyncMock()):
+        await notify_chat_mentioned(
+            db,
+            session,
+            sender_name=test_user.full_name,
+            recipient_ids=[second_user.id, str(second_user.id)],
+            message_id=42,
+            is_private_note=True,
+        )
+
+    notifications = _notifications_for(db, second_user.id)
+    assert len(notifications) == 1
+    assert notifications[0].type == NotificationType.CHAT
+    assert notifications[0].notification_metadata == {
+        "session_id": str(session.session_id),
+        "message_id": 42,
+        "event": "chat_mention",
+    }
+    assert "internal note" in notifications[0].message
+
+
+def test_mention_candidates_follow_the_conversation_visibility_scope(
+    db, test_organization, test_agent, test_customer, test_user, inbox_user
+):
+    from app.api.session_to_agent import _visible_inbox_users
+
+    session = _new_session(db, test_organization, test_agent, test_customer)
+    visible_ids = {str(user.id) for user in _visible_inbox_users(db, session)}
+
+    assert str(inbox_user.id) in visible_ids
+    assert str(test_user.id) not in visible_ids

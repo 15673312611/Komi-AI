@@ -15,6 +15,9 @@ limitations under the License.
 """
 
 import traceback
+import asyncio
+from datetime import datetime, timedelta
+import secrets
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from fastapi.responses import RedirectResponse, HTMLResponse
 from sqlalchemy.orm import Session
@@ -54,7 +57,21 @@ router = APIRouter()
 logger = get_logger(__name__)
 
 # Define the scopes needed for your app
-SCOPES = "read_products,read_themes,write_themes,write_script_tags,read_script_tags,read_orders,read_customers"
+SCOPES = "read_products,read_themes,write_themes,write_script_tags,read_script_tags,read_orders,write_orders,read_customers"
+
+
+def _normalise_shop_domain(value: str) -> str:
+    host = value.strip().lower().replace("https://", "").replace("http://", "").split("/")[0]
+    if not host or not host.endswith(".myshopify.com"):
+        raise HTTPException(status_code=400, detail="Enter a valid *.myshopify.com shop domain")
+    handle = host[: -len(".myshopify.com")]
+    if not handle or not all(char.islower() or char.isdigit() or char == "-" for char in handle):
+        raise HTTPException(status_code=400, detail="Enter a valid *.myshopify.com shop domain")
+    return host
+
+
+def _shopify_callback_url() -> str:
+    return f"{settings.BACKEND_URL.rstrip('/')}{settings.API_V1_STR}/shopify/callback"
 
 
 def _require_shopify_agent_in_org(db, agent_id, org_id) -> None:
@@ -71,6 +88,93 @@ def _require_shopify_agent_in_org(db, agent_id, org_id) -> None:
         raise HTTPException(status_code=404, detail="Agent not found")
     if not AgentRepository(db).get_agent_in_org(agent_uuid, org_uuid):
         raise HTTPException(status_code=404, detail="Agent not found")
+
+
+@router.get("/auth")
+async def begin_shopify_oauth(
+    shop: str = Query(..., min_length=3, max_length=255),
+    db: Session = Depends(get_db),
+    organization: Organization = Depends(get_current_organization),
+    current_user: User = Depends(require_permissions("manage_organization")),
+):
+    """Start an administrator-scoped OAuth (or reauthorization) flow."""
+    if not settings.SHOPIFY_API_KEY or not settings.SHOPIFY_API_SECRET:
+        raise HTTPException(status_code=503, detail="Shopify OAuth is not configured")
+    domain = _normalise_shop_domain(shop)
+    repository = ShopifyShopRepository(db)
+    db_shop = repository.get_shop_by_domain(domain)
+    if db_shop and db_shop.organization_id and str(db_shop.organization_id) != str(organization.id):
+        # Do not disclose that another organization has connected the domain.
+        raise HTTPException(status_code=404, detail="Shop not found")
+    if db_shop is None:
+        db_shop = repository.create_shop(ShopifyShopCreate(
+            shop_domain=domain,
+            organization_id=str(organization.id),
+            is_installed=False,
+        ))
+    elif not db_shop.organization_id:
+        db_shop.organization_id = organization.id
+
+    state = secrets.token_urlsafe(32)
+    db_shop.oauth_state = state
+    # The column predates timezone-aware use, so persist a UTC-naive timestamp
+    # and compare it in the same representation in the callback.
+    db_shop.oauth_state_expiry = datetime.utcnow() + timedelta(minutes=10)
+    db.commit()
+
+    query = urlencode({
+        "client_id": settings.SHOPIFY_API_KEY,
+        "scope": SCOPES,
+        "redirect_uri": _shopify_callback_url(),
+        "state": state,
+    })
+    return RedirectResponse(url=f"https://{domain}/admin/oauth/authorize?{query}", status_code=302)
+
+
+@router.get("/callback")
+async def complete_shopify_oauth(
+    request: Request,
+    shop: str = Query(..., min_length=3, max_length=255),
+    code: str = Query(..., min_length=1, max_length=4096),
+    state: str = Query(..., min_length=16, max_length=256),
+    hmac: str = Query(..., min_length=16, max_length=256),
+    db: Session = Depends(get_db),
+):
+    """Validate Shopify's callback and persist the newly granted scopes."""
+    domain = _normalise_shop_domain(shop)
+    if not ShopifyHelperService.validate_shop_request(request, domain, hmac):
+        raise HTTPException(status_code=401, detail="Invalid Shopify OAuth callback")
+
+    repository = ShopifyShopRepository(db)
+    db_shop = repository.get_shop_by_domain(domain)
+    if not db_shop or not db_shop.oauth_state or not secrets.compare_digest(db_shop.oauth_state, state):
+        raise HTTPException(status_code=400, detail="Shopify OAuth state is invalid or expired")
+    expires = db_shop.oauth_state_expiry
+    if not expires or expires < datetime.utcnow():
+        db_shop.oauth_state = None
+        db_shop.oauth_state_expiry = None
+        db.commit()
+        raise HTTPException(status_code=400, detail="Shopify OAuth state is invalid or expired")
+
+    try:
+        access_token, granted_scope = await asyncio.to_thread(
+            ShopifyHelperService.exchange_oauth_code_for_token,
+            domain,
+            code,
+        )
+    except HTTPException:
+        raise
+    db_shop.access_token = access_token
+    db_shop.scope = granted_scope
+    db_shop.is_installed = True
+    db_shop.oauth_state = None
+    db_shop.oauth_state_expiry = None
+    db.commit()
+
+    return RedirectResponse(
+        url=f"{settings.FRONTEND_URL.rstrip('/')}/settings/integrations?shopify=connected",
+        status_code=302,
+    )
 
 
 @router.post("/exchange-token")
@@ -128,6 +232,7 @@ async def exchange_session_token(
         
         token_data = response.json()
         access_token = token_data.get('access_token')
+        granted_scope = token_data.get('scope')
         
         if not access_token:
             logger.error(f"No access token in response: {token_data}")
@@ -144,12 +249,13 @@ async def exchange_session_token(
             shop_data = ShopifyShopCreate(
                 shop_domain=shop_domain,
                 access_token=access_token,
+                scope=granted_scope,
                 is_installed=True
             )
             db_shop = shop_repo.create_shop(shop_data)
         else:
             logger.info(f"Updating existing shop record for: {shop_domain}")
-            shop_update = ShopifyShopUpdate(access_token=access_token, is_installed=True)
+            shop_update = ShopifyShopUpdate(access_token=access_token, scope=granted_scope, is_installed=True)
             db_shop = shop_repo.update_shop(db_shop.id, shop_update)
         
         db.commit()    

@@ -725,8 +725,8 @@ def inbox_agent_client(db: Session, test_organization, agent_user: User) -> Test
     app.dependency_overrides.clear()
 
 
-def test_teammates_visible_to_inbox_roles(inbox_agent_client: TestClient, db: Session, test_organization, test_role: Role):
-    """An agent can list who to hand a chat to, without manage_users.
+def test_teammates_visible_to_inbox_roles(inbox_agent_client: TestClient, db: Session, test_organization, test_role: Role, agent_user: User):
+    """An agent can list actionable handoff targets without manage_users.
 
     The inbox used to call GET /users for this, which 403'd — so Reassign, an
     action the API allows an agent to perform, had an empty dropdown.
@@ -741,13 +741,26 @@ def test_teammates_visible_to_inbox_roles(inbox_agent_client: TestClient, db: Se
         full_name="Colleague",
     )
     db.add(colleague)
+    eligible = User(
+        id=uuid4(),
+        email="eligible@test.com",
+        hashed_password=get_password_hash("pw"),
+        organization_id=test_organization.id,
+        # The inbox-agent role owns manage_assigned_chats; unlike ``test_role``
+        # it can actually receive a transferred conversation and reply to it.
+        role_id=agent_user.role_id,
+        is_active=True,
+        full_name="Eligible colleague",
+    )
+    db.add(eligible)
     db.commit()
 
     response = inbox_agent_client.get("/api/v1/users/teammates")
 
     assert response.status_code == 200
     emails = {u["email"] for u in response.json()}
-    assert "colleague@test.com" in emails
+    assert "eligible@test.com" in emails
+    assert "colleague@test.com" not in emails
 
 
 def test_teammates_does_not_leak_roles_or_permissions(inbox_agent_client: TestClient):

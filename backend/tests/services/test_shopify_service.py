@@ -586,6 +586,116 @@ def test_get_order_success(shopify_service, mock_shop):
         assert "customer" in result["order"]
         assert "shipping_address" in result["order"]
 
+
+def test_get_customer_summary_requires_exact_email_match(shopify_service, mock_shop):
+    with patch.object(shopify_service, '_execute_graphql', return_value={
+        "success": True,
+        "data": {"customers": {"edges": [{"node": {
+            "email": "other@example.com",
+            "numberOfOrders": 8,
+            "amountSpent": {"amount": "99.00", "currencyCode": "USD"},
+        }}]}},
+    }):
+        result = shopify_service.get_customer_summary(mock_shop, "customer@example.com")
+
+    assert result == {"success": True, "customer_found": False}
+
+
+def test_get_customer_summary_returns_shopify_totals(shopify_service, mock_shop):
+    with patch.object(shopify_service, '_execute_graphql', return_value={
+        "success": True,
+        "data": {"customers": {"edges": [{"node": {
+            "email": "customer@example.com",
+            "numberOfOrders": 3,
+            "amountSpent": {"amount": "149.50", "currencyCode": "USD"},
+        }}]}},
+    }):
+        result = shopify_service.get_customer_summary(mock_shop, "customer@example.com")
+
+    assert result == {
+        "success": True,
+        "customer_found": True,
+        "order_count": 3,
+        "total_spend": "149.50",
+        "currency": "USD",
+    }
+
+
+def test_create_full_order_refund_recalculates_the_shopify_preview(shopify_service, mock_shop):
+    preview = {
+        "success": True,
+        "amount": "29.99",
+        "currency": "USD",
+        "transactions": [{
+            "amount": "29.99", "kind": "REFUND", "gateway": "shopify_payments",
+            "parentId": "gid://shopify/OrderTransaction/1",
+        }],
+        "refund_line_items": [{
+            "lineItemId": "gid://shopify/LineItem/1", "quantity": 1, "restockType": "NO_RESTOCK",
+        }],
+    }
+    mutation_response = {
+        "success": True,
+        "data": {"refundCreate": {"refund": {
+            "id": "gid://shopify/Refund/1",
+            "totalRefundedSet": {"shopMoney": {"amount": "29.99", "currencyCode": "USD"}},
+        }, "userErrors": []}},
+    }
+    with patch.object(shopify_service, 'preview_full_order_refund', return_value=preview), \
+         patch.object(shopify_service, '_execute_graphql', return_value=mutation_response) as execute:
+        result = shopify_service.create_full_order_refund(mock_shop, "1", "Customer requested a refund")
+
+    assert result["success"] is True
+    assert result["refund_id"] == "gid://shopify/Refund/1"
+    variables = execute.call_args.args[2]
+    assert variables["input"]["orderId"] == "gid://shopify/Order/1"
+    assert variables["input"]["transactions"] == preview["transactions"]
+    assert variables["input"]["refundLineItems"] == preview["refund_line_items"]
+    assert variables["input"]["note"] == "Customer requested a refund"
+
+
+def test_update_order_shipping_address_maps_only_server_fields(shopify_service, mock_shop):
+    response = {
+        "success": True,
+        "data": {"orderUpdate": {"order": {
+            "id": "gid://shopify/Order/1",
+            "name": "#1001",
+            "shippingAddress": {
+                "firstName": "Jane", "lastName": "Doe", "address1": "1 Test Street",
+                "city": "Shanghai", "country": "CN", "zip": "200000",
+            },
+        }, "userErrors": []}},
+    }
+    address = {
+        "recipient_name": "Jane Doe", "address1": "1 Test Street", "address2": "Unit 8",
+        "city": "Shanghai", "province": "Shanghai", "country": "CN", "zip": "200000", "phone": "+86123",
+    }
+    with patch.object(shopify_service, '_execute_graphql', return_value=response) as execute:
+        result = shopify_service.update_order_shipping_address(mock_shop, "1", address)
+
+    assert result["success"] is True
+    variables = execute.call_args.args[2]
+    assert variables["input"]["id"] == "gid://shopify/Order/1"
+    assert variables["input"]["shippingAddress"] == {
+        "firstName": "Jane", "lastName": "Doe", "address1": "1 Test Street", "address2": "Unit 8",
+        "city": "Shanghai", "province": "Shanghai", "country": "CN", "zip": "200000", "phone": "+86123",
+    }
+
+
+def test_send_order_invoice_uses_the_verified_customer_email(shopify_service, mock_shop):
+    response = {
+        "success": True,
+        "data": {"orderInvoiceSend": {"order": {"id": "gid://shopify/Order/1", "name": "#1001"}, "userErrors": []}},
+    }
+    with patch.object(shopify_service, '_execute_graphql', return_value=response) as execute:
+        result = shopify_service.send_order_invoice(mock_shop, "1", "customer@example.com")
+
+    assert result == {"success": True, "order_name": "#1001"}
+    assert execute.call_args.args[2] == {
+        "id": "gid://shopify/Order/1",
+        "email": {"to": "customer@example.com"},
+    }
+
 def test_make_rest_request_success(shopify_service, mock_shop):
     """Test successful REST API request"""
     # Arrange

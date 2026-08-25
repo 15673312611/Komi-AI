@@ -10,6 +10,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'close'): void
   (e: 'send-to-chat', text: string): void
+  (e: 'action-toast', msg: string, type?: 'success' | 'info' | 'error'): void
 }>()
 
 const fulfillments = computed(() => props.order?.fulfillments || [])
@@ -17,8 +18,18 @@ const trackingNumbers = computed(() => fulfillments.value.flatMap(item => item.t
 const trackingUrls = computed(() => fulfillments.value.flatMap(item => item.tracking_urls || []).filter(Boolean))
 const hasData = computed(() => fulfillments.value.length > 0 && (trackingNumbers.value.length > 0 || trackingUrls.value.length > 0))
 
-const copy = async (value: string) => {
-  try { await navigator.clipboard?.writeText(value) } catch { /* clipboard permission is optional */ }
+const copy = async (value: string, label: string) => {
+  if (!value) return
+  if (!navigator.clipboard) {
+    emit('action-toast', '无法访问剪贴板，请手动复制', 'error')
+    return
+  }
+  try {
+    await navigator.clipboard.writeText(value)
+    emit('action-toast', label, 'success')
+  } catch {
+    emit('action-toast', '复制失败，请手动复制', 'error')
+  }
 }
 
 const insertDraft = () => {
@@ -57,11 +68,11 @@ const insertDraft = () => {
           </article>
           <div v-if="trackingNumbers.length" class="copy-row">
             <span>运单号：{{ trackingNumbers.join('、') }}</span>
-            <button type="button" class="link-button" @click="copy(trackingNumbers.join(', '))">复制</button>
+            <button type="button" class="link-button" @click="copy(trackingNumbers.join(', '), '运单号已复制')">复制</button>
           </div>
           <div v-if="trackingUrls.length" class="copy-row">
             <span>追踪链接：{{ trackingUrls[0] }}</span>
-            <button type="button" class="link-button" @click="copy(trackingUrls[0])">复制链接</button>
+            <button type="button" class="link-button" @click="copy(trackingUrls[0], '物流链接已复制')">复制链接</button>
           </div>
         </template>
       </div>

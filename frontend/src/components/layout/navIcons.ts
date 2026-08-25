@@ -32,6 +32,7 @@ export const NAV_ICONS: Record<string, string> = {
     integrations: '<line x1="12" y1="12" x2="6" y2="6"/><line x1="12" y1="12" x2="18" y2="6"/><line x1="12" y1="12" x2="12" y2="19"/><circle cx="12" cy="12" r="2.2" fill="currentColor"/><circle cx="6" cy="6" r="2"/><circle cx="18" cy="6" r="2"/><circle cx="12" cy="19" r="2"/>',
     widgets: '<rect x="4" y="4" width="7" height="7" rx="2"/><rect x="13" y="4" width="7" height="7" rx="2"/><rect x="4" y="13" width="7" height="7" rx="2"/><circle cx="16.5" cy="16.5" r="3.5"/>',
     aiconfig: '<line x1="4" y1="8" x2="20" y2="8"/><line x1="4" y1="16" x2="20" y2="16"/><circle cx="9" cy="8" r="2.4"/><circle cx="15" cy="16" r="2.4"/>',
+    responses: '<path d="M5 4h14a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H11l-4 3v-3H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/><line x1="7" y1="9" x2="17" y2="9"/><line x1="7" y1="13" x2="14" y2="13"/>',
     usersettings: '<circle cx="12" cy="8" r="3.4"/><path d="M5.5 19a6.5 5.5 0 0 1 13 0"/>',
     more: '<circle cx="5" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1.4" fill="currentColor" stroke="none"/>',
     bell: '<path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9z"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/>',

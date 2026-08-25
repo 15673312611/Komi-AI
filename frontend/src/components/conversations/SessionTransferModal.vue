@@ -19,28 +19,42 @@ const selectedTarget = ref('')
 const note = ref('')
 const loading = ref(false)
 const error = ref('')
+let teammatesRequestVersion = 0
 
 const loadTeammates = async () => {
+  const requestVersion = ++teammatesRequestVersion
+  const currentUserId = props.currentUserId
   loading.value = true
   error.value = ''
+  teammates.value = []
+  selectedTarget.value = ''
+  const isCurrentRequest = () =>
+    requestVersion === teammatesRequestVersion && props.show && props.currentUserId === currentUserId
+
   try {
-    teammates.value = (await listTeammates()).filter(user => user.id !== props.currentUserId)
+    const loadedTeammates = await listTeammates()
+    if (!isCurrentRequest()) return
+    teammates.value = loadedTeammates.filter(user => user.id !== currentUserId)
     if (!selectedTarget.value || !teammates.value.some(user => user.id === selectedTarget.value)) {
       selectedTarget.value = teammates.value[0]?.id || ''
     }
   } catch (err: any) {
+    if (!isCurrentRequest()) return
     error.value = err.response?.data?.detail || '无法加载团队成员，请刷新后重试。'
   } finally {
-    loading.value = false
+    if (isCurrentRequest()) loading.value = false
   }
 }
 
-watch(() => props.show, (show) => {
-  if (show) {
-    note.value = ''
-    void loadTeammates()
+watch(() => [props.show, props.currentUserId], ([show]) => {
+  if (!show) {
+    teammatesRequestVersion += 1
+    loading.value = false
+    return
   }
-})
+  note.value = ''
+  void loadTeammates()
+}, { immediate: true })
 
 const confirm = () => {
   if (!selectedTarget.value || props.actionLoading) return
@@ -67,7 +81,7 @@ const confirm = () => {
           </option>
         </select>
         <p v-if="error" class="error-text">{{ error }}</p>
-        <p v-else-if="!loading && !teammates.length" class="muted">当前没有可转交的团队成员。</p>
+        <p v-else-if="!loading && !teammates.length" class="muted">当前没有可接收并处理会话的团队成员。</p>
 
         <label class="field-label" for="transfer-note">交接备注（可选，仅团队可见）</label>
         <textarea id="transfer-note" v-model="note" rows="3" :disabled="actionLoading" placeholder="说明已核实的事实、待处理事项或客户的明确诉求…" />

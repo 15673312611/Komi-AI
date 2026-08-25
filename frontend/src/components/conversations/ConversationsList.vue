@@ -4,141 +4,127 @@ Copyright 2024-2026 ChatterMate
 -->
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
+import type { Conversation } from '@/types/chat'
+import { userService } from '@/services/user'
+import channelsService, { type ChannelAccount } from '@/services/channels'
+import ConversationFilters, { type FilterValues } from '@/components/conversations/ConversationFilters.vue'
+import NewWhatsAppConversation from '@/components/conversations/NewWhatsAppConversation.vue'
 
-const props = defineProps<{
-  activeSessionId?: string
-}>()
+const props = withDefaults(defineProps<{
+  activeSessionId?: string | null
+  conversations?: Conversation[]
+  unreadCounts?: Record<string, number>
+  loading?: boolean
+  loadingMore?: boolean
+  hasMore?: boolean
+  error?: string
+  showFilters?: boolean
+  filterValues?: FilterValues
+  filterUsers?: Array<{ id: string; full_name: string | null; email: string; profile_pic?: string | null; is_online?: boolean }>
+  filterAgents?: Array<{ id: string; name: string; display_name: string | null }>
+  loadingFilterUsers?: boolean
+  loadingFilterAgents?: boolean
+}>(), { activeSessionId: null, conversations: () => [], unreadCounts: () => ({}), loading: false, loadingMore: false, hasMore: false, error: '' })
 
 const emit = defineEmits<{
   (e: 'select-session', sessionId: string): void
+  (e: 'clear-unread', sessionId: string): void
   (e: 'refresh'): void
+  (e: 'load-more'): void
   (e: 'action-toast', msg: string, type?: 'success' | 'info' | 'error'): void
+  (e: 'toggle-filters'): void
+  (e: 'apply-filters', filters: FilterValues): void
+  (e: 'clear-filters'): void
+  (e: 'update-filter-values', filters: FilterValues): void
+  (e: 'new-conversation-started', sessionId: string): void
 }>()
 
 const currentFilterTab = ref<'all' | 'ai' | 'mine' | 'queue' | 'closed'>('all')
 const currentStoreFilter = ref('all')
 const searchQuery = ref('')
+const searchInputRef = ref<HTMLInputElement | null>(null)
 const showStoreDropdown = ref(false)
 const showFolderDrawer = ref(false)
-const activeId = ref(props.activeSessionId || 'conv-1')
+const activeId = ref(props.activeSessionId || '')
+const showNewWhatsApp = ref(false)
+const whatsappAccounts = ref<ChannelAccount[]>([])
+const loadingWhatsAppAccounts = ref(false)
+watch(() => props.activeSessionId, value => { activeId.value = value || '' })
 
-// 多渠道跨境模拟会话列表
-const conversations = ref([
-  {
-    id: 'conv-1',
-    customerName: 'Jessica Miller',
-    avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=120&auto=format&fit=crop&q=80',
-    email: 'jessica.m@outlook.com',
-    channel: 'whatsapp',
-    channelColor: 'bg-[#25D366] text-white',
-    storeId: 'shopify_us',
-    storeName: 'SHE-GLOW 美东站',
-    storePlatform: 'Shopify',
-    platformBadge: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
-    status: 'ai',
-    statusText: 'AI 处理中',
-    unreadCount: 2,
-    lastTime: '14:25',
-    lastMessage: 'Can you confirm if DHL will deliver my dress before Friday evening?',
-  },
-  {
-    id: 'conv-2',
-    customerName: 'Liam Smith',
-    avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=120&auto=format&fit=crop&q=80',
-    email: 'liam.tech@gmail.com',
-    channel: 'email',
-    channelColor: 'bg-blue-500 text-white',
-    storeId: 'amazon_uk',
-    storeName: 'CYBER-TECH 旗舰店',
-    storePlatform: 'Amazon',
-    platformBadge: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
-    status: 'queue',
-    statusText: '排队待接入',
-    unreadCount: 1,
-    lastTime: '14:18',
-    lastMessage: 'The ANC wireless headphone has a crack on the right hinge. Requesting refund.',
-  },
-  {
-    id: 'conv-3',
-    customerName: 'Elena Rostova',
-    avatar: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=120&auto=format&fit=crop&q=80',
-    email: 'elena.r@tiktok.com',
-    channel: 'tiktok',
-    channelColor: 'bg-cyan-500 text-white',
-    storeId: 'tiktok_sea',
-    storeName: 'AURA 美妆东南亚',
-    storePlatform: 'TikTok',
-    platformBadge: 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20',
-    status: 'mine',
-    statusText: '人工接管 · Alex',
-    unreadCount: 0,
-    lastTime: '13:50',
-    lastMessage: 'Is this peptide glow serum safe for sensitive acne-prone skin?',
-  },
-  {
-    id: 'conv-4',
-    customerName: 'Maximilian Weber',
-    avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=120&auto=format&fit=crop&q=80',
-    email: 'm.weber@berlin-design.de',
-    channel: 'telegram',
-    channelColor: 'bg-sky-500 text-white',
-    storeId: 'shopify_us',
-    storeName: 'SHE-GLOW 独立站',
-    storePlatform: 'Shopify',
-    platformBadge: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
-    status: 'mine',
-    statusText: '人工接管 · Sarah',
-    unreadCount: 0,
-    lastTime: '12:10',
-    lastMessage: 'We want to place an order of 500 units for our boutique store in Munich.',
-  },
-  {
-    id: 'conv-5',
-    customerName: 'Chloe Dupont',
-    avatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=120&auto=format&fit=crop&q=80',
-    email: 'chloe.dupont@paris.fr',
-    channel: 'instagram',
-    channelColor: 'bg-pink-500 text-white',
-    storeId: 'shopify_us',
-    storeName: 'SHE-GLOW 独立站',
-    storePlatform: 'Shopify',
-    platformBadge: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
-    status: 'ai',
-    statusText: 'AI 处理中',
-    unreadCount: 0,
-    lastTime: '11:40',
-    lastMessage: 'Merci! Le code promo VIP a bien fonctionné.',
-  },
-  {
-    id: 'conv-6',
-    customerName: 'David Tanaka',
-    avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=120&auto=format&fit=crop&q=80',
-    email: 'tanaka.d@tokyo.jp',
-    channel: 'livechat',
-    channelColor: 'bg-teal-500 text-white',
-    storeId: 'shopify_us',
-    storeName: 'SHE-GLOW 独立站',
-    storePlatform: 'Shopify',
-    platformBadge: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
-    status: 'closed',
-    statusText: '已解决关闭',
-    unreadCount: 0,
-    lastTime: '昨天',
-    lastMessage: 'ありがとうございます！注文が完了しました。',
-  },
+type InboxStatus = 'ai' | 'mine' | 'assigned' | 'queue' | 'closed'
+interface InboxConversation {
+  id: string
+  customerName: string
+  initials: string
+  avatar?: string
+  email: string
+  channel: string
+  channelColor: string
+  storeId: string
+  storeName: string
+  storePlatform: string
+  platformBadge: string
+  status: InboxStatus
+  unreadCount: number
+  lastTime: string
+  lastMessage: string
+}
+
+const currentUserId = userService.getUserId()
+const conversations = ref<InboxConversation[]>([])
+const statusFor = (conv: Conversation): InboxStatus => {
+  if (conv.status === 'closed') return 'closed'
+  if (conv.user_id && String(conv.user_id) === String(currentUserId)) return 'mine'
+  if (conv.user_id) return 'assigned'
+  return conv.status === 'transferred' || conv.ai_auto_reply === false || conv.agent?.ai_replies_enabled === false ? 'queue' : 'ai'
+}
+const normalizeConversations = (items: Conversation[]) => items.map(conv => {
+  const meta = conv.customer?.meta_data || {}
+  const storeName = typeof meta.store_name === 'string' && meta.store_name.trim() ? meta.store_name.trim() : '未关联店铺'
+  const customerName = conv.customer?.full_name || conv.customer?.email || '未知客户'
+  const status = statusFor(conv)
+  return {
+    id: conv.session_id,
+    customerName,
+    initials: customerName.trim().slice(0, 1).toUpperCase() || '?',
+    avatar: typeof meta.avatar_url === 'string' && meta.avatar_url ? meta.avatar_url : undefined,
+    email: conv.customer?.email || '',
+    channel: conv.channel || 'web',
+    channelColor: conv.channel === 'whatsapp' ? 'bg-[#25D366] text-white' : conv.channel === 'email' ? 'bg-blue-500 text-white' : 'bg-slate-600 text-white',
+    storeId: storeName,
+    storeName,
+    storePlatform: conv.channel ? conv.channel[0].toUpperCase() + conv.channel.slice(1) : 'Web',
+    platformBadge: 'bg-slate-500/10 text-slate-300 border-slate-500/20',
+    status,
+    unreadCount: props.unreadCounts?.[conv.session_id] || 0,
+    lastTime: new Date(conv.updated_at).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false }),
+    lastMessage: conv.last_message || '（无消息内容）',
+  }
+})
+watch(() => [props.conversations, props.unreadCounts] as const, ([items]) => {
+  conversations.value = normalizeConversations(items || [])
+}, { immediate: true, deep: true })
+
+const stores = computed(() => [
+  { id: 'all', name: '所有关联店铺', iconClass: 'fa-solid fa-store', badge: String(conversations.value.length), color: 'text-emerald-400 bg-emerald-500/15 border border-emerald-500/20' },
+  ...[...new Set(conversations.value.map(conv => conv.storeName).filter(name => name !== '未关联店铺'))].map(name => ({
+    id: name,
+    name,
+    iconClass: 'fa-solid fa-store',
+    badge: String(conversations.value.filter(conv => conv.storeId === name).length),
+    color: 'text-slate-300 bg-slate-500/10 border border-slate-500/20',
+  })),
 ])
 
-const stores = [
-  { id: 'all', name: '全部跨境店铺 (All Stores)', iconClass: 'fa-solid fa-store', badge: '28', color: 'text-emerald-400 bg-emerald-500/15 border border-emerald-500/20' },
-  { id: 'shopify_us', name: 'SHE-GLOW 女装美东站 (Shopify)', iconClass: 'fa-brands fa-shopify', badge: 'Shopify', color: 'text-rose-400 bg-rose-500/15 border border-rose-500/20' },
-  { id: 'amazon_uk', name: 'CYBER-TECH 数码旗舰 (Amazon UK)', iconClass: 'fa-brands fa-amazon', badge: 'Amazon', color: 'text-amber-400 bg-amber-500/15 border border-amber-500/20' },
-  { id: 'tiktok_sea', name: 'AURA 美妆个护 (TikTok SEA)', iconClass: 'fa-brands fa-tiktok', badge: 'TikTok', color: 'text-cyan-400 bg-cyan-500/15 border border-cyan-500/20' },
-]
-
 const selectedStoreObj = computed(() => {
-  return stores.find((s) => s.id === currentStoreFilter.value) || stores[0]
+  return stores.value.find((s) => s.id === currentStoreFilter.value) || stores.value[0]
 })
+watch(stores, value => {
+  if (!value.some(store => store.id === currentStoreFilter.value)) currentStoreFilter.value = 'all'
+})
+const countBy = (status?: string) => status ? conversations.value.filter(c => c.status === status).length : conversations.value.length
+const openCount = computed(() => conversations.value.filter(conv => conv.status !== 'closed').length)
 
 const filteredConversations = computed(() => {
   return conversations.value.filter((conv) => {
@@ -160,10 +146,13 @@ const filteredConversations = computed(() => {
   })
 })
 
+const selectStatus = (status: 'all' | 'ai' | 'mine' | 'queue' | 'closed') => { currentFilterTab.value = status }
+
 const selectSession = (id: string) => {
   activeId.value = id
   const target = conversations.value.find((c) => c.id === id)
   if (target) target.unreadCount = 0
+  emit('clear-unread', id)
   emit('select-session', id)
 }
 
@@ -172,6 +161,48 @@ const selectStore = (id: string) => {
   showStoreDropdown.value = false
   emit('action-toast', `已筛选: ${selectedStoreObj.value.name}`, 'info')
 }
+
+const openNewWhatsApp = async () => {
+  if (whatsappAccounts.value.length) {
+    showNewWhatsApp.value = true
+    return
+  }
+  if (loadingWhatsAppAccounts.value) return
+  loadingWhatsAppAccounts.value = true
+  try {
+    whatsappAccounts.value = await channelsService.listActiveWhatsAppAccounts()
+  } finally {
+    loadingWhatsAppAccounts.value = false
+    // Wait until the account list is known. NewWhatsAppConversation uses the
+    // first account as its initial template source, so mounting it with an
+    // empty list would leave the template picker permanently unbound.
+    showNewWhatsApp.value = true
+  }
+}
+
+const handleWhatsAppStarted = (sessionId: string) => {
+  showNewWhatsApp.value = false
+  emit('new-conversation-started', sessionId)
+}
+
+const requestMore = () => {
+  if (!props.loading && !props.loadingMore && props.hasMore) emit('load-more')
+}
+
+const handleConversationScroll = (event: Event) => {
+  const element = event.target as HTMLElement
+  if (element.scrollHeight - element.scrollTop - element.clientHeight < 80) requestMore()
+}
+
+const focusSearch = (event: KeyboardEvent) => {
+  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
+    event.preventDefault()
+    searchInputRef.value?.focus()
+  }
+}
+
+onMounted(() => window.addEventListener('keydown', focusSearch))
+onBeforeUnmount(() => window.removeEventListener('keydown', focusSearch))
 </script>
 
 <template>
@@ -184,11 +215,20 @@ const selectStore = (id: string) => {
         <h1 class="text-sm font-extrabold text-slate-100 tracking-tight flex items-center gap-2">
           <span>会话中心</span>
           <span class="px-2 py-0.5 text-[11px] font-bold bg-emerald-500/15 text-emerald-400 rounded-full border border-emerald-500/30">
-            <span class="font-mono">28</span> 待办
+            <span class="font-mono">{{ openCount }}</span> 待办
           </span>
         </h1>
       </div>
       <div class="flex items-center gap-1.5">
+        <button
+          type="button"
+          @click="openNewWhatsApp"
+          class="w-7 h-7 rounded-lg text-slate-400 hover:text-emerald-400 hover:bg-white/[0.06] border border-transparent hover:border-white/10 flex items-center justify-center transition-colors"
+          title="发起 WhatsApp 新会话"
+          aria-label="发起 WhatsApp 新会话"
+        >
+          <i class="fa-brands fa-whatsapp text-xs"></i>
+        </button>
         <button
           @click="showFolderDrawer = !showFolderDrawer"
           class="w-7 h-7 rounded-lg text-slate-400 hover:text-emerald-400 hover:bg-white/[0.06] border border-transparent hover:border-white/10 flex items-center justify-center transition-colors"
@@ -212,16 +252,18 @@ const selectStore = (id: string) => {
       <div class="relative">
         <i class="fa-solid fa-magnifying-glass fa-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs pointer-events-none"></i>
         <input
+          ref="searchInputRef"
           v-model="searchQuery"
           type="text"
-          placeholder="搜索客户姓名、邮箱、消息、订单号..."
+          placeholder="搜索客户姓名、邮箱或消息..."
           class="w-full bg-[#151C2C] text-xs text-slate-100 placeholder-slate-500 rounded-lg pl-8 pr-9 py-2 border border-[#222E46] focus:border-emerald-500/70 focus:outline-none transition-colors"
         />
         <span class="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] text-slate-400 bg-white/[0.07] px-1.5 py-0.5 rounded font-mono border border-white/[0.06]">⌘K</span>
       </div>
 
-      <!-- 店铺选择器 -->
-      <div class="relative">
+      <!-- 店铺选择器与高级筛选 -->
+      <div class="flex items-center gap-2">
+      <div class="relative flex-1 min-w-0">
         <button
           @click="showStoreDropdown = !showStoreDropdown"
           class="w-full flex items-center justify-between px-2.5 py-1.5 bg-[#151C2C] hover:bg-[#1A2336] rounded-lg border border-[#222E46] hover:border-slate-600 text-xs text-slate-200 transition-colors"
@@ -254,59 +296,79 @@ const selectStore = (id: string) => {
           </div>
         </div>
       </div>
+        <ConversationFilters
+          :show-filters="props.showFilters || false"
+          :filter-values="props.filterValues || { customerEmailFilter: '', agentFilter: '', userFilter: '', dateFromFilter: '', dateToFilter: '' }"
+          :users="props.filterUsers || []"
+          :agents="props.filterAgents || []"
+          :loading-users="props.loadingFilterUsers"
+          :loading-agents="props.loadingFilterAgents"
+          @toggle="emit('toggle-filters')"
+          @apply="emit('apply-filters', $event)"
+          @clear="emit('clear-filters')"
+          @update:filter-values="emit('update-filter-values', $event)"
+        />
+      </div>
     </div>
+
+    <NewWhatsAppConversation
+      v-if="showNewWhatsApp"
+      :accounts="whatsappAccounts"
+      @close="showNewWhatsApp = false"
+      @started="handleWhatsAppStarted"
+    />
 
     <!-- 零滚动 3+2 筛选矩阵 (原版原色，清晰边框，零发光) -->
     <div class="p-2.5 border-b border-[#1E2638] bg-[#0A0E17]/60 space-y-1.5">
       <!-- 第一行 -->
       <div class="grid grid-cols-3 gap-1.5">
         <button
-          @click="currentFilterTab = 'all'"
+          @click="selectStatus('all')"
           :class="['matrix-pill', currentFilterTab === 'all' ? 'active-pill-emerald' : '']"
         >
           <span class="flex items-center gap-1.5 truncate"><i class="fa-solid fa-inbox text-[11px]"></i> 全部</span>
-          <span class="text-[10px] font-mono px-1 rounded bg-white/10 text-slate-200">28</span>
+          <span class="text-[10px] font-mono px-1 rounded bg-white/10 text-slate-200">{{ countBy() }}</span>
         </button>
 
         <button
-          @click="currentFilterTab = 'ai'"
+          @click="selectStatus('ai')"
           :class="['matrix-pill', currentFilterTab === 'ai' ? 'active-pill-emerald' : '']"
         >
           <span class="flex items-center gap-1.5 truncate"><i class="fa-solid fa-robot text-[11px] text-emerald-400"></i> AI</span>
-          <span class="text-[10px] font-mono px-1 rounded bg-emerald-500/20 text-emerald-300">14</span>
+          <span class="text-[10px] font-mono px-1 rounded bg-emerald-500/20 text-emerald-300">{{ countBy('ai') }}</span>
         </button>
 
         <button
-          @click="currentFilterTab = 'mine'"
+          @click="selectStatus('mine')"
           :class="['matrix-pill', currentFilterTab === 'mine' ? 'active-pill-blue' : '']"
         >
           <span class="flex items-center gap-1.5 truncate"><i class="fa-solid fa-user-check text-[11px] text-blue-400"></i> 我的</span>
-          <span class="text-[10px] font-mono px-1 rounded bg-blue-500/20 text-blue-300">6</span>
+          <span class="text-[10px] font-mono px-1 rounded bg-blue-500/20 text-blue-300">{{ countBy('mine') }}</span>
         </button>
       </div>
 
       <!-- 第二行 -->
       <div class="grid grid-cols-2 gap-1.5">
         <button
-          @click="currentFilterTab = 'queue'"
+          @click="selectStatus('queue')"
           :class="['matrix-pill', currentFilterTab === 'queue' ? 'active-pill-amber' : '']"
         >
           <span class="flex items-center gap-1.5 truncate">
             <span class="w-2 h-2 rounded-full bg-amber-400 shrink-0"></span>
             <span class="truncate">⏳ 待人工接入</span>
           </span>
-          <span class="text-[10px] font-mono font-bold px-1.5 rounded bg-amber-500/20 text-amber-300">5</span>
+          <span class="text-[10px] font-mono font-bold px-1.5 rounded bg-amber-500/20 text-amber-300">{{ countBy('queue') }}</span>
         </button>
 
         <button
-          @click="currentFilterTab = 'closed'"
+          @click="selectStatus('closed')"
           :class="['matrix-pill', currentFilterTab === 'closed' ? 'active-pill-closed' : '']"
         >
           <span class="flex items-center gap-1.5 truncate">
             <i class="fa-solid fa-lock text-[10px] text-slate-500"></i>
             <span class="truncate">🔒 已解决关闭</span>
           </span>
-          <span class="text-[10px] font-mono px-1 rounded bg-white/5 text-slate-400">3</span>
+          <span class="text-[10px] font-mono px-1 rounded bg-white/5 text-slate-400">{{ countBy('closed') }}</span>
         </button>
       </div>
     </div>
@@ -318,34 +380,41 @@ const selectStore = (id: string) => {
     >
       <div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-2 py-1 flex items-center justify-between">
         <span>收件箱全景视图</span>
-        <span class="text-emerald-400 font-mono">SLA 正常</span>
+        <span class="text-emerald-400 font-mono">{{ openCount }} 进行中</span>
       </div>
-      <div @click="currentFilterTab = 'all'" class="flex items-center justify-between p-2 rounded-lg hover:bg-white/[0.06] cursor-pointer text-slate-200">
+      <div @click="selectStatus('all')" class="flex items-center justify-between p-2 rounded-lg hover:bg-white/[0.06] cursor-pointer text-slate-200">
         <span class="flex items-center gap-2"><i class="fa-solid fa-inbox text-emerald-400"></i> 全部实时会话</span>
-        <span class="font-mono text-slate-400 font-bold">28</span>
+        <span class="font-mono text-slate-400 font-bold">{{ countBy() }}</span>
       </div>
-      <div @click="currentFilterTab = 'ai'" class="flex items-center justify-between p-2 rounded-lg hover:bg-white/[0.06] cursor-pointer text-slate-200">
+      <div @click="selectStatus('ai')" class="flex items-center justify-between p-2 rounded-lg hover:bg-white/[0.06] cursor-pointer text-slate-200">
         <span class="flex items-center gap-2"><i class="fa-solid fa-robot text-emerald-400"></i> 🤖 AI 智能应答中</span>
-        <span class="font-mono text-emerald-400 font-bold">14</span>
+        <span class="font-mono text-emerald-400 font-bold">{{ countBy('ai') }}</span>
       </div>
-      <div @click="currentFilterTab = 'mine'" class="flex items-center justify-between p-2 rounded-lg hover:bg-white/[0.06] cursor-pointer text-slate-200">
+      <div @click="selectStatus('mine')" class="flex items-center justify-between p-2 rounded-lg hover:bg-white/[0.06] cursor-pointer text-slate-200">
         <span class="flex items-center gap-2"><i class="fa-solid fa-user-check text-blue-400"></i> 👤 分配给我的接待</span>
-        <span class="font-mono text-blue-400 font-bold">6</span>
+        <span class="font-mono text-blue-400 font-bold">{{ countBy('mine') }}</span>
       </div>
-      <div @click="currentFilterTab = 'queue'" class="flex items-center justify-between p-2 rounded-lg hover:bg-white/[0.06] cursor-pointer text-slate-200">
+      <div @click="selectStatus('queue')" class="flex items-center justify-between p-2 rounded-lg hover:bg-white/[0.06] cursor-pointer text-slate-200">
         <span class="flex items-center gap-2"><i class="fa-solid fa-clock text-amber-400"></i> ⏳ 排队等待人工接入</span>
-        <span class="font-mono text-amber-400 font-bold">5</span>
+        <span class="font-mono text-amber-400 font-bold">{{ countBy('queue') }}</span>
       </div>
-      <div @click="currentFilterTab = 'closed'" class="flex items-center justify-between p-2 rounded-lg hover:bg-white/[0.06] cursor-pointer text-slate-200">
+      <div @click="selectStatus('closed')" class="flex items-center justify-between p-2 rounded-lg hover:bg-white/[0.06] cursor-pointer text-slate-200">
         <span class="flex items-center gap-2"><i class="fa-solid fa-circle-check text-slate-400"></i> 🔒 已解决/历史归档</span>
-        <span class="font-mono text-slate-500">3</span>
+        <span class="font-mono text-slate-500">{{ countBy('closed') }}</span>
       </div>
     </div>
 
     <!-- 会话卡片列表容器 (重点：原版绿色、清晰轮廓、零发光) -->
-    <div class="flex-1 overflow-y-auto p-2 space-y-2">
+    <div class="flex-1 overflow-y-auto p-2 space-y-2" @scroll="handleConversationScroll">
+      <div v-if="props.loading" class="py-14 text-center text-slate-500 text-xs">
+        <i class="fa-solid fa-spinner fa-spin mr-2"></i>正在加载会话…
+      </div>
+      <div v-else-if="props.error" class="py-10 px-4 text-center text-rose-300 text-xs">
+        <p>{{ props.error }}</p>
+        <button class="mt-3 px-3 py-1.5 rounded-lg border border-rose-500/30 hover:bg-rose-500/10" @click="emit('refresh')">重试</button>
+      </div>
       <div
-        v-for="conv in filteredConversations"
+        v-else v-for="conv in filteredConversations"
         :key="conv.id"
         @click="selectSession(conv.id)"
         :class="[
@@ -357,10 +426,14 @@ const selectStore = (id: string) => {
           <!-- 头像与渠道徽标 (无发光) -->
           <div class="relative shrink-0 mt-0.5">
             <img
+              v-if="conv.avatar"
               :src="conv.avatar"
               :alt="conv.customerName"
               class="w-10 h-10 rounded-xl object-cover border border-white/10"
             />
+            <div v-else class="w-10 h-10 rounded-xl border border-white/10 bg-slate-700 text-sm font-bold text-slate-200 flex items-center justify-center">
+              {{ conv.initials }}
+            </div>
             <span
               :class="[
                 'absolute -bottom-1 -right-1 w-4 h-4 rounded-full flex items-center justify-center text-[9px] border-2 border-[#161D2B]',
@@ -435,6 +508,12 @@ const selectStore = (id: string) => {
                   👤 人工接管
                 </span>
                 <span
+                  v-else-if="conv.status === 'assigned'"
+                  class="inline-flex items-center gap-1 px-1.5 py-0.2 text-[10px] font-semibold bg-blue-500/10 text-blue-400 border border-blue-500/25 rounded-md"
+                >
+                  👤 其他客服接待
+                </span>
+                <span
                   v-else
                   class="inline-flex items-center gap-1 px-1.5 py-0.2 text-[10px] font-medium bg-slate-800/80 text-slate-400 border border-slate-700/50 rounded-md"
                 >
@@ -466,15 +545,24 @@ const selectStore = (id: string) => {
       >
         没有匹配的会话
       </div>
+      <button
+        v-else-if="hasMore || loadingMore"
+        type="button"
+        class="w-full py-2 text-center text-[11px] text-slate-400 hover:text-emerald-300 disabled:cursor-wait disabled:opacity-60"
+        :disabled="loadingMore"
+        @click="requestMore"
+      >
+        {{ loadingMore ? '正在加载更多会话…' : '加载更多会话' }}
+      </button>
     </div>
 
     <!-- 列表底部状态条 -->
     <div class="p-2.5 border-t border-[#1E2638] bg-[#0E1422] text-[11px] text-slate-400 flex items-center justify-between px-3">
       <span class="flex items-center gap-1.5">
         <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
-        <span>AI 智能客服引擎运行中</span>
+        <span>会话状态</span>
       </span>
-      <span class="text-slate-400 font-mono text-[10px]">0.6s 极速应答</span>
+      <span class="text-slate-400 font-mono text-[10px]">{{ openCount }} 进行中</span>
     </div>
   </section>
 </template>

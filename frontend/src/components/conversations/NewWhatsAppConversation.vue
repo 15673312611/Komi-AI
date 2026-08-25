@@ -54,6 +54,12 @@ const to = ref(props.person?.phone ?? '')
 const name = ref('')
 const selection = ref<TemplateSelection | null>(null)
 const sending = ref(false)
+const outboundIdempotencyKey = ref('')
+
+const newIdempotencyKey = () => {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') return crypto.randomUUID()
+  return `wa-${Date.now()}-${Math.random().toString(36).slice(2, 14)}`
+}
 
 /** The person this number belongs to, when known — prevents a duplicate row. */
 const pickedPerson = ref<{ id: string; label: string } | null>(
@@ -145,6 +151,7 @@ const send = async () => {
   const { template, components } = selection.value
   try {
     sending.value = true
+    if (!outboundIdempotencyKey.value) outboundIdempotencyKey.value = newIdempotencyKey()
     const result = await channelsService.startWhatsAppConversation(accountId.value, {
       to: to.value,
       template_name: template.name,
@@ -152,6 +159,7 @@ const send = async () => {
       components,
       customer_id: pickedPerson.value?.id,
       customer_name: name.value.trim() || undefined,
+      idempotency_key: outboundIdempotencyKey.value,
     })
     toast.success('消息发送成功', {
       description: '会话已添加到您的会话列表中，客户回复时 AI 将自动应答。',

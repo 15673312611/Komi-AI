@@ -21,36 +21,46 @@ const result = ref('')
 const error = ref('')
 const loading = ref(false)
 const mode = ref<CopilotMode>('polite')
+let generationVersion = 0
 
-watch(() => props.open, (open) => {
+watch([() => props.open, () => props.chat?.session_id], ([open]) => {
+  generationVersion += 1
+  loading.value = false
   if (!open) return
   draftText.value = props.currentDraft || ''
   result.value = ''
   error.value = ''
   mode.value = 'polite'
-})
+}, { immediate: true })
 watch(() => props.currentDraft, (value) => {
   if (props.open && !loading.value) draftText.value = value || ''
 })
 
 const generate = async (nextMode: CopilotMode = mode.value) => {
+  if (loading.value) return
   const text = draftText.value.trim()
-  if (!text || !props.chat?.session_id) {
+  const sessionId = props.chat?.session_id
+  if (!text || !sessionId) {
     error.value = !text ? '请先输入想表达的要点。' : '会话信息不可用，请刷新后重试。'
     result.value = ''
     return
   }
+  const requestVersion = ++generationVersion
+  const isCurrentGeneration = () =>
+    requestVersion === generationVersion && props.open && props.chat?.session_id === sessionId
   mode.value = nextMode
   loading.value = true
   error.value = ''
   result.value = ''
   try {
-    const response = await chatService.generateCopilotDraft(props.chat.session_id, { draft: text, mode: nextMode })
+    const response = await chatService.generateCopilotDraft(sessionId, { draft: text, mode: nextMode })
+    if (!isCurrentGeneration()) return
     result.value = response.draft
   } catch (err: any) {
+    if (!isCurrentGeneration()) return
     error.value = err.response?.data?.detail || 'AI Copilot 暂时不可用，请稍后重试。'
   } finally {
-    loading.value = false
+    if (isCurrentGeneration()) loading.value = false
   }
 }
 
@@ -73,12 +83,12 @@ const apply = () => {
       </header>
       <div class="modal-body">
         <label class="field-label" for="copilot-draft">待处理草稿</label>
-        <textarea id="copilot-draft" v-model="draftText" rows="4" placeholder="输入事实、语气和你希望表达的要点…" />
+        <textarea id="copilot-draft" v-model="draftText" :disabled="loading" rows="4" placeholder="输入事实、语气和你希望表达的要点…" />
         <div class="mode-grid" role="radiogroup" aria-label="Copilot 模式">
-          <button type="button" :class="{ active: mode === 'polite' }" @click="generate('polite')">专业礼貌</button>
-          <button type="button" :class="{ active: mode === 'concise' }" @click="generate('concise')">简洁明确</button>
-          <button type="button" :class="{ active: mode === 'translate_en' }" @click="generate('translate_en')">自然英文</button>
-          <button type="button" :class="{ active: mode === 'apology' }" @click="generate('apology')">诚恳致歉</button>
+          <button type="button" :disabled="loading" :class="{ active: mode === 'polite' }" @click="generate('polite')">专业礼貌</button>
+          <button type="button" :disabled="loading" :class="{ active: mode === 'concise' }" @click="generate('concise')">简洁明确</button>
+          <button type="button" :disabled="loading" :class="{ active: mode === 'translate_en' }" @click="generate('translate_en')">自然英文</button>
+          <button type="button" :disabled="loading" :class="{ active: mode === 'apology' }" @click="generate('apology')">诚恳致歉</button>
         </div>
         <div class="result-box" :class="{ error }">
           <div class="result-heading"><span>生成结果</span><span v-if="loading" class="spinner" aria-label="生成中" /></div>
@@ -112,6 +122,7 @@ textarea:focus { border-color: var(--teal-border); }
 .mode-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
 .mode-grid button { min-height: 34px; border: 1px solid var(--o10); border-radius: 7px; background: transparent; color: var(--muted); font-size: 11px; cursor: pointer; }
 .mode-grid button.active, .mode-grid button:hover { color: var(--text); border-color: var(--teal-border); background: var(--teal-bg-10); }
+.mode-grid button:disabled, textarea:disabled { cursor: not-allowed; opacity: .6; }
 .result-box { min-height: 120px; border: 1px solid var(--teal-border); border-radius: 8px; padding: 12px; background: var(--teal-bg-10); }
 .result-box.error { border-color: color-mix(in srgb, var(--c-danger) 50%, transparent); background: color-mix(in srgb, var(--c-danger) 7%, var(--bg)); }
 .result-heading { display: flex; align-items: center; justify-content: space-between; color: var(--c-teal); font-size: 11px; font-weight: 600; }

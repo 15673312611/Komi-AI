@@ -20,8 +20,9 @@ os.environ.setdefault('TOKENIZERS_PARALLELISM', 'false')
 
 # Add users import
 from fastapi.staticfiles import StaticFiles
+from starlette.responses import Response
 import socketio
-from app.api import chat, organizations, users, ai_setup, knowledge, agent, notification, widget, widget_apps, user_groups, roles, analytics, jira, shopify, workflow, workflow_node, mcp_tool, file_upload, token, lead_capture, people, tickets
+from app.api import chat, organizations, users, ai_setup, knowledge, agent, notification, widget, widget_apps, user_groups, roles, analytics, jira, shopify, workflow, workflow_node, mcp_tool, file_upload, token, lead_capture, people, tickets, canned_responses
 from app.api import help_center as help_center_api
 from app.api import help_center_images
 from app.api import channels as channels_api
@@ -207,6 +208,12 @@ app.include_router(
 )
 
 app.include_router(
+    canned_responses.router,
+    prefix=f"{settings.API_V1_STR}/canned-responses",
+    tags=["canned-responses"]
+)
+
+app.include_router(
     mcp_tool.router,
     prefix=f"{settings.API_V1_STR}/mcp-tools",
     tags=["mcp-tools"]
@@ -343,8 +350,18 @@ if not os.path.exists("uploads"):
 if not os.path.exists("uploads/agents"):
     os.makedirs("uploads/agents")
 
+# Chat attachments are private records. Other upload folders remain static
+# because they contain intentional public assets (for example help-center
+# images), but this mount must never become a bypass around /files/download.
+class PublicUploadFiles(StaticFiles):
+    async def get_response(self, path: str, scope):
+        if path == "chat_attachments" or path.startswith("chat_attachments/"):
+            return Response(status_code=404)
+        return await super().get_response(path, scope)
+
+
 # Mount static files
-app.mount("/api/v1/uploads", StaticFiles(directory="uploads"), name="uploads")
+app.mount("/api/v1/uploads", PublicUploadFiles(directory="uploads"), name="uploads")
 app.mount("/assets", StaticFiles(directory="assets"), name="assets")
 
 # Create final ASGI app

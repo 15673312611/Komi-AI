@@ -4,67 +4,189 @@ Copyright 2024-2026 ChatterMate
 -->
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed, watch } from 'vue'
+import type { ChatDetail, Conversation } from '@/types/chat'
 import ShopifyOrderPanel from '@/components/conversations/ShopifyOrderPanel.vue'
+import { chatService, type CustomerSummary } from '@/services/chat'
+import { permissionChecks } from '@/utils/permissions'
+import { chatHandler } from '@/utils/chatState'
 
 const props = defineProps<{
-  chatInfo?: any
+  chatInfo?: ChatDetail | null
 }>()
+const customerName = computed(() => props.chatInfo?.customer?.full_name || props.chatInfo?.customer?.email || '未知客户')
+const customerEmail = computed(() => props.chatInfo?.customer?.email || '')
+const customerInitial = computed(() => customerName.value.trim().slice(0, 1).toUpperCase() || '?')
+const canManageChat = computed(() => permissionChecks.canTakeOverChats())
+const channelLabel = computed(() => {
+  const channel = props.chatInfo?.channel || 'web'
+  return channel === 'web' ? '网页会话' : channel[0].toUpperCase() + channel.slice(1)
+})
+const assignmentLabel = computed(() => {
+  const handler = chatHandler(props.chatInfo)
+  if (handler.kind === 'closed') return '会话已关闭'
+  if (handler.kind === 'human') return `已分配给 ${handler.label}`
+  return handler.kind === 'waiting' ? '等待人工接入' : '由 AI 自动回复'
+})
 
 const emit = defineEmits<{
   (e: 'open-tracking', order: any): void
   (e: 'open-transfer'): void
+  (e: 'select-session', sessionId: string): void
+  (e: 'chat-updated', chat: ChatDetail): void
   (e: 'action-toast', msg: string, type?: 'success' | 'info' | 'error'): void
 }>()
 
-const tags = ref([
-  { id: '1', name: '🔥 VIP大客户', color: 'amber' },
-  { id: '2', name: '📦 物流催件', color: 'cyan' },
-  { id: '3', name: '👗 晚礼服大促', color: 'purple' },
-])
+const tagNames = ref<string[]>([])
 const newTagText = ref('')
+const tagsSaving = ref(false)
+let tagsSaveRequest = 0
+const canEditTags = computed(() => canManageChat.value && Boolean(props.chatInfo?.session_id))
+const tagColors = ['amber', 'cyan', 'purple', 'emerald']
+const tags = computed(() => tagNames.value.map((name, index) => ({
+  id: `${index}-${name}`,
+  name,
+  color: tagColors[index % tagColors.length],
+})))
+watch(() => [props.chatInfo?.session_id, props.chatInfo?.tags] as const, ([, value]) => {
+  // A save response belongs only to the conversation that initiated it. Reset
+  // local state on every thread switch before an old request can settle.
+  tagsSaveRequest += 1
+  tagsSaving.value = false
+  tagNames.value = [...(value || [])]
+  newTagText.value = ''
+}, { immediate: true, deep: true })
+
+const saveTags = async (nextTags: string[]) => {
+  const sessionId = props.chatInfo?.session_id
+  if (!canEditTags.value || !sessionId || tagsSaving.value) return
+  const request = ++tagsSaveRequest
+  const isCurrentRequest = () => request === tagsSaveRequest && props.chatInfo?.session_id === sessionId
+  tagsSaving.value = true
+  try {
+    const updated = await chatService.updateTags(sessionId, nextTags)
+    if (!isCurrentRequest()) return
+    tagNames.value = [...(updated.tags || [])]
+    emit('chat-updated', updated)
+  } catch (err: any) {
+    if (!isCurrentRequest()) return
+    emit('action-toast', err?.response?.data?.detail || '保存标签失败，请稍后重试', 'error')
+  } finally {
+    if (isCurrentRequest()) tagsSaving.value = false
+  }
+}
 
 const removeTag = (id: string) => {
-  tags.value = tags.value.filter((t) => t.id !== id)
+  if (!canEditTags.value) return
+  void saveTags(tags.value.filter(tag => tag.id !== id).map(tag => tag.name))
 }
 
 const addTagFromInput = () => {
+  if (!canEditTags.value) return
   const text = newTagText.value.trim()
-  if (!text) return
-  tags.value.push({
-    id: String(Date.now()),
-    name: text,
-    color: 'emerald',
-  })
+  if (!text || tags.value.some(tag => tag.name.toLocaleLowerCase() === text.toLocaleLowerCase())) return
   newTagText.value = ''
-  emit('action-toast', `已添加标签: ${text}`, 'success')
+  void saveTags([...tagNames.value, text])
 }
 
-const addPresetTag = (name: string, color: string) => {
-  if (tags.value.some((t) => t.name === name)) return
-  tags.value.push({ id: String(Date.now()), name, color })
-  emit('action-toast', `已添加标签: ${name}`, 'success')
+const addPresetTag = (name: string) => {
+  if (!canEditTags.value) return
+  if (tags.value.some(tag => tag.name === name)) return
+  void saveTags([...tagNames.value, name])
 }
 
-const copyEmail = () => {
-  navigator.clipboard?.writeText('jessica.m@outlook.com')
-  emit('action-toast', '客户邮箱已复制到剪贴板', 'success')
+const copyEmail = async () => {
+  if (!customerEmail.value) return
+  if (!navigator.clipboard) {
+    emit('action-toast', '无法访问剪贴板，请手动复制客户邮箱', 'error')
+    return
+  }
+  try {
+    await navigator.clipboard.writeText(customerEmail.value)
+    emit('action-toast', '客户邮箱已复制到剪贴板', 'success')
+  } catch {
+    emit('action-toast', '无法访问剪贴板，请手动复制客户邮箱', 'error')
+  }
 }
 
-const histories = [
-  {
-    channel: 'Instagram DM',
-    date: '2026-07-12',
-    title: '咨询尺码推荐表',
-    outcome: '已推荐购买 M 码并成单',
-  },
-  {
-    channel: 'Email',
-    date: '2026-05-18',
-    title: '申请更改收件邮编',
-    outcome: '客服 Sarah 2分钟内已同步 Shopify',
-  },
-]
+const customerSummary = ref<CustomerSummary | null>(null)
+const customerSummaryLoading = ref(false)
+let customerSummaryRequest = 0
+const formatSpend = (summary: CustomerSummary | null) => {
+  if (!summary || summary.total_spend === null || summary.total_spend === undefined) return '--'
+  const amount = Number(summary.total_spend)
+  if (!Number.isFinite(amount)) return '--'
+  return `${summary.currency || ''} ${amount.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`.trim()
+}
+const formatSatisfaction = (summary: CustomerSummary | null) => {
+  if (!summary || summary.satisfaction_score === null || summary.satisfaction_score === undefined) return '--'
+  return `${summary.satisfaction_score.toFixed(1)} / 5`
+}
+const loadCustomerSummary = async () => {
+  const sessionId = props.chatInfo?.session_id
+  const request = ++customerSummaryRequest
+  customerSummary.value = null
+  if (!sessionId) {
+    customerSummaryLoading.value = false
+    return
+  }
+  customerSummaryLoading.value = true
+  try {
+    const summary = await chatService.getCustomerSummary(sessionId)
+    if (request === customerSummaryRequest) customerSummary.value = summary
+  } catch {
+    if (request === customerSummaryRequest) customerSummary.value = null
+  } finally {
+    if (request === customerSummaryRequest) customerSummaryLoading.value = false
+  }
+}
+
+interface CustomerHistory {
+  sessionId: string
+  channel: string
+  date: string
+  title: string
+  outcome: string
+}
+
+const histories = ref<CustomerHistory[]>([])
+const historyLoading = ref(false)
+let historyRequest = 0
+const historyOutcome = (chat: Conversation) => {
+  if (chat.status === 'closed') return '已解决并关闭'
+  if (chat.user_name) return `人工接待：${chat.user_name}`
+  return chat.status === 'transferred' || chat.agent.ai_replies_enabled === false ? '等待人工接入' : 'AI 自动回复中'
+}
+const loadCustomerHistory = async () => {
+  const email = customerEmail.value
+  const currentSessionId = props.chatInfo?.session_id
+  const request = ++historyRequest
+  histories.value = []
+  if (!email || !currentSessionId) {
+    historyLoading.value = false
+    return
+  }
+  historyLoading.value = true
+  try {
+    const chats = await chatService.getRecentChats({ customer_email: email, limit: 100 })
+    if (request !== historyRequest) return
+    histories.value = chats
+      .filter(chat => chat.session_id !== currentSessionId)
+      .map(chat => ({
+        sessionId: chat.session_id,
+        channel: chat.channel === 'web' ? '网页会话' : (chat.channel || 'web')[0].toUpperCase() + (chat.channel || 'web').slice(1),
+        date: new Date(chat.updated_at).toLocaleDateString('zh-CN'),
+        title: chat.last_message || '（无消息内容）',
+        outcome: historyOutcome(chat),
+      }))
+  } catch {
+    if (request === historyRequest) histories.value = []
+  } finally {
+    if (request === historyRequest) historyLoading.value = false
+  }
+}
+watch(() => [props.chatInfo?.session_id, customerEmail.value], () => { void loadCustomerHistory() }, { immediate: true })
+watch(() => props.chatInfo?.session_id, () => { void loadCustomerSummary() }, { immediate: true })
 </script>
 
 <template>
@@ -73,43 +195,39 @@ const histories = [
     <div class="p-4 border-b border-white/[0.08] bg-gradient-to-b from-[#131B2E] to-[#0F1523]">
       <div class="flex items-start justify-between">
         <div class="flex items-center gap-3">
-          <img
-            src="https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=120&auto=format&fit=crop&q=80"
-            alt="Jessica Miller"
-            class="w-12 h-12 rounded-2xl object-cover border-2 border-emerald-500/40 shadow-[0_0_12px_rgba(16,185,129,0.3)]"
-          />
+          <div class="w-12 h-12 rounded-2xl border-2 border-emerald-500/40 bg-slate-700 text-base font-bold text-slate-100 flex items-center justify-center shadow-[0_0_12px_rgba(16,185,129,0.3)]">
+            {{ customerInitial }}
+          </div>
           <div>
-            <div class="flex items-center gap-1.5">
-              <h3 class="font-bold text-slate-100 text-sm">Jessica Miller</h3>
-              <span class="text-sm">🇺🇸</span>
-            </div>
+            <h3 class="font-bold text-slate-100 text-sm">{{ customerName }}</h3>
             <p
+              v-if="customerEmail"
               @click="copyEmail"
               class="text-xs text-slate-400 mt-0.5 flex items-center gap-1 cursor-pointer hover:text-emerald-400 transition-colors"
             >
-              <span>jessica.m@outlook.com</span>
+              <span>{{ customerEmail }}</span>
               <i class="fa-regular fa-copy text-[10px]"></i>
             </p>
           </div>
         </div>
-        <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30">
-          L5 钻冠会员
+        <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+          {{ channelLabel }}
         </span>
       </div>
 
       <!-- 电商关键指标概览 -->
       <div class="grid grid-cols-3 gap-2 mt-4 p-2.5 rounded-xl bg-[#080B11]/80 border border-white/[0.08] text-center shadow-inner">
         <div>
-          <div class="text-[10px] text-slate-400">历史总消费</div>
-          <div class="text-xs font-bold text-emerald-400 font-mono mt-0.5">$1,842.50</div>
+          <div class="text-[10px] text-slate-400">历史消费</div>
+          <div class="text-xs font-bold text-emerald-400 mt-0.5 truncate" :title="formatSpend(customerSummary)">{{ customerSummaryLoading ? '…' : formatSpend(customerSummary) }}</div>
         </div>
         <div class="border-x border-white/5">
-          <div class="text-[10px] text-slate-400">订单总数</div>
-          <div class="text-xs font-bold text-slate-100 font-mono mt-0.5">8 笔</div>
+          <div class="text-[10px] text-slate-400">订单数量</div>
+          <div class="text-xs font-bold text-slate-100 font-mono mt-0.5">{{ customerSummaryLoading ? '…' : customerSummary?.order_count ?? '--' }}</div>
         </div>
         <div>
-          <div class="text-[10px] text-slate-400">满意度评价</div>
-          <div class="text-xs font-bold text-amber-400 font-mono mt-0.5">5.0 ⭐</div>
+          <div class="text-[10px] text-slate-400">满意度</div>
+          <div class="text-xs font-bold text-amber-400 font-mono mt-0.5" :title="customerSummary?.rating_count ? `${customerSummary.rating_count} 条评分` : ''">{{ customerSummaryLoading ? '…' : formatSatisfaction(customerSummary) }}</div>
         </div>
       </div>
     </div>
@@ -121,7 +239,7 @@ const histories = [
           <i class="fa-solid fa-tags text-emerald-400 text-[11px]"></i>
           <span>客户与对话标签</span>
         </span>
-        <span class="text-[10px] text-slate-500">点击标签即可管理</span>
+        <span class="text-[10px] text-slate-500">{{ canEditTags ? '点击标签即可管理' : '只读' }}</span>
       </div>
 
       <div class="flex flex-wrap gap-1.5 mb-2.5">
@@ -130,7 +248,8 @@ const histories = [
           :key="t.id"
           @click="removeTag(t.id)"
           :class="[
-            'px-2 py-0.5 rounded-md text-[11px] font-medium border flex items-center gap-1 cursor-pointer hover:opacity-80 transition-all shadow-sm',
+            'px-2 py-0.5 rounded-md text-[11px] font-medium border flex items-center gap-1 transition-all shadow-sm',
+            canEditTags ? 'cursor-pointer hover:opacity-80' : 'cursor-default',
             t.color === 'amber'
               ? 'bg-amber-500/15 text-amber-300 border-amber-500/30'
               : t.color === 'cyan'
@@ -151,12 +270,14 @@ const histories = [
             v-model="newTagText"
             type="text"
             placeholder="输入新标签按回车..."
+            :disabled="!canEditTags || tagsSaving"
             @keydown.enter="addTagFromInput"
             class="flex-1 bg-[#080B11] text-[11px] text-slate-200 placeholder-slate-500 rounded-lg px-2.5 py-1.5 border border-white/[0.08] focus:outline-none focus:border-emerald-500/50"
           />
           <button
+            :disabled="!canEditTags || tagsSaving"
             @click="addTagFromInput"
-            class="px-2.5 py-1.5 bg-white/5 hover:bg-white/10 text-slate-300 rounded-lg text-xs font-medium border border-white/[0.08]"
+            class="px-2.5 py-1.5 bg-white/5 hover:bg-white/10 text-slate-300 rounded-lg text-xs font-medium border border-white/[0.08] disabled:cursor-not-allowed disabled:opacity-40"
           >
             + 添加
           </button>
@@ -164,25 +285,29 @@ const histories = [
         <div class="flex flex-wrap gap-1 text-[10px] text-slate-400">
           <span class="text-slate-500">常用:</span>
           <button
-            @click="addPresetTag('🔥 VIP客户', 'amber')"
+            :disabled="!canEditTags || tagsSaving"
+            @click="addPresetTag('🔥 VIP客户')"
             class="px-1.5 py-0.5 rounded bg-white/5 hover:bg-white/10 text-slate-300"
           >
             + VIP客户
           </button>
           <button
-            @click="addPresetTag('📦 物流催件', 'cyan')"
+            :disabled="!canEditTags || tagsSaving"
+            @click="addPresetTag('📦 物流催件')"
             class="px-1.5 py-0.5 rounded bg-white/5 hover:bg-white/10 text-slate-300"
           >
             + 物流催件
           </button>
           <button
-            @click="addPresetTag('💰 退款咨询', 'rose')"
+            :disabled="!canEditTags || tagsSaving"
+            @click="addPresetTag('💰 退款咨询')"
             class="px-1.5 py-0.5 rounded bg-white/5 hover:bg-white/10 text-slate-300"
           >
             + 退款咨询
           </button>
           <button
-            @click="addPresetTag('👗 尺码偏小', 'purple')"
+            :disabled="!canEditTags || tagsSaving"
+            @click="addPresetTag('👗 尺码偏小')"
             class="px-1.5 py-0.5 rounded bg-white/5 hover:bg-white/10 text-slate-300"
           >
             + 尺码偏小
@@ -194,7 +319,8 @@ const histories = [
     <!-- 📦 Shopify / 多渠道电商订单面板 -->
     <div class="p-3.5 border-b border-white/[0.08]">
       <ShopifyOrderPanel
-        :session-id="'conv-1'"
+        :session-id="chatInfo?.session_id || ''"
+        :can-manage-chat="canManageChat"
         @open-tracking="(order: any) => emit('open-tracking', order)"
         @action-toast="(msg: string, type?: 'success' | 'info' | 'error') => emit('action-toast', msg, type)"
       />
@@ -207,22 +333,22 @@ const histories = [
           <i class="fa-solid fa-user-group fa-users text-blue-400 text-[11px]"></i>
           <span>团队协同与工单指派</span>
         </span>
-        <span class="text-[10px] text-emerald-400">● 客服在线</span>
+        <span class="text-[10px] text-slate-400">{{ assignmentLabel }}</span>
       </div>
 
       <div class="space-y-2">
         <div class="flex items-center justify-between p-2 rounded-lg bg-[#131B2E] border border-white/[0.08]">
           <div class="flex items-center gap-2">
-            <img
-              src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=80&auto=format&fit=crop&q=80"
-              class="w-7 h-7 rounded-lg object-cover"
-            />
+            <div class="w-7 h-7 rounded-lg bg-slate-700 text-[10px] text-slate-200 flex items-center justify-center">
+              <i class="fa-solid fa-user"></i>
+            </div>
             <div>
-              <div class="text-xs font-semibold text-slate-100">Alex Chen (我)</div>
-              <div class="text-[10px] text-slate-400">高级跨境售后支持 · P1 处理中</div>
+              <div class="text-xs font-semibold text-slate-100">{{ chatInfo?.user_name || '未分配客服' }}</div>
+              <div class="text-[10px] text-slate-400">{{ assignmentLabel }}</div>
             </div>
           </div>
           <button
+            v-if="canManageChat && chatInfo?.status !== 'closed'"
             @click="emit('open-transfer')"
             class="px-2 py-1 bg-white/5 hover:bg-white/10 text-slate-300 text-[11px] rounded border border-white/[0.08]"
           >
@@ -237,15 +363,17 @@ const histories = [
       <div class="flex items-center justify-between mb-3">
         <span class="text-xs font-bold text-slate-300 flex items-center gap-1.5">
           <i class="fa-solid fa-clock-rotate-left fa-history text-purple-400 text-[11px]"></i>
-          <span>往期多渠道咨询历史 (2)</span>
+          <span>往期多渠道咨询历史 ({{ historyLoading ? '…' : histories.length }})</span>
         </span>
       </div>
 
       <div class="space-y-3 relative pl-3.5 border-l border-white/10 ml-2 text-xs">
-        <div
+        <button
           v-for="(hist, i) in histories"
-          :key="i"
-          class="relative"
+          :key="hist.sessionId"
+          type="button"
+          class="relative block w-full border-0 bg-transparent p-0 text-left"
+          @click="emit('select-session', hist.sessionId)"
         >
           <span class="absolute -left-[18px] top-1 w-2 h-2 rounded-full bg-slate-500 border-2 border-[#0F1523]"></span>
           <div class="flex items-center justify-between leading-none">
@@ -254,7 +382,8 @@ const histories = [
           </div>
           <p class="text-slate-400 text-[11px] mt-1">{{ hist.title }}</p>
           <p class="text-emerald-400 text-[10px] mt-0.5">结果: {{ hist.outcome }}</p>
-        </div>
+        </button>
+        <p v-if="!historyLoading && histories.length === 0" class="text-slate-500 text-[11px]">暂无可访问的往期会话。</p>
       </div>
     </div>
   </aside>

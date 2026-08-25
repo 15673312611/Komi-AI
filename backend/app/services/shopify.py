@@ -703,7 +703,13 @@ class ShopifyService:
             "end_cursor": result.get("data", {}).get("products", {}).get("pageInfo", {}).get("endCursor")
         }
             
-    def search_orders(self, shop: ShopifyShop, params: Dict[str, Any], limit: int = 10) -> Dict[str, Any]:
+    def search_orders(
+        self,
+        shop: ShopifyShop,
+        params: Dict[str, Any],
+        limit: int = 10,
+        after: Optional[str] = None,
+    ) -> Dict[str, Any]:
         """
         Search for orders in a Shopify store using GraphQL.
         
@@ -731,8 +737,8 @@ class ShopifyService:
         query_string = " ".join(query_parts) if query_parts else ""
         
         graphql_query = """
-        query SearchOrders($query: String!, $limit: Int!) {
-          orders(first: $limit, query: $query) {
+        query SearchOrders($query: String!, $limit: Int!, $after: String) {
+          orders(first: $limit, after: $after, query: $query) {
             edges {
               node {
                 id
@@ -780,6 +786,7 @@ class ShopifyService:
                 fulfillments {
                   status
                   trackingInfo {
+                    company
                     number
                     url
                   }
@@ -816,7 +823,8 @@ class ShopifyService:
         
         variables = {
             "query": query_string,
-            "limit": limit
+            "limit": limit,
+            "after": after,
         }
         
         result = self._execute_graphql(shop, graphql_query, variables)
@@ -857,12 +865,14 @@ class ShopifyService:
                 
                 for tracking in fulfillment.get("trackingInfo", []):
                     tracking_info.append({
+                        "company": tracking.get("company"),
                         "number": tracking.get("number"),
                         "url": tracking.get("url")
                     })
                 
                 fulfillments.append({
                     "status": fulfillment.get("status"),
+                    "tracking_company": next((t.get("company") for t in tracking_info if t.get("company")), None),
                     "tracking_numbers": [t.get("number") for t in tracking_info if t.get("number")],
                     "tracking_urls": [t.get("url") for t in tracking_info if t.get("url")],
                     "tracking_info": tracking_info
@@ -911,6 +921,259 @@ class ShopifyService:
             "has_next_page": result.get("data", {}).get("orders", {}).get("pageInfo", {}).get("hasNextPage", False),
             "end_cursor": result.get("data", {}).get("orders", {}).get("pageInfo", {}).get("endCursor")
         }
+
+    def get_customer_summary(self, shop: ShopifyShop, email: str) -> Dict[str, Any]:
+        """Return Shopify's customer-level commerce totals for an exact email.
+
+        The customer object carries Shopify's own total spend and order count,
+        avoiding an incomplete sum over a single page of orders.  The exact
+        email comparison is deliberate: the Admin API's search can return a
+        fuzzy match, which must never be exposed in another customer's chat.
+        """
+        query = """
+        query CustomerCommerceSummary($query: String!) {
+          customers(first: 1, query: $query) {
+            edges {
+              node {
+                email
+                numberOfOrders
+                amountSpent {
+                  amount
+                  currencyCode
+                }
+              }
+            }
+          }
+        }
+        """
+        result = self._execute_graphql(shop, query, {"query": f"email:{email}"})
+        if not result.get("success"):
+            return result
+
+        edges = result.get("data", {}).get("customers", {}).get("edges", [])
+        node = edges[0].get("node", {}) if edges else {}
+        if str(node.get("email") or "").strip().lower() != email.strip().lower():
+            return {"success": True, "customer_found": False}
+
+        amount = node.get("amountSpent") or {}
+        return {
+            "success": True,
+            "customer_found": True,
+            "order_count": node.get("numberOfOrders"),
+            "total_spend": amount.get("amount"),
+            "currency": amount.get("currencyCode"),
+        }
+
+    @staticmethod
+    def _shopify_user_errors(payload: Dict[str, Any], mutation: str) -> Optional[str]:
+        errors = payload.get(mutation, {}).get("userErrors") or []
+        if not errors:
+            return None
+        messages = [str(error.get("message") or "Unknown Shopify error") for error in errors]
+        return "; ".join(messages[:3])
+
+    def preview_full_order_refund(self, shop: ShopifyShop, order_id: str) -> Dict[str, Any]:
+        """Calculate Shopify's current full-refund proposal without mutation."""
+        query = """
+        query FullRefundPreview($id: ID!) {
+          order(id: $id) {
+            id
+            name
+            suggestedRefund {
+              maximumRefundableSet {
+                shopMoney {
+                  amount
+                  currencyCode
+                }
+              }
+              refundLineItems {
+                lineItem { id }
+                quantity
+                restockType
+                location { id }
+              }
+              suggestedTransactions {
+                amount
+                kind
+                gateway
+                parentTransaction { id }
+              }
+            }
+          }
+        }
+        """
+        result = self._execute_graphql(
+            shop,
+            query,
+            {"id": f"gid://shopify/Order/{order_id}"},
+        )
+        if not result.get("success"):
+            return result
+
+        order = result.get("data", {}).get("order")
+        suggested = (order or {}).get("suggestedRefund") or {}
+        amount = suggested.get("maximumRefundableSet", {}).get("shopMoney", {})
+        transactions = []
+        for transaction in suggested.get("suggestedTransactions") or []:
+            parent_id = (transaction.get("parentTransaction") or {}).get("id")
+            if not parent_id or transaction.get("amount") in (None, ""):
+                continue
+            transactions.append({
+                "amount": str(transaction["amount"]),
+                "kind": transaction.get("kind") or "REFUND",
+                "gateway": transaction.get("gateway"),
+                "parentId": parent_id,
+            })
+        refund_line_items = []
+        for line in suggested.get("refundLineItems") or []:
+            line_item_id = (line.get("lineItem") or {}).get("id")
+            if not line_item_id or not line.get("quantity"):
+                continue
+            item = {
+                "lineItemId": line_item_id,
+                "quantity": int(line["quantity"]),
+                "restockType": line.get("restockType") or "NO_RESTOCK",
+            }
+            location_id = (line.get("location") or {}).get("id")
+            if location_id:
+                item["locationId"] = location_id
+            refund_line_items.append(item)
+        return {
+            "success": True,
+            "order_name": (order or {}).get("name"),
+            "amount": amount.get("amount"),
+            "currency": amount.get("currencyCode"),
+            "transactions": transactions,
+            "refund_line_items": refund_line_items,
+        }
+
+    def create_full_order_refund(self, shop: ShopifyShop, order_id: str, note: Optional[str] = None) -> Dict[str, Any]:
+        """Create Shopify's current suggested full refund for one order.
+
+        The preview is recalculated immediately before the mutation rather
+        than trusting an amount or transaction id supplied by the browser.
+        """
+        preview = self.preview_full_order_refund(shop, order_id)
+        if not preview.get("success"):
+            return preview
+        if not preview.get("transactions") or not preview.get("amount"):
+            return {"success": False, "message": "Shopify reports no refundable balance for this order"}
+
+        refund_input: Dict[str, Any] = {
+            "orderId": f"gid://shopify/Order/{order_id}",
+            "transactions": preview["transactions"],
+            "refundLineItems": preview["refund_line_items"],
+        }
+        if note:
+            refund_input["note"] = note[:2000]
+        mutation = """
+        mutation RefundOrder($input: RefundInput!) {
+          refundCreate(input: $input) {
+            refund {
+              id
+              totalRefundedSet {
+                shopMoney {
+                  amount
+                  currencyCode
+                }
+              }
+            }
+            userErrors { field message }
+          }
+        }
+        """
+        result = self._execute_graphql(shop, mutation, {"input": refund_input})
+        if not result.get("success"):
+            return result
+        error = self._shopify_user_errors(result.get("data", {}), "refundCreate")
+        if error:
+            return {"success": False, "message": error}
+        refund = result.get("data", {}).get("refundCreate", {}).get("refund") or {}
+        total = refund.get("totalRefundedSet", {}).get("shopMoney", {})
+        return {
+            "success": bool(refund.get("id")),
+            "refund_id": refund.get("id"),
+            "amount": total.get("amount") or preview.get("amount"),
+            "currency": total.get("currencyCode") or preview.get("currency"),
+        }
+
+    def update_order_shipping_address(self, shop: ShopifyShop, order_id: str, address: Dict[str, str]) -> Dict[str, Any]:
+        """Update an order's shipping address through Shopify Admin GraphQL."""
+        recipient = str(address.get("recipient_name") or "").strip()
+        names = recipient.split(None, 1)
+        shipping_address = {
+            "firstName": names[0] if names else "",
+            "lastName": names[1] if len(names) > 1 else "",
+            "address1": address["address1"],
+            "city": address["city"],
+            "country": address["country"],
+            "zip": address["zip"],
+        }
+        for source, target in (("address2", "address2"), ("province", "province"), ("phone", "phone")):
+            if address.get(source):
+                shipping_address[target] = address[source]
+        mutation = """
+        mutation UpdateOrderShippingAddress($input: OrderInput!) {
+          orderUpdate(input: $input) {
+            order {
+              id
+              name
+              shippingAddress {
+                firstName
+                lastName
+                address1
+                address2
+                city
+                province
+                country
+                zip
+                phone
+              }
+            }
+            userErrors { field message }
+          }
+        }
+        """
+        result = self._execute_graphql(shop, mutation, {
+            "input": {
+                "id": f"gid://shopify/Order/{order_id}",
+                "shippingAddress": shipping_address,
+            },
+        })
+        if not result.get("success"):
+            return result
+        error = self._shopify_user_errors(result.get("data", {}), "orderUpdate")
+        if error:
+            return {"success": False, "message": error}
+        order = result.get("data", {}).get("orderUpdate", {}).get("order") or {}
+        updated = order.get("shippingAddress") or {}
+        if updated:
+            updated["name"] = " ".join(
+                value for value in (updated.get("firstName"), updated.get("lastName")) if value
+            )
+        return {"success": bool(order.get("id")), "order_name": order.get("name"), "shipping_address": updated}
+
+    def send_order_invoice(self, shop: ShopifyShop, order_id: str, customer_email: str) -> Dict[str, Any]:
+        """Ask Shopify to resend the order invoice to its verified customer."""
+        mutation = """
+        mutation SendOrderInvoice($id: ID!, $email: EmailInput!) {
+          orderInvoiceSend(id: $id, email: $email) {
+            order { id name }
+            userErrors { field message }
+          }
+        }
+        """
+        result = self._execute_graphql(shop, mutation, {
+            "id": f"gid://shopify/Order/{order_id}",
+            "email": {"to": customer_email},
+        })
+        if not result.get("success"):
+            return result
+        error = self._shopify_user_errors(result.get("data", {}), "orderInvoiceSend")
+        if error:
+            return {"success": False, "message": error}
+        order = result.get("data", {}).get("orderInvoiceSend", {}).get("order") or {}
+        return {"success": bool(order.get("id")), "order_name": order.get("name")}
     
     def get_order(self, shop: ShopifyShop, order_id: str) -> Dict[str, Any]:
         """
@@ -974,6 +1237,7 @@ class ShopifyService:
             fulfillments {
               status
               trackingInfo {
+                company
                 number
                 url
               }
@@ -1045,12 +1309,14 @@ class ShopifyService:
             
             for tracking in fulfillment.get("trackingInfo", []):
                 tracking_info.append({
+                    "company": tracking.get("company"),
                     "number": tracking.get("number"),
                     "url": tracking.get("url")
                 })
             
             fulfillments.append({
                 "status": fulfillment.get("status"),
+                "tracking_company": next((t.get("company") for t in tracking_info if t.get("company")), None),
                 "tracking_numbers": [t.get("number") for t in tracking_info if t.get("number")],
                 "tracking_urls": [t.get("url") for t in tracking_info if t.get("url")],
                 "tracking_info": tracking_info
@@ -1318,4 +1584,4 @@ class ShopifyService:
             
             logger.info(f"Successfully removed script tag with ID {script_id} from shop {shop.shop_domain}")
         
-        logger.info(f"Completed widget script removal for shop {shop.shop_domain}") 
+        logger.info(f"Completed widget script removal for shop {shop.shop_domain}")

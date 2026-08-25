@@ -19,13 +19,14 @@ from fastapi.testclient import TestClient
 from fastapi import FastAPI
 from app.models.user import User, UserGroup
 from app.models.chat_history import ChatHistory
+from app.models.chat_read_state import ChatReadState
 from app.models.session_to_agent import SessionToAgent, SessionStatus
 from app.models.agent import Agent
 from app.models.role import Role
 from app.models.customer import Customer
 from app.models.permission import Permission, role_permissions
 from uuid import uuid4
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from app.api import chat as chat_router
 from app.core.auth import get_current_user, require_permissions, get_unified_chat_auth
 from app.database import get_db
@@ -283,6 +284,59 @@ def test_get_recent_chats_ai_handled_has_no_handler(
     assert chats[0]["user_name"] is None
 
 
+def test_thread_unread_counts_are_per_user_and_only_include_customer_messages(
+    client,
+    db,
+    test_user,
+    test_chat_session,
+    test_chat_messages,
+):
+    """Opening a thread advances only this user's customer-message cursor."""
+    initial = client.get("/api/chats/inbox/thread-unread-counts")
+    assert initial.status_code == 200
+    assert initial.json()["counts"] == {str(test_chat_session.session_id): 2}
+
+    marked = client.put(f"/api/chats/{test_chat_session.session_id}/read")
+    assert marked.status_code == 200
+    assert marked.json()["session_id"] == str(test_chat_session.session_id)
+    state = db.query(ChatReadState).filter_by(
+        user_id=test_user.id,
+        session_id=test_chat_session.session_id,
+    ).one()
+    assert state.organization_id == test_user.organization_id
+
+    after_read = client.get("/api/chats/inbox/thread-unread-counts")
+    assert after_read.status_code == 200
+    assert after_read.json()["counts"] == {}
+
+    # A bot/private-note update remains read-state neutral; only a later
+    # customer message should recreate the badge.
+    db.add(ChatHistory(
+        organization_id=test_user.organization_id,
+        user_id=test_user.id,
+        customer_id=test_chat_session.customer_id,
+        agent_id=test_chat_session.agent_id,
+        session_id=test_chat_session.session_id,
+        message="Internal triage note",
+        message_type="private_note",
+        created_at=state.last_read_at + timedelta(seconds=1),
+    ))
+    db.add(ChatHistory(
+        organization_id=test_user.organization_id,
+        customer_id=test_chat_session.customer_id,
+        agent_id=test_chat_session.agent_id,
+        session_id=test_chat_session.session_id,
+        message="I still need help",
+        message_type="user",
+        created_at=state.last_read_at + timedelta(seconds=2),
+    ))
+    db.commit()
+
+    later = client.get("/api/chats/inbox/thread-unread-counts")
+    assert later.status_code == 200
+    assert later.json()["counts"] == {str(test_chat_session.session_id): 1}
+
+
 def test_get_recent_chats_reports_a_human_only_agent(
     client,
     db,
@@ -304,6 +358,23 @@ def test_get_recent_chats_reports_a_human_only_agent(
     chats = response.json()
     assert len(chats) == 1
     assert chats[0]["agent"]["ai_replies_enabled"] is False
+
+
+def test_get_recent_chats_reports_session_ai_auto_reply_override(
+    client,
+    db,
+    test_chat_session,
+    test_chat_messages,
+):
+    """The list must reflect a session-level pause, not only agent defaults."""
+    test_chat_session.user_id = None
+    test_chat_session.workflow_state = {"ai_auto_reply": False}
+    db.commit()
+
+    response = client.get("/api/chats/recent")
+
+    assert response.status_code == 200
+    assert response.json()[0]["ai_auto_reply"] is False
 
 
 def test_get_recent_chats_with_view_assigned(
@@ -665,4 +736,4 @@ def test_get_chat_detail_shopify_endpoint(client, db, test_user, test_chat_sessi
     response = client.get(f"/api/chats/{test_chat_session.session_id}/shopify")
     assert response.status_code == 200
     chat = response.json()
-    assert chat["session_id"] == str(test_chat_session.session_id) 
+    assert chat["session_id"] == str(test_chat_session.session_id)

@@ -15,7 +15,7 @@ limitations under the License.
 -->
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { toast } from 'vue-sonner'
 import channelsService, { type WhatsAppTemplate } from '@/services/channels'
 import { DEFAULT_LANGUAGE } from '@/utils/whatsappLanguages'
@@ -36,29 +36,53 @@ const emit = defineEmits<{
 
 const selection = ref<TemplateSelection | null>(null)
 const sending = ref(false)
+let sendRequest = 0
+const outboundIdempotencyKey = ref('')
 
-const canSend = computed(() => !!selection.value?.complete && !sending.value)
+const newIdempotencyKey = () => {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') return crypto.randomUUID()
+  return `wa-${Date.now()}-${Math.random().toString(36).slice(2, 14)}`
+}
+
+const canSend = computed(() => !!props.accountId && !!props.sessionId && !!selection.value?.complete && !sending.value)
+
+watch(() => [props.accountId, props.sessionId], () => {
+  sendRequest += 1
+  selection.value = null
+  sending.value = false
+  outboundIdempotencyKey.value = ''
+}, { immediate: true })
 
 const send = async () => {
   if (!selection.value || !canSend.value) return
+  const accountId = props.accountId
+  const sessionId = props.sessionId
+  const request = ++sendRequest
+  const isCurrentRequest = () =>
+    request === sendRequest && props.accountId === accountId && props.sessionId === sessionId
   const { template, components } = selection.value
   try {
     sending.value = true
-    await channelsService.sendWhatsAppTemplate(props.accountId, {
-      session_id: props.sessionId,
+    if (!outboundIdempotencyKey.value) outboundIdempotencyKey.value = newIdempotencyKey()
+    await channelsService.sendWhatsAppTemplate(accountId, {
+      session_id: sessionId,
       template_name: template.name,
       language: template.language || DEFAULT_LANGUAGE,
       components,
+      idempotency_key: outboundIdempotencyKey.value,
     })
+    if (!isCurrentRequest()) return
     toast.success('模板消息已发送', { description: '客户在未来 24 小时内回复即可重新激活实时会话。' })
     emit('sent', template)
+    emit('close')
   } catch (error: any) {
+    if (!isCurrentRequest()) return
     toast.error('发送模板消息失败', {
       description: error?.response?.data?.detail || '请重试',
       closeButton: true,
     })
   } finally {
-    sending.value = false
+    if (isCurrentRequest()) sending.value = false
   }
 }
 </script>

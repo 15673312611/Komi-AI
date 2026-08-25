@@ -21,6 +21,7 @@ from typing import Dict, Optional, List, Set
 from app.core.config import settings
 from app.core.s3 import upload_file_to_s3, get_s3_signed_url
 from app.core.logger import get_logger
+from app.utils.attachment_urls import local_attachment_download_url
 
 logger = get_logger(__name__)
 
@@ -363,7 +364,7 @@ class FileUploadService:
                     f.write(file_content)
                 
                 file_url = f"/uploads/{folder}/{unique_filename}"
-                signed_url = file_url
+                signed_url = local_attachment_download_url(f"{folder}/{unique_filename}")
             
             logger.info(f"Successfully uploaded file: {filename} -> {file_url}")
             

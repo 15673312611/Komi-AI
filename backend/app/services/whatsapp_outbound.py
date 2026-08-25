@@ -20,6 +20,7 @@ from typing import Optional
 from uuid import UUID
 
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 
 from app.channels import get_adapter
 from app.channels.constants import DEFAULT_TEMPLATE_LANGUAGE
@@ -36,6 +37,7 @@ from app.repositories.channels import (
 from app.repositories.chat import ChatRepository
 from app.repositories.customer import CustomerRepository
 from app.repositories.session_to_agent import SessionToAgentRepository
+from app.models.session_to_agent import SessionToAgent
 from app.utils.phone import normalize_phone, to_wa_id
 
 logger = get_logger(__name__)
@@ -183,6 +185,7 @@ async def start_outbound_conversation(
     components: Optional[list] = None,
     customer_id: Optional[UUID] = None,
     customer_name: Optional[str] = None,
+    idempotency_key: Optional[str] = None,
 ) -> UUID:
     """Start (or rejoin) a WhatsApp conversation by phone number.
 
@@ -199,14 +202,36 @@ async def start_outbound_conversation(
         raise OutboundError(400, "Enter the number in international format, e.g. +91 12345 67890")
     wa_id = to_wa_id(phone)
 
+    # Resolved BEFORE the template is validated: whether this opens a thread or
+    # rejoins one decides which rules the template must satisfy.
+    conv_repo = ChannelConversationRepository(db)
+    if idempotency_key:
+        prior = conv_repo.get_by_outbound_idempotency(account.id, idempotency_key)
+        if prior is not None:
+            # An idempotency key is bound to the complete outbound operation,
+            # including its recipient. Never replay a result (or retry a
+            # failed reservation) onto a different WhatsApp number.
+            if prior.external_conversation_id != wa_id:
+                raise OutboundError(
+                    409,
+                    "This idempotency key belongs to another WhatsApp recipient. "
+                    "Start a new request with a new key.",
+                )
+            marker = (prior.extra or {}).get("outbound_idempotency") or {}
+            if marker.get("status") == "sent":
+                return prior.session_id
+            if marker.get("status") == "pending":
+                raise OutboundError(409, "This outbound WhatsApp send is already in progress. Verify its result before retrying.")
+
+    # A fresh send must have an agent route. Replays above intentionally do not
+    # require the route to still exist: once Meta accepted a message, a later
+    # routing change must not turn a safe retry into a second send or a false
+    # 400 response.
     agent_id = AgentChannelConfigRepository(db).get_active_agent_id(account.id)
     if agent_id is None:
         raise OutboundError(400, "Route an agent to this number first — "
                                  "otherwise nobody would answer the reply")
 
-    # Resolved BEFORE the template is validated: whether this opens a thread or
-    # rejoins one decides which rules the template must satisfy.
-    conv_repo = ChannelConversationRepository(db)
     existing = conv_repo.get_active(account.id, wa_id)
 
     template = await _approved_outbound_template(
@@ -228,24 +253,59 @@ async def start_outbound_conversation(
             organization_id=str(account.organization_id),
             channel=account.channel_type,
         )
-        await notify_new_chat(db, new_session)
-        conversation = conv_repo.create(
-            channel_account_id=account.id,
-            channel_type=account.channel_type,
-            external_conversation_id=wa_id,
-            external_user_id=wa_id,
-            session_id=session_id,
-            organization_id=account.organization_id,
-            agent_id=agent_id,
-            customer_id=customer.id,
-            last_inbound_at=None,
-        )
+        created_new_session = False
+        try:
+            conversation = conv_repo.create(
+                channel_account_id=account.id,
+                channel_type=account.channel_type,
+                external_conversation_id=wa_id,
+                external_user_id=wa_id,
+                session_id=session_id,
+                organization_id=account.organization_id,
+                agent_id=agent_id,
+                customer_id=customer.id,
+                outbound_idempotency_key=idempotency_key,
+                extra={
+                    "outbound_idempotency": {
+                        "key": idempotency_key,
+                        "status": "pending",
+                    }
+                } if idempotency_key else None,
+                last_inbound_at=None,
+            )
+            created_new_session = True
+        except IntegrityError:
+            # Two browser retries can reserve the same account/key at once.
+            # The channel row is the durable winner; remove only this request's
+            # just-created session before replaying that winner.
+            db.rollback()
+            db.query(SessionToAgent).filter(SessionToAgent.session_id == session_id).delete()
+            db.commit()
+            prior = conv_repo.get_by_outbound_idempotency(account.id, idempotency_key) if idempotency_key else None
+            if prior is None:
+                raise OutboundError(409, "This WhatsApp send is being processed concurrently. Retry with the same key.")
+            marker = (prior.extra or {}).get("outbound_idempotency") or {}
+            if marker.get("status") == "sent":
+                return prior.session_id
+            if marker.get("status") == "pending":
+                raise OutboundError(409, "This outbound WhatsApp send is already in progress. Verify its result before retrying.")
+            # A failed reservation is safely retryable on the winning thread.
+            conversation, session_id, customer = prior, prior.session_id, None
+        if created_new_session:
+            await notify_new_chat(db, new_session)
+    if existing is not None and idempotency_key:
+        # Reserve the key on an existing thread before calling Meta. This is
+        # the durable boundary for a browser retry after a lost response.
+        current_extra = dict(conversation.extra or {})
+        conversation.outbound_idempotency_key = idempotency_key
+        current_extra["outbound_idempotency"] = {"key": idempotency_key, "status": "pending"}
+        conv_repo.set_extra(conversation, current_extra)
 
     adapter = get_adapter("whatsapp")
     result = await adapter.send_template(account, conversation, template_name,
                                          language, components)
     if not result.ok:
-        if existing is None:
+        if existing is None and not idempotency_key:
             # A failed send must not leave an empty thread in the inbox: drop
             # the conversation, then the session it points at. The customer
             # row stays — harmless, and reused on the next attempt.
@@ -264,6 +324,11 @@ async def start_outbound_conversation(
                 db.rollback()
                 logger.error(f"Could not roll back the empty outbound thread for "
                              f"session {session_id}: {e}")
+        if idempotency_key:
+            conv_repo.set_extra(conversation, {
+                **(conversation.extra or {}),
+                "outbound_idempotency": {"key": idempotency_key, "status": "failed", "error": result.error},
+            })
         raise OutboundError(502, result.error or "WhatsApp did not accept the message")
 
     rendered = _render_body(template, components)
@@ -286,5 +351,6 @@ async def start_outbound_conversation(
     conv_repo.set_extra(conversation, {
         **(conversation.extra or {}),
         "outbound_template": rendered,
+        **({"outbound_idempotency": {"key": idempotency_key, "status": "sent", "external_message_id": result.external_message_id}} if idempotency_key else {}),
     })
     return session_id

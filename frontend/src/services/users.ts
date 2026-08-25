@@ -64,12 +64,12 @@ export interface Teammate {
 }
 
 /**
- * Who a conversation can be handed to.
+ * Active teammates who can actually receive and reply to a conversation.
  *
  * The inbox used to call GET /users for this, which needs manage_users — so an
  * agent got a 403 and an empty Reassign dropdown for an action the API would
- * have allowed. This endpoint is gated on the inbox permissions instead, and
- * returns no roles or permission lists.
+ * have allowed. This endpoint is gated on inbox permissions, filters out
+ * read-only teammates server-side, and returns no roles or permission lists.
  */
 export async function listTeammates(): Promise<Teammate[]> {
   const response = await api.get('users/teammates')
@@ -134,4 +134,4 @@ export async function uploadProfilePic(formData: FormData): Promise<User> {
 
 export async function updateUserStatus(id: string, isOnline: boolean): Promise<void> {
   await api.post(`/users/${id}/status`, { is_online: isOnline })
-} 
+}

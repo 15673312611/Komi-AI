@@ -46,6 +46,7 @@ export interface ChatHandler {
 export interface HandlerCandidate extends TakeoverCandidate {
   user_name?: string | null
   group_id?: string | null
+  ai_auto_reply?: boolean | null
   agent?: { ai_replies_enabled?: boolean } | null
 }
 
@@ -103,6 +104,7 @@ export function chatHandler(
     chat &&
     (chat.status === 'transferred' ||
       chat.group_id ||
+      chat.ai_auto_reply === false ||
       chat.agent?.ai_replies_enabled === false)
   ) {
     return { kind: 'waiting', label: HANDLER_LABELS.waiting }

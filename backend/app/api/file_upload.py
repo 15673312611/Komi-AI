@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-from fastapi import APIRouter, UploadFile, File, HTTPException, Depends, status, Header, Request
+from fastapi import APIRouter, UploadFile, File, HTTPException, Depends, status, Header, Request, Query
 from fastapi.responses import JSONResponse
 from typing import Optional
 import uuid
@@ -28,6 +28,7 @@ from app.core.security import verify_conversation_token
 from app.models import User
 from app.core.auth import get_current_user
 from app.database import get_db
+from app.utils.attachment_urls import is_valid_local_attachment_signature
 
 logger = get_logger(__name__)
 
@@ -157,7 +158,9 @@ async def download_file(
     request: Request,
     db: Session = Depends(get_db),
     authorization: Optional[str] = Header(None),
-    x_conversation_token: Optional[str] = Header(None)
+    x_conversation_token: Optional[str] = Header(None),
+    expires: Optional[int] = Query(None),
+    signature: Optional[str] = Query(None),
 ):
     """
     Download/serve a file from AWS S3 or local storage
@@ -169,12 +172,20 @@ async def download_file(
         from app.core.s3 import get_s3_client
         import io
 
-        # Authentication is required, and the result is what authorizes the
-        # read below. This used to swallow the failure and serve the file
-        # anyway, making every org's attachments world-readable by path.
-        auth_info = await get_current_user_or_widget(
-            request, db, authorization, x_conversation_token)
-        storage_key = authorized_attachment_key(file_path, auth_info.get("org_id"))
+        # A signed local URL is required for browser image/download requests
+        # from the widget, which cannot attach its conversation-token header to
+        # an <img> or <a> navigation. It is scoped to the exact storage key and
+        # expires quickly. All other access remains authenticated and
+        # organization-scoped.
+        clean_path = file_path.lstrip('/').removeprefix('uploads/')
+        candidate_org_id = clean_path.split('/')[1] if len(clean_path.split('/')) == 3 else None
+        signed_storage_key = authorized_attachment_key(file_path, candidate_org_id)
+        if not settings.S3_FILE_STORAGE and is_valid_local_attachment_signature(signed_storage_key, expires, signature):
+            storage_key = signed_storage_key
+        else:
+            auth_info = await get_current_user_or_widget(
+                request, db, authorization, x_conversation_token)
+            storage_key = authorized_attachment_key(file_path, auth_info.get("org_id"))
 
         if not settings.S3_FILE_STORAGE:
             # Serve local file

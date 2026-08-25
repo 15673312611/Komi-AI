@@ -57,8 +57,9 @@ def get_logger(name=None):
 
         # File handler
         log_dir = 'logs'
-        if not os.path.exists(log_dir):
-            os.makedirs(log_dir)
+        # Multiple worker/test processes can initialize loggers together. This
+        # must be atomic so a competing directory creation is not fatal.
+        os.makedirs(log_dir, exist_ok=True)
 
         file_handler = RotatingFileHandler(
             f'{log_dir}/app.log',

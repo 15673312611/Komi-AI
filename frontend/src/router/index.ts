@@ -27,6 +27,7 @@ import AIConfigSettings from '@/views/settings/AIConfigSettings.vue'
 import IntegrationsSettings from '@/views/settings/IntegrationsSettings.vue'
 import WidgetAppsSettings from '@/views/settings/WidgetAppsSettings.vue'
 import UserSettingsView from '@/views/UserSettingsView.vue'
+import CannedResponsesSettings from '@/views/settings/CannedResponsesSettings.vue'
 import { useEnterpriseFeatures } from '@/composables/useEnterpriseFeatures'
 
 // Initialize enterprise features
@@ -168,6 +169,15 @@ const baseRoutes = [
     path: '/settings/ai-config',
     name: 'ai-config-settings',
     component: AIConfigSettings,
+    meta: {
+      requiresAuth: true,
+      layout: 'dashboard',
+    },
+  },
+  {
+    path: '/settings/canned-responses',
+    name: 'canned-responses-settings',
+    component: CannedResponsesSettings,
     meta: {
       requiresAuth: true,
       layout: 'dashboard',

@@ -55,6 +55,22 @@ except ImportError:
 logger = get_logger(__name__)
 
 
+async def _broadcast_dashboard_conversation_snapshot(db: Session, session_id: str, organization_id) -> None:
+    """Fan out a post-message snapshot to every inbox user who may see it."""
+    try:
+        detail = await ChatRepository(db).get_chat_detail(session_id, organization_id)
+        if not detail:
+            return
+        # Session actions own the single visibility fan-out implementation.
+        # Keep this lazy because that API also imports Socket.IO at startup.
+        from app.api.session_to_agent import _emit_conversation_updated
+        from app.models.schemas.chat import ChatDetailResponse
+
+        await _emit_conversation_updated(db, ChatDetailResponse(**detail))
+    except Exception as exc:
+        logger.warning("Failed to broadcast dashboard conversation snapshot for %s: %s", session_id, exc)
+
+
 async def process_channel_message(account_id, inbound: InboundMessage) -> None:
     """Process one inbound customer message from an external channel.
 
@@ -120,6 +136,7 @@ async def process_channel_message(account_id, inbound: InboundMessage) -> None:
             stored = _store_customer_message(db, inbound, session_record, agent_id,
                                              customer_id, org_id, account)
             await _relay_to_human(session_record, inbound, stored_message=stored)
+            await _broadcast_dashboard_conversation_snapshot(db, session_id, account.organization_id)
 
             # Nothing will answer this on its own, so acknowledge once — on a
             # channel an unanswered message reads as a dead number. Only on the
@@ -179,6 +196,7 @@ async def process_channel_message(account_id, inbound: InboundMessage) -> None:
             _record_delivery_failure(db, session_id, delivery)
 
         await _send_channel_prompts(db, adapter, account, conversation, response)
+        await _broadcast_dashboard_conversation_snapshot(db, session_id, account.organization_id)
     except Exception as e:
         logger.error(f"Error processing channel message: {e}", exc_info=True)
     finally:
