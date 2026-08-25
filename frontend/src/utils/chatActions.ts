@@ -31,15 +31,15 @@ const TOAST_OPTIONS = { duration: 4000, closeButton: true }
 export async function routeChatToHuman(sessionId: string): Promise<ChatDetail | null> {
   try {
     const updated = await chatService.routeToHuman(sessionId)
-    toast.success('Chat handed to your team', {
-      description: 'The AI has stopped replying. Anyone can now take it over.',
+    toast.success('已转交人工团队', {
+      description: 'AI 已停止回复，团队成员现在可以接管会话。',
       ...TOAST_OPTIONS,
     })
     return updated
   } catch (err: any) {
     console.error('Failed to route chat to a human:', err)
-    toast.error('Failed to hand this chat over', {
-      description: err.response?.data?.detail || 'Please try again',
+    toast.error('转交人工团队失败', {
+      description: err.response?.data?.detail || '请稍后重试',
       ...TOAST_OPTIONS,
     })
     return null

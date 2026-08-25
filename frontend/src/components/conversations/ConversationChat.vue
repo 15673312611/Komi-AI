@@ -72,6 +72,7 @@ const messages = computed(() => chatState.formattedMessages.value.map((msg: any)
 const currentStatus = computed(() => chatState.isChatClosed.value ? 'resolved' : chatState.handledByAI.value ? 'ai' : chatState.isWaitingForHuman.value ? 'waiting' : 'human')
 const canManageChat = computed(() => permissionChecks.canTakeOverChats())
 const canToggleAiAutoReply = computed(() => canManageChat.value && !chatState.isChatClosed.value)
+const canRouteToHuman = computed(() => canManageChat.value && currentStatus.value === 'ai' && Boolean(chat.value.session_id) && !chat.value.user_id)
 const canHandBackToAI = computed(() =>
   canManageChat.value &&
   (currentStatus.value === 'human' || currentStatus.value === 'waiting') &&
@@ -183,6 +184,8 @@ const handleSendAndResolve = (text: string, files: OutboundAttachment[] = [], me
 
 const handleTakeover = () => void chatState.handleTakeover()
 
+const handleRouteToHuman = () => void chatState.handleRouteToHuman()
+
 const handleHandoverAI = () => void chatState.handleHandBackToAI()
 
 const handleResolveSession = () => void chatState.endChat(true)
@@ -278,7 +281,17 @@ const insertProduct = (product: ShopifyProduct, shopDomain?: string) => {
           </button>
 
           <button
-            v-else-if="canHandBackToAI"
+            v-if="canRouteToHuman"
+            @click="handleRouteToHuman"
+            class="px-2.5 py-1.5 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-300 font-medium text-xs flex items-center gap-1.5 transition-all"
+            title="停止 AI 回复并转入人工队列"
+          >
+            <i class="fa-solid fa-user-clock text-xs"></i>
+            <span>转交团队</span>
+          </button>
+
+          <button
+            v-if="!chatState.showTakeoverButton.value && canHandBackToAI"
             @click="handleHandoverAI"
             class="px-2.5 py-1.5 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-300 font-medium text-xs flex items-center gap-1.5 transition-all"
           >
@@ -287,7 +300,7 @@ const insertProduct = (product: ShopifyProduct, shopDomain?: string) => {
           </button>
 
           <button
-            v-if="currentStatus !== 'resolved' && canManageChat"
+            v-if="currentStatus !== 'resolved' && canManageChat && chat.user_id"
             @click="emit('open-transfer')"
             class="px-2.5 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 text-xs flex items-center gap-1.5 transition-all"
             title="转交给售后/物流专员"

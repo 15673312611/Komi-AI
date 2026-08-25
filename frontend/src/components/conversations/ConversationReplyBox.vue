@@ -292,7 +292,7 @@ const removePendingFile = (index: number) => { pendingFiles.value.splice(index, 
           ]"
         >
           <i class="fa-solid fa-reply text-xs"></i>
-          <span>💬 回复客户 (Reply)</span>
+          <span>💬 回复客户</span>
         </button>
 
         <button

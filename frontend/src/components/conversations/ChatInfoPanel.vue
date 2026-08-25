@@ -348,7 +348,7 @@ watch(() => props.chatInfo?.session_id, () => { void loadCustomerSummary() }, { 
             </div>
           </div>
           <button
-            v-if="canManageChat && chatInfo?.status !== 'closed'"
+            v-if="canManageChat && chatInfo?.status !== 'closed' && chatInfo?.user_id"
             @click="emit('open-transfer')"
             class="px-2 py-1 bg-white/5 hover:bg-white/10 text-slate-300 text-[11px] rounded border border-white/[0.08]"
           >

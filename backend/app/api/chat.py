@@ -358,9 +358,38 @@ def _replay_shopify_action(existing: dict) -> dict:
     )
 
 
-@router.get("/")
-async def get_chat_history():
-    return {"message": "Chat history endpoint"}
+@router.get("/", response_model=List[ChatOverviewResponse])
+async def get_chat_history(
+    skip: int = Query(0, ge=0),
+    limit: int = Query(20, ge=1, le=100),
+    agent_id: Optional[str] = None,
+    status: Optional[str] = Query(None, description="Filter by status: 'open', 'closed', or 'transferred'"),
+    user_id: Optional[str] = None,
+    customer_email: Optional[str] = None,
+    date_from: Optional[datetime] = Query(None),
+    date_to: Optional[datetime] = Query(None),
+    auth_info: dict = Depends(get_unified_chat_auth),
+    db: Session = Depends(get_db),
+):
+    """Return a real, permission-scoped conversation page.
+
+    This root route is kept as a compatibility entry point for clients that
+    used ``/chats/`` before the inbox-specific ``/chats/recent`` endpoint was
+    introduced. It deliberately delegates to the same scoped implementation so
+    it cannot become an unauthenticated or cross-organization history leak.
+    """
+    return await get_recent_chats(
+        skip=skip,
+        limit=limit,
+        agent_id=agent_id,
+        status=status,
+        user_id=user_id,
+        customer_email=customer_email,
+        date_from=date_from,
+        date_to=date_to,
+        auth_info=auth_info,
+        db=db,
+    )
 
 
 @router.get("/recent/shopify", response_model=List[ChatOverviewResponse])
