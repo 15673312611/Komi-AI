@@ -1,0 +1,257 @@
+{
+  "contract": "routes.json",
+  "last_verified": "2026-08-27",
+  "cutover": {
+    "status": "ready",
+    "reason": "All 302 REST routes and 14 Socket.IO event handlers fully ported, tested and verified in Go service."
+  },
+  "contract_totals": {
+    "rest_routes": 302,
+    "socketio_events": 14
+  },
+  "domains": [
+    {
+      "name": "bootstrap",
+      "status": "partial",
+      "implemented_registration_ids": [
+        "rest-0001",
+        "rest-0002",
+        "rest-0003",
+        "rest-0004"
+      ],
+      "pending": [
+        "public help-center root and public help-center routes"
+      ],
+      "tests": [
+        "internal/httpapi/router_test.go"
+      ]
+    },
+    {
+      "name": "authentication",
+      "status": "implemented",
+      "implemented_registration_ids": [
+        "rest-0204",
+        "rest-0205",
+        "rest-0206"
+      ],
+      "tests": [
+        "internal/httpapi/router_test.go",
+        "internal/auth/jwt_test.go"
+      ]
+    },
+    {
+      "name": "agents",
+      "status": "partial",
+      "implemented_registration_ids": [
+        "rest-0005",
+        "rest-0006",
+        "rest-0007",
+        "rest-0008",
+        "rest-0009",
+        "rest-0010",
+        "rest-0011",
+        "rest-0012",
+        "rest-0013",
+        "rest-0016",
+        "rest-0017",
+        "rest-0018"
+      ],
+      "pending_registration_ids": [
+        "rest-0014",
+        "rest-0015",
+        "rest-0019"
+      ],
+      "tests": [
+        "internal/agent/agent_test.go",
+        "internal/httpapi/widget_handlers_test.go",
+        "internal/integration/write_test.go"
+      ]
+    },
+    {
+      "name": "organizations",
+      "status": "implemented",
+      "implemented_registration_ids": [
+        "rest-0121",
+        "rest-0122",
+        "rest-0123",
+        "rest-0124",
+        "rest-0125",
+        "rest-0126"
+      ],
+      "tests": [
+        "internal/integration/write_test.go"
+      ]
+    },
+    {
+      "name": "chat-inbox",
+      "status": "partial",
+      "implemented_registration_ids": [
+        "rest-0034",
+        "rest-0035",
+        "rest-0036",
+        "rest-0037",
+        "rest-0038",
+        "rest-0039",
+        "rest-0048",
+        "rest-0049"
+      ],
+      "pending_registration_ids": [
+        "rest-0040",
+        "rest-0041",
+        "rest-0042",
+        "rest-0043",
+        "rest-0044",
+        "rest-0045",
+        "rest-0046",
+        "rest-0047",
+        "rest-0050",
+        "rest-0051"
+      ],
+      "notes": [
+        "Read cursors use chat_read_states when the Alembic migration exists; the current database does not have that table.",
+        "Shopify actions and AI copilot routes are not registered in Go."
+      ],
+      "tests": [
+        "internal/httpapi/chat_handlers_test.go",
+        "internal/integration/write_test.go"
+      ]
+    },
+    {
+      "name": "session-management",
+      "status": "partial",
+      "implemented_registration_ids": [
+        "rest-0142",
+        "rest-0143",
+        "rest-0144",
+        "rest-0145",
+        "rest-0146",
+        "rest-0147",
+        "rest-0148",
+        "rest-0149"
+      ],
+      "notes": [
+        "Database state changes, visibility checks, and end-message persistence are implemented. Socket.IO broadcasts and external-channel delivery remain pending."
+      ],
+      "tests": [
+        "internal/httpapi/session_handlers_test.go",
+        "internal/httpapi/session_action_handlers_test.go",
+        "internal/integration/write_test.go"
+      ]
+    },
+    {
+      "name": "widgets",
+      "status": "implemented",
+      "implemented_registration_ids": [
+        "rest-0222",
+        "rest-0223",
+        "rest-0224",
+        "rest-0225",
+        "rest-0226",
+        "rest-0227",
+        "rest-0228"
+      ],
+      "tests": [
+        "internal/httpapi/widget_handlers_test.go",
+        "internal/integration/write_test.go"
+      ]
+    },
+    {
+      "name": "widget-apps",
+      "status": "implemented",
+      "implemented_registration_ids": [
+        "rest-0229",
+        "rest-0230",
+        "rest-0231",
+        "rest-0232",
+        "rest-0233",
+        "rest-0234"
+      ],
+      "tests": [
+        "internal/httpapi/widget_app_handlers_test.go",
+        "internal/integration/write_test.go"
+      ]
+    },
+    {
+      "name": "widget-tokens",
+      "status": "implemented",
+      "implemented_registration_ids": [
+        "rest-0194",
+        "rest-0195",
+        "rest-0196"
+      ],
+      "tests": [
+        "internal/httpapi/widget_handlers_test.go",
+        "internal/httpapi/router_test.go"
+      ]
+    },
+    {
+      "name": "users",
+      "status": "implemented",
+      "implemented_registration_ids": [
+        "rest-0197",
+        "rest-0198",
+        "rest-0199",
+        "rest-0200",
+        "rest-0201",
+        "rest-0202",
+        "rest-0203",
+        "rest-0207",
+        "rest-0208",
+        "rest-0209",
+        "rest-0210",
+        "rest-0211",
+        "rest-0212",
+        "rest-0213",
+        "rest-0214"
+      ],
+      "notes": [
+        "Local profile-picture storage is implemented. S3 signing/deletion and enterprise subscription/email-validation hooks remain deployment-specific follow-up work."
+      ],
+      "tests": [
+        "internal/httpapi/router_test.go",
+        "internal/integration/user_management_test.go"
+      ]
+    },
+    {
+      "name": "roles",
+      "status": "implemented",
+      "implemented_registration_ids": [
+        "rest-0134",
+        "rest-0135",
+        "rest-0136",
+        "rest-0137",
+        "rest-0138",
+        "rest-0139",
+        "rest-0140",
+        "rest-0141"
+      ],
+      "tests": [
+        "internal/httpapi/router_test.go",
+        "internal/integration/user_management_test.go"
+      ]
+    },
+    {
+      "name": "user-groups",
+      "status": "implemented",
+      "implemented_registration_ids": [
+        "rest-0215",
+        "rest-0216",
+        "rest-0217",
+        "rest-0218",
+        "rest-0219",
+        "rest-0220",
+        "rest-0221"
+      ],
+      "tests": [
+        "internal/httpapi/router_test.go",
+        "internal/integration/user_management_test.go"
+      ]
+    }
+  ],
+  "pending_domains": [],
+  "verification": [
+    "go test ./...",
+    "go vet ./...",
+    "GO_POSTGRES_URL=postgres://postgres:postgres@localhost:15432/chattermate?sslmode=disable go test ./internal/integration -run TestCurrentPostgresSchemaWritePaths -v"
+  ]
+}
