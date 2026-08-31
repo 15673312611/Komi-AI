@@ -178,7 +178,7 @@ onMounted(() => {
   <div v-else class="people-view">
     <div class="pv-header">
       <div>
-        <h1 class="pv-title">客户与线索画像 (People)</h1>
+        <h1 class="pv-title">客户档案与线索管理 (CRM)</h1>
         <p class="pv-sub">智能体与客服接待捕获的客户线索库，跨渠道自动归集去重生成统一画像档案。</p>
       </div>
     </div>

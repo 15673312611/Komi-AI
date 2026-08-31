@@ -1,0 +1,744 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ChatterMate 跨境电商邮件与会话联动模拟测试器</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    :root {
+      --primary: #C9F24E;
+      --primary-hover: #d8fa67;
+      --primary-dark: #0b0f14;
+      --bg: #090D14;
+      --card-bg: #121824;
+      --card-sub: #172030;
+      --border: rgba(255, 255, 255, 0.1);
+      --text: #F8FAFC;
+      --text-muted: #94A3B8;
+      --blue: #60A5FA;
+      --green: #34D399;
+      --amber: #FBBF24;
+      --rose: #FB7185;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      padding: 20px;
+    }
+    .container {
+      width: 100%;
+      max-width: 960px;
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      box-shadow: 0 24px 48px rgba(0, 0, 0, 0.6);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      height: 94vh;
+    }
+    
+    /* Header */
+    .header {
+      padding: 16px 24px;
+      background: #151d2c;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+    }
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .header-icon {
+      width: 38px;
+      height: 38px;
+      border-radius: 8px;
+      background: rgba(201, 242, 78, 0.15);
+      color: var(--primary);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+    }
+    .header h2 { font-size: 16px; font-weight: 700; color: #fff; }
+    .header p { font-size: 11.5px; color: var(--text-muted); margin-top: 2px; }
+    
+    .status-badge {
+      font-size: 11.5px;
+      font-weight: 600;
+      padding: 4px 12px;
+      border-radius: 999px;
+      background: rgba(52, 211, 153, 0.12);
+      color: #34d399;
+      border: 1px solid rgba(52, 211, 153, 0.25);
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      white-space: nowrap;
+    }
+    .pulse-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #34d399;
+      box-shadow: 0 0 8px #34d399;
+    }
+
+    /* Logic Chain Explainer Banner */
+    .logic-guide {
+      background: rgba(96, 165, 250, 0.06);
+      border-bottom: 1px solid rgba(96, 165, 250, 0.15);
+      padding: 10px 20px;
+      font-size: 12px;
+      color: #cbd5e1;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+    .logic-steps {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .step-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 2px 8px;
+      background: rgba(0, 0, 0, 0.3);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 4px;
+      font-size: 11.5px;
+      color: #93c5fd;
+    }
+    .step-arrow { color: #64748b; font-size: 10px; }
+
+    /* Webhook Config Panel */
+    .config-panel {
+      padding: 14px 20px;
+      background: #101622;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .config-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .config-header label {
+      font-size: 12.5px;
+      color: #e2e8f0;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .config-header .help-text {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+    .url-input-wrap {
+      display: flex;
+      gap: 8px;
+    }
+    .config-panel input {
+      flex: 1;
+      padding: 9px 12px;
+      background: #090d14;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: #38bdf8;
+      font-size: 12.5px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    .config-panel input:focus { border-color: var(--primary); }
+    .btn-test-url {
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      color: #fff;
+      padding: 6px 14px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.15s;
+      white-space: nowrap;
+    }
+    .btn-test-url:hover {
+      background: rgba(201, 242, 78, 0.15);
+      border-color: var(--primary);
+      color: var(--primary);
+    }
+
+    /* Chat / Logs Container */
+    .chat-container {
+      flex: 1;
+      padding: 20px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      background: #0d121b;
+    }
+    .msg {
+      display: flex;
+      flex-direction: column;
+      max-width: 84%;
+      animation: fadeIn 0.2s ease;
+    }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+    .msg.user { align-self: flex-end; }
+    .msg.system { align-self: center; max-width: 96%; width: 100%; }
+
+    .msg-header {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-bottom: 4px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .msg.user .msg-header { justify-content: flex-end; }
+
+    .msg-bubble {
+      padding: 12px 16px;
+      border-radius: 12px;
+      font-size: 13.5px;
+      line-height: 1.5;
+      word-break: break-word;
+      white-space: pre-wrap;
+    }
+    .msg.user .msg-bubble {
+      background: #1e3a5f;
+      border: 1px solid #2563eb;
+      color: #eff6ff;
+      font-weight: 400;
+      border-bottom-right-radius: 2px;
+    }
+    .msg.user .msg-subject {
+      font-weight: 700;
+      color: #93c5fd;
+      margin-bottom: 6px;
+      padding-bottom: 6px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .msg.system .msg-bubble {
+      background: #172030;
+      border: 1px solid var(--border);
+      color: #cbd5e1;
+      font-size: 12px;
+      border-radius: 10px;
+      padding: 12px 18px;
+    }
+    .msg.system.success .msg-bubble {
+      background: rgba(52, 211, 153, 0.08);
+      border-color: rgba(52, 211, 153, 0.3);
+      color: #6ee7b7;
+    }
+    .msg.system.error .msg-bubble {
+      background: rgba(244, 63, 94, 0.08);
+      border-color: rgba(244, 63, 94, 0.3);
+      color: #fda4af;
+    }
+
+    /* Presets Bar */
+    .preset-bar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 20px;
+      background: #111722;
+      overflow-x: auto;
+      border-top: 1px solid var(--border);
+    }
+    .preset-label {
+      font-size: 11.5px;
+      color: var(--text-muted);
+      font-weight: 600;
+      white-space: nowrap;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .preset-btn {
+      background: #182232;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      color: #cbd5e1;
+      padding: 5px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: all 0.15s;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .preset-btn:hover {
+      background: rgba(201, 242, 78, 0.12);
+      color: var(--primary);
+      border-color: rgba(201, 242, 78, 0.3);
+    }
+
+    /* Input Form Area */
+    .input-area {
+      padding: 16px 20px;
+      background: #151d2c;
+      border-top: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .input-row {
+      display: flex;
+      gap: 10px;
+    }
+    .sender-wrap {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      width: 320px;
+    }
+    .sender-input {
+      flex: 1;
+      padding: 9px 12px;
+      background: #090d14;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: #fff;
+      font-size: 13px;
+      outline: none;
+    }
+    .btn-rand-user {
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      color: #cbd5e1;
+      padding: 8px 10px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 12px;
+      white-space: nowrap;
+      transition: all 0.15s;
+    }
+    .btn-rand-user:hover {
+      background: rgba(201, 242, 78, 0.15);
+      color: var(--primary);
+      border-color: var(--primary);
+    }
+    .subject-input {
+      flex: 1;
+      padding: 9px 12px;
+      background: #090d14;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: #fff;
+      font-size: 13px;
+      outline: none;
+    }
+    .body-row {
+      display: flex;
+      gap: 10px;
+    }
+    .body-textarea {
+      flex: 1;
+      height: 72px;
+      padding: 10px 12px;
+      background: #090d14;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: #fff;
+      font-size: 13.5px;
+      outline: none;
+      resize: none;
+      font-family: inherit;
+      line-height: 1.5;
+    }
+    .body-textarea:focus, .sender-input:focus, .subject-input:focus {
+      border-color: var(--primary);
+    }
+    .send-btn {
+      width: 130px;
+      background: var(--primary);
+      color: #0b0f14;
+      font-weight: 700;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.15s;
+      font-size: 13.5px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+    }
+    .send-btn:hover { background: var(--primary-hover); transform: translateY(-1px); }
+    .send-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+    .send-shortcut { font-size: 10px; opacity: 0.7; font-weight: normal; }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <!-- Top Bar -->
+  <div class="header">
+    <div class="header-left">
+      <div class="header-icon">
+        <i class="fa-solid fa-paper-plane"></i>
+      </div>
+      <div>
+        <h2>ChatterMate 跨境电商邮件与会话联动模拟器</h2>
+        <p>模拟海外买家发信 ➔ 自动触发系统邮件入站 ➔ 关联店铺与 AI 智能体应答 ➔ 同步至会话收件箱</p>
+      </div>
+    </div>
+    <span class="status-badge">
+      <span class="pulse-dot"></span>
+      <span>买家模拟端就绪</span>
+    </span>
+  </div>
+
+  <!-- Business Logic Chain Explanation -->
+  <div class="logic-guide">
+    <div class="logic-steps">
+      <span style="font-weight: 600; color: #fff;">联动全链路：</span>
+      <span class="step-item"><i class="fa-solid fa-envelope text-blue-400"></i> 1. 模拟买家发信</span>
+      <span class="step-arrow">➔</span>
+      <span class="step-item"><i class="fa-solid fa-server text-purple-400"></i> 2. 专属 Webhook 接收</span>
+      <span class="step-arrow">➔</span>
+      <span class="step-item"><i class="fa-solid fa-shop text-emerald-400"></i> 3. 自动归集对应店铺</span>
+      <span class="step-arrow">➔</span>
+      <span class="step-item"><i class="fa-solid fa-robot text-[#C9F24E]"></i> 4. 唤醒对应 AI 智能体</span>
+      <span class="step-arrow">➔</span>
+      <span class="step-item"><i class="fa-solid fa-inbox text-amber-400"></i> 5. 呈现在会话收件箱</span>
+    </div>
+  </div>
+
+  <!-- Webhook Configuration -->
+  <div class="config-panel">
+    <div class="config-header">
+      <label>
+        <i class="fa-solid fa-link text-blue-400"></i>
+        <span>店铺专属 HTTP Webhook 收件回调 URL</span>
+      </label>
+      <span class="help-text">在系统「店铺管理」卡片中点击【收件配置】直接复制</span>
+    </div>
+    <div class="url-input-wrap">
+      <input
+        type="text"
+        id="webhookUrl"
+        placeholder="http://localhost:8001/api/v1/webhooks/email/<channel_id>?token=<secret>"
+      >
+      <button class="btn-test-url" id="btnTestUrl" onclick="testWebhookEndpoint()">
+        <i class="fa-solid fa-bolt"></i>
+        <span>检测连通性</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Messages Stream -->
+  <div class="chat-container" id="chatList">
+    <div class="msg system">
+      <div class="msg-bubble">
+        <strong>💡 如何开始快速测试：</strong><br>
+        1. 确保您的 Go 后端正在运行（默认 <code>http://localhost:8001</code>）。<br>
+        2. 登录系统后，进入 <strong>「店铺管理」</strong>，在您要测试的店铺卡片上点击 <strong>【📬 收件配置】</strong> 复制专属 Webhook URL 粘贴至上方。<br>
+        3. 在下方选择测试场景（如退换货政策、物流查询）或自定义邮件内容，点击 <strong>【发送邮件】</strong>。<br>
+        4. 回到系统的 <strong>「会话收件箱」(/conversations)</strong>，您将看到新会话已自动生成并打上该店铺标签，负责该店铺的 AI 智能体正在自动回复！
+      </div>
+    </div>
+  </div>
+
+  <!-- E-commerce Presets Bar -->
+  <div class="preset-bar">
+    <span class="preset-label">
+      <i class="fa-solid fa-wand-magic-sparkles text-amber-400"></i>
+      快捷场景预设：
+    </span>
+    <button class="preset-btn" onclick="applyPreset('关于订单 #20260831 物流时效查询', '你好！我三天前在你们独立站下单购买了一件外套（订单号 #20260831），目前物流状态显示正在清关，请问预计什么时候能够派送到纽约？')">
+      🚚 物流与时效查询
+    </button>
+    <button class="preset-btn" onclick="applyPreset('尺码不合身申请退换货流程咨询', 'Hi, 我昨天收到的连衣裙尺码偏小，我想申请换成 L 码。请问你们的退换货政策是怎样的？退回运费需要我承担吗？')">
+      🔄 尺码退换与政策
+    </button>
+    <button class="preset-btn" onclick="applyPreset('新客户首单优惠券与满减咨询', '您好，我是第一次在你们店铺购物，请问现在有什么新人专属折扣码或者满减优惠吗？')">
+      🎁 优惠券与大促活动
+    </button>
+    <button class="preset-btn" onclick="applyPreset('【紧急】收到的商品有破损需要售后处理', '你好，刚刚收到包裹，开箱后发现商品有明显的划痕与破损。请问如何申请售后赔付或补发？订单号是 #20260831。')">
+      ⚠️ 商品破损与售后
+    </button>
+    <button class="preset-btn" onclick="applyPreset('羊绒衫清洗与日常保养注意事项', '请问在你们店铺买的纯羊绒毛衣可以用洗衣机羊毛模式洗涤吗？需要使用专用洗涤剂吗？')">
+      🧼 材质与保养咨询
+    </button>
+  </div>
+
+  <!-- Send Input Form -->
+  <div class="input-area">
+    <div class="input-row">
+      <div class="sender-wrap">
+        <input
+          type="email"
+          id="senderEmail"
+          placeholder="买家邮箱 (如: buyer@gmail.com)"
+          class="sender-input"
+        >
+        <button class="btn-rand-user" onclick="generateRandomBuyer()" title="生成新买家邮箱以开启独立新会话">
+          <i class="fa-solid fa-shuffle"></i> 换买家
+        </button>
+      </div>
+      <input
+        type="text"
+        id="emailSubject"
+        placeholder="邮件主题 / 标题"
+        class="subject-input"
+      >
+    </div>
+    <div class="body-row">
+      <textarea
+        id="emailBody"
+        placeholder="输入买家邮件正文内容... (支持 Ctrl + Enter 快捷发送)"
+        class="body-textarea"
+      ></textarea>
+      <button class="send-btn" id="sendBtn" onclick="sendMessage()">
+        <span><i class="fa-solid fa-paper-plane"></i> 发送邮件</span>
+        <span class="send-shortcut">Ctrl + Enter</span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+  const STORAGE_KEY_URL = 'chattermate_tester_webhook_url';
+  const STORAGE_KEY_SENDER = 'chattermate_tester_sender_email';
+
+  const webhookUrlInput = document.getElementById('webhookUrl');
+  const senderEmailInput = document.getElementById('senderEmail');
+  const emailSubjectInput = document.getElementById('emailSubject');
+  const emailBodyInput = document.getElementById('emailBody');
+  const chatList = document.getElementById('chatList');
+  const sendBtn = document.getElementById('sendBtn');
+  const btnTestUrl = document.getElementById('btnTestUrl');
+
+  // Initialize
+  window.addEventListener('DOMContentLoaded', () => {
+    const savedUrl = localStorage.getItem(STORAGE_KEY_URL);
+    if (savedUrl) {
+      webhookUrlInput.value = savedUrl;
+    }
+    const savedSender = localStorage.getItem(STORAGE_KEY_SENDER);
+    if (savedSender) {
+      senderEmailInput.value = savedSender;
+    } else {
+      generateRandomBuyer(false);
+    }
+    applyPreset('关于订单 #20260831 物流时效查询', '你好！我三天前在你们独立站下单购买了一件外套（订单号 #20260831），目前物流状态显示正在清关，请问预计什么时候能够派送到纽约？');
+  });
+
+  function generateRandomBuyer(showNotice = true) {
+    const names = ['emma', 'olivia', 'liam', 'noah', 'james', 'sophia', 'lucas', 'charlotte', 'alex', 'david'];
+    const randName = names[Math.floor(Math.random() * names.length)];
+    const randNum = Math.floor(1000 + Math.random() * 9000);
+    const newEmail = `${randName}_${randNum}@gmail.com`;
+    senderEmailInput.value = newEmail;
+    localStorage.setItem(STORAGE_KEY_SENDER, newEmail);
+    if (showNotice) {
+      appendMessage('system', 'System Helper', `🔄 已为您切换为全新买家邮箱：${newEmail}。\n发送后将创建独立新会话，AI 智能体将直接介入并根据知识库自动回复！`, 'success');
+    }
+  }
+
+  function applyPreset(subject, body) {
+    emailSubjectInput.value = subject;
+    emailBodyInput.value = body;
+    emailBodyInput.focus();
+  }
+
+  emailBodyInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault();
+      sendMessage();
+    }
+  });
+
+  async function testWebhookEndpoint() {
+    const url = webhookUrlInput.value.trim();
+    if (!url) {
+      alert('请先输入 Webhook URL！\n可在系统「店铺管理」中点击店铺的【收件配置】直接复制。');
+      webhookUrlInput.focus();
+      return;
+    }
+
+    btnTestUrl.disabled = true;
+    btnTestUrl.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> 检测中...';
+
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ping: true })
+      });
+
+      if (res.status === 200 || res.status === 400) {
+        appendMessage('system', 'System Prober', `✅ 连通性检测成功！端点可正常访问 (HTTP ${res.status})。Token 鉴权通过，可正常投递邮件。`, 'success');
+      } else if (res.status === 403) {
+        appendMessage('system', 'System Prober', `⚠️ 鉴权失败 (HTTP 403 Invalid Token)：请检查 Webhook URL 末尾是否包含完整的 ?token= 密钥。可在店铺管理中重新复制。`, 'error');
+      } else if (res.status === 404) {
+        appendMessage('system', 'System Prober', `❌ 渠道未找到 (HTTP 404 Unknown Account)：请在「店铺管理」中重新复制正确的专属 Webhook URL。`, 'error');
+      } else {
+        appendMessage('system', 'System Prober', `ℹ️ 服务器响应状态：HTTP ${res.status}`, '');
+      }
+    } catch (err) {
+      appendMessage('system', 'System Prober', `❌ 无法连接后端服务器 (${err.message})。请检查后端服务是否正在运行 (localhost:8001)。`, 'error');
+    } finally {
+      btnTestUrl.disabled = false;
+      btnTestUrl.innerHTML = '<i class="fa-solid fa-bolt"></i> <span>检测连通性</span>';
+    }
+  }
+
+  async function sendMessage() {
+    const webhookUrl = webhookUrlInput.value.trim();
+    const from = senderEmailInput.value.trim();
+    const subject = emailSubjectInput.value.trim();
+    const body = emailBodyInput.value.trim();
+
+    if (!webhookUrl) {
+      alert('请填写 Webhook URL\n提示：可在系统「店铺管理」中点击对应店铺的【收件配置】直接复制。');
+      webhookUrlInput.focus();
+      return;
+    }
+    if (!from || !from.includes('@')) {
+      alert('请填写有效的买家邮箱');
+      senderEmailInput.focus();
+      return;
+    }
+    if (!body) {
+      alert('请输入邮件正文内容');
+      emailBodyInput.focus();
+      return;
+    }
+
+    localStorage.setItem(STORAGE_KEY_URL, webhookUrl);
+    localStorage.setItem(STORAGE_KEY_SENDER, from);
+
+    // Render user message bubble
+    appendUserMessage(from, subject, body);
+    emailBodyInput.value = '';
+    sendBtn.disabled = true;
+    sendBtn.innerHTML = '<span><i class="fa-solid fa-spinner fa-spin"></i> 投递中...</span>';
+
+    try {
+      const payload = {
+        from: from,
+        subject: subject,
+        body: body,
+        text: body,
+        message_id: 'sim_msg_' + Date.now() + '_' + Math.random().toString(36).substring(2, 8)
+      };
+
+      const start = performance.now();
+      const res = await fetch(webhookUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload)
+      });
+      const duration = Math.round(performance.now() - start);
+
+      if (res.ok) {
+        appendMessage(
+          'system',
+          'Webhook Inbound Receiver',
+          `✅ 邮件已成功投递进系统 (耗时 ${duration}ms, 状态码 ${res.status})！\n\n🎯 【处理结果】：\n• 系统已自动根据 Webhook 识别出绑定的店铺，并为买家 ${from} 归集创建了工单会话；\n• 该店铺负责的 AI 智能体已收到入站事件并开始结合专属知识库检索与生成答复；\n• 👉 请前往 ChatterMate 主系统界面的【会话收件箱】(/conversations) 实时查看答复效果！`,
+          'success'
+        );
+      } else {
+        const errorText = await res.text();
+        appendMessage(
+          'system',
+          'Webhook Delivery Failed',
+          `❌ 邮件投递失败 (状态码 ${res.status})：${errorText}\n提示：请确认 Webhook URL 中的 Token 密钥与 Channel ID 是否准确。`,
+          'error'
+        );
+      }
+    } catch (err) {
+      appendMessage(
+        'system',
+        'Network Error',
+        `❌ 网络请求异常 (${err.message})。\n请确认 ChatterMate 后端服务已正常启动 (http://localhost:8001)。`,
+        'error'
+      );
+    } finally {
+      sendBtn.disabled = false;
+      sendBtn.innerHTML = '<span><i class="fa-solid fa-paper-plane"></i> 发送邮件</span><span class="send-shortcut">Ctrl + Enter</span>';
+    }
+  }
+
+  function appendUserMessage(from, subject, body) {
+    const time = new Date().toLocaleTimeString();
+    const msgDiv = document.createElement('div');
+    msgDiv.className = 'msg user';
+    msgDiv.innerHTML = `
+      <div class="msg-header">
+        <span>${from}</span>
+        <span>•</span>
+        <span>${time}</span>
+      </div>
+      <div class="msg-bubble">
+        <div class="msg-subject"><i class="fa-solid fa-envelope"></i> ${escapeHtml(subject || '(无主题)')}</div>
+        <div>${escapeHtml(body)}</div>
+      </div>
+    `;
+    chatList.appendChild(msgDiv);
+    chatList.scrollTop = chatList.scrollHeight;
+  }
+
+  function appendMessage(type, sender, text, styleClass = '') {
+    const time = new Date().toLocaleTimeString();
+    const msgDiv = document.createElement('div');
+    msgDiv.className = `msg ${type} ${styleClass}`;
+    msgDiv.innerHTML = `
+      <div class="msg-header">
+        <span style="font-weight: 600;">${sender}</span>
+        <span>•</span>
+        <span>${time}</span>
+      </div>
+      <div class="msg-bubble">${escapeHtml(text)}</div>
+    `;
+    chatList.appendChild(msgDiv);
+    chatList.scrollTop = chatList.scrollHeight;
+  }
+
+  function escapeHtml(str) {
+    return (str || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  }
+</script>
+
+</body>
+</html>

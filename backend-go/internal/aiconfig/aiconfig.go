@@ -26,6 +26,8 @@ type Config struct {
 	ModelType      string         `json:"model_type"`
 	ModelName      string         `json:"model_name"`
 	IsActive       bool           `json:"is_active"`
+	HasAPIKey      bool           `json:"has_api_key"`
+	APIKeyMasked   string         `json:"api_key_masked,omitempty"`
 	Settings       map[string]any `json:"settings"`
 }
 
@@ -34,6 +36,7 @@ type CreateInput struct {
 	ModelType      string
 	ModelName      string
 	APIKey         string
+	Settings       map[string]any
 }
 
 type UpdateInput struct {
@@ -106,7 +109,16 @@ func (r *Repository) Create(ctx context.Context, input CreateInput) (*Config, er
 	if err != nil {
 		return nil, err
 	}
-	settings, err := json.Marshal(defaultSettings)
+	mergedSettings := map[string]any{}
+	for k, v := range defaultSettings {
+		mergedSettings[k] = v
+	}
+	if input.Settings != nil {
+		for k, v := range input.Settings {
+			mergedSettings[k] = v
+		}
+	}
+	settings, err := json.Marshal(mergedSettings)
 	if err != nil {
 		return nil, err
 	}
@@ -124,7 +136,7 @@ INSERT INTO ai_configs (organization_id, model_type, model_name, encrypted_api_k
 VALUES ($1,$2::aimodeltype,$3,$4,$5,TRUE) RETURNING id`, input.OrganizationID, strings.ToUpper(input.ModelType), input.ModelName, encrypted, string(settings)).Scan(&id); err != nil {
 		return nil, err
 	}
-	result, err := scanConfig(tx.QueryRow(ctx, `SELECT id, organization_id, model_type::text, model_name, is_active, settings FROM ai_configs WHERE id = $1`, id))
+	result, err := scanConfig(tx.QueryRow(ctx, `SELECT id, organization_id, model_type::text, model_name, is_active, settings, COALESCE(encrypted_api_key, '') FROM ai_configs WHERE id = $1`, id))
 	if err != nil {
 		return nil, err
 	}
@@ -139,7 +151,7 @@ func (r *Repository) GetActive(ctx context.Context, organizationID uuid.UUID) (*
 		return nil, err
 	}
 	result, err := scanConfig(r.pool.QueryRow(ctx, `
-SELECT id, organization_id, model_type::text, model_name, is_active, settings
+SELECT id, organization_id, model_type::text, model_name, is_active, settings, COALESCE(encrypted_api_key, '')
 FROM ai_configs WHERE organization_id = $1 AND is_active = TRUE ORDER BY id DESC LIMIT 1`, organizationID))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound
@@ -179,6 +191,10 @@ ORDER BY id DESC LIMIT 1`, organizationID).Scan(
 	if len(settingsRaw) > 0 {
 		_ = json.Unmarshal(settingsRaw, &result.Settings)
 	}
+	if strings.TrimSpace(encrypted) != "" {
+		result.HasAPIKey = true
+		result.APIKeyMasked = "••••••••(已配置有效密钥)"
+	}
 	apiKey, err := encryption.Decrypt(encrypted)
 	if err != nil {
 		return nil, "", fmt.Errorf("decrypt AI API key: %w", err)
@@ -190,27 +206,33 @@ func (r *Repository) Update(ctx context.Context, id int64, organizationID uuid.U
 	if err := r.ready(); err != nil {
 		return nil, err
 	}
-	if _, err := r.GetActiveByID(ctx, id, organizationID); err != nil {
+	current, err := r.GetActiveByID(ctx, id, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	targetModelType := current.ModelType
+	if input.ModelType != nil && strings.TrimSpace(*input.ModelType) != "" {
+		targetModelType = strings.ToUpper(strings.TrimSpace(*input.ModelType))
+	}
+	targetModelName := current.ModelName
+	if input.ModelName != nil && strings.TrimSpace(*input.ModelName) != "" {
+		targetModelName = strings.TrimSpace(*input.ModelName)
+	}
+	if err := ValidateModelSelection(targetModelType, targetModelName); err != nil {
 		return nil, err
 	}
 	parts := make([]string, 0, 4)
-	args := make([]any, 0, 5)
-	if input.ModelType != nil {
-		if err := ValidateModelSelection(*input.ModelType, valueOrEmpty(input.ModelName)); err != nil {
-			return nil, err
-		}
-		args = append(args, strings.ToUpper(*input.ModelType))
+	args := make([]any, 0, 6)
+	if input.ModelType != nil && strings.TrimSpace(*input.ModelType) != "" {
+		args = append(args, targetModelType)
 		parts = append(parts, fmt.Sprintf("model_type = $%d::aimodeltype", len(args)))
 	}
-	if input.ModelName != nil {
-		if strings.TrimSpace(*input.ModelName) == "" {
-			return nil, ErrInvalid
-		}
-		args = append(args, *input.ModelName)
+	if input.ModelName != nil && strings.TrimSpace(*input.ModelName) != "" {
+		args = append(args, targetModelName)
 		parts = append(parts, fmt.Sprintf("model_name = $%d", len(args)))
 	}
-	if input.APIKey != nil {
-		encrypted, err := encryption.Encrypt(*input.APIKey)
+	if input.APIKey != nil && strings.TrimSpace(*input.APIKey) != "" {
+		encrypted, err := encryption.Encrypt(strings.TrimSpace(*input.APIKey))
 		if err != nil {
 			return nil, err
 		}
@@ -218,7 +240,16 @@ func (r *Repository) Update(ctx context.Context, id int64, organizationID uuid.U
 		parts = append(parts, fmt.Sprintf("encrypted_api_key = $%d", len(args)))
 	}
 	if input.Settings != nil {
-		settings, err := json.Marshal(input.Settings)
+		mergedSettings := map[string]any{}
+		if current.Settings != nil {
+			for k, v := range current.Settings {
+				mergedSettings[k] = v
+			}
+		}
+		for k, v := range input.Settings {
+			mergedSettings[k] = v
+		}
+		settings, err := json.Marshal(mergedSettings)
 		if err != nil {
 			return nil, err
 		}
@@ -235,7 +266,7 @@ func (r *Repository) Update(ctx context.Context, id int64, organizationID uuid.U
 }
 
 func (r *Repository) GetActiveByID(ctx context.Context, id int64, organizationID uuid.UUID) (*Config, error) {
-	result, err := scanConfig(r.pool.QueryRow(ctx, `SELECT id, organization_id, model_type::text, model_name, is_active, settings FROM ai_configs WHERE id = $1 AND organization_id = $2 AND is_active = TRUE`, id, organizationID))
+	result, err := scanConfig(r.pool.QueryRow(ctx, `SELECT id, organization_id, model_type::text, model_name, is_active, settings, COALESCE(encrypted_api_key, '') FROM ai_configs WHERE id = $1 AND organization_id = $2 AND is_active = TRUE`, id, organizationID))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -275,13 +306,84 @@ func valueOrEmpty(value *string) string {
 
 func Providers() []Provider {
 	return []Provider{
-		{Value: "OPENAI", Label: "OpenAI", RequiresAPIKey: true, CustomAllowed: true, APIKeyURL: "https://platform.openai.com/api-keys", Models: []Model{{"gpt-4.1", "GPT-4.1"}, {"gpt-4o", "GPT-4o"}, {"gpt-4.1-mini", "GPT-4.1 Mini"}, {"gpt-4o-mini", "GPT-4o Mini"}, {"o4-mini", "o4-mini"}}},
-		{Value: "ANTHROPIC", Label: "Anthropic (Claude)", RequiresAPIKey: true, CustomAllowed: true, APIKeyURL: "https://console.anthropic.com/settings/keys", Models: []Model{{"claude-opus-4-8", "Claude Opus 4.8"}, {"claude-sonnet-5", "Claude Sonnet 5"}, {"claude-sonnet-4-6", "Claude Sonnet 4.6"}, {"claude-haiku-4-5", "Claude Haiku 4.5"}}},
-		{Value: "GOOGLE", Label: "Google Gemini", RequiresAPIKey: true, CustomAllowed: true, APIKeyURL: "https://aistudio.google.com/app/apikey", Models: []Model{{"gemini-2.5-pro", "Gemini 2.5 Pro"}, {"gemini-2.5-flash", "Gemini 2.5 Flash"}, {"gemini-2.5-flash-lite", "Gemini 2.5 Flash-Lite"}, {"gemini-3.5-flash", "Gemini 3.5 Flash"}}},
-		{Value: "MISTRAL", Label: "Mistral", RequiresAPIKey: true, CustomAllowed: true, APIKeyURL: "https://console.mistral.ai/api-keys", Models: []Model{{"mistral-large-latest", "Mistral Large"}, {"mistral-medium-latest", "Mistral Medium"}, {"mistral-small-latest", "Mistral Small"}}},
-		{Value: "XAI", Label: "xAI (Grok)", RequiresAPIKey: true, CustomAllowed: true, APIKeyURL: "https://console.x.ai", Models: []Model{{"grok-4", "Grok 4"}, {"grok-4-fast-reasoning", "Grok 4 Fast (Reasoning)"}, {"grok-4-fast-non-reasoning", "Grok 4 Fast (Non-Reasoning)"}, {"grok-3", "Grok 3"}}},
-		{Value: "DEEPSEEK", Label: "DeepSeek", RequiresAPIKey: true, CustomAllowed: true, APIKeyURL: "https://platform.deepseek.com/api_keys", Models: []Model{{"deepseek-chat", "DeepSeek Chat (V3)"}, {"deepseek-reasoner", "DeepSeek Reasoner"}}},
-		{Value: "GROQ", Label: "Groq", RequiresAPIKey: true, CustomAllowed: true, APIKeyURL: "https://console.groq.com/keys", Models: []Model{{"openai/gpt-oss-120b", "GPT-OSS 120B"}, {"llama-3.3-70b-versatile", "Llama 3.3 70B Versatile"}}},
+		{
+			Value: "OPENAI", Label: "OpenAI", RequiresAPIKey: true, CustomAllowed: true, APIKeyURL: "https://platform.openai.com/api-keys",
+			Models: []Model{
+				{"gpt-5.6-sol", "GPT-5.6 Sol (旗舰推理与编程)"},
+				{"gpt-5.6-terra", "GPT-5.6 Terra (智能与成本平衡)"},
+				{"gpt-5.6-luna", "GPT-5.6 Luna (高并发低成本)"},
+			},
+		},
+		{
+			Value: "DEEPSEEK", Label: "DeepSeek", RequiresAPIKey: true, CustomAllowed: true, APIKeyURL: "https://platform.deepseek.com/api_keys",
+			Models: []Model{
+				{"deepseek-v4-pro", "DeepSeek-V4 Pro (旗舰推理)"},
+				{"deepseek-v4-flash", "DeepSeek-V4 Flash (快速通用)"},
+			},
+		},
+		{
+			Value: "ANTHROPIC", Label: "Anthropic (Claude)", RequiresAPIKey: true, CustomAllowed: true, APIKeyURL: "https://console.anthropic.com/settings/keys",
+			Models: []Model{
+				{"claude-opus-5", "Claude Opus 5"},
+				{"claude-sonnet-5", "Claude Sonnet 5"},
+				{"claude-fable-5", "Claude Fable 5"},
+				{"claude-haiku-4-5-20251001", "Claude Haiku 4.5"},
+			},
+		},
+		{
+			Value: "GOOGLE", Label: "Google Gemini", RequiresAPIKey: true, CustomAllowed: true, APIKeyURL: "https://aistudio.google.com/app/apikey",
+			Models: []Model{
+				{"gemini-3.7-flash", "Gemini 3.7 Flash (最新通用)"},
+				{"gemini-3.6-flash", "Gemini 3.6 Flash"},
+				{"gemini-3.5-flash", "Gemini 3.5 Flash"},
+				{"gemini-3.1-pro", "Gemini 3.1 Pro (高级推理)"},
+			},
+		},
+		{
+			Value: "XAI", Label: "xAI (Grok)", RequiresAPIKey: true, CustomAllowed: true, APIKeyURL: "https://console.x.ai",
+			Models: []Model{
+				{"grok-4.20", "Grok 4.20 (最新旗舰)"},
+				{"grok-4.20-reasoning", "Grok 4.20 Reasoning"},
+				{"grok-4.20-non-reasoning", "Grok 4.20 Non-Reasoning"},
+				{"grok-code-fast-1", "Grok Code Fast 1"},
+			},
+		},
+		{
+			Value: "GROQ", Label: "Groq (LPU Speed)", RequiresAPIKey: true, CustomAllowed: true, APIKeyURL: "https://console.groq.com/keys",
+			Models: []Model{
+				{"qwen/qwen3.8-27b", "Qwen 3.8 27B"},
+				{"qwen/qwen3.6-27b", "Qwen 3.6 27B"},
+				{"meta-llama/llama-4-maverick-17b-128e-instruct", "Llama 4 Maverick 17B"},
+				{"meta-llama/llama-4-scout-17b-16e-instruct", "Llama 4 Scout 17B"},
+				{"openai/gpt-oss-120b", "GPT-OSS 120B"},
+			},
+		},
+		{
+			Value: "MISTRAL", Label: "Mistral", RequiresAPIKey: true, CustomAllowed: true, APIKeyURL: "https://console.mistral.ai/api-keys",
+			Models: []Model{
+				{"mistral-medium-3.5-26.04", "Mistral Medium 3.5 (旗舰多模态)"},
+				{"mistral-large-3-25-12", "Mistral Large 3"},
+				{"mistral-small-4-0-26-03", "Mistral Small 4"},
+				{"devstral-2512", "Devstral 2 (代码)"},
+			},
+		},
+		{
+			Value: "ZHIPU", Label: "智谱 AI (GLM)", RequiresAPIKey: true, CustomAllowed: true, APIKeyURL: "https://open.bigmodel.cn/usercenter/apikeys",
+			Models: []Model{
+				{"glm-5.3", "GLM-5.3 (最新旗舰)"},
+				{"glm-5.3-flash", "GLM-5.3-Flash (高速)"},
+				{"glm-5.2", "GLM-5.2"},
+			},
+		},
+		{
+			Value: "KIMI", Label: "Kimi (Moonshot AI)", RequiresAPIKey: true, CustomAllowed: true, APIKeyURL: "https://platform.moonshot.cn/console/api-keys",
+			Models: []Model{
+				{"kimi-k3", "Kimi K3 (最新旗舰)"},
+				{"kimi-k2.7-code-highspeed", "Kimi K2.7 Code Highspeed"},
+				{"kimi-k2.6", "Kimi K2.6"},
+				{"kimi-k2.5", "Kimi K2.5"},
+			},
+		},
 	}
 }
 
@@ -292,7 +394,8 @@ func scanConfig(row rowScanner) (*Config, error) {
 	var modelType string
 	var settings []byte
 	var active pgtype.Bool
-	if err := row.Scan(&result.ID, &result.OrganizationID, &modelType, &result.ModelName, &active, &settings); err != nil {
+	var encryptedKey string
+	if err := row.Scan(&result.ID, &result.OrganizationID, &modelType, &result.ModelName, &active, &settings, &encryptedKey); err != nil {
 		return nil, err
 	}
 	result.ModelType = strings.ToUpper(modelType)
@@ -300,6 +403,10 @@ func scanConfig(row rowScanner) (*Config, error) {
 	result.Settings = map[string]any{}
 	if len(settings) > 0 {
 		_ = json.Unmarshal(settings, &result.Settings)
+	}
+	if strings.TrimSpace(encryptedKey) != "" {
+		result.HasAPIKey = true
+		result.APIKeyMasked = "••••••••(已配置有效密钥)"
 	}
 	return &result, nil
 }

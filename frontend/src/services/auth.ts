@@ -52,6 +52,9 @@ export const authService = {
         },
       })
 
+      if (response.data.access_token) {
+        localStorage.setItem('access_token', response.data.access_token)
+      }
       userService.setCurrentUser(response.data.user)
       return response.data.user
     } catch (err) {
@@ -64,6 +67,7 @@ export const authService = {
     try {
       await api.post('/users/logout')
       userService.clearCurrentUser()
+      localStorage.removeItem('access_token')
       localStorage.removeItem('agents')
       localStorage.removeItem('current_subscription')
       localStorage.removeItem('exploreView_customization')

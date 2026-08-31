@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"runtime/debug"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5/middleware"
@@ -60,20 +61,27 @@ func Recover(log zerolog.Logger) func(http.Handler) http.Handler {
 
 func CORS(origins []string) func(http.Handler) http.Handler {
 	allowed := make(map[string]struct{}, len(origins))
+	allowAll := false
 	for _, origin := range origins {
-		allowed[origin] = struct{}{}
+		if origin == "*" {
+			allowAll = true
+		}
+		allowed[strings.TrimRight(origin, "/")] = struct{}{}
 	}
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			origin := r.Header.Get("Origin")
-			if _, ok := allowed[origin]; ok {
+			normOrigin := strings.TrimRight(origin, "/")
+			_, isAllowed := allowed[normOrigin]
+			if origin != "" && (allowAll || isAllowed || isLocalhostOrigin(origin)) {
 				w.Header().Set("Access-Control-Allow-Origin", origin)
 				w.Header().Set("Access-Control-Allow-Credentials", "true")
 				w.Header().Add("Vary", "Origin")
 			}
 			if r.Method == http.MethodOptions {
-				w.Header().Set("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS")
-				w.Header().Set("Access-Control-Allow-Headers", "Authorization,Content-Type,X-Requested-With,X-API-Key")
+				w.Header().Set("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS,HEAD")
+				w.Header().Set("Access-Control-Allow-Headers", "Authorization,Content-Type,X-Requested-With,X-API-Key,Accept,Origin")
+				w.Header().Set("Access-Control-Max-Age", "86400")
 				w.WriteHeader(http.StatusNoContent)
 				return
 			}
@@ -81,3 +89,12 @@ func CORS(origins []string) func(http.Handler) http.Handler {
 		})
 	}
 }
+
+func isLocalhostOrigin(origin string) bool {
+	return origin == "null" ||
+		strings.HasPrefix(origin, "http://localhost:") ||
+		strings.HasPrefix(origin, "http://127.0.0.1:") ||
+		strings.HasPrefix(origin, "https://localhost:") ||
+		strings.HasPrefix(origin, "https://127.0.0.1:")
+}
+

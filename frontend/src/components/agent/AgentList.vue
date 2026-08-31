@@ -26,6 +26,7 @@ import { agentService } from '@/services/agent'
 import { permissionChecks } from '@/utils/permissions'
 import AgentDetail from './AgentDetail.vue'
 import CreateAgentModal from './CreateAgentModal.vue'
+import AgentTestChatModal from './AgentTestChatModal.vue'
 import { widgetService } from '@/services/widget'
 import { toast } from 'vue-sonner'
 import { useEnterpriseFeatures } from '@/composables/useEnterpriseFeatures'
@@ -39,6 +40,7 @@ const { hasEnterpriseModule } = useEnterpriseFeatures()
 
 const agents = ref<Agent[]>([])
 const selectedAgent = ref<Agent | null>(null)
+const testingAgent = ref<Agent | null>(null)
 const showCreateModal = ref(false)
 const showUpgradeModal = ref(false)
 const widgetLoadingMap = ref<Record<string, boolean>>({})
@@ -61,10 +63,10 @@ const toggleAgentActive = async (agent: Agent) => {
         const updated = await agentService.updateAgent(agent.id, { is_active: !agent.is_active })
         const idx = agents.value.findIndex(a => a.id === agent.id)
         if (idx !== -1) agents.value[idx] = updated
-        toast.success(updated.is_active ? 'Agent is now online' : 'Agent set offline')
+        toast.success(updated.is_active ? '智能体已设为在线' : '智能体已设为离线')
     } catch (err) {
         console.error('Failed to toggle agent status:', err)
-        toast.error('Failed to update agent status')
+        toast.error('更新智能体状态失败')
     } finally {
         togglingActiveId.value = null
     }
@@ -74,10 +76,10 @@ const copyAgentId = async (agent: Agent) => {
     closeMenu()
     try {
         await navigator.clipboard.writeText(agent.id)
-        toast.success('Agent ID copied to clipboard')
+        toast.success('智能体 ID 已复制到剪贴板')
     } catch (err) {
         console.error('Failed to copy agent ID:', err)
-        toast.error('Failed to copy agent ID')
+        toast.error('复制智能体 ID 失败')
     }
 }
 
@@ -94,7 +96,7 @@ const showResumeBanner = computed(() => onboarding.hasUnfinishedRun(orgId) && !b
 const bannerDismissed = ref(false)
 const checklistProgress = computed(() => {
     const done = onboardingRecord.value.completedSteps.length
-    return `${done} of ${onboarding.ONBOARDING_STEPS.length} steps complete`
+    return `已完成 ${done} / ${onboarding.ONBOARDING_STEPS.length} 个配置步骤`
 })
 const dismissBanner = () => {
     onboarding.skip(orgId)
@@ -164,7 +166,7 @@ const copyWidgetCode = async (agent: Agent) => {
             await copyWidgetCodeToClipboard(newWidget, agent.require_token_auth)
         } catch (error) {
             console.error('Failed to create widget:', error)
-            toast.error('Failed to create widget')
+            toast.error('创建挂件失败')
         } finally {
             widgetLoadingMap.value[agent.id] = false
         }
@@ -177,10 +179,10 @@ const copyWidgetCodeToClipboard = async (widget: Widget, requireTokenAuth?: bool
     const code = buildWidgetEmbed(widget.id, requireTokenAuth)
     try {
         await navigator.clipboard.writeText(code)
-        toast.success('Widget code copied to clipboard!', { duration: 3000 })
+        toast.success('挂件代码已复制到剪贴板！', { duration: 3000 })
     } catch (error) {
         console.error('Failed to copy widget code:', error)
-        toast.error('Failed to copy widget code')
+        toast.error('复制挂件代码失败')
     }
 }
 
@@ -280,17 +282,17 @@ const getOrbStyle = (agent: Agent): Record<string, string> => {
             <div v-if="showResumeBanner" class="resume-banner">
                 <div class="resume-info">
                     <div class="resume-text">
-                        <div class="resume-title">Finish setting up your agent</div>
+                        <div class="resume-title">完成智能体初始配置</div>
                         <div class="resume-progress">{{ checklistProgress }}</div>
                     </div>
                 </div>
                 <div class="resume-actions">
-                    <button class="resume-dismiss" @click="dismissBanner">Dismiss</button>
+                    <button class="resume-dismiss" @click="dismissBanner">稍后处理</button>
                     <button
                         v-if="canManageAgents"
                         class="resume-cta"
                         @click="emit('resume-onboarding')"
-                    >Resume setup →</button>
+                    >继续配置 →</button>
                 </div>
             </div>
 
@@ -307,20 +309,30 @@ const getOrbStyle = (agent: Agent): Record<string, string> => {
                         class="search-input"
                     />
                 </div>
-                <button
-                    v-if="canManageAgents"
-                    class="create-agent-button"
-                    :class="{ 'locked': isAgentCreationLocked }"
-                    :disabled="isAgentCreationLocked"
-                    @click="handleCreateAgent"
-                    :title="isAgentCreationLocked ? `已达套餐智能体数量上限 (${currentAgentCount}/${planLimits.maxAgents})。` : '创建新 AI 智能体'"
-                >
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
-                        <path d="M12 5v14M5 12h14"/>
-                    </svg>
-                    创建智能体
-                    <font-awesome-icon v-if="hasEnterpriseModule && isAgentCreationLocked" icon="fa-solid fa-lock" class="lock-icon" />
-                </button>
+                <div class="header-actions-wrap">
+                    <router-link
+                        to="/settings/ai-config"
+                        class="ai-config-quick-btn"
+                        title="配置大模型 API Key（OpenAI / DeepSeek / Gemini 等）"
+                    >
+                        <i class="fa-solid fa-microchip"></i>
+                        <span>模型引擎配置</span>
+                    </router-link>
+                    <button
+                        v-if="canManageAgents"
+                        class="create-agent-button"
+                        :class="{ 'locked': isAgentCreationLocked }"
+                        :disabled="isAgentCreationLocked"
+                        @click="handleCreateAgent"
+                        :title="isAgentCreationLocked ? `已达套餐智能体数量上限 (${currentAgentCount}/${planLimits.maxAgents})。` : '创建新 AI 智能体'"
+                    >
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+                            <path d="M12 5v14M5 12h14"/>
+                        </svg>
+                        创建智能体
+                        <font-awesome-icon v-if="hasEnterpriseModule && isAgentCreationLocked" icon="fa-solid fa-lock" class="lock-icon" />
+                    </button>
+                </div>
             </div>
 
             <!-- KPI Strip -->
@@ -380,6 +392,7 @@ const getOrbStyle = (agent: Agent): Record<string, string> => {
                                 </svg>
                             </button>
                             <div v-if="openMenuId === agent.id" class="card-menu" role="menu">
+                                <button class="card-menu-item" role="menuitem" @click="closeMenu(); testingAgent = agent">💬 测试对话</button>
                                 <button class="card-menu-item" role="menuitem" @click="closeMenu(); handleAgentClick(agent)">配置详情</button>
                                 <button class="card-menu-item" role="menuitem" @click="closeMenu(); copyWidgetCode(agent)">复制挂件代码</button>
                                 <button class="card-menu-item" role="menuitem" @click="copyAgentId(agent)">复制智能体 ID</button>
@@ -431,6 +444,12 @@ const getOrbStyle = (agent: Agent): Record<string, string> => {
 
                     <!-- Action buttons -->
                     <div class="card-actions" @click.stop>
+                        <button class="btn-test-chat" @click="testingAgent = agent" title="开启对话窗口测试此智能体">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                            </svg>
+                            测试对话
+                        </button>
                         <button class="btn-configure" @click="handleAgentClick(agent)">
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                 <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/>
@@ -480,6 +499,12 @@ const getOrbStyle = (agent: Agent): Record<string, string> => {
             v-if="showCreateModal"
             @close="showCreateModal = false"
             @created="handleAgentCreated"
+        />
+
+        <AgentTestChatModal
+            v-if="testingAgent"
+            :agent="testingAgent"
+            @close="testingAgent = null"
         />
 
         <!-- Agent Limit Upgrade Modal -->
@@ -643,6 +668,34 @@ const getOrbStyle = (agent: Agent): Record<string, string> => {
     outline: none;
     border-color: var(--accent-ink);
     box-shadow: var(--ring-focus);
+}
+
+.header-actions-wrap {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.ai-config-quick-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 10px 16px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 12px;
+    color: var(--muted, #94A3B8);
+    font-size: var(--text-sm);
+    font-weight: 600;
+    text-decoration: none;
+    transition: all var(--transition-fast);
+    white-space: nowrap;
+}
+
+.ai-config-quick-btn:hover {
+    background: rgba(201, 242, 78, 0.12);
+    border-color: rgba(201, 242, 78, 0.35);
+    color: var(--accent-ink, #C9F24E);
 }
 
 .create-agent-button {
@@ -986,9 +1039,35 @@ const getOrbStyle = (agent: Agent): Record<string, string> => {
 /* Action buttons */
 .card-actions {
     display: grid;
-    grid-template-columns: 1fr auto;
+    grid-template-columns: 1fr 1fr auto;
     gap: 8px;
     margin-top: 2px;
+}
+
+.btn-test-chat {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 10px 12px;
+    background: #eef2ff;
+    color: #4f46e5;
+    border: 1px solid #c7d2fe;
+    border-radius: 12px;
+    font-family: var(--font-sans);
+    font-weight: 700;
+    font-size: var(--text-sm);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+    white-space: nowrap;
+}
+
+.btn-test-chat:hover {
+    background: #4f46e5;
+    color: #ffffff;
+    border-color: #4f46e5;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(79, 70, 229, 0.2);
 }
 
 .btn-configure {

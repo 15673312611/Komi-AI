@@ -75,7 +75,7 @@ const newFieldLabel = ref('')
 const newFieldOptions = ref('')
 function addCustomField() {
   const label = newFieldLabel.value.trim()
-  if (!label) { toast.error('Enter a field label'); return }
+  if (!label) { toast.error('请输入自定义字段名称'); return }
   // Slug from the label; fall back to an index when the label has no a–z0–9 chars
   // (e.g. non-Latin scripts) so the key is never a bare "custom_". Ensure uniqueness
   // since record_lead_capture keys off field.key and duplicates would overwrite.
@@ -129,7 +129,7 @@ async function load() {
     slackNotifyEnabled.value = !!cfg.slack_notify_enabled
     seedDefaultsIfEmpty()
   } catch {
-    toast.error('Failed to load lead capture settings')
+    toast.error('加载线索收集配置失败')
   } finally {
     loading.value = false
   }
@@ -154,9 +154,9 @@ async function save() {
       slack_notify_enabled: slackNotifyEnabled.value,
     })
     enabled.value = !!updated.enabled
-    toast.success('Lead capture settings saved')
+    toast.success('线索收集配置已保存')
   } catch {
-    toast.error('Failed to save lead capture settings')
+    toast.error('保存线索收集配置失败')
   } finally {
     saving.value = false
   }

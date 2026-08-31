@@ -335,16 +335,15 @@ SELECT c.id, c.email, c.full_name,
        a.id, a.name, a.display_name, COALESCE(a.ai_replies_enabled, TRUE),
        COALESCE(a.allow_attachments, FALSE), a.allowed_attachment_types,
        s.status::text, COALESCE(s.channel, 'web'), s.group_id, s.session_id,
-       s.user_id, u.full_name, MIN(h.created_at), MAX(h.created_at), c.meta_data
-FROM chat_history h
-JOIN session_to_agents s ON s.session_id = h.session_id
-JOIN customers c ON c.id = h.customer_id
-JOIN agents a ON a.id = h.agent_id
+       s.user_id, u.full_name,
+       (SELECT MIN(created_at) FROM chat_history WHERE session_id = s.session_id),
+       (SELECT MAX(created_at) FROM chat_history WHERE session_id = s.session_id),
+       c.meta_data
+FROM session_to_agents s
+JOIN customers c ON c.id = s.customer_id
+JOIN agents a ON a.id = s.agent_id
 LEFT JOIN users u ON u.id = s.user_id
-WHERE s.session_id = $1 AND s.organization_id = $2
-GROUP BY c.id, c.email, c.full_name, a.id, a.name, a.display_name,
-         a.ai_replies_enabled, a.allow_attachments,
-         s.status, s.channel, s.group_id, s.session_id, s.user_id, u.full_name`,
+WHERE s.session_id = $1 AND s.organization_id = $2`,
 		sessionID, organizationID,
 	).Scan(
 		&found.Customer.ID, &found.Customer.Email, &fullName,
@@ -728,7 +727,7 @@ func (r *Repository) MarkDeliveryFailed(ctx context.Context, messageID int64, re
 	}
 	_, err = r.pool.Exec(ctx, `
 UPDATE chat_history
-SET attributes = COALESCE(attributes, '{}'::jsonb) || $2::jsonb
+SET attributes = (COALESCE(attributes::jsonb, '{}'::jsonb) || $2::jsonb)::json
 WHERE id = $1`, messageID, encoded)
 	return err
 }

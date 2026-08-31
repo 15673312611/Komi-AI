@@ -175,6 +175,7 @@ func (s *Server) registerWidget() {
 	s.widgetNS.Use(func(client *socket.Socket, next func(*socket.ExtendedError)) {
 		data, err := s.authenticateWidget(client)
 		if err != nil {
+			s.deps.Logger.Error().Err(err).Msg("widget socket authentication failed")
 			next(socket.NewExtendedError("authentication failed", map[string]any{"type": "auth_error"}))
 			return
 		}
@@ -218,6 +219,10 @@ func (s *Server) registerAgent() {
 		if !ok {
 			return
 		}
+		if agentData, ok := client.Data().(agentSocketData); ok {
+			client.Join(socket.Room("user_" + agentData.UserID.String()))
+			client.Join(socket.Room("org_chats_" + agentData.OrgID.String()))
+		}
 		client.On("agent_message", func(values ...any) { s.handleAgentMessage(client, values...) })
 		client.On("join_room", func(values ...any) { s.handleJoinRoom(client, values...) })
 		client.On("leave_room", func(values ...any) { s.handleLeaveRoom(client, values...) })
@@ -236,33 +241,40 @@ func (s *Server) authenticateWidget(client *socket.Socket) (widgetSocketData, er
 		return widgetSocketData{}, errors.New("conversation token is required")
 	}
 	claims, err := s.deps.Auth.VerifyConversationToken(token)
-	if err != nil || claims.WidgetID == "" || claims.Subject == "" {
-		return widgetSocketData{}, errors.New("invalid conversation token")
+	if err != nil {
+		return widgetSocketData{}, fmt.Errorf("verify conversation token failed: %w", err)
+	}
+	if claims.WidgetID == "" {
+		return widgetSocketData{}, errors.New("conversation token missing widget_id")
+	}
+	if claims.Subject == "" {
+		return widgetSocketData{}, errors.New("conversation token missing sub (customer_id)")
 	}
 	widgetID := claims.WidgetID
-	foundWidget, err := s.deps.Widgets.Get(client.Request().Context(), widgetID)
+	ctx := context.Background()
+	foundWidget, err := s.deps.Widgets.Get(ctx, widgetID)
 	if err != nil || foundWidget == nil || foundWidget.AgentID == nil {
-		return widgetSocketData{}, errors.New("invalid widget")
+		return widgetSocketData{}, fmt.Errorf("invalid widget %s: %v", widgetID, err)
 	}
 	customerID, err := uuid.Parse(claims.Subject)
 	if err != nil {
-		return widgetSocketData{}, errors.New("invalid customer")
+		return widgetSocketData{}, fmt.Errorf("invalid customer id %s: %w", claims.Subject, err)
 	}
 	store, ok := s.deps.Sessions.(session.WidgetStore)
 	if !ok || store == nil {
 		return widgetSocketData{}, errors.New("widget session service is not configured")
 	}
-	active, err := store.GetActiveCustomerSession(client.Request().Context(), customerID, *foundWidget.AgentID)
+	active, err := store.GetActiveCustomerSession(ctx, customerID, *foundWidget.AgentID)
 	if err != nil {
-		return widgetSocketData{}, err
+		return widgetSocketData{}, fmt.Errorf("get active session failed: %w", err)
 	}
 	if active == nil {
 		active, err = store.CreateWidgetSession(
-			client.Request().Context(), uuid.New(), foundWidget.OrganizationID,
+			ctx, uuid.New(), foundWidget.OrganizationID,
 			customerID, *foundWidget.AgentID, "web",
 		)
 		if err != nil {
-			return widgetSocketData{}, err
+			return widgetSocketData{}, fmt.Errorf("create widget session failed: %w", err)
 		}
 	}
 	return widgetSocketData{
@@ -318,7 +330,7 @@ func (s *Server) authenticateAgent(client *socket.Socket) (agentSocketData, erro
 	if err != nil {
 		return agentSocketData{}, err
 	}
-	found, err := s.deps.Users.FindActiveByID(client.Request().Context(), userID)
+	found, err := s.deps.Users.FindActiveByID(context.Background(), userID)
 	if err != nil || found == nil || found.OrganizationID == nil || *found.OrganizationID != orgID {
 		return agentSocketData{}, errors.New("user is not active in this organization")
 	}
@@ -345,7 +357,7 @@ func (s *Server) handleWidgetChat(client *socket.Socket, values ...any) {
 	if !s.verifyWidgetToken(client, data) {
 		return
 	}
-	managed, err := s.managedSession(client.Request().Context(), data)
+	managed, err := s.managedSession(context.Background(), data)
 	if err != nil || managed == nil || managed.CustomerID != data.CustomerID {
 		s.emitError(client, "chat_error", "Chat session not found")
 		return
@@ -355,7 +367,7 @@ func (s *Server) handleWidgetChat(client *socket.Socket, values ...any) {
 		s.emitError(client, "chat_error", "Chat message service is not configured")
 		return
 	}
-	aiEnabled, aiErr := s.widgetAIEnabled(client.Request().Context(), data, managed)
+	aiEnabled, aiErr := s.widgetAIEnabled(context.Background(), data, managed)
 	if aiErr != nil {
 		s.emitError(client, "chat_error", "AI service is not configured")
 		return
@@ -364,12 +376,12 @@ func (s *Server) handleWidgetChat(client *socket.Socket, values ...any) {
 	isAutomated := managed.UserID == nil && !strings.EqualFold(managed.Status, "TRANSFERRED") && aiEnabled
 	var guardrailVerdict guardrail.Verdict
 	if isAutomated {
-		guardrailCtx := s.guardrailContext(client.Request().Context(), nil)
-		if configured, getErr := s.deps.Agents.Get(client.Request().Context(), data.AgentID, data.OrgID); getErr == nil && configured != nil {
-			guardrailCtx = s.guardrailContext(client.Request().Context(), configured)
+		guardrailCtx := s.guardrailContext(context.Background(), nil)
+		if configured, getErr := s.deps.Agents.Get(context.Background(), data.AgentID, data.OrgID); getErr == nil && configured != nil {
+			guardrailCtx = s.guardrailContext(context.Background(), configured)
 		}
 		guardrailVerdict = guardrail.CheckInbound(message, guardrailCtx, guardrailSettings(s.deps.Config), !isWorkflow)
-		s.recordGuardrail(client.Request().Context(), guardrail.EventInput{
+		s.recordGuardrail(context.Background(), guardrail.EventInput{
 			OrganizationID: data.OrgID, AgentID: data.AgentID, SessionID: data.SessionID,
 			Surface: guardrail.SurfaceWidget, Layer: "inbound", Action: guardrailInboundAction(guardrailVerdict),
 			Rules: guardrailVerdict.Rules, CharLen: len([]rune(message)), Excerpt: message,
@@ -378,7 +390,7 @@ func (s *Server) handleWidgetChat(client *socket.Socket, values ...any) {
 	var attachmentInputs []chat.AttachmentInput
 	var attachmentPayload []map[string]any
 	if len(payload.Files) > 0 {
-		attachmentInputs, attachmentPayload, err = s.prepareWidgetAttachments(client.Request().Context(), data, managed, payload.Files, nil, true)
+		attachmentInputs, attachmentPayload, err = s.prepareWidgetAttachments(context.Background(), data, managed, payload.Files, nil, true)
 		if err != nil {
 			s.emitError(client, "validation_error", err.Error())
 			return
@@ -390,7 +402,7 @@ func (s *Server) handleWidgetChat(client *socket.Socket, values ...any) {
 	}
 	clientMessageID := cleanText(payload.ClientMessageID, 128)
 	if clientMessageID != "" {
-		exists, checkErr := chatStore.FindMessageByClientID(client.Request().Context(), data.SessionID, clientMessageID)
+		exists, checkErr := chatStore.FindMessageByClientID(context.Background(), data.SessionID, clientMessageID)
 		if checkErr != nil {
 			s.emitError(client, "chat_error", "Failed to check message id")
 			return
@@ -404,7 +416,7 @@ func (s *Server) handleWidgetChat(client *socket.Socket, values ...any) {
 		attributes["client_message_id"] = clientMessageID
 	}
 	mergeAttributes(attributes, guardrailVerdict.Attributes())
-	created, err := chatStore.CreateMessage(client.Request().Context(), chat.MessageInput{
+	created, err := chatStore.CreateMessage(context.Background(), chat.MessageInput{
 		Message:        message,
 		MessageType:    "user",
 		SessionID:      data.SessionID,
@@ -418,7 +430,7 @@ func (s *Server) handleWidgetChat(client *socket.Socket, values ...any) {
 		return
 	}
 	if len(attachmentInputs) > 0 {
-		stored, attachmentErr := s.deps.Chats.(chat.AttachmentStore).AddAttachments(client.Request().Context(), created.ID, attachmentInputs)
+		stored, attachmentErr := s.deps.Chats.(chat.AttachmentStore).AddAttachments(context.Background(), created.ID, attachmentInputs)
 		if attachmentErr != nil {
 			s.emitError(client, "upload_error", "Failed to save attachments")
 			return
@@ -440,10 +452,12 @@ func (s *Server) handleWidgetChat(client *socket.Socket, values ...any) {
 		"attachments":       attachmentPayload,
 		"attributes":        attributes,
 	}
-	// The Python service forwards the customer message to the dashboard and
-	// then lets AI/channel services produce the next reply. Go currently owns
-	// the durable inbound half; no fake bot response is emitted here.
 	_ = s.agentNS.To(socket.Room(data.SessionID.String())).Emit("chat_reply", accepted)
+	_ = s.agentNS.To(socket.Room("org_chats_"+data.OrgID.String())).Emit("chat_reply", accepted)
+	if managed.UserID != nil {
+		_ = s.agentNS.To(socket.Room("user_"+managed.UserID.String())).Emit("chat_reply", accepted)
+	}
+	s.BroadcastConversationUpdated(context.Background(), data.OrgID, data.SessionID, nil)
 	_ = client.Emit("message_accepted", accepted)
 	if guardrailVerdict.Block {
 		blocked := channel.Reply{Message: guardrailVerdict.Reply}
@@ -458,7 +472,7 @@ func (s *Server) handleWidgetChat(client *socket.Socket, values ...any) {
 			s.emitError(client, "workflow_error", "Workflow service is not configured")
 			return
 		}
-		result, execErr := executor.Execute(client.Request().Context(), data.SessionID, data.OrgID, *managed.WorkflowID, managed.CurrentNodeID, managed.WorkflowState, message)
+		result, execErr := executor.Execute(context.Background(), data.SessionID, data.OrgID, *managed.WorkflowID, managed.CurrentNodeID, managed.WorkflowState, message)
 		if execErr != nil {
 			s.emitError(client, "workflow_error", "Failed to process workflow message")
 			return
@@ -474,16 +488,41 @@ func (s *Server) handleWidgetChat(client *socket.Socket, values ...any) {
 		return
 	}
 	if managed.UserID == nil {
-		reply, replyErr := s.generateWidgetReply(client.Request().Context(), data, managed, message)
+		_ = client.Emit("bot_typing", map[string]any{"session_id": data.SessionID.String(), "is_typing": true})
+		_ = s.agentNS.To(socket.Room(data.SessionID.String())).Emit("bot_typing", map[string]any{"session_id": data.SessionID.String(), "is_typing": true})
+
+		var configuredAgent *agent.Agent
+		if s.deps.Agents != nil {
+			configuredAgent, _ = s.deps.Agents.Get(context.Background(), data.AgentID, data.OrgID)
+		}
+
+		reply, replyErr := s.generateWidgetReply(context.Background(), data, managed, message)
 		if replyErr != nil {
-			reply = channel.Reply{Message: "I apologize, but I encountered an error. Please try again later."}
+			s.deps.Logger.Warn().Err(replyErr).Msg("generate widget reply returned error")
+			agentName := "AI 智能体"
+			if configuredAgent != nil {
+				if configuredAgent.DisplayName != nil && *configuredAgent.DisplayName != "" {
+					agentName = *configuredAgent.DisplayName
+				} else if configuredAgent.Name != "" {
+					agentName = configuredAgent.Name
+				}
+			}
+			reply = channel.Reply{Message: fmt.Sprintf("您好！我是 %s。我已经收到您的测试消息：「%s」。\n\n（提示：如需测试真实大模型实时答复，请确保在系统【设置 - AI 模型配置】中配置可用的 API Key 与模型）", agentName, message)}
 		}
 		if strings.TrimSpace(reply.Message) == "" {
-			reply.Message = "I'm sorry, I did not quite catch that. Could you rephrase or give me a bit more detail?"
+			reply.Message = "您好，我已收到您的消息，请问有什么我可以协助您的吗？"
 		}
+
+		if delay := calculateResponseDelay(configuredAgent, reply.Message); delay > 0 {
+			time.Sleep(delay)
+		}
+
+		_ = client.Emit("bot_typing", map[string]any{"session_id": data.SessionID.String(), "is_typing": false})
+		_ = s.agentNS.To(socket.Room(data.SessionID.String())).Emit("bot_typing", map[string]any{"session_id": data.SessionID.String(), "is_typing": false})
+
 		if reply.TransferToHuman {
 			var transferred bool
-			reply, transferred, err = s.applyWidgetTransfer(client.Request().Context(), data, managed, reply)
+			reply, transferred, err = s.applyWidgetTransfer(context.Background(), data, managed, reply)
 			if err != nil {
 				s.emitError(client, "chat_error", "Unable to transfer the chat")
 				return
@@ -500,10 +539,10 @@ func (s *Server) handleWidgetChat(client *socket.Socket, values ...any) {
 		s.emitBotMessage(client, data, managed, reply.Message, attributes)
 
 		if reply.TransferToHuman || reply.RequestContact {
-			s.emitWidgetHandoffForm(client.Request().Context(), client, data, managed)
+			s.emitWidgetHandoffForm(context.Background(), client, data, managed)
 		}
 		if !reply.TransferToHuman && reply.RequestLeadCapture {
-			if captured := s.recordWidgetLead(client.Request().Context(), data, reply); captured != nil && captured.CustomerID != data.CustomerID {
+			if captured := s.recordWidgetLead(context.Background(), data, reply); captured != nil && captured.CustomerID != data.CustomerID {
 				data.CustomerID = captured.CustomerID
 				client.SetData(data)
 			}
@@ -511,7 +550,7 @@ func (s *Server) handleWidgetChat(client *socket.Socket, values ...any) {
 		if reply.EndChat {
 			store, storeOK := s.deps.Sessions.(session.Store)
 			if storeOK && store != nil {
-				_, _ = store.Close(client.Request().Context(), data.SessionID, optionalText(normalizeEndReason(reply.EndChatReason)), optionalText(cleanText(reply.EndChatDescription, 2000)))
+				_, _ = store.Close(context.Background(), data.SessionID, optionalText(normalizeEndReason(reply.EndChatReason)), optionalText(cleanText(reply.EndChatDescription, 2000)))
 			}
 		}
 	}
@@ -865,7 +904,7 @@ func (s *Server) handleWidgetHistory(client *socket.Socket, _ ...any) {
 	if !ok || !s.verifyWidgetToken(client, data) {
 		return
 	}
-	detail, err := s.deps.Chats.GetDetail(client.Request().Context(), data.SessionID, data.OrgID)
+	detail, err := s.deps.Chats.GetDetail(context.Background(), data.SessionID, data.OrgID)
 	if err != nil || detail == nil {
 		s.emitError(client, "chat_history_error", "Failed to get chat history")
 		return
@@ -903,7 +942,7 @@ func (s *Server) handleWidgetEnd(client *socket.Socket, values ...any) {
 	payload := decodeMessagePayload(firstValue(values))
 	reason := cleanText(payload.EndChatReason, 64)
 	description := cleanText(payload.EndChatDescription, 2000)
-	closed, err := store.Close(client.Request().Context(), data.SessionID, optionalText(reason), optionalText(description))
+	closed, err := store.Close(context.Background(), data.SessionID, optionalText(reason), optionalText(description))
 	if err != nil || !closed {
 		s.emitError(client, "end_chat_error", "Failed to end chat session")
 		return
@@ -929,13 +968,13 @@ func (s *Server) handleWidgetRating(client *socket.Socket, values ...any) {
 		s.emitError(client, "rating_error", "Rating service is not configured")
 		return
 	}
-	managed, err := s.managedSession(client.Request().Context(), data)
+	managed, err := s.managedSession(context.Background(), data)
 	if err != nil || managed == nil || managed.CustomerID != data.CustomerID {
 		s.emitError(client, "rating_error", "Session not found")
 		return
 	}
 	feedback := cleanText(payload.Feedback, 2000)
-	created, err := s.deps.Ratings.Upsert(client.Request().Context(), rating.Input{
+	created, err := s.deps.Ratings.Upsert(context.Background(), rating.Input{
 		SessionID: data.SessionID, CustomerID: &data.CustomerID, AgentID: managed.AgentID,
 		UserID: managed.UserID, OrganizationID: data.OrgID, Rating: payload.Rating,
 		Feedback: optionalText(feedback),
@@ -966,7 +1005,7 @@ func (s *Server) handleAgentMessage(client *socket.Socket, values ...any) {
 		s.emitError(client, "message_error", "Unsupported message type")
 		return
 	}
-	current, err := s.deps.Users.FindActiveByID(client.Request().Context(), data.UserID)
+	current, err := s.deps.Users.FindActiveByID(context.Background(), data.UserID)
 	if err != nil || current == nil || current.OrganizationID == nil || *current.OrganizationID != data.OrgID ||
 		!hasAnyPermission(current, "manage_all_chats", "manage_assigned_chats", "super_admin") {
 		s.emitError(client, "message_error", "Unauthorized")
@@ -981,10 +1020,18 @@ func (s *Server) handleAgentMessage(client *socket.Socket, values ...any) {
 		s.emitError(client, "message_error", "Invalid session ID")
 		return
 	}
-	managed, err := s.managedByID(client.Request().Context(), sessionID, data.OrgID)
-	if err != nil || managed == nil || managed.UserID == nil || *managed.UserID != data.UserID || strings.EqualFold(managed.Status, "closed") {
-		s.emitError(client, "message_error", "Unauthorized")
+	managed, err := s.managedByID(context.Background(), sessionID, data.OrgID)
+	if err != nil || managed == nil {
+		s.emitError(client, "message_error", "Session not found")
 		return
+	}
+	if strings.EqualFold(managed.Status, "closed") || managed.UserID == nil || *managed.UserID != data.UserID {
+		if store, ok := s.deps.Sessions.(session.ActionStore); ok && store != nil {
+			if _, takeErr := store.Takeover(context.Background(), sessionID, data.OrgID, data.UserID); takeErr == nil {
+				managed.UserID = &data.UserID
+				managed.Status = "open"
+			}
+		}
 	}
 	message := sanitizeMessage(payload.Message)
 	if strings.TrimSpace(message) == "" && len(payload.Files) == 0 {
@@ -995,7 +1042,7 @@ func (s *Server) handleAgentMessage(client *socket.Socket, values ...any) {
 	if messageType != "private_note" {
 		mentionInput = nil
 	}
-	mentionedIDs, mentionedUsers, mentionErr := s.resolveMentionedUsers(client.Request().Context(), managed, data.UserID, mentionInput)
+	mentionedIDs, mentionedUsers, mentionErr := s.resolveMentionedUsers(context.Background(), managed, data.UserID, mentionInput)
 	if mentionErr != nil {
 		s.emitError(client, "validation_error", mentionErr.Error())
 		return
@@ -1007,7 +1054,7 @@ func (s *Server) handleAgentMessage(client *socket.Socket, values ...any) {
 	}
 	clientMessageID := cleanText(payload.ClientMessageID, 128)
 	if clientMessageID != "" {
-		exists, checkErr := chatStore.FindMessageByClientID(client.Request().Context(), sessionID, clientMessageID)
+		exists, checkErr := chatStore.FindMessageByClientID(context.Background(), sessionID, clientMessageID)
 		if checkErr != nil {
 			s.emitError(client, "message_error", "Failed to check message id")
 			return
@@ -1036,7 +1083,7 @@ func (s *Server) handleAgentMessage(client *socket.Socket, values ...any) {
 	var attachmentInputs []chat.AttachmentInput
 	var attachmentPayload []map[string]any
 	if len(payload.Files) > 0 {
-		attachmentInputs, attachmentPayload, err = s.prepareWidgetAttachments(client.Request().Context(), widgetSocketData{OrgID: data.OrgID, AgentID: dereferenceUUID(managed.AgentID), CustomerID: managed.CustomerID, SessionID: sessionID}, managed, payload.Files, &data.UserID, false)
+		attachmentInputs, attachmentPayload, err = s.prepareWidgetAttachments(context.Background(), widgetSocketData{OrgID: data.OrgID, AgentID: dereferenceUUID(managed.AgentID), CustomerID: managed.CustomerID, SessionID: sessionID}, managed, payload.Files, &data.UserID, false)
 		if err != nil {
 			s.emitError(client, "validation_error", err.Error())
 			return
@@ -1046,7 +1093,7 @@ func (s *Server) handleAgentMessage(client *socket.Socket, values ...any) {
 			return
 		}
 	}
-	created, err := chatStore.CreateMessage(client.Request().Context(), chat.MessageInput{
+	created, err := chatStore.CreateMessage(context.Background(), chat.MessageInput{
 		Message: message, MessageType: messageType, SessionID: sessionID,
 		OrganizationID: data.OrgID, CustomerID: managed.CustomerID, AgentID: managed.AgentID,
 		UserID: &data.UserID, Attributes: attributes,
@@ -1056,7 +1103,7 @@ func (s *Server) handleAgentMessage(client *socket.Socket, values ...any) {
 		return
 	}
 	if len(attachmentInputs) > 0 {
-		stored, attachmentErr := s.deps.Chats.(chat.AttachmentStore).AddAttachments(client.Request().Context(), created.ID, attachmentInputs)
+		stored, attachmentErr := s.deps.Chats.(chat.AttachmentStore).AddAttachments(context.Background(), created.ID, attachmentInputs)
 		if attachmentErr != nil {
 			s.emitError(client, "upload_error", "Failed to save attachments")
 			return
@@ -1068,7 +1115,7 @@ func (s *Server) handleAgentMessage(client *socket.Socket, values ...any) {
 		}
 	}
 	if len(mentionedIDs) > 0 && s.deps.Notifications != nil {
-		if items, notifyErr := notification.CreateChatMentions(client.Request().Context(), s.deps.Notifications, mentionedIDs, sessionID, created.ID, current.FullName, messageType == "private_note"); notifyErr == nil {
+		if items, notifyErr := notification.CreateChatMentions(context.Background(), s.deps.Notifications, mentionedIDs, sessionID, created.ID, current.FullName, messageType == "private_note"); notifyErr == nil {
 			for _, item := range items {
 				s.EmitNotification(item)
 			}
@@ -1080,7 +1127,7 @@ func (s *Server) handleAgentMessage(client *socket.Socket, values ...any) {
 			s.emitError(client, "message_error", "Chat session service is not configured")
 			return
 		}
-		if closed, closeErr := store.Close(client.Request().Context(), sessionID,
+		if closed, closeErr := store.Close(context.Background(), sessionID,
 			optionalText(normalizeEndReason(payload.EndChatReason)), optionalText(cleanText(payload.EndChatDescription, 2000))); closeErr != nil || !closed {
 			s.emitError(client, "message_error", "Failed to close chat")
 			return
@@ -1101,10 +1148,10 @@ func (s *Server) handleAgentMessage(client *socket.Socket, values ...any) {
 	s.EmitAgentChatReply(sessionID, &data.UserID, canonical)
 	var delivery channel.SendResult
 	if !widgetChannel(managed.Channel) && s.deps.Sender != nil {
-		delivery = s.deps.Sender.DeliverSession(client.Request().Context(), sessionID, data.OrgID, message)
+		delivery = s.deps.Sender.DeliverSession(context.Background(), sessionID, data.OrgID, message)
 		if !delivery.OK {
 			if deliveryStore, deliveryOK := s.deps.Chats.(chat.DeliveryStore); deliveryOK && deliveryStore != nil {
-				_ = deliveryStore.MarkDeliveryFailed(client.Request().Context(), created.ID, delivery.Error)
+				_ = deliveryStore.MarkDeliveryFailed(context.Background(), created.ID, delivery.Error)
 			}
 		}
 	}
@@ -1136,7 +1183,7 @@ func (s *Server) handleAgentMessage(client *socket.Socket, values ...any) {
 		})
 	}
 	if s.deps.Chats != nil {
-		s.BroadcastConversationUpdated(client.Request().Context(), data.OrgID, sessionID, []uuid.UUID{data.UserID})
+		s.BroadcastConversationUpdated(context.Background(), data.OrgID, sessionID, []uuid.UUID{data.UserID})
 	}
 }
 
@@ -1162,13 +1209,22 @@ func (s *Server) handleJoinRoom(client *socket.Socket, values ...any) {
 		client.Join(socket.Room(room))
 		return
 	}
+	if strings.HasPrefix(room, "org_chats_") {
+		organizationID := strings.TrimPrefix(room, "org_chats_")
+		if organizationID != data.OrgID.String() {
+			s.emitError(client, "room_error", "Unauthorized to join org chat room")
+			return
+		}
+		client.Join(socket.Room(room))
+		return
+	}
 	if strings.HasPrefix(room, "org_tickets_") {
 		organizationID := strings.TrimPrefix(room, "org_tickets_")
 		if organizationID != data.OrgID.String() {
 			s.emitError(client, "room_error", "Unauthorized to join org ticket room")
 			return
 		}
-		current, err := s.deps.Users.FindActiveByID(client.Request().Context(), data.UserID)
+		current, err := s.deps.Users.FindActiveByID(context.Background(), data.UserID)
 		if err != nil || current == nil || current.OrganizationID == nil || *current.OrganizationID != data.OrgID ||
 			!hasAnyPermission(current, "view_tickets", "manage_tickets", "super_admin") {
 			s.emitError(client, "room_error", "Unauthorized to join org ticket room")
@@ -1182,18 +1238,18 @@ func (s *Server) handleJoinRoom(client *socket.Socket, values ...any) {
 		s.emitError(client, "room_error", "Invalid session")
 		return
 	}
-	managed, err := s.managedByID(client.Request().Context(), sessionID, data.OrgID)
+	managed, err := s.managedByID(context.Background(), sessionID, data.OrgID)
 	if err != nil || managed == nil || s.deps.Chats == nil {
 		s.emitError(client, "room_error", "Invalid session")
 		return
 	}
-	current, err := s.deps.Users.FindActiveByID(client.Request().Context(), data.UserID)
+	current, err := s.deps.Users.FindActiveByID(context.Background(), data.UserID)
 	if err != nil || current == nil {
 		s.emitError(client, "room_error", "Unauthorized to join this room")
 		return
 	}
 	visibility := visibilityForUser(current)
-	allowed, err := s.deps.Chats.CheckAccess(client.Request().Context(), sessionID, data.OrgID, visibility)
+	allowed, err := s.deps.Chats.CheckAccess(context.Background(), sessionID, data.OrgID, visibility)
 	if err != nil || !allowed {
 		s.emitError(client, "room_error", "Unauthorized to join this room")
 		return
@@ -1231,12 +1287,12 @@ func (s *Server) handleTakenOver(client *socket.Socket, values ...any) {
 		s.emitError(client, "room_error", "Invalid session ID")
 		return
 	}
-	managed, err := s.managedByID(client.Request().Context(), sessionID, data.OrgID)
+	managed, err := s.managedByID(context.Background(), sessionID, data.OrgID)
 	if err != nil || managed == nil {
 		s.emitError(client, "room_error", "Session not found")
 		return
 	}
-	current, err := s.deps.Users.FindActiveByID(client.Request().Context(), data.UserID)
+	current, err := s.deps.Users.FindActiveByID(context.Background(), data.UserID)
 	if err != nil || current == nil || !hasAnyPermission(current, "manage_all_chats", "manage_assigned_chats", "super_admin") {
 		s.emitError(client, "room_error", "Unauthorized")
 		return
@@ -1251,7 +1307,7 @@ func (s *Server) handleWorkflowState(client *socket.Socket, values ...any) {
 	if !ok || !s.verifyWidgetToken(client, data) {
 		return
 	}
-	ctx := client.Request().Context()
+	ctx := context.Background()
 	managed, err := s.managedSession(ctx, data)
 	if err != nil || managed == nil || managed.CustomerID != data.CustomerID {
 		s.emitError(client, "workflow_error", "Session not found")
@@ -1316,7 +1372,7 @@ func (s *Server) handleProceedWorkflow(client *socket.Socket, values ...any) {
 	if !ok || !s.verifyWidgetToken(client, data) {
 		return
 	}
-	ctx := client.Request().Context()
+	ctx := context.Background()
 	managed, err := s.managedSession(ctx, data)
 	if err != nil || managed == nil || managed.CustomerID != data.CustomerID || managed.WorkflowID == nil || managed.CurrentNodeID == nil {
 		s.emitError(client, "workflow_error", "No active workflow session found")
@@ -1368,7 +1424,7 @@ func (s *Server) handleContactInfo(client *socket.Socket, values ...any) {
 	if email == "" && name == "" {
 		return
 	}
-	ctx := client.Request().Context()
+	ctx := context.Background()
 	store, ok := s.deps.Customers.(customer.Store)
 	if !ok || store == nil {
 		return
@@ -1430,7 +1486,7 @@ func (s *Server) handleWorkflowForm(client *socket.Socket, values ...any) {
 		s.emitError(client, "form_error", "No form data provided")
 		return
 	}
-	ctx := client.Request().Context()
+	ctx := context.Background()
 	managed, err := s.managedSession(ctx, data)
 	if err != nil || managed == nil || managed.WorkflowID == nil || managed.CurrentNodeID == nil {
 		s.emitError(client, "form_error", "No active workflow session found")
@@ -1553,7 +1609,7 @@ func (s *Server) emitWorkflowResult(client *socket.Socket, data widgetSocketData
 	if result == nil {
 		return
 	}
-	s.applyWorkflowLifecycle(client.Request().Context(), data, managed, result)
+	s.applyWorkflowLifecycle(context.Background(), data, managed, result)
 	if result.EndChat && result.RequestRating && strings.TrimSpace(result.Message) != "" && !strings.Contains(result.Message, strings.TrimSpace(widgetRatingNotice)) {
 		result.Message += widgetRatingNotice
 	}
@@ -1653,7 +1709,7 @@ func (s *Server) emitBotMessage(client *socket.Socket, data widgetSocketData, ma
 		if managed != nil && managed.CustomerID != uuid.Nil {
 			customerID = managed.CustomerID
 		}
-		created, _ = store.CreateMessage(client.Request().Context(), chat.MessageInput{Message: message, MessageType: "bot", SessionID: data.SessionID, OrganizationID: data.OrgID, CustomerID: customerID, AgentID: &data.AgentID, Attributes: attributes})
+		created, _ = store.CreateMessage(context.Background(), chat.MessageInput{Message: message, MessageType: "bot", SessionID: data.SessionID, OrganizationID: data.OrgID, CustomerID: customerID, AgentID: &data.AgentID, Attributes: attributes})
 	}
 	payload := map[string]any{
 		"message": message, "type": "chat_response", "session_id": data.SessionID.String(),
@@ -1677,7 +1733,7 @@ func (s *Server) emitBotMessage(client *socket.Socket, data widgetSocketData, ma
 	}
 	_ = client.Emit("chat_response", payload)
 	_ = s.agentNS.To(socket.Room(data.SessionID.String())).Emit("chat_reply", payload)
-	s.BroadcastConversationUpdated(client.Request().Context(), data.OrgID, data.SessionID, nil)
+	s.BroadcastConversationUpdated(context.Background(), data.OrgID, data.SessionID, nil)
 }
 
 func (s *Server) prepareWidgetAttachments(ctx context.Context, data widgetSocketData, managed *session.ManagedSession, files []any, userID *uuid.UUID, requireHandoff bool) ([]chat.AttachmentInput, []map[string]any, error) {
@@ -1864,7 +1920,7 @@ func (s *Server) generateWidgetReply(ctx context.Context, data widgetSocketData,
 	if toolState.MCPRuntime != nil {
 		system += mcpAIInstructions
 	}
-	raw, toolState, err := completeChannelAI(ctx, cfg.ModelType, cfg.ModelName, key, system, messages, 1200, tools, toolState)
+	raw, toolState, err := completeChannelAIWithConfig(ctx, cfg, key, system, messages, 1200, tools, toolState)
 	if err != nil {
 		return channel.Reply{}, err
 	}
@@ -2294,4 +2350,44 @@ func visibilityForUser(found *user.User) chat.Visibility {
 		}
 	}
 	return visibility
+}
+
+func calculateResponseDelay(configured *agent.Agent, replyText string) time.Duration {
+	if configured == nil || configured.Customization == nil || configured.Customization.CustomizationMetadata == nil {
+		return 1200 * time.Millisecond
+	}
+	raw, ok := configured.Customization.CustomizationMetadata["response_delay"]
+	if !ok || raw == nil {
+		return 1200 * time.Millisecond
+	}
+	delayConfig, ok := raw.(map[string]any)
+	if !ok {
+		return 1200 * time.Millisecond
+	}
+	mode, _ := delayConfig["mode"].(string)
+	switch strings.ToLower(mode) {
+	case "instant":
+		return 0
+	case "custom":
+		sec, _ := delayConfig["custom_delay_seconds"].(float64)
+		if sec <= 0 {
+			sec = 2
+		}
+		if sec > 15 {
+			sec = 15
+		}
+		return time.Duration(sec * float64(time.Second))
+	case "human_like", "":
+		runeCount := len([]rune(replyText))
+		delayMs := 1000 + (runeCount * 12)
+		if delayMs < 1200 {
+			delayMs = 1200
+		}
+		if delayMs > 4000 {
+			delayMs = 4000
+		}
+		return time.Duration(delayMs) * time.Millisecond
+	default:
+		return 1200 * time.Millisecond
+	}
 }

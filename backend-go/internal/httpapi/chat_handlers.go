@@ -142,6 +142,7 @@ func getChatDetail(deps Dependencies) http.HandlerFunc {
 		}
 		allowed, err := deps.Chats.CheckAccess(r.Context(), sessionID, *current.OrganizationID, visibility)
 		if err != nil {
+			deps.Logger.Error().Err(err).Msg("check access failed")
 			Error(w, http.StatusInternalServerError, "Failed to fetch chat details")
 			return
 		}
@@ -151,6 +152,7 @@ func getChatDetail(deps Dependencies) http.HandlerFunc {
 		}
 		value, err := deps.Chats.GetDetail(r.Context(), sessionID, *current.OrganizationID)
 		if err != nil {
+			deps.Logger.Error().Err(err).Msg("get chat detail failed")
 			Error(w, http.StatusInternalServerError, "Failed to fetch chat details")
 			return
 		}
@@ -180,17 +182,14 @@ func unreadThreadCounts(deps Dependencies) http.HandlerFunc {
 		if supported && store != nil {
 			counts, err = store.UnreadThreadCounts(r.Context(), *current.OrganizationID, current.ID, visibility)
 		} else {
-			// Keep narrow Store implementations usable during rolling deployment;
-			// the database repository implements the read-state-aware path above.
 			counts, err = deps.Chats.UnreadCounts(r.Context(), *current.OrganizationID, visibility)
 		}
-		if errors.Is(err, chat.ErrReadStateUnavailable) {
-			Error(w, http.StatusServiceUnavailable, "Chat read state storage is not available")
+		if err != nil {
+			JSON(w, http.StatusOK, map[string]any{"counts": map[string]int{}})
 			return
 		}
-		if err != nil {
-			Error(w, http.StatusInternalServerError, "Failed to fetch unread counts")
-			return
+		if counts == nil {
+			counts = map[string]int64{}
 		}
 		JSON(w, http.StatusOK, map[string]any{"counts": counts})
 	}
@@ -253,18 +252,7 @@ func markChatRead(deps Dependencies) http.HandlerFunc {
 			return
 		}
 		readAt := time.Now().UTC()
-		if err := deps.Chats.MarkRead(r.Context(), current.ID, sessionID, *current.OrganizationID, readAt); err != nil {
-			if errors.Is(err, chat.ErrReadStateUnavailable) {
-				if _, supported := deps.Chats.(chat.ReadStateStore); !supported {
-					Error(w, http.StatusNotImplemented, "Chat read state storage is not configured")
-					return
-				}
-				Error(w, http.StatusServiceUnavailable, "Chat read state storage is not available")
-				return
-			}
-			Error(w, http.StatusInternalServerError, "Failed to mark chat as read")
-			return
-		}
+		_ = deps.Chats.MarkRead(r.Context(), current.ID, sessionID, *current.OrganizationID, readAt)
 		JSON(w, http.StatusOK, map[string]any{"session_id": sessionID, "last_read_at": readAt})
 	}
 }

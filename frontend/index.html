@@ -40,10 +40,20 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <!-- FontAwesome 6 Pro Icons (Aligned with workbench_v2.html, Multi-CDN Resilient) -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" onerror="this.onerror=null;this.href='https://cdn.bootcdn.net/ajax/libs/font-awesome/6.5.1/css/all.min.css';">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.5.1/css/all.min.css">
+  <script>
+    document.addEventListener('error', function(e) {
+      if (e.target && e.target.tagName === 'IMG') {
+        var alt = e.target.alt || 'CM';
+        var initial = (alt.split(' ').map(function(n){return n[0];}).join('') || 'CM').toUpperCase().slice(0, 2);
+        e.target.onerror = null;
+        e.target.src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80" viewBox="0 0 80 80"><rect width="80" height="80" rx="16" fill="%231E293B"/><text x="50%" y="54%" dominant-baseline="middle" text-anchor="middle" font-family="sans-serif" font-weight="bold" font-size="28" fill="%2394A3B8">' + initial + '</text></svg>';
+      }
+    }, true);
+  </script>
   <script src="https://cdn.tailwindcss.com"></script>
-  <!-- FontAwesome 6.5.1 Icons & SVG Runtime (100% 对齐 workbench_v2.html) -->
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/js/all.min.js" defer></script>
   <script>
     if (window.tailwind) {
       tailwind.config = {
@@ -82,11 +92,19 @@
     }
   </script>
   <title>ChatterMate · 多渠道跨境电商智能客服</title>
-  <meta name="shopify-api-key" content="<%= VITE_SHOPIFY_API_KEY %>" />
-  <!-- Shopify App Bridge - must be first script tag, no async/defer -->
-  <!-- Shopify Polaris Web Components -->
-  <script src="https://cdn.shopify.com/shopifycloud/app-bridge.js"></script>
-  <script src="https://cdn.shopify.com/shopifycloud/polaris.js"></script>
+  <script>
+    (function() {
+      var params = new URLSearchParams(window.location.search);
+      if (params.has('shop') || params.has('host')) {
+        var s1 = document.createElement('script');
+        s1.src = 'https://cdn.shopify.com/shopifycloud/app-bridge.js';
+        document.head.appendChild(s1);
+        var s2 = document.createElement('script');
+        s2.src = 'https://cdn.shopify.com/shopifycloud/polaris.js';
+        document.head.appendChild(s2);
+      }
+    })();
+  </script>
 </head>
 
 <body>

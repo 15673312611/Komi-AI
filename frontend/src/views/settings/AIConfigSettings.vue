@@ -38,25 +38,14 @@ const handleSetupComplete = () => {
   display: flex;
   height: 100%;
   position: relative;
+  overflow-y: auto;
 }
 
 .settings-section {
   flex: 1;
-  padding: var(--space-lg);
-}
-
-.page-header {
-  margin-bottom: var(--space-xl);
-}
-
-.page-header h1 {
-  font-size: var(--text-2xl);
-  color: var(--text-color);
-  margin-bottom: var(--space-sm);
-}
-
-.description {
-  color: var(--text-color);
-  opacity: 0.7;
+  padding: 28px 32px;
+  max-width: 1200px;
+  margin: 0 auto;
+  width: 100%;
 }
 </style> 

@@ -187,27 +187,27 @@ watch(() => props.shopifyError, (newValue) => {
 })
 
 const ticketReasons = [
-  "Issues without immediate resolution",
-  "No transfer agent available",
-  "Transfer requests not attended",
-  "Customer follow-ups",
-  "Complex issues requiring tracking"
+  "无法立即在线解答的复杂问题",
+  "当前无在线人工客服值班",
+  "转人工请求超时未被接待",
+  "需要多部门协同调查的售后事项",
+  "需要长期追踪解决进度的事务"
 ]
 
 const ticketTooltipContent = computed(() => {
-  return `Create tickets when:\n${ticketReasons.map(reason => `• ${reason}`).join('\n')}`
+  return `在以下情况自动创建工单：\n${ticketReasons.map(reason => `• ${reason}`).join('\n')}`
 })
 
 const shopifyReasons = [
-  "Display product information",
-  "Answer product-specific questions",
-  "Handle product recommendations",
-  "Check stock availability",
-  "Process product inquiries"
+  "实时展示商品详情与价格",
+  "精准解答商品规格与参数咨询",
+  "智能推荐关联搭配商品",
+  "实时查询库存可用状态",
+  "一键查询买家订单物流进度"
 ]
 
 const shopifyTooltipContent = computed(() => {
-  return `Enable Shopify features for:\n${shopifyReasons.map(reason => `• ${reason}`).join('\n')}`
+  return `开启 Shopify 联动支持：\n${shopifyReasons.map(reason => `• ${reason}`).join('\n')}`
 })
 
 const toggleCreateTicket = () => {
@@ -283,9 +283,9 @@ onMounted(async () => {
 <template>
   <div class="integrations-tab">
     <section class="detail-section">
-      <h3 class="section-title">Integrations</h3>
+      <h3 class="section-title">渠道与系统集成 (Integrations)</h3>
       <p class="section-description">
-        Let this agent take action in the tools you already use.
+        让当前智能体无缝对接企业现有业务系统与多渠道通讯工具，实现自动化跨系统协作。
       </p>
 
       <!-- Native AI Ticketing (per-agent toggle) -->
@@ -295,7 +295,7 @@ onMounted(async () => {
             <div class="integration-badge badge-lime">TK</div>
             <div class="integration-heading">
               <div class="integration-title">
-                AI Ticketing
+                AI 智能工单 (AI Ticketing)
                 <font-awesome-icon v-if="ticketingLocked" :icon="['fas', 'lock']" class="lock-icon" />
               </div>
               <div class="integration-desc">

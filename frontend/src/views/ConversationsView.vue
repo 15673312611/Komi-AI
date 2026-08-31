@@ -15,8 +15,8 @@ import SessionTransferModal from '@/components/conversations/SessionTransferModa
 import { chatService } from '@/services/chat'
 import { socketService } from '@/services/socket'
 import { userService } from '@/services/user'
-import { listTeammates, type Teammate } from '@/services/users'
 import { agentService } from '@/services/agent'
+import { aiService } from '@/services/ai'
 import type { FilterValues } from '@/components/conversations/ConversationFilters.vue'
 import type { Conversation, ChatDetail } from '@/types/chat'
 import { toast } from 'vue-sonner'
@@ -25,6 +25,8 @@ import { toast } from 'vue-sonner'
 const route = useRoute()
 const router = useRouter()
 const activeSessionId = ref<string | null>(typeof route.query.session === 'string' ? route.query.session : null)
+const showAiConfigWarning = ref(false)
+const dismissedAiBanner = ref(false)
 const conversations = ref<Conversation[]>([])
 const loading = ref(true)
 const loadingMoreConversations = ref(false)
@@ -230,10 +232,13 @@ const loadChatDetail = async (sessionId: string) => {
 }
 
 const handleSelectSession = (sessionId: string) => {
+  if (activeSessionId.value === sessionId && currentChatDetail.value?.session_id === sessionId) return
   activeSessionId.value = sessionId
   composerDraft.value = ''
   clearUnread(sessionId)
-  router.replace({ query: { ...route.query, session: sessionId } })
+  if (route.query.session !== sessionId) {
+    router.replace({ query: { ...route.query, session: sessionId } })
+  }
   void loadChatDetail(sessionId)
 }
 
@@ -272,6 +277,22 @@ const handleHandBackToAI = async () => {
     addToast('会话已交还给 AI 自动回复', 'success')
   } catch (err: any) {
     addToast(err?.response?.data?.detail || '交还 AI 失败，请稍后重试', 'error')
+  } finally {
+    transferLoading.value = false
+  }
+}
+
+const handleRouteToQueue = async () => {
+  if (!activeSessionId.value || transferLoading.value) return
+  transferLoading.value = true
+  try {
+    const updated = await chatService.routeToHuman(activeSessionId.value)
+    updateFromChat(updated)
+    showTransferModal.value = false
+    await loadConversations()
+    addToast('已转入人工排队队列', 'success')
+  } catch (err: any) {
+    addToast(err?.response?.data?.detail || '转入队列失败，请稍后重试', 'error')
   } finally {
     transferLoading.value = false
   }
@@ -414,13 +435,24 @@ const handleChatReply = (event: any) => {
   conversations.value.unshift(updated)
 }
 
-const joinUserRoom = () => {
+const joinOrgAndUserRooms = () => {
   const userId = userService.getUserId()
+  const orgId = userService.getOrganizationId() || (currentChatDetail.value as any)?.organization_id || localStorage.getItem('cm-org-id')
   if (userId) socketService.emit('join_room', { session_id: `user_${userId}` })
+  if (orgId) socketService.emit('join_room', { session_id: `org_chats_${orgId}` })
 }
 const handleSocketReconnect = () => {
-  joinUserRoom()
+  joinOrgAndUserRooms()
   void loadUnreadCounts()
+}
+
+const handleVisibilityChange = () => {
+  if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+    void loadConversations()
+    if (activeSessionId.value) {
+      void loadChatDetail(activeSessionId.value)
+    }
+  }
 }
 
 onMounted(async () => {
@@ -435,19 +467,41 @@ onMounted(async () => {
   socketService.on('chat_reply', handleChatReply)
   socketService.on('conversation_read', handleConversationRead)
   socketService.onReconnect(handleSocketReconnect)
-  joinUserRoom()
+  if (typeof window !== 'undefined') {
+    window.addEventListener('visibilitychange', handleVisibilityChange)
+    window.addEventListener('focus', handleVisibilityChange)
+  }
+  joinOrgAndUserRooms()
+  void checkAiConfigStatus()
 })
+
+const checkAiConfigStatus = async () => {
+  try {
+    const config = await aiService.getOrganizationConfig()
+    showAiConfigWarning.value = !config || !config.model_name
+  } catch {
+    showAiConfigWarning.value = true
+  }
+}
 onBeforeUnmount(() => {
   const userId = userService.getUserId()
+  const orgId = userService.getOrganizationId() || (currentChatDetail.value as any)?.organization_id || localStorage.getItem('cm-org-id')
   if (userId) socketService.emit('leave_room', { session_id: `user_${userId}` })
+  if (orgId) socketService.emit('leave_room', { session_id: `org_chats_${orgId}` })
   socketService.off('room_event', handleRoomEvent)
   socketService.off('chat_reply', handleChatReply)
   socketService.off('conversation_read', handleConversationRead)
   socketService.offReconnect(handleSocketReconnect)
+  if (typeof window !== 'undefined') {
+    window.removeEventListener('visibilitychange', handleVisibilityChange)
+    window.removeEventListener('focus', handleVisibilityChange)
+  }
 })
 watch(() => route.query.session, value => {
   const id = typeof value === 'string' ? value : null
-  if (id && id !== activeSessionId.value) { activeSessionId.value = id; void loadChatDetail(id) }
+  if (id && id !== activeSessionId.value) {
+    activeSessionId.value = id
+  }
 })
 watch(activeSessionId, () => {
   // Drafts and action dialogs always belong to exactly one thread. Keeping
@@ -463,6 +517,32 @@ watch(activeSessionId, () => {
 <template>
   <DashboardLayout :hide-header="true">
     <div class="h-full w-full bg-[#080B11] text-slate-100 antialiased overflow-hidden flex select-none font-sans relative">
+      <!-- AI 状态极简诊断提示横幅 -->
+      <div
+        v-if="showAiConfigWarning && !dismissedAiBanner"
+        class="absolute top-3 left-1/2 -translate-x-1/2 z-30 flex items-center gap-3 px-4 py-2 rounded-xl bg-amber-950/90 border border-amber-500/30 text-amber-200 text-xs shadow-2xl backdrop-blur-md transition-all animate-in fade-in slide-in-from-top-2 duration-300"
+      >
+        <span class="flex items-center gap-2">
+          <i class="fa-solid fa-triangle-exclamation text-amber-400 text-sm"></i>
+          <span>当前租户尚未配置大模型 API 密钥，AI 智能回复处于人工直连模式</span>
+        </span>
+        <button
+          type="button"
+          @click="router.push('/settings/ai-config')"
+          class="px-2.5 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 font-semibold border border-amber-500/40 transition-colors"
+        >
+          立即配置
+        </button>
+        <button
+          type="button"
+          @click="dismissedAiBanner = true"
+          class="text-slate-400 hover:text-slate-200 p-1 ml-1"
+          title="关闭提示"
+        >
+          <i class="fa-solid fa-xmark text-xs"></i>
+        </button>
+      </div>
+
       <!-- 1. 会话导航栏：3+2 零横向滚动状态矩阵 (320px) -->
       <ConversationsList
         :active-session-id="activeSessionId"
@@ -531,6 +611,7 @@ watch(activeSessionId, () => {
         :customer-name="currentChatDetail?.customer?.full_name"
         @close="showTransferModal = false"
         @transfer="handleTransfer"
+        @route-to-queue="handleRouteToQueue"
         @hand-back-to-ai="handleHandBackToAI"
       />
 

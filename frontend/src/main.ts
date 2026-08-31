@@ -16,6 +16,7 @@ limitations under the License.
 
 import './assets/styles/main.css'
 import '@/assets/base.css'
+import '@fortawesome/fontawesome-free/css/all.min.css'
 
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
@@ -28,14 +29,15 @@ import 'floating-vue/dist/style.css'
 import FloatingVue from 'floating-vue'
 
 /* Font Awesome imports */
-import { library } from '@fortawesome/fontawesome-svg-core'
+import { library, dom } from '@fortawesome/fontawesome-svg-core'
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 import { fas } from '@fortawesome/free-solid-svg-icons'
 import { far } from '@fortawesome/free-regular-svg-icons'
 import { fab } from '@fortawesome/free-brands-svg-icons'
 
-/* Add icons to the library */
+/* Add icons to the library and watch DOM */
 library.add(fas, far, fab)
+dom.watch()
 
 const savedTheme = localStorage.getItem('cm-theme') ?? 'dark'
 const resolvedTheme = savedTheme === 'system'

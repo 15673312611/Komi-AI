@@ -32,6 +32,7 @@ import (
 	"github.com/chattermate/chattermate/backend-go/internal/realtime"
 	"github.com/chattermate/chattermate/backend-go/internal/session"
 	"github.com/chattermate/chattermate/backend-go/internal/shopify"
+	"github.com/chattermate/chattermate/backend-go/internal/store"
 	"github.com/chattermate/chattermate/backend-go/internal/ticketdb"
 	"github.com/chattermate/chattermate/backend-go/internal/ticketing"
 	"github.com/chattermate/chattermate/backend-go/internal/user"
@@ -63,6 +64,7 @@ type Dependencies struct {
 	CRM             *crm.Service
 	Jira            *jira.Service
 	Shopify         *shopify.Service
+	Stores          store.Service
 	Sessions        session.Store
 	Chats           chat.Store
 	Channels        *channel.Repository
@@ -134,6 +136,9 @@ func NewRouter(deps Dependencies) http.Handler {
 		if deps.Shopify == nil && deps.DB != nil {
 			deps.Shopify = shopify.NewService(shopify.NewRepository(deps.DB), deps.Config)
 		}
+		if deps.Stores == nil && deps.DB != nil {
+			deps.Stores = store.NewRepository(deps.DB)
+		}
 		if deps.Notifications == nil && deps.DB != nil {
 			deps.Notifications = notification.NewRepository(deps.DB)
 		}
@@ -178,6 +183,7 @@ func NewRouter(deps Dependencies) http.Handler {
 		registerCRMRoutes(api, deps)
 		registerJiraRoutes(api, deps)
 		registerShopifyRoutes(api, deps)
+		registerStoreRoutes(api, deps)
 		registerNotificationRoutes(api, deps)
 		registerWorkflowRoutes(api, deps)
 		registerMCPToolRoutes(api, deps)

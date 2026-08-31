@@ -993,7 +993,7 @@ func (r *Repository) CreateQueue(ctx context.Context, input QueueCreateInput) (*
 	}
 	metadata, _ := json.Marshal(input.Metadata)
 	var itemID int64
-	if err := r.pool.QueryRow(ctx, `INSERT INTO knowledge_queue (organization_id,agent_id,user_id,source_type,source,status,error,queue_metadata,priority,processing_stage,progress_percentage,total_items,processed_items,crawled_urls) VALUES ($1,$2,$3,$4,$5,'pending',NULL,$6::jsonb,$7,'not_started',0,0,0,'[]'::jsonb) RETURNING id`, input.OrganizationID, input.AgentID, input.UserID, strings.ToLower(input.SourceType), input.Source, string(metadata), input.Priority).Scan(&itemID); err != nil {
+	if err := r.pool.QueryRow(ctx, `INSERT INTO knowledge_queue (organization_id,agent_id,user_id,source_type,source,status,error,queue_metadata,priority,processing_stage,progress_percentage,total_items,processed_items,crawled_urls) VALUES ($1,$2,$3,$4,$5,'pending',NULL,$6::json,$7,'not_started',0,0,0,'[]'::json) RETURNING id`, input.OrganizationID, input.AgentID, input.UserID, strings.ToLower(input.SourceType), input.Source, string(metadata), input.Priority).Scan(&itemID); err != nil {
 		return nil, err
 	}
 	return r.GetQueue(ctx, itemID)
@@ -1171,7 +1171,7 @@ func (r *Repository) UpdateQueueProgress(ctx context.Context, id int64, stage st
 	if progress > 100 {
 		progress = 100
 	}
-	_, err := r.pool.Exec(ctx, `UPDATE knowledge_queue SET processing_stage=COALESCE(NULLIF($2,''),processing_stage),progress_percentage=$3,total_items=$4,processed_items=$5,crawled_urls=CASE WHEN $6='' THEN crawled_urls WHEN crawled_urls @> to_jsonb(ARRAY[$6]::text[]) THEN crawled_urls ELSE COALESCE(crawled_urls,'[]'::jsonb) || to_jsonb(ARRAY[$6]::text[]) END,updated_at=NOW() WHERE id=$1`, id, stage, progress, total, processed, crawledURL)
+	_, err := r.pool.Exec(ctx, `UPDATE knowledge_queue SET processing_stage=COALESCE(NULLIF($2,''),processing_stage),progress_percentage=$3,total_items=$4,processed_items=$5,crawled_urls=CASE WHEN $6='' THEN crawled_urls WHEN COALESCE(crawled_urls::jsonb,'[]'::jsonb) @> to_jsonb(ARRAY[$6]::text[]) THEN crawled_urls ELSE (COALESCE(crawled_urls::jsonb,'[]'::jsonb) || to_jsonb(ARRAY[$6]::text[]))::json END,updated_at=NOW() WHERE id=$1`, id, stage, progress, total, processed, crawledURL)
 	return err
 }
 
@@ -1179,7 +1179,7 @@ func (r *Repository) SetQueueStatus(ctx context.Context, id int64, status string
 	if err := r.ready(); err != nil {
 		return err
 	}
-	_, err := r.pool.Exec(ctx, `UPDATE knowledge_queue SET status=$2,error=$3,processing_stage=CASE WHEN $2='completed' THEN 'completed' ELSE processing_stage END,progress_percentage=CASE WHEN $2='completed' THEN 100 ELSE progress_percentage END,updated_at=NOW() WHERE id=$1`, id, strings.ToLower(status), errText)
+	_, err := r.pool.Exec(ctx, `UPDATE knowledge_queue SET status=$2::text,error=$3::text,processing_stage=CASE WHEN $2::text='completed' THEN 'completed' WHEN $2::text='failed' THEN 'failed' ELSE processing_stage END,progress_percentage=CASE WHEN $2::text='completed' THEN 100 ELSE progress_percentage END,updated_at=NOW() WHERE id=$1`, id, strings.ToLower(status), errText)
 	return err
 }
 

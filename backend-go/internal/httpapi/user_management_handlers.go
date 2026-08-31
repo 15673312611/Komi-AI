@@ -159,6 +159,8 @@ func registerUserManagementRoutes(r chi.Router, deps Dependencies) {
 	r.With(requireAllPermissions(deps, "manage_users")).Delete("/groups/{group_id}", deleteGroup(deps))
 	r.With(requireAllPermissions(deps, "manage_users")).Post("/groups/{group_id}/users/{user_id}", addGroupUser(deps))
 	r.With(requireAllPermissions(deps, "manage_users")).Delete("/groups/{group_id}/users/{user_id}", removeGroupUser(deps))
+	// Alias for frontend compatibility with /user-groups/{group_id}
+	r.With(requireAllPermissions(deps, "manage_users")).Get("/user-groups/{group_id}", getGroup(deps))
 }
 
 func userManagementStore(deps Dependencies) (user.UserManagementStore, bool) {

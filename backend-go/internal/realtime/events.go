@@ -36,6 +36,9 @@ func (s *Server) EmitAgentChatReply(sessionID uuid.UUID, userID *uuid.UUID, payl
 		return
 	}
 	_ = s.agentNS.To(socket.Room(sessionID.String())).Emit("chat_reply", payload)
+	if orgID, ok := payload["organization_id"].(string); ok && orgID != "" {
+		_ = s.agentNS.To(socket.Room("org_chats_" + orgID)).Emit("chat_reply", payload)
+	}
 	if userID != nil && *userID != uuid.Nil {
 		_ = s.agentNS.To(socket.Room("user_"+userID.String())).Emit("chat_reply", payload)
 	}
@@ -104,6 +107,9 @@ func (s *Server) BroadcastConversationUpdated(ctx context.Context, organizationI
 			recipients[userID] = struct{}{}
 		}
 	}
+	_ = s.agentNS.To(socket.Room("org_chats_"+organizationID.String())).Emit("room_event", map[string]any{
+		"type": "conversation_updated", "session_id": sessionID.String(), "chat": detail,
+	})
 	for userID := range recipients {
 		if _, ok := visible[userID]; ok {
 			_ = s.agentNS.To(socket.Room("user_"+userID.String())).Emit("room_event", map[string]any{

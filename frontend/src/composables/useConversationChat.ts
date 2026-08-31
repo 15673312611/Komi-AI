@@ -91,7 +91,7 @@ export function useConversationChat(
     }
   })
   const canSendMessage = computed(() =>
-    !isChatClosed.value && !showTakeoverButton.value && !showTakenOverStatus.value && !handledByAI.value
+    !showTakenOverStatus.value
   )
 
   const scrollToBottom = async () => {
@@ -99,10 +99,11 @@ export function useConversationChat(
     if (messagesContainer.value) messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight
   }
 
-  watch(() => chat.value.messages, (messages) => {
+  watch(() => chat.value.messages?.length, () => {
     void scrollToBottom()
-    if (messages?.[messages.length - 1]?.message_type === 'user') templateCanReopen.value = false
-  }, { deep: true })
+    const msgs = chat.value.messages
+    if (msgs && msgs[msgs.length - 1]?.message_type === 'user') templateCanReopen.value = false
+  })
   watch(() => chat.value.session_id, () => { templateCanReopen.value = false })
 
   const clearTemplateSuggestion = () => { templateCanReopen.value = false }
@@ -204,6 +205,14 @@ export function useConversationChat(
     const clientMessageId = newClientMessageId()
     const timestamp = new Date().toISOString()
     const messageType = isPrivateNote ? 'private_note' : 'agent'
+
+    // If chat was closed or not assigned to current user, auto-reopen and assign
+    const wasClosed = isChatClosed.value
+    if (wasClosed || chat.value.user_id !== currentUserId) {
+      chat.value.status = 'open'
+      chat.value.user_id = currentUserId
+    }
+
     const local = optimisticMessage(messageText, messageType, clientMessageId, timestamp, files, {
       ...(isPrivateNote ? { is_private: true } : {}),
       ...(mentions.length ? {
@@ -225,8 +234,28 @@ export function useConversationChat(
     })
     if (isPrivateNote) {
       toast.success('内部便签已保存', { description: '仅团队成员可见，客户不会收到此内容', duration: 3000 })
+    } else if (wasClosed) {
+      toast.success('已自动重新开启会话', { description: '已恢复为您的人工接待状态', duration: 3000 })
+      emit('refresh')
     }
     return true
+  }
+
+  const reopenChat = async () => {
+    const context = captureChatContext()
+    try {
+      isLoading.value = true
+      const updated = await chatService.takeoverChat(context.sessionId)
+      if (!context.isCurrent()) return
+      publishChat(updated, true)
+      toast.success('会话已重新开启', { description: '已恢复为您的人工接待会话', duration: 3000 })
+      emit('refresh')
+    } catch (err: any) {
+      if (!context.isCurrent()) return
+      toast.error('重新开启失败', { description: err.response?.data?.detail || '请稍后重试', duration: 4500 })
+    } finally {
+      if (context.isCurrent()) isLoading.value = false
+    }
   }
 
   const clearPendingClose = () => {
@@ -481,8 +510,23 @@ export function useConversationChat(
       : -1
   }
 
+  const isAiTyping = ref(false)
+  const typingMessage = ref('AI 智能体正在检索知识库并组织回复…')
+
+  const handleBotTyping = (data: any) => {
+    if (!data?.session_id || data.session_id === chat.value.session_id) {
+      isAiTyping.value = Boolean(data?.is_typing ?? true)
+      if (data?.status_text) {
+        typingMessage.value = String(data.status_text)
+      } else {
+        typingMessage.value = 'AI 智能体正在检索知识库并组织回复…'
+      }
+    }
+  }
+
   const handleChatReply = (data: SocketChatReply) => {
     if (!data?.session_id || data.session_id !== chat.value.session_id) return
+    isAiTyping.value = false
     if (!rememberSocketMessage(socketMessageKey(data))) return
     const incoming = socketMessage(data)
     const messages = [...chat.value.messages]
@@ -519,11 +563,13 @@ export function useConversationChat(
     socketService.connect()
     socketService.on('error', handleDeliveryError)
     socketService.on('chat_reply', handleChatReply)
+    socketService.on('bot_typing', handleBotTyping)
     joinChatRoom(chat.value.session_id)
   }
   const cleanupSocketListeners = () => {
     socketService.off('error', handleDeliveryError)
     socketService.off('chat_reply', handleChatReply)
+    socketService.off('bot_typing', handleBotTyping)
   }
   const handleSocketReconnect = () => { cleanupSocketListeners(); setupSocketListeners() }
 
@@ -537,9 +583,15 @@ export function useConversationChat(
 
   watch(() => chat.value.session_id, sessionId => joinChatRoom(sessionId))
 
-  const formattedMessages = computed(() => chat.value.messages.map(message => ({
+  const safeTimeAgo = (dateStr?: string) => {
+    if (!dateStr) return ''
+    const d = new Date(dateStr)
+    return isNaN(d.getTime()) ? '' : formatDistanceToNow(d, { addSuffix: true })
+  }
+
+  const formattedMessages = computed(() => (chat.value?.messages || []).map(message => ({
     ...message,
-    timeAgo: formatDistanceToNow(new Date(message.created_at), { addSuffix: true }),
+    timeAgo: safeTimeAgo(message.created_at),
   })))
 
   const sendPrivateNote = (
@@ -573,7 +625,10 @@ export function useConversationChat(
     replaceChatFromProps,
     handledByAI,
     endChat,
+    reopenChat,
     templateCanReopen,
     clearTemplateSuggestion,
+    isAiTyping,
+    typingMessage,
   }
 }

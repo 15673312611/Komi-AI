@@ -6,12 +6,25 @@
     <title>ChatterMate AI · 多渠道跨境电商智能客服工作台 (旗舰尊享版)</title>
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- FontAwesome 6 Pro Icons -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <!-- FontAwesome 6 Pro Icons (Multi-CDN Resilient) -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" onerror="this.onerror=null;this.href='https://cdn.bootcdn.net/ajax/libs/font-awesome/6.5.1/css/all.min.css';">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.5.1/css/all.min.css">
     <!-- Google Fonts: Plus Jakarta Sans & JetBrains Mono -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <script>
+        // Global Image Error Handler to prevent broken image placeholder boxes
+        document.addEventListener('error', function(e) {
+            if (e.target && e.target.tagName === 'IMG') {
+                const alt = e.target.alt || 'CM';
+                const initial = (alt.split(' ').map(n=>n[0]).join('') || 'CM').toUpperCase().slice(0, 2);
+                e.target.onerror = null;
+                e.target.src = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80" viewBox="0 0 80 80"><rect width="80" height="80" rx="16" fill="%231E293B"/><text x="50%" y="54%" dominant-baseline="middle" text-anchor="middle" font-family="sans-serif" font-weight="bold" font-size="28" fill="%2394A3B8">${initial}</text></svg>`;
+            }
+        }, true);
+    </script>
     
     <script>
         tailwind.config = {
@@ -186,7 +199,9 @@
                 <!-- 会话中心 (Active) -->
                 <button class="relative w-10 h-10 rounded-xl bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 border-t-emerald-400/50 flex items-center justify-center transition-all group shadow-glow-emerald" title="会话中心 (Ctrl+1)">
                     <i class="fa-solid fa-message text-base"></i>
+                    <!-- 左侧激活发光指示条 -->
                     <span class="absolute -left-4 w-1.5 h-6 bg-emerald-400 rounded-r-full shadow-glow-emerald"></span>
+                    <!-- 未读角标 -->
                     <span class="absolute -top-1 -right-1 px-1.5 py-0.2 bg-rose-500 text-white font-bold text-[10px] rounded-full border-2 border-obsidian-900 pulse-subtle">12</span>
                 </button>
 
@@ -382,6 +397,34 @@
                     </span>
                     <span class="text-[10px] font-mono px-1 rounded bg-white/5 text-slate-400">3</span>
                 </button>
+            </div>
+        </div>
+
+        <!-- Intercom 风格全景视图折叠树面板 -->
+        <div id="inboxFolderDrawer" class="hidden p-2 border-b border-obsidian-border bg-obsidian-800/95 space-y-1 text-xs animate-in fade-in duration-200 shadow-lg">
+            <div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-2 py-1 flex items-center justify-between">
+                <span>收件箱视图 (Inbox Views)</span>
+                <span class="text-emerald-400">SLA 正常</span>
+            </div>
+            <div onclick="setFilterTab('all')" class="flex items-center justify-between p-2 rounded-lg hover:bg-white/5 cursor-pointer text-slate-200">
+                <span class="flex items-center gap-2"><i class="fa-solid fa-inbox text-emerald-400"></i> 全部实时会话</span>
+                <span class="font-mono text-slate-400 font-bold">28</span>
+            </div>
+            <div onclick="setFilterTab('ai')" class="flex items-center justify-between p-2 rounded-lg hover:bg-white/5 cursor-pointer text-slate-200">
+                <span class="flex items-center gap-2"><i class="fa-solid fa-robot text-emerald-400"></i> 🤖 AI 智能应答中</span>
+                <span class="font-mono text-emerald-400 font-bold">14</span>
+            </div>
+            <div onclick="setFilterTab('mine')" class="flex items-center justify-between p-2 rounded-lg hover:bg-white/5 cursor-pointer text-slate-200">
+                <span class="flex items-center gap-2"><i class="fa-solid fa-user-check text-blue-400"></i> 👤 分配给我的接待</span>
+                <span class="font-mono text-blue-400 font-bold">6</span>
+            </div>
+            <div onclick="setFilterTab('queue')" class="flex items-center justify-between p-2 rounded-lg hover:bg-white/5 cursor-pointer text-slate-200">
+                <span class="flex items-center gap-2"><i class="fa-solid fa-clock text-amber-400"></i> ⏳ 排队等待人工接入</span>
+                <span class="font-mono text-amber-400 font-bold pulse-subtle">5</span>
+            </div>
+            <div onclick="setFilterTab('closed')" class="flex items-center justify-between p-2 rounded-lg hover:bg-white/5 cursor-pointer text-slate-200">
+                <span class="flex items-center gap-2"><i class="fa-solid fa-circle-check text-slate-400"></i> 🔒 已解决/历史归档</span>
+                <span class="font-mono text-slate-500">3</span>
             </div>
         </div>
 
@@ -1001,7 +1044,7 @@
                     <textarea id="transferNoteInput" rows="2" class="w-full bg-obsidian-950 text-slate-200 rounded-lg p-2 border border-obsidian-border" placeholder="如: 客户要求退货运费补贴，已口头承诺赠送 15% 优惠券..."></textarea>
                 </div>
             </div>
-            <div class="p-3 border-t border-obsidian-border bg-obsidian-850 flex items-center justify-justify gap-2">
+            <div class="p-3 border-t border-obsidian-border bg-obsidian-850 flex items-center justify-end gap-2">
                 <button onclick="closeModal('transferModal')" class="px-3 py-1.5 text-slate-400 text-xs">取消</button>
                 <button onclick="confirmTransfer()" class="px-4 py-1.5 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-lg text-xs shadow-glow-blue">
                     确认转交
@@ -1013,6 +1056,9 @@
     <!-- 全局 Toast 提示容器 -->
     <div id="toastContainer" class="fixed top-4 right-4 z-50 flex flex-col gap-2 pointer-events-none"></div>
 
+    <!-- ========================================================================= -->
+    <!-- 完整业务数据与交互脚本 (Vanilla JavaScript - 100% 丰富完整) -->
+    <!-- ========================================================================= -->
     <script>
         const CONVERSATIONS_DATA = [
             {
@@ -1179,7 +1225,286 @@
                     "💰 发起全额原路退款并致歉",
                     "📦 发送预付退货运费标签 (Prepaid Label)"
                 ]
+            },
+            {
+                id: "conv-3",
+                customerName: "Elena Rostova",
+                avatar: "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=120&auto=format&fit=crop&q=80",
+                email: "elena.r@tiktok.com",
+                country: "🇸🇬 新加坡 (SG)",
+                timezone: "🇸🇬 新加坡时间 02:28 AM",
+                channel: "tiktok",
+                channelName: "TikTok Shop",
+                channelIcon: "fa-brands fa-tiktok",
+                channelColor: "text-cyan-400 bg-cyan-500/20",
+                storeId: "tiktok_sea",
+                storeName: "AURA 美妆东南亚",
+                storePlatform: "TikTok",
+                vipLevel: "新晋客户",
+                ltv: "$68.00",
+                orderCount: 1,
+                status: "mine",
+                statusText: "人工接管 · Alex",
+                unreadCount: 0,
+                lastTime: "13:50",
+                lastMessage: "Is this peptide glow serum safe for sensitive acne-prone skin?",
+                tags: [
+                    { name: "💄 美妆护肤", color: "pink" },
+                    { name: "💡 售前成分咨询", color: "emerald" }
+                ],
+                order: {
+                    number: "#TK-SEA-3391",
+                    date: "2026-08-24 13:40",
+                    total: "$45.00",
+                    payStatus: "已支付",
+                    fulfillStatus: "准备打包",
+                    carrier: "J&T Express SEA",
+                    tracking: "JT-99128472SG",
+                    products: [
+                        {
+                            title: "HydraGlow Peptide Recovery Serum 50ml",
+                            sku: "AG-SERUM-50",
+                            specs: "50ml 瓶装",
+                            price: "$45.00",
+                            qty: 1,
+                            image: "https://images.unsplash.com/photo-1620916566398-39f1143ab7be?w=100&auto=format&fit=crop&q=80"
+                        }
+                    ]
+                },
+                history: [],
+                messages: [
+                    {
+                        type: "customer",
+                        time: "13:45",
+                        text: "Hi! I just saw your live stream on TikTok! Is this peptide glow serum safe for sensitive acne-prone skin? Does it contain alcohol or artificial fragrances?"
+                    },
+                    {
+                        type: "agent",
+                        author: "Alex Chen (在线)",
+                        time: "13:48",
+                        text: "Hi Elena! 🌿 Yes, absolutely! Our HydraGlow Peptide Serum is 100% alcohol-free, fragrance-free, and non-comedogenic. It is dermatologically tested on sensitive skin with Centella Asiatica to soothe acne irritation."
+                    },
+                    {
+                        type: "customer",
+                        time: "13:50",
+                        text: "That is perfect! Can you send me the link for the 3-step bundle? I want to get the cleanser too!"
+                    }
+                ],
+                aiSuggestions: [
+                    "🛍️ 推送 3 件套美妆礼盒并附赠 $5 优惠券",
+                    "🧴 推荐搭配温和氨基酸洁面乳",
+                    "🚚 告知东南亚 TikTok 专线 48h 极速达"
+                ]
+            },
+            {
+                id: "conv-4",
+                customerName: "Maximilian Weber",
+                avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=120&auto=format&fit=crop&q=80",
+                email: "m.weber@berlin-design.de",
+                country: "🇩🇪 德国 (DE)",
+                timezone: "🇩🇪 柏林时间 20:28 PM",
+                channel: "telegram",
+                channelName: "Telegram",
+                channelIcon: "fa-brands fa-telegram",
+                channelColor: "text-sky-400 bg-sky-500/20",
+                storeId: "shopify_us",
+                storeName: "SHE-GLOW 独立站",
+                storePlatform: "Shopify",
+                vipLevel: "B2B 批发客户",
+                ltv: "$4,500.00",
+                orderCount: 12,
+                status: "mine",
+                statusText: "人工接管 · Sarah",
+                unreadCount: 0,
+                lastTime: "12:10",
+                lastMessage: "We want to place an order of 500 units for our boutique store in Munich.",
+                tags: [
+                    { name: "💎 B2B大额批发", color: "purple" },
+                    { name: "🇪🇺 欧洲关税VAT", color: "blue" }
+                ],
+                order: {
+                    number: "#B2B-EU-108",
+                    date: "2026-08-20",
+                    total: "$3,200.00",
+                    payStatus: "电汇已确认",
+                    fulfillStatus: "海外仓整托备货",
+                    carrier: "Kuehne+Nagel",
+                    tracking: "KN-99018471DE",
+                    products: [
+                        {
+                            title: "Oversized Cashmere Blend Coat",
+                            sku: "CT-CASH-OVR",
+                            specs: "Camel / L 码",
+                            price: "$320.00",
+                            qty: 10,
+                            image: "https://images.unsplash.com/photo-1539533018447-63fcce667883?w=100&auto=format&fit=crop&q=80"
+                        }
+                    ]
+                },
+                history: [],
+                messages: [
+                    {
+                        type: "customer",
+                        time: "12:05",
+                        text: "Good day. We want to place an order of 500 units for our boutique store in Munich. Can we get the EU VAT reverse-charge invoice and DDP customs terms?"
+                    },
+                    {
+                        type: "agent",
+                        author: "Sarah Jenkins",
+                        time: "12:08",
+                        text: "Guten Tag Maximilian! Absolutely. We support full EU DDP (Delivered Duty Paid) with valid VAT reverse-charge. I am generating the custom B2B quotation sheet for you right now."
+                    }
+                ],
+                aiSuggestions: [
+                    "📑 生成 PDF 格式 B2B 批发报价单 (含 DDP 德国关税)",
+                    "✉️ 发送海外仓看样样品申请流程",
+                    "👥 安排专属大客户经理 1对1 电话沟通"
+                ]
+            },
+            {
+                id: "conv-5",
+                customerName: "Chloe Dupont",
+                avatar: "https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=120&auto=format&fit=crop&q=80",
+                email: "chloe.dupont@paris.fr",
+                country: "🇫🇷 法国 (FR)",
+                timezone: "🇫🇷 巴黎时间 20:28 PM",
+                channel: "instagram",
+                channelName: "Instagram DM",
+                channelIcon: "fa-brands fa-instagram",
+                channelColor: "text-pink-400 bg-pink-500/20",
+                storeId: "shopify_us",
+                storeName: "SHE-GLOW 独立站",
+                storePlatform: "Shopify",
+                vipLevel: "普通客户",
+                ltv: "$120.00",
+                orderCount: 1,
+                status: "ai",
+                statusText: "AI 处理中",
+                unreadCount: 0,
+                lastTime: "11:40",
+                lastMessage: "Merci! Le code promo VIP a bien fonctionné.",
+                tags: [
+                    { name: "🎁 促销优惠", color: "amber" }
+                ],
+                order: {
+                    number: "#FR-2918",
+                    date: "2026-08-24 11:38",
+                    total: "$88.00",
+                    payStatus: "已支付",
+                    fulfillStatus: "已出库",
+                    carrier: "Colissimo FR",
+                    tracking: "CL-88192019FR",
+                    products: [
+                        {
+                            title: "Vintage Denim High-Rise Jacket",
+                            sku: "JK-DENIM-01",
+                            specs: "Light Wash / S 码",
+                            price: "$88.00",
+                            qty: 1,
+                            image: "https://images.unsplash.com/photo-1544441893-675973e31985?w=100&auto=format&fit=crop&q=80"
+                        }
+                    ]
+                },
+                history: [],
+                messages: [
+                    {
+                        type: "customer",
+                        time: "11:35",
+                        text: "Bonjour! Est-ce que le code SUMMER15 fonctionne pour la France?"
+                    },
+                    {
+                        type: "ai",
+                        time: "11:36",
+                        duration: "0.5s",
+                        intent: "优惠券多语言咨询",
+                        text: "Bonjour Chloé! 🌸 Oui, le code promo SUMMER15 est valable pour toute commande expédiée en France! Vous bénéficiez de -15% et de la livraison gratuite dès 60€ d'achat."
+                    },
+                    {
+                        type: "customer",
+                        time: "11:40",
+                        text: "Merci! Le code promo VIP a bien fonctionné."
+                    }
+                ],
+                aiSuggestions: [
+                    "🛍️ 推荐搭配法式复古牛仔短裙",
+                    "📦 发送 Colissimo 法国本土清关时效说明"
+                ]
+            },
+            {
+                id: "conv-6",
+                customerName: "David Tanaka",
+                avatar: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=120&auto=format&fit=crop&q=80",
+                email: "tanaka.d@tokyo.jp",
+                country: "🇯🇵 日本 (JP)",
+                timezone: "🇯🇵 东京时间 03:28 AM",
+                channel: "livechat",
+                channelName: "LiveChat 网页在线",
+                channelIcon: "fa-solid fa-comments",
+                channelColor: "text-teal-400 bg-teal-500/20",
+                storeId: "shopify_us",
+                storeName: "SHE-GLOW 独立站",
+                storePlatform: "Shopify",
+                vipLevel: "银牌会员",
+                ltv: "$320.00",
+                orderCount: 2,
+                status: "closed",
+                statusText: "已解决关闭",
+                unreadCount: 0,
+                lastTime: "昨天",
+                lastMessage: "ありがとうございます！注文が完了しました。",
+                tags: [
+                    { name: "🔒 咨询已完结", color: "slate" }
+                ],
+                order: {
+                    number: "#JP-10928",
+                    date: "2026-08-23",
+                    total: "$158.00",
+                    payStatus: "已支付",
+                    fulfillStatus: "已签收",
+                    carrier: "Sagawa Express",
+                    tracking: "SG-99482109JP",
+                    products: [
+                        {
+                            title: "Minimalist Linen Long Cardigan",
+                            sku: "CD-LIN-BEI",
+                            specs: "Beige / M 码",
+                            price: "$158.00",
+                            qty: 1,
+                            image: "https://images.unsplash.com/photo-1434389677669-e08b4cac3105?w=100&auto=format&fit=crop&q=80"
+                        }
+                    ]
+                },
+                history: [],
+                messages: [
+                    {
+                        type: "customer",
+                        time: "08-23 15:10",
+                        text: "東京への配送料はいくらですか？"
+                    },
+                    {
+                        type: "ai",
+                        time: "08-23 15:11",
+                        duration: "0.4s",
+                        intent: "运费与关税政策",
+                        text: "Tanaka様、こんにちは！🌸 日本（東京）への送料は一律$9.99です。$80以上のお買い上げで【送料無料】となります！佐川急便で3〜5日でお届けいたします。"
+                    },
+                    {
+                        type: "customer",
+                        time: "08-23 15:15",
+                        text: "ありがとうございます！注文が完了しました。"
+                    }
+                ],
+                aiSuggestions: [
+                    "🙏 感谢购买并提示发货后自动邮件通知"
+                ]
             }
+        ];
+
+        const QUICK_REPLIES_DATA = [
+            { category: "物流咨询", title: "解释国际空运时效与清关正常", text: "Hi {{name}}, your order has been dispatched via express air freight and has safely cleared customs. The final local courier will complete delivery within 24-48 hours. Thank you for your patience!" },
+            { category: "售后退款", title: "同意免退货极速退款", text: "Dear {{name}}, we sincerely apologize for the inconvenience! We have processed a 100% full refund to your original payment method. The funds will reflect in your account within 1-3 business days without needing to return the item." },
+            { category: "大促优惠", title: "发放 15% VIP 专属关怀优惠券", text: "As a token of our appreciation for being our valued VIP customer, here is an exclusive 15% discount code for your next order: [VIPCARE15]. Valid for 30 days on all items!" },
+            { category: "尺码咨询", title: "欧美标准尺码对比说明", text: "Our garments follow standard US sizing. For a relaxed or oversized fit, we recommend selecting one size up from your usual EU/Asian size. Please check our detailed size chart here!" }
         ];
 
         let currentConvId = "conv-1";
@@ -1192,6 +1517,7 @@
         document.addEventListener("DOMContentLoaded", () => {
             renderConversationList();
             renderActiveConversation(currentConvId);
+            renderQuickReplies(QUICK_REPLIES_DATA);
         });
 
         function renderConversationList() {
@@ -1210,13 +1536,29 @@
                     const matchName = conv.customerName.toLowerCase().includes(q);
                     const matchEmail = conv.email.toLowerCase().includes(q);
                     const matchMsg = conv.lastMessage.toLowerCase().includes(q);
-                    if (!matchName && !matchEmail && !matchMsg) return false;
+                    const matchOrder = conv.order?.number.toLowerCase().includes(q);
+                    if (!matchName && !matchEmail && !matchMsg && !matchOrder) return false;
                 }
+
                 return true;
             });
 
+            if (filtered.length === 0) {
+                container.innerHTML = `
+                    <div class="flex flex-col items-center justify-center py-16 text-center text-slate-500">
+                        <div class="w-12 h-12 rounded-2xl bg-white/5 flex items-center justify-center text-slate-400 mb-3 text-lg">
+                            <i class="fa-regular fa-folder-open"></i>
+                        </div>
+                        <p class="text-xs font-semibold text-slate-400">没有匹配的会话</p>
+                        <p class="text-[11px] text-slate-600 mt-1">试试清除筛选或更改搜索词</p>
+                    </div>
+                `;
+                return;
+            }
+
             container.innerHTML = filtered.map(conv => {
                 const isActive = conv.id === currentConvId;
+                
                 let statusBadgeHtml = '';
                 if (conv.status === 'ai') {
                     statusBadgeHtml = `<span class="inline-flex items-center gap-1 px-1.5 py-0.2 text-[10px] font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 rounded-full"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400 pulse-subtle"></span>AI 处理中</span>`;
@@ -1232,7 +1574,9 @@
                     <div 
                         onclick="selectConversation('${conv.id}')"
                         class="p-2.5 rounded-xl cursor-pointer relative ${
-                            isActive ? 'crystal-card-active' : 'crystal-card'
+                            isActive 
+                                ? 'crystal-card-active' 
+                                : 'crystal-card'
                         }"
                     >
                         <div class="flex items-start gap-2.5">
@@ -1252,14 +1596,23 @@
                                     <span class="text-[10px] text-slate-500 font-mono shrink-0">${conv.lastTime}</span>
                                 </div>
 
-                                <p class="text-xs text-slate-400 truncate mt-1 leading-snug">${conv.lastMessage}</p>
+                                <p class="text-xs text-slate-400 truncate mt-1 leading-snug">
+                                    ${conv.lastMessage}
+                                </p>
 
                                 <div class="flex items-center justify-between mt-2 pt-1 border-t border-white/[0.04]">
-                                    <div>${statusBadgeHtml}</div>
-                                    ${conv.unreadCount > 0 ? `<span class="px-1.5 py-0.2 bg-rose-500 text-white font-bold text-[10px] rounded-full shadow">${conv.unreadCount}</span>` : ''}
+                                    <div class="flex items-center gap-1">
+                                        ${statusBadgeHtml}
+                                    </div>
+                                    ${
+                                        conv.unreadCount > 0 
+                                            ? `<span class="px-1.5 py-0.2 bg-rose-500 text-white font-bold text-[10px] rounded-full shadow">${conv.unreadCount}</span>` 
+                                            : ''
+                                    }
                                 </div>
                             </div>
                         </div>
+
                         ${isActive ? '<div class="absolute left-0 top-3 bottom-3 w-1 bg-emerald-400 rounded-r-full shadow-glow-emerald"></div>' : ''}
                     </div>
                 `;
@@ -1288,6 +1641,22 @@
             const channelBadge = document.getElementById("headerChannelBadge");
             channelBadge.className = `absolute -bottom-1 -right-1 w-4 h-4 rounded-full ${conv.channelColor} flex items-center justify-center text-[9px] shadow`;
             channelBadge.innerHTML = `<i class="${conv.channelIcon}"></i>`;
+
+            const statusBadge = document.getElementById("headerStatusBadge");
+            const statusText = document.getElementById("headerStatusText");
+            if (conv.status === 'ai') {
+                statusBadge.className = "flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-xs font-semibold shadow-glow-emerald";
+                statusText.innerText = "🤖 AI 处理中 (置信度 98%)";
+            } else if (conv.status === 'mine') {
+                statusBadge.className = "flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-500/15 border border-blue-500/30 text-blue-400 text-xs font-semibold shadow-glow-blue";
+                statusText.innerText = "👤 人工客服已接管 · Alex";
+            } else if (conv.status === 'queue') {
+                statusBadge.className = "flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-400 text-xs font-semibold shadow-glow-amber";
+                statusText.innerText = "⏳ 排队等待人工中...";
+            } else {
+                statusBadge.className = "flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-700/50 border border-slate-600 text-slate-300 text-xs font-semibold";
+                statusText.innerText = "🔒 会话已解决关闭";
+            }
 
             renderMessageFeed(conv);
             renderAiSuggestions(conv.aiSuggestions || []);
@@ -1334,6 +1703,19 @@
                             </div>
                             <div class="ai-crystal-bubble p-3.5 rounded-2xl rounded-tr-sm text-xs text-slate-100 leading-relaxed space-y-2.5 shadow-md">
                                 <div>${msg.text}</div>
+                                ${
+                                    msg.source ? `
+                                        <div class="pt-2 border-t border-emerald-500/20 flex items-center justify-between text-[11px] text-emerald-300">
+                                            <span class="flex items-center gap-1">
+                                                <i class="fa-solid fa-book-bookmark text-[10px]"></i> 引用: ${msg.source}
+                                            </span>
+                                            <div class="flex items-center gap-2">
+                                                <button onclick="showToast('已采纳该回复', 'success')" class="hover:text-white" title="赞同"><i class="fa-regular fa-thumbs-up"></i></button>
+                                                <button onclick="showToast('AI 正在重新生成并丰富细节...', 'info')" class="hover:text-white" title="重新生成"><i class="fa-solid fa-arrow-rotate-right"></i></button>
+                                            </div>
+                                        </div>
+                                    ` : ''
+                                }
                             </div>
                         </div>
                     `;
@@ -1347,16 +1729,42 @@
                             <div class="p-3 rounded-2xl rounded-tr-sm bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-xs leading-relaxed shadow-glow-blue/40">
                                 ${msg.text}
                             </div>
+                            <span class="text-[10px] text-slate-500 flex items-center gap-1"><i class="fa-solid fa-check-double text-blue-400"></i> 已送达客户</span>
                         </div>
                     `;
                 } else if (msg.type === 'note') {
                     html += `
                         <div class="my-2 p-3 rounded-xl note-crystal-bubble text-xs text-amber-200 space-y-1 shadow-sm">
                             <div class="flex items-center justify-between text-amber-400 font-bold text-[11px]">
-                                <span class="flex items-center gap-1.5"><i class="fa-solid fa-lock"></i> 内部私信便签</span>
+                                <span class="flex items-center gap-1.5"><i class="fa-solid fa-lock"></i> 内部私信便签 (仅客服团队可见)</span>
                                 <span class="font-normal font-mono text-[10px]">${msg.author} · ${msg.time}</span>
                             </div>
                             <p class="leading-relaxed text-amber-100/90">${msg.text}</p>
+                        </div>
+                    `;
+                } else if (msg.type === 'attachment') {
+                    html += `
+                        <div class="flex items-start gap-2.5 max-w-[80%] animate-in fade-in duration-200">
+                            <img src="${conv.avatar}" class="w-8 h-8 rounded-xl object-cover shrink-0 mt-0.5 shadow-sm">
+                            <div class="space-y-1">
+                                <div class="text-xs font-semibold text-slate-300">${msg.author}</div>
+                                <div class="p-2 rounded-2xl bg-obsidian-800 border border-obsidian-borderLight space-y-2 shadow-sm">
+                                    <img src="${msg.img}" class="rounded-xl max-h-48 object-cover cursor-pointer hover:opacity-90 transition-opacity" onclick="window.open('${msg.img}')">
+                                    <div class="flex items-center justify-between text-[11px] text-slate-400 px-1">
+                                        <span class="truncate"><i class="fa-regular fa-image text-slate-400 mr-1"></i>${msg.fileName}</span>
+                                        <a href="${msg.img}" target="_blank" class="text-emerald-400 hover:underline">下载</a>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                } else if (msg.type === 'system') {
+                    html += `
+                        <div class="flex items-center justify-center my-2">
+                            <div class="px-3.5 py-1.5 rounded-xl bg-white/5 border border-white/10 text-[11px] text-slate-400 flex items-center gap-2 max-w-md text-center shadow-sm">
+                                <i class="fa-solid fa-circle-info text-blue-400"></i>
+                                <span>${msg.text}</span>
+                            </div>
                         </div>
                     `;
                 }
@@ -1369,6 +1777,12 @@
         function renderAiSuggestions(suggestions) {
             const container = document.getElementById("aiSuggestionChips");
             if (!container) return;
+
+            if (suggestions.length === 0) {
+                container.innerHTML = `<span class="text-[11px] text-slate-500">AI 正在深度解析对话上下文...</span>`;
+                return;
+            }
+
             container.innerHTML = suggestions.map(text => `
                 <button 
                     onclick="useSuggestion('${escapeHtml(text)}')"
@@ -1386,6 +1800,8 @@
             document.getElementById("profileEmail").innerHTML = `<span>${conv.email}</span> <i class="fa-regular fa-copy text-[10px]"></i>`;
             document.getElementById("profileLtv").innerText = conv.ltv;
             document.getElementById("profileOrderCount").innerText = `${conv.orderCount} 笔`;
+
+            renderTags(conv.tags || []);
 
             if (conv.order) {
                 document.getElementById("orderNumber").innerText = conv.order.number;
@@ -1408,6 +1824,52 @@
                     </div>
                 `).join('');
             }
+
+            const histContainer = document.getElementById("historyTimelineContainer");
+            if (conv.history && conv.history.length > 0) {
+                histContainer.innerHTML = conv.history.map(h => `
+                    <div class="relative pl-3">
+                        <span class="absolute -left-[17px] top-1.5 w-2 h-2 rounded-full bg-purple-400 border-2 border-obsidian-850"></span>
+                        <div class="flex items-center justify-between text-[11px]">
+                            <span class="font-semibold text-slate-200">${h.title}</span>
+                            <span class="text-slate-500 font-mono text-[10px]">${h.date}</span>
+                        </div>
+                        <p class="text-[11px] text-slate-400 mt-0.5">${h.channel} · ${h.outcome}</p>
+                    </div>
+                `).join('');
+            } else {
+                histContainer.innerHTML = `<p class="text-[11px] text-slate-500 pl-3">该客户首次咨询，暂无往期记录</p>`;
+            }
+        }
+
+        function renderTags(tags) {
+            const container = document.getElementById("tagContainer");
+            if (!container) return;
+
+            if (tags.length === 0) {
+                container.innerHTML = `<span class="text-[11px] text-slate-500">暂无标签，点击下方快速贴标</span>`;
+                return;
+            }
+
+            const colorMap = {
+                amber: "bg-amber-500/15 text-amber-300 border-amber-500/30",
+                cyan: "bg-cyan-500/15 text-cyan-300 border-cyan-500/30",
+                rose: "bg-rose-500/15 text-rose-300 border-rose-500/30",
+                purple: "bg-purple-500/15 text-purple-300 border-purple-500/30",
+                blue: "bg-blue-500/15 text-blue-300 border-blue-500/30",
+                pink: "bg-pink-500/15 text-pink-300 border-pink-500/30",
+                slate: "bg-slate-700/40 text-slate-400 border-slate-600/30"
+            };
+
+            container.innerHTML = tags.map((t, idx) => {
+                const cls = colorMap[t.color] || colorMap.amber;
+                return `
+                    <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium border ${cls}">
+                        <span>${t.name}</span>
+                        <button onclick="removeTag(${idx})" class="hover:opacity-75 ml-0.5"><i class="fa-solid fa-xmark text-[9px]"></i></button>
+                    </span>
+                `;
+            }).join('');
         }
 
         function switchReplyMode(mode) {
@@ -1425,12 +1887,14 @@
                 boxBorder.className = "bg-obsidian-950 rounded-xl border border-obsidian-borderLight focus-within:border-emerald-500/60 focus-within:ring-1 focus-within:ring-emerald-500/30 transition-all p-2.5 shadow-inner";
                 sendBtn.className = "px-4 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs rounded-l-lg flex items-center gap-1.5 shadow-glow-emerald transition-all";
                 sendBtnLabel.innerText = "发送";
+                textarea.placeholder = "输入回复内容... (按 Enter 发送，Shift+Enter 换行，输入 '/' 快捷调用话术)";
             } else {
                 tabNote.className = "px-3.5 py-1.5 rounded-t-lg font-bold text-xs flex items-center gap-1.5 text-amber-300 bg-amber-500/10 border-t-2 border-amber-500 transition-all";
                 tabReply.className = "px-3.5 py-1.5 rounded-t-lg font-semibold text-xs flex items-center gap-1.5 text-slate-400 hover:text-emerald-400 hover:bg-emerald-500/5 transition-all";
                 boxBorder.className = "bg-obsidian-950 rounded-xl border border-amber-500/40 focus-within:border-amber-500 focus-within:ring-1 focus-within:ring-amber-500/30 transition-all p-2.5 shadow-inner";
                 sendBtn.className = "px-4 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs rounded-l-lg flex items-center gap-1.5 shadow-glow-amber transition-all";
                 sendBtnLabel.innerText = "添加便签";
+                textarea.placeholder = "📝 输入内部团队便签 (仅同事可见，客户绝对不可见)...";
             }
         }
 
@@ -1446,14 +1910,33 @@
             const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 
             if (currentReplyMode === 'reply') {
-                conv.messages.push({ type: "agent", author: "Alex Chen (我)", time: timeStr, text: text });
-                showToast("消息已发送给客户", "success");
+                conv.messages.push({
+                    type: "agent",
+                    author: "Alex Chen (我)",
+                    time: timeStr,
+                    text: text
+                });
+                conv.lastMessage = `我: ${text}`;
+                conv.lastTime = timeStr;
+                
+                if (conv.status === 'ai' || conv.status === 'queue') {
+                    conv.status = 'mine';
+                    conv.statusText = '人工接管 · Alex';
+                }
+
+                showToast("消息已发送", "success");
             } else {
-                conv.messages.push({ type: "note", author: "Alex Chen (便签)", time: timeStr, text: text });
-                showToast("内部便签已保存", "info");
+                conv.messages.push({
+                    type: "note",
+                    author: "Alex Chen (便签)",
+                    time: timeStr,
+                    text: text
+                });
+                showToast("内部团队便签已保存", "info");
             }
 
             textarea.value = "";
+            renderConversationList();
             renderActiveConversation(currentConvId);
         }
 
@@ -1461,6 +1944,8 @@
             if (event.key === 'Enter' && !event.shiftKey) {
                 event.preventDefault();
                 sendMessage();
+            } else if (event.key === '/' && event.target.value === '') {
+                setTimeout(() => showQuickReplyModal(), 50);
             }
         }
 
@@ -1471,28 +1956,320 @@
             showToast("已填入输入框，按 Enter 即可直接发送", "info");
         }
 
-        function handleTakeover() { showToast("已成功接管会话，AI 自动回复已暂停", "success"); }
-        function handleHandoverAI() { showToast("已将该会话无缝转交回 AI 智能接待", "success"); }
-        function handleResolveSession() { showToast("会话已标记为【已解决】", "success"); }
+        function handleTakeover() {
+            const conv = CONVERSATIONS_DATA.find(c => c.id === currentConvId);
+            if (!conv) return;
+            conv.status = 'mine';
+            conv.statusText = '人工接管 · Alex';
+            renderConversationList();
+            renderActiveConversation(currentConvId);
+            showToast("已成功接管会话，AI 自动回复已暂停", "success");
+        }
+
+        function handleHandoverAI() {
+            const conv = CONVERSATIONS_DATA.find(c => c.id === currentConvId);
+            if (!conv) return;
+            conv.status = 'ai';
+            conv.statusText = 'AI 处理中';
+            renderConversationList();
+            renderActiveConversation(currentConvId);
+            showToast("已将该会话无缝转交回 AI 智能接待", "success");
+        }
+
+        function handleResolveSession() {
+            const conv = CONVERSATIONS_DATA.find(c => c.id === currentConvId);
+            if (!conv) return;
+            conv.status = 'closed';
+            conv.statusText = '已解决关闭';
+            renderConversationList();
+            renderActiveConversation(currentConvId);
+            showToast("会话已标记为【已解决】，满意度评价邀请已自动发送给客户", "success");
+        }
+
+        function toggleAiAutoReply(cb) {
+            isAiAutoEnabled = cb.checked;
+            showToast(isAiAutoEnabled ? "AI 自动应答模式已开启" : "AI 自动应答模式已暂停", "info");
+        }
+
+        function toggleRightDrawer() {
+            const drawer = document.getElementById("rightDrawer");
+            const icon = document.getElementById("rightDrawerIcon");
+            if (drawer.classList.contains("hidden")) {
+                drawer.classList.remove("hidden");
+                icon.className = "fa-solid fa-table-columns text-xs text-emerald-400";
+            } else {
+                drawer.classList.add("hidden");
+                icon.className = "fa-solid fa-table-columns text-xs text-slate-400";
+            }
+        }
+
+        function toggleInboxFolderView() {
+            const drawer = document.getElementById("inboxFolderDrawer");
+            drawer.classList.toggle("hidden");
+        }
+
+        function addPresetTag(name, color) {
+            const conv = CONVERSATIONS_DATA.find(c => c.id === currentConvId);
+            if (!conv) return;
+            if (!conv.tags) conv.tags = [];
+            if (conv.tags.some(t => t.name === name)) {
+                showToast("该标签已存在", "info");
+                return;
+            }
+            conv.tags.push({ name, color });
+            renderTags(conv.tags);
+            showToast(`已贴上标签: ${name}`, "success");
+        }
+
+        function addTagFromInput() {
+            const input = document.getElementById("newTagInput");
+            const val = input.value.trim();
+            if (!val) return;
+            addPresetTag(val, "purple");
+            input.value = "";
+        }
+
+        function handleTagInputKeydown(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                addTagFromInput();
+            }
+        }
+
+        function removeTag(idx) {
+            const conv = CONVERSATIONS_DATA.find(c => c.id === currentConvId);
+            if (!conv || !conv.tags) return;
+            conv.tags.splice(idx, 1);
+            renderTags(conv.tags);
+        }
+
+        function setFilterTab(tab) {
+            currentFilterTab = tab;
+            
+            document.querySelectorAll(".grid-pill").forEach(pill => {
+                pill.classList.remove("active", "active-amber", "active-blue");
+                pill.className = "grid-pill py-1.5 px-2 rounded-lg bg-obsidian-800 border border-obsidian-border text-slate-400 hover:text-white flex items-center justify-between text-xs font-semibold";
+            });
+
+            const activePill = document.getElementById(`pill-${tab}`);
+            if (activePill) {
+                if (tab === 'queue') {
+                    activePill.className = "grid-pill active-amber py-1.5 px-2 rounded-lg border text-amber-300 flex items-center justify-between text-xs font-bold";
+                } else if (tab === 'mine') {
+                    activePill.className = "grid-pill active-blue py-1.5 px-2 rounded-lg border text-blue-400 flex items-center justify-between text-xs font-bold";
+                } else {
+                    activePill.className = "grid-pill active py-1.5 px-2 rounded-lg border text-emerald-300 flex items-center justify-between text-xs font-bold";
+                }
+            }
+
+            renderConversationList();
+        }
+
+        function toggleStoreDropdown() {
+            const menu = document.getElementById("storeDropdownMenu");
+            menu.classList.toggle("hidden");
+        }
+
+        function selectStore(id, name, icon, color) {
+            currentStoreFilter = id;
+            document.getElementById("selectedStoreName").innerText = name;
+            document.getElementById("selectedStoreIcon").innerHTML = `<i class="fa-solid ${icon}"></i>`;
+            document.getElementById("storeDropdownMenu").classList.add("hidden");
+            renderConversationList();
+            showToast(`已切换店铺筛选: ${name}`, "info");
+        }
+
+        function filterConversations() {
+            currentSearchQuery = document.getElementById("conversationSearchInput").value;
+            renderConversationList();
+        }
+
         function showModal(id) { document.getElementById(id).classList.remove("hidden"); }
         function closeModal(id) { document.getElementById(id).classList.add("hidden"); }
+
         function showTrackingTimelineModal() { showModal("trackingModal"); }
         function showQuickReplyModal() { showModal("quickReplyModal"); }
-        function showAiPolishModal() { showModal("aiPolishModal"); }
+        function showAiPolishModal() {
+            const draft = document.getElementById("messageTextarea").value;
+            if (draft) document.getElementById("aiDraftInput").value = draft;
+            showModal("aiPolishModal"); 
+        }
         function showTemplateModal() { showModal("templateModal"); }
         function showTransferModal() { showModal("transferModal"); }
+
+        function showRefundModal() {
+            showToast("已打开 Shopify 退款专用通道，支持原路退款至客户信用卡", "info");
+        }
+        function showAddressModal() {
+            showToast("已获取客户最新地址并同步给国际物流承运商", "success");
+        }
+        function resendOrderInvoice() {
+            showToast("已将最新带有防伪盖章的 PDF 发票发送至客户邮箱", "success");
+        }
+
+        function triggerFileUpload() {
+            showToast("已调起附件选择器 (支持 PNG/JPG/PDF/MP4)", "info");
+        }
+
+        function showProductPickerModal() {
+            const conv = CONVERSATIONS_DATA.find(c => c.id === currentConvId);
+            if (!conv) return;
+            conv.messages.push({
+                type: "agent",
+                author: "Alex Chen",
+                time: "刚刚",
+                text: "Here is the Shopify recommended product card: [Silk Halter Evening Maxi Dress - Navy / L - $129.00]"
+            });
+            renderActiveConversation(currentConvId);
+            showToast("Shopify 商品卡片已成功推入聊天流", "success");
+        }
+
+        function insertEmoji(emoji) {
+            const textarea = document.getElementById("messageTextarea");
+            textarea.value += emoji;
+            textarea.focus();
+        }
+
+        function toggleSendOptions() {
+            showToast("快捷操作：按 Enter 直接发送，或点击菜单【发送并标记解决】", "info");
+        }
+
+        function insertTrackingToChat() {
+            const conv = CONVERSATIONS_DATA.find(c => c.id === currentConvId);
+            if (!conv) return;
+            conv.messages.push({
+                type: "agent",
+                author: "Alex Chen",
+                time: "刚刚",
+                text: `📦 Here is your live tracking update: DHL Express (Tracking: ${conv.order.tracking}). Status: Custom cleared at LAX hub, on schedule for arrival today by 4 PM!`
+            });
+            closeModal("trackingModal");
+            renderActiveConversation(currentConvId);
+            showToast("物流实时轨迹卡片已发送给客户", "success");
+        }
+
+        function renderQuickReplies(data) {
+            const container = document.getElementById("quickReplyList");
+            if (!container) return;
+            container.innerHTML = data.map(item => `
+                <div onclick="selectQuickReply('${escapeHtml(item.text)}')" class="p-2.5 rounded-xl bg-white/5 hover:bg-amber-500/10 hover:border-amber-500/30 border border-obsidian-border cursor-pointer transition-all">
+                    <div class="flex items-center justify-between mb-1">
+                        <span class="font-bold text-slate-200 text-xs">${item.title}</span>
+                        <span class="px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-400 text-[10px]">${item.category}</span>
+                    </div>
+                    <p class="text-[11px] text-slate-400 leading-snug">${item.text}</p>
+                </div>
+            `).join('');
+        }
+
+        function filterQuickReplies() {
+            const q = document.getElementById("quickReplySearch").value.toLowerCase();
+            const filtered = QUICK_REPLIES_DATA.filter(i => i.title.toLowerCase().includes(q) || i.text.toLowerCase().includes(q) || i.category.toLowerCase().includes(q));
+            renderQuickReplies(filtered);
+        }
+
+        function selectQuickReply(text) {
+            const conv = CONVERSATIONS_DATA.find(c => c.id === currentConvId);
+            const name = conv ? conv.customerName.split(' ')[0] : 'Customer';
+            const replaced = text.replace(/{{name}}/g, name);
+            document.getElementById("messageTextarea").value = replaced;
+            closeModal("quickReplyModal");
+            document.getElementById("messageTextarea").focus();
+            showToast("话术已载入输入框", "success");
+        }
+
+        function applyAiTransform(type) {
+            const resBox = document.getElementById("aiResultText");
+            if (type === 'polite') {
+                resBox.innerText = "Dear Jessica, thank you for reaching out! We truly appreciate your patience and will ensure your request is prioritized with our highest care.";
+            } else if (type === 'translate_en') {
+                resBox.innerText = "Hello! Your package has arrived at the regional distribution center and will be delivered straight to your doorstep before Friday afternoon.";
+            } else if (type === 'apology') {
+                resBox.innerText = "We sincerely apologize for any delay caused during the international customs inspection. We have expedited the shipment and attached a 15% courtesy coupon [VIPCARE15].";
+            } else if (type === 'promo') {
+                resBox.innerText = "Great choice! Today we have an exclusive bundle promotion: buy 2 get 1 free with free worldwide express shipping. Would you like me to reserve one for you?";
+            }
+            showToast("AI 已根据意图重新润色生成", "success");
+        }
+
+        function applyAiResultToTextarea() {
+            const text = document.getElementById("aiResultText").innerText.replace(/^"|"$/g, '');
+            document.getElementById("messageTextarea").value = text;
+            closeModal("aiPolishModal");
+            document.getElementById("messageTextarea").focus();
+            showToast("已采纳 AI 优化结果", "success");
+        }
+
+        function selectWhatsAppTemplate(num) {
+            showToast(`已选择 Meta 官方第 ${num} 号报备模板`, "info");
+        }
+
+        function sendSelectedTemplate() {
+            const conv = CONVERSATIONS_DATA.find(c => c.id === currentConvId);
+            if (!conv) return;
+            conv.messages.push({
+                type: "agent",
+                author: "Alex Chen (Meta 官方模板)",
+                time: "刚刚",
+                text: `[Meta WhatsApp Approved Template] Hi ${conv.customerName}, your order ${conv.order.number} has cleared customs and is scheduled for today's delivery!`
+            });
+            closeModal("templateModal");
+            renderActiveConversation(currentConvId);
+            showToast("Meta 官方模板消息已成功下发至客户 WhatsApp", "success");
+        }
+
+        function confirmTransfer() {
+            const sel = document.getElementById("transferSelect");
+            const text = sel.options[sel.selectedIndex].text;
+            closeModal("transferModal");
+            showToast(`会话已成功转交给: ${text}`, "success");
+        }
+
+        function copyText(text, successMsg) {
+            navigator.clipboard.writeText(text).then(() => {
+                showToast(successMsg || "已复制到剪贴板", "success");
+            }).catch(() => {
+                showToast("已复制: " + text, "success");
+            });
+        }
+
         function showToast(message, type = "info") {
             const container = document.getElementById("toastContainer");
             if (!container) return;
+
             const toast = document.createElement("div");
+            const icon = type === 'success' ? 'fa-circle-check text-emerald-400' : (type === 'error' ? 'fa-triangle-exclamation text-rose-400' : 'fa-circle-info text-blue-400');
             const border = type === 'success' ? 'border-emerald-500/40' : (type === 'error' ? 'border-rose-500/40' : 'border-blue-500/40');
+
             toast.className = `px-3.5 py-2.5 rounded-xl bg-obsidian-800/95 backdrop-blur-md border ${border} shadow-floating text-xs text-slate-100 flex items-center gap-2.5 transition-all duration-300 pointer-events-auto transform translate-y-2 opacity-0`;
-            toast.innerHTML = `<i class="fa-solid fa-circle-info text-sm text-emerald-400"></i><span class="font-medium">${message}</span>`;
+            toast.innerHTML = `
+                <i class="fa-solid ${icon} text-sm"></i>
+                <span class="font-medium">${message}</span>
+            `;
+
             container.appendChild(toast);
-            setTimeout(() => { toast.classList.remove("translate-y-2", "opacity-0"); }, 10);
-            setTimeout(() => { toast.classList.add("opacity-0", "translate-y-2"); setTimeout(() => toast.remove(), 300); }, 3000);
+
+            setTimeout(() => {
+                toast.classList.remove("translate-y-2", "opacity-0");
+            }, 10);
+
+            setTimeout(() => {
+                toast.classList.add("opacity-0", "translate-y-2");
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
         }
-        function escapeHtml(str) { return str.replace(/'/g, "\\'").replace(/"/g, '&quot;'); }
+
+        function escapeHtml(str) {
+            return str.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+        }
+
+        function refreshConversations() {
+            showToast("正在拉取全渠道最新会话与订单数据...", "info");
+            setTimeout(() => {
+                renderConversationList();
+                showToast("数据已是最新 (18ms)", "success");
+            }, 400);
+        }
     </script>
 </body>
 </html>

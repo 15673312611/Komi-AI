@@ -26,7 +26,7 @@ export function useAgentCreate() {
 
   const validateForm = () => {
     if (!agentName.value.trim()) {
-      error.value = 'Agent name is required'
+      error.value = '请输入智能体名称'
       return false
     }
     return true
@@ -42,14 +42,14 @@ export function useAgentCreate() {
         name: agentName.value.trim(),
         display_name: agentName.value.trim(),
         agent_type: 'custom',
-        instructions: ['I am an AI assistant here to help with questions.'],
+        instructions: ['您好！我是您的 AI 智能客服，很高兴为您服务。请问有什么可以协助您的？'],
         is_active: true,
         use_workflow: useWorkflow.value
       })
       
       return newAgent
     } catch (err: any) {
-      error.value = err.response?.data?.detail || 'Failed to create agent'
+      error.value = err.response?.data?.detail || '创建智能体失败'
       return null
     } finally {
       isCreating.value = false

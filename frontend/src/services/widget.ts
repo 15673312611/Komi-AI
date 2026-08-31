@@ -39,6 +39,11 @@ class WidgetService {
     await api.delete(`${this.baseUrl}/${id}`)
   }
 
+  async getWidgetsByAgent(agentId: string): Promise<Widget[]> {
+    const response = await api.get(`${this.baseUrl}/agent/${agentId}`)
+    return response.data
+  }
+
   async getWidgetDetails(id: string): Promise<Widget> {
     const response = await api.get(`${this.baseUrl}/${id}/details`)
     return response.data

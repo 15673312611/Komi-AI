@@ -37,8 +37,8 @@ export function useAgentWorkflow(agentId: string) {
       
       // Don't show error toast for 404 - it means agent doesn't have a workflow yet (normal state)
       if (error.response?.status !== 404) {
-        workflowError.value = error.response?.data?.detail || 'Failed to fetch workflow'
-        toast.error('Failed to fetch workflow', {
+        workflowError.value = error.response?.data?.detail || '获取工作流失败'
+        toast.error('获取工作流失败', {
           duration: 4000,
           closeButton: true
         })
@@ -66,7 +66,7 @@ export function useAgentWorkflow(agentId: string) {
       const newWorkflow = await workflowService.createWorkflow(workflowData)
       workflow.value = newWorkflow
       
-      toast.success('Workflow created successfully', {
+      toast.success('工作流创建成功', {
         duration: 4000,
         closeButton: true
       })
@@ -74,8 +74,8 @@ export function useAgentWorkflow(agentId: string) {
       return newWorkflow
     } catch (error: any) {
       console.error('Error creating workflow:', error)
-      workflowError.value = error.response?.data?.detail || 'Failed to create workflow'
-      toast.error('Failed to create workflow', {
+      workflowError.value = error.response?.data?.detail || '创建工作流失败'
+      toast.error('创建工作流失败', {
         duration: 4000,
         closeButton: true
       })
@@ -99,7 +99,7 @@ export function useAgentWorkflow(agentId: string) {
       const updatedWorkflow = await workflowService.updateWorkflow(targetId, targetData)
       workflow.value = updatedWorkflow
       
-      toast.success('Workflow updated successfully', {
+      toast.success('工作流更新成功', {
         duration: 4000,
         closeButton: true
       })
@@ -107,8 +107,8 @@ export function useAgentWorkflow(agentId: string) {
       return updatedWorkflow
     } catch (error: any) {
       console.error('Error updating workflow:', error)
-      workflowError.value = error.response?.data?.detail || 'Failed to update workflow'
-      toast.error('Failed to update workflow', {
+      workflowError.value = error.response?.data?.detail || '更新工作流失败'
+      toast.error('更新工作流失败', {
         duration: 4000,
         closeButton: true
       })
@@ -127,14 +127,14 @@ export function useAgentWorkflow(agentId: string) {
       await workflowService.deleteWorkflow(targetId)
       workflow.value = null
       
-      toast.success('Workflow deleted successfully', {
+      toast.success('工作流已成功删除', {
         duration: 4000,
         closeButton: true
       })
     } catch (error: any) {
       console.error('Error deleting workflow:', error)
-      workflowError.value = error.response?.data?.detail || 'Failed to delete workflow'
-      toast.error('Failed to delete workflow', {
+      workflowError.value = error.response?.data?.detail || '删除工作流失败'
+      toast.error('删除工作流失败', {
         duration: 4000,
         closeButton: true
       })

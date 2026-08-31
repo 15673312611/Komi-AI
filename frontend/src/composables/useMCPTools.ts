@@ -49,24 +49,24 @@ export function useMCPTools(agentId: string) {
 
   // Transport type options
   const transportTypes = [
-    { value: 'stdio', label: 'STDIO', description: 'Standard input/output communication' },
-    { value: 'sse', label: 'Server-Sent Events', description: 'HTTP streaming communication' },
-    { value: 'http', label: 'HTTP', description: 'Request/response communication' }
+    { value: 'stdio', label: 'STDIO 进程', description: '标准输入输出进程间通信 (本地命令)' },
+    { value: 'sse', label: 'Server-Sent Events (SSE)', description: 'HTTP 流式持久连接通信' },
+    { value: 'http', label: 'HTTP / Webhook', description: '基于标准 HTTP 请求与响应通信' }
   ]
 
   // Common MCP tool presets
   const mcpPresets = [
     {
-      name: 'File System',
-      description: 'Access and manage files and directories',
+      name: '文件系统 (File System)',
+      description: '读取与管理本地文件及目录',
       transport_type: 'stdio' as MCPTransportType,
       command: 'npx',
       args: ['-y','@modelcontextprotocol/server-filesystem'],
       env_vars: { ALLOWED_DIRECTORIES: '/path/to/allowed/directory' }
     },
     {
-      name: 'Weather',
-      description: 'Get weather information',
+      name: '实时天气 (Weather)',
+      description: '查询全球城市实时天气与预报',
       transport_type: 'stdio' as MCPTransportType,
       command: 'uvx',
       args: ["--from", "git+https://github.com/adhikasp/mcp-weather.git", "mcp-weather"],
@@ -83,7 +83,7 @@ export function useMCPTools(agentId: string) {
       const response = await mcpService.getAgentMCPTools(agentId)
       agentMCPTools.value = response.mcp_tools
     } catch (err: any) {
-      error.value = err.response?.data?.detail || 'Failed to fetch MCP tools'
+      error.value = err.response?.data?.detail || '获取 MCP 工具列表失败'
       console.error('Error fetching agent MCP tools:', err)
     } finally {
       isLoading.value = false
@@ -99,7 +99,7 @@ export function useMCPTools(agentId: string) {
       availableMCPTools.value = tools
     } catch (err: any) {
       console.error('Error fetching available MCP tools:', err)
-      toast.error('Failed to fetch available MCP tools')
+      toast.error('获取可用 MCP 工具列表失败')
     } finally {
       isLoadingAvailable.value = false
     }
@@ -120,9 +120,9 @@ export function useMCPTools(agentId: string) {
       resetCreateForm()
       showCreateModal.value = false
       
-      toast.success('MCP tool created and linked successfully')
+      toast.success('MCP 工具创建并关联成功')
     } catch (err: any) {
-      const errorMessage = err.response?.data?.detail || 'Failed to create MCP tool'
+      const errorMessage = err.response?.data?.detail || '创建 MCP 工具失败'
       toast.error(errorMessage)
       throw err
     }
@@ -133,9 +133,9 @@ export function useMCPTools(agentId: string) {
     try {
       await mcpService.addMCPToolToAgent(toolId, agentId)
       await fetchAgentMCPTools()
-      toast.success('MCP tool linked successfully')
+      toast.success('MCP 工具关联成功')
     } catch (err: any) {
-      const errorMessage = err.response?.data?.detail || 'Failed to link MCP tool'
+      const errorMessage = err.response?.data?.detail || '关联 MCP 工具失败'
       toast.error(errorMessage)
     }
   }
@@ -145,9 +145,9 @@ export function useMCPTools(agentId: string) {
     try {
       await mcpService.removeMCPToolFromAgent(toolId, agentId)
       await fetchAgentMCPTools()
-      toast.success('MCP tool unlinked successfully')
+      toast.success('已取消 MCP 工具关联')
     } catch (err: any) {
-      const errorMessage = err.response?.data?.detail || 'Failed to unlink MCP tool'
+      const errorMessage = err.response?.data?.detail || '取消关联 MCP 工具失败'
       toast.error(errorMessage)
     }
   }
@@ -160,9 +160,9 @@ export function useMCPTools(agentId: string) {
       await mcpService.deleteMCPTool(deleteTargetId.value)
       await fetchAgentMCPTools()
       cancelDelete()
-      toast.success('MCP tool deleted successfully')
+      toast.success('MCP 工具已成功删除')
     } catch (err: any) {
-      const errorMessage = err.response?.data?.detail || 'Failed to delete MCP tool'
+      const errorMessage = err.response?.data?.detail || '删除 MCP 工具失败'
       toast.error(errorMessage)
     }
   }

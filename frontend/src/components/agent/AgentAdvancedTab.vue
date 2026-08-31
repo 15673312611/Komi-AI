@@ -102,12 +102,12 @@ const updateAttachmentsSetting = async (enabled: boolean) => {
     emit('update', updatedAgent)
     
     // Show success toast
-    toast.success('Attachment setting updated', {
+    toast.success('附件传输配置已更新', {
       duration: 2000
     })
   } catch (err) {
     console.error('Failed to update attachments setting:', err)
-    toast.error('Failed to update attachment setting', {
+    toast.error('更新附件传输配置失败', {
       duration: 2000
     })
   }

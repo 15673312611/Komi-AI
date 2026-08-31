@@ -23,13 +23,34 @@ import { buildUploadUrl } from '@/utils/avatars'
 
 // API URLs - Dynamic functions..
 export function getApiUrl(): string {
-  return (
-    window.APP_CONFIG?.API_URL || import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1'
-  )
+  if (window.APP_CONFIG?.API_URL) return window.APP_CONFIG.API_URL
+  if (import.meta.env.VITE_API_URL) return import.meta.env.VITE_API_URL
+  if (typeof window !== 'undefined' && window.location) {
+    if (window.location.port === '3001') {
+      return `${window.location.protocol}//${window.location.hostname}:8001/api/v1`
+    }
+    if (window.location.port === '5173' || window.location.port === '3000') {
+      return `${window.location.protocol}//${window.location.hostname}:8000/api/v1`
+    }
+    return `${window.location.origin}/api/v1`
+  }
+  return 'http://localhost:8000/api/v1'
 }
 
 export function getWsUrl(): string {
-  return window.APP_CONFIG?.WS_URL || import.meta.env.VITE_WS_URL || 'ws://localhost:8000'
+  if (window.APP_CONFIG?.WS_URL) return window.APP_CONFIG.WS_URL
+  if (import.meta.env.VITE_WS_URL) return import.meta.env.VITE_WS_URL
+  if (typeof window !== 'undefined' && window.location) {
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+    if (window.location.port === '3001') {
+      return `${protocol}//${window.location.hostname}:8001`
+    }
+    if (window.location.port === '5173' || window.location.port === '3000') {
+      return `${protocol}//${window.location.hostname}:8000`
+    }
+    return `${protocol}//${window.location.host}`
+  }
+  return 'ws://localhost:8000'
 }
 
 /**

@@ -5,7 +5,7 @@
   "license": "Apache-2.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "vite --port 3001 --host 0.0.0.0",
     "build": "run-p type-check \"build-only {@}\" --",
     "build:dev": "run-p type-check \"build-only:dev {@}\" --",
     "prebuild:dev": "tsx scripts/generate-dev-env.ts",
@@ -29,7 +29,7 @@
     "build:widgetdocker": "tsx scripts/build-widget-docker.ts"
   },
   "dependencies": {
-    "@fortawesome/fontawesome-free": "7.0.0",
+    "@fortawesome/fontawesome-free": "6.5.1",
     "@fortawesome/fontawesome-svg-core": "7.0.0",
     "@fortawesome/free-brands-svg-icons": "7.0.0",
     "@fortawesome/free-regular-svg-icons": "7.0.0",

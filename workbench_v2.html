@@ -6,12 +6,25 @@
     <title>ChatterMate AI · 多渠道跨境电商智能客服工作台 (旗舰尊享版)</title>
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- FontAwesome 6 Pro Icons -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <!-- FontAwesome 6 Pro Icons (Multi-CDN Resilient) -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" onerror="this.onerror=null;this.href='https://cdn.bootcdn.net/ajax/libs/font-awesome/6.5.1/css/all.min.css';">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.5.1/css/all.min.css">
     <!-- Google Fonts: Plus Jakarta Sans & JetBrains Mono -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <script>
+        // Global Image Error Handler to prevent broken image placeholder boxes
+        document.addEventListener('error', function(e) {
+            if (e.target && e.target.tagName === 'IMG') {
+                const alt = e.target.alt || 'CM';
+                const initial = (alt.split(' ').map(n=>n[0]).join('') || 'CM').toUpperCase().slice(0, 2);
+                e.target.onerror = null;
+                e.target.src = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80" viewBox="0 0 80 80"><rect width="80" height="80" rx="16" fill="%231E293B"/><text x="50%" y="54%" dominant-baseline="middle" text-anchor="middle" font-family="sans-serif" font-weight="bold" font-size="28" fill="%2394A3B8">${initial}</text></svg>`;
+            }
+        }, true);
+    </script>
     
     <script>
         tailwind.config = {

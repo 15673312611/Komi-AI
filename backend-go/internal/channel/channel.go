@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -63,7 +64,8 @@ type Conversation struct {
 }
 
 type Repository struct {
-	pool *pgxpool.Pool
+	pool     *pgxpool.Pool
+	initOnce sync.Once
 }
 
 func NewRepository(pool *pgxpool.Pool) *Repository {
@@ -77,6 +79,13 @@ func (r *Repository) ready() error {
 	if r == nil || r.pool == nil {
 		return ErrNotConfigured
 	}
+	r.initOnce.Do(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_, _ = r.pool.Exec(ctx, `
+ALTER TABLE IF EXISTS channel_conversations ADD COLUMN IF NOT EXISTS outbound_idempotency_key TEXT;
+`)
+	})
 	return nil
 }
 
@@ -245,15 +254,46 @@ func (r *Repository) AgentID(ctx context.Context, accountID uuid.UUID) (*uuid.UU
 		return nil, err
 	}
 	var id pgtype.UUID
+	// 1. Direct channel config in agent_channel_configs
 	err := r.pool.QueryRow(ctx, `SELECT CASE WHEN is_active THEN agent_id ELSE NULL END FROM agent_channel_configs WHERE channel_account_id=$1`, accountID).Scan(&id)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return nil, nil
+	if err == nil && id.Valid {
+		value := uuid.UUID(id.Bytes)
+		return &value, nil
 	}
-	if err != nil || !id.Valid {
-		return nil, err
+
+	// 2. Check if a Store is bound to this email channel account
+	var storeAgentID pgtype.UUID
+	err = r.pool.QueryRow(ctx, `SELECT agent_id FROM stores WHERE email_account_id=$1 AND is_active=true AND agent_id IS NOT NULL LIMIT 1`, accountID).Scan(&storeAgentID)
+	if err == nil && storeAgentID.Valid {
+		value := uuid.UUID(storeAgentID.Bytes)
+		return &value, nil
 	}
-	value := uuid.UUID(id.Bytes)
-	return &value, nil
+
+	// 3. Fallback to any active agent in the organization
+	var orgID uuid.UUID
+	err = r.pool.QueryRow(ctx, `SELECT organization_id FROM channel_accounts WHERE id=$1`, accountID).Scan(&orgID)
+	if err == nil && orgID != uuid.Nil {
+		var defaultAgentID pgtype.UUID
+		err = r.pool.QueryRow(ctx, `SELECT id FROM agents WHERE organization_id=$1 AND is_active=true ORDER BY created_at ASC LIMIT 1`, orgID).Scan(&defaultAgentID)
+		if err == nil && defaultAgentID.Valid {
+			value := uuid.UUID(defaultAgentID.Bytes)
+			return &value, nil
+		}
+	}
+
+	return nil, nil
+}
+
+func (r *Repository) GetStoreName(ctx context.Context, accountID uuid.UUID) string {
+	if r.ready() != nil {
+		return ""
+	}
+	var name string
+	err := r.pool.QueryRow(ctx, `SELECT name FROM stores WHERE email_account_id=$1 AND is_active=true LIMIT 1`, accountID).Scan(&name)
+	if err == nil {
+		return strings.TrimSpace(name)
+	}
+	return ""
 }
 
 func (r *Repository) SetAgent(ctx context.Context, accountID, organizationID, agentID uuid.UUID, active bool) error {

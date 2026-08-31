@@ -65,23 +65,32 @@ export function useOnboardingTestChat() {
       })
       const token: string | undefined = data?.token
       if (!token) {
-        connectionError.value = 'Could not start a test session for this agent.'
+        connectionError.value = '无法为此智能体初始化测试会话令牌。'
         return false
       }
       setToken(token)
       const connected = await connect()
       if (!connected) {
-        connectionError.value = 'Could not connect to the agent. Please try again.'
+        connectionError.value = '未能建立与智能体实时服务的连接通道，请检查 WebSocket 后端服务状态。'
         return false
+      }
+      // If connected and no messages yet, seed a friendly greeting
+      if (messages.value.length === 0) {
+        messages.value.push({
+          message: '您好！我是您的 AI 智能体助手。我已经就绪，您可以随时向我提问或测试业务场景。',
+          message_type: 'bot',
+          created_at: new Date().toISOString(),
+          session_id: '',
+        } as any)
       }
       return true
     } catch (err: any) {
       if (err?.response?.status === 401) {
         connectionError.value =
-          'This agent requires authenticated chat. Test it from the live widget instead.'
+          '该智能体需要验证权限。请在已部署的小部件或访客模式下进行体验。'
       } else {
         connectionError.value =
-          err?.response?.data?.detail || 'Could not start a test session.'
+          err?.response?.data?.detail || '无法启动测试对话，请确认后端服务正常运行。'
       }
       return false
     } finally {

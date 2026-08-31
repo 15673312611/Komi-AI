@@ -37,6 +37,7 @@ import (
 	"github.com/chattermate/chattermate/backend-go/internal/realtime"
 	"github.com/chattermate/chattermate/backend-go/internal/session"
 	"github.com/chattermate/chattermate/backend-go/internal/shopify"
+	"github.com/chattermate/chattermate/backend-go/internal/store"
 	"github.com/chattermate/chattermate/backend-go/internal/ticketdb"
 	"github.com/chattermate/chattermate/backend-go/internal/ticketing"
 	"github.com/chattermate/chattermate/backend-go/internal/user"
@@ -83,6 +84,7 @@ func main() {
 	var crmService *crm.Service
 	var jiraService *jira.Service
 	var shopifyService *shopify.Service
+	var storeStore store.Service
 	var notificationStore notification.Store
 	var workflowStore workflow.Store
 	var mcpToolStore mcptool.Store
@@ -103,12 +105,16 @@ func main() {
 		widgets = widget.NewRepository(db)
 		customers = customer.NewRepository(db)
 		leadCaptureStore = leadcapture.NewRepository(db)
-		knowledgeStoreValue = knowledgeStore.NewRepository(db)
+		knowledgeRepo := knowledgeStore.NewRepository(db)
+		knowledgeStoreValue = knowledgeRepo
+		knowledgeProcessor := knowledgeStore.NewProcessor(knowledgeRepo, log)
+		knowledgeProcessor.Start(ctx)
 		helpCenterStore = helpcenter.NewRepository(db)
 		crmService = crm.NewService(crm.NewRepository(db), cfg)
 		peopleStore = people.NewRepository(db, crmService)
 		jiraService = jira.NewService(jira.NewRepository(db), cfg)
 		shopifyService = shopify.NewService(shopify.NewRepository(db), cfg)
+		storeStore = store.NewRepository(db)
 		notificationStore = notification.NewRepository(db)
 		workflowStore = workflow.NewRepository(db)
 		mcpToolStore = mcptool.NewRepository(db)
@@ -145,7 +151,7 @@ func main() {
 	})
 	server := &http.Server{
 		Addr:              cfg.HTTPAddr,
-			Handler:           httpapi.NewRouter(httpapi.Dependencies{Config: cfg, Logger: log, DB: db, Redis: redisClient, Auth: authService, Users: users, Agents: agents, Organizations: organizations, Widgets: widgets, Customers: customers, LeadCapture: leadCaptureStore, Knowledge: knowledgeStoreValue, HelpCenters: helpCenterStore, People: peopleStore, CRM: crmService, Jira: jiraService, Shopify: shopifyService, Notifications: notificationStore, Workflows: workflowStore, MCPTools: mcpToolStore, GuardrailEvents: guardrailEvents, AIConfigs: aiConfigStore, Analytics: analyticsStore, Sessions: sessions, Chats: chats, Channels: channelStore, WidgetApps: widgetApps, TicketDB: ticketDBStore, Tickets: ticketStore, Realtime: realtimeServer, Sender: channelSender}),
+			Handler:           httpapi.NewRouter(httpapi.Dependencies{Config: cfg, Logger: log, DB: db, Redis: redisClient, Auth: authService, Users: users, Agents: agents, Organizations: organizations, Widgets: widgets, Customers: customers, LeadCapture: leadCaptureStore, Knowledge: knowledgeStoreValue, HelpCenters: helpCenterStore, People: peopleStore, CRM: crmService, Jira: jiraService, Shopify: shopifyService, Stores: storeStore, Notifications: notificationStore, Workflows: workflowStore, MCPTools: mcpToolStore, GuardrailEvents: guardrailEvents, AIConfigs: aiConfigStore, Analytics: analyticsStore, Sessions: sessions, Chats: chats, Channels: channelStore, WidgetApps: widgetApps, TicketDB: ticketDBStore, Tickets: ticketStore, Realtime: realtimeServer, Sender: channelSender}),
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       30 * time.Second,
 		WriteTimeout:      60 * time.Second,

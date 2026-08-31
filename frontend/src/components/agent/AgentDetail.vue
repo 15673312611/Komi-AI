@@ -31,6 +31,7 @@ import AgentInstructionsTab from './AgentInstructionsTab.vue'
 import AgentWorkflowTab from './AgentWorkflowTab.vue'
 import AgentMCPToolsTab from './AgentMCPToolsTab.vue'
 import AgentLeadCaptureTab from './AgentLeadCaptureTab.vue'
+import AgentTestChatModal from './AgentTestChatModal.vue'
 import { Cropper, CircleStencil } from 'vue-advanced-cropper'
 import 'vue-advanced-cropper/dist/style.css'
 import { useAgentChat } from '@/composables/useAgentChat'
@@ -43,6 +44,8 @@ import { useEnterpriseFeatures } from '@/composables/useEnterpriseFeatures'
 const props = defineProps<{
     agent: AgentWithCustomization
 }>()
+
+const showTestChatModal = ref(false)
 
 const { hasEnterpriseModule } = useEnterpriseFeatures()
 const agentData = ref({ ...props.agent })
@@ -588,13 +591,13 @@ const handleToggleUseWorkflow = async () => {
         // Force reactivity update
         await nextTick()
         
-        toast.success(`Workflow mode ${newValue ? 'enabled' : 'disabled'}`, {
+        toast.success(newValue ? '已开启工作流模式' : '已关闭工作流模式', {
             duration: 4000,
             closeButton: true
         })
     } catch (error) {
         console.error('Error toggling workflow mode:', error)
-        toast.error('Failed to update workflow mode', {
+        toast.error('更新工作流模式失败', {
             duration: 4000,
             closeButton: true
         })
@@ -610,13 +613,13 @@ const toggleTicketing = async () => {
         const updatedAgent = await agentService.updateAgent(agentData.value.id, { ticketing_enabled: newValue })
         Object.assign(agentData.value, updatedAgent)
         agentStorage.updateAgent(updatedAgent)
-        toast.success(`AI ticketing ${newValue ? 'enabled' : 'disabled'} for this agent`, {
+        toast.success(newValue ? '已为此智能体启用 AI 智能工单' : '已为此智能体禁用 AI 智能工单', {
             duration: 4000,
             closeButton: true
         })
     } catch (error) {
         console.error('Error toggling AI ticketing:', error)
-        toast.error('Failed to update AI ticketing', {
+        toast.error('更新 AI 智能工单设置失败', {
             duration: 4000,
             closeButton: true
         })
@@ -682,13 +685,13 @@ const handleSaveHeader = async () => {
         
         isEditingHeader.value = false
         
-        toast.success('Agent updated successfully', {
+        toast.success('智能体信息更新成功', {
             duration: 4000,
             closeButton: true
         })
     } catch (error) {
         console.error('Error saving agent:', error)
-        toast.error('Failed to save agent changes', {
+        toast.error('保存智能体修改失败', {
             duration: 4000,
             closeButton: true
         })
@@ -721,13 +724,13 @@ const handleStatusToggle = async (event: Event) => {
             // Update storage to keep data in sync
             agentStorage.updateAgent(updatedAgent)
             
-            toast.success(`Agent ${newStatus ? 'activated' : 'deactivated'} successfully`, {
+            toast.success(newStatus ? '智能体已成功上线' : '智能体已设为离线', {
                 duration: 3000,
                 closeButton: true
             })
         } catch (error) {
             console.error('Error updating agent status:', error)
-            toast.error('Failed to update agent status', {
+            toast.error('更新智能体状态失败', {
                 duration: 4000,
                 closeButton: true
             })
@@ -763,19 +766,33 @@ const handleSaveAgentFromTab = async (data: any) => {
             await updateAgentGroups(data.selectedGroupIds)
         }
         
+        // Update responseDelay and unknown_fallback_strategy in customization_metadata if present
+        if ((data.responseDelay || data.unknownFallbackStrategy) && agentData.value.customization) {
+            const meta = {
+                ...(agentData.value.customization.customization_metadata ?? {}),
+                ...(data.responseDelay ? { response_delay: data.responseDelay } : {}),
+                ...(data.unknownFallbackStrategy ? { unknown_fallback_strategy: data.unknownFallbackStrategy } : {})
+            }
+            const updatedCustomization = await agentService.updateCustomization(agentData.value.id, {
+                ...agentData.value.customization,
+                customization_metadata: meta
+            })
+            agentData.value.customization = updatedCustomization
+        }
+
         // Update the agent data to trigger reactivity
         Object.assign(agentData.value, updatedAgent)
         
         // Update storage to keep data in sync
-        agentStorage.updateAgent(updatedAgent)
+        agentStorage.updateAgent(agentData.value)
         
-        toast.success('Agent updated successfully', {
+        toast.success('智能体人设与配置保存成功', {
             duration: 4000,
             closeButton: true
         })
     } catch (error) {
         console.error('Error saving agent:', error)
-        toast.error('Failed to save agent changes', {
+        toast.error('保存智能体配置失败', {
             duration: 4000,
             closeButton: true
         })
@@ -1023,6 +1040,16 @@ const isWorkflowFullscreen = ref(false)
                         >
                             知识库
                         </button>
+                        <button
+                            class="tab-button tab-test-chat-btn"
+                            @click="showTestChatModal = true"
+                            title="弹出独立对话窗口测试该智能体"
+                        >
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                            </svg>
+                            <span>💬 实时测试对话</span>
+                        </button>
                         <button 
                             class="tab-button" 
                             :class="{ 'active': activeTab === 'integrations' }"
@@ -1097,26 +1124,26 @@ const isWorkflowFullscreen = ref(false)
                         <div v-if="activeTab === 'preview'" class="tab-content">
                             <div class="preview-container">
                                 <div class="preview-header">
-                                    <h3 class="section-title">Chat Preview</h3>
+                                    <h3 class="section-title">聊天挂件实时预览</h3>
                                     <p class="section-description">
-                                        This is how your chat widget will appear to users. The preview shows the exact interface they will interact with.
+                                        此为挂件在访客端展示的真实样式，可在此直接进行交互与效果测试。
                                     </p>
                                 </div>
                                 <div class="preview-wrapper" :style="previewWrapperStyles">
                                     <!-- Token auth required notice -->
                                     <div v-if="agentData.require_token_auth" class="preview-unavailable">
                                         <div class="preview-unavailable-icon">
-                                            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                                <path d="M12 15V17M6 21H18C19.1046 21 20 20.1046 20 19V13C20 11.8954 19.1046 11 18 11H6C4.89543 11 4 11.8954 4 13V19C4 20.1046 4.89543 21 6 21ZM16 11V7C16 4.79086 14.2091 3 12 3C9.79086 3 8 4.79086 8 7V11H16Z"
-                                                    stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                                            </svg>
+                                             <svg width="48" height="48" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                                 <path d="M12 15V17M6 21H18C19.1046 21 20 20.1046 20 19V13C20 11.8954 19.1046 11 18 11H6C4.89543 11 4 11.8954 4 13V19C4 20.1046 4.89543 21 6 21ZM16 11V7C16 4.79086 14.2091 3 12 3C9.79086 3 8 4.79086 8 7V11H16Z"
+                                                     stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                             </svg>
                                         </div>
-                                        <h4 class="preview-unavailable-title">Preview Unavailable</h4>
+                                        <h4 class="preview-unavailable-title">预览不可用</h4>
                                         <p class="preview-unavailable-description">
-                                            This agent requires Widget App authentication. The preview cannot be shown because token authentication is enabled.
+                                            该智能体已开启挂件 App 安全认证，必须携带有效的安全令牌 (Token) 才能加载对话。
                                         </p>
                                         <p class="preview-unavailable-hint">
-                                            To test this agent, use the external widget with a valid API key from a Widget App, or temporarily disable "Require Token Authentication" in the Settings tab.
+                                            如需测试该智能体，请在挂件嵌入代码中使用有效的 API Key，或在高级设置中暂时关闭“要求 Token 身份验证”。
                                         </p>
                                     </div>
                                     <!-- Normal preview iframe -->
@@ -1125,11 +1152,11 @@ const isWorkflowFullscreen = ref(false)
                                         :src="iframeUrl"
                                         class="widget-preview"
                                         frameborder="0"
-                                        title="Widget Preview"
+                                        title="挂件实时预览"
                                         allow="clipboard-write"
                                     ></iframe>
                                     <div v-else class="loading-preview">
-                                        Loading widget preview...
+                                        正在加载挂件预览...
                                     </div>
                                 </div>
                             </div>
@@ -1141,14 +1168,14 @@ const isWorkflowFullscreen = ref(false)
                                 <KnowledgeExplorer
                                     mode="agent"
                                     variant="section"
-                                    title="Knowledge sources"
-                                    description="Every page this agent learns from. Review the extracted content and choose what grounds its answers."
+                                    title="知识库数据源"
+                                    description="该智能体学习的所有知识内容。查看提取的知识切片并决定其回答所依据的数据源。"
                                     :agent-id="agentData.id"
                                     :organization-id="agentData.organization_id"
                                 >
                                     <template #actions>
                                         <router-link to="/knowledge" class="kb-open-link">
-                                            Open knowledge base
+                                            前往知识库中心
                                             <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><path d="M15 3h6v6"></path><path d="M10 14 21 3"></path></svg>
                                         </router-link>
                                     </template>
@@ -1355,10 +1382,35 @@ const isWorkflowFullscreen = ref(false)
                 </div>
             </div>
         </div>
+
+        <!-- Realtime test chat modal -->
+        <AgentTestChatModal
+            v-if="showTestChatModal"
+            :agent="agentData"
+            @close="showTestChatModal = false"
+        />
     </div>
 </template>
 
 <style scoped>
+.tab-test-chat-btn {
+    margin-left: auto;
+    background: #eef2ff !important;
+    color: #4f46e5 !important;
+    border: 1px solid #c7d2fe !important;
+    font-weight: 700 !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 6px !important;
+}
+
+.tab-test-chat-btn:hover {
+    background: #4f46e5 !important;
+    color: #ffffff !important;
+    border-color: #4f46e5 !important;
+    box-shadow: 0 4px 12px rgba(79, 70, 229, 0.25);
+}
+
 .agent-detail {
     display: flex;
     flex-direction: column;

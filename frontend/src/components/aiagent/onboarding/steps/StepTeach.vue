@@ -107,8 +107,8 @@ const removeFile = (index: number) => {
 <template>
   <div class="step">
     <header class="step-head">
-      <h2 class="step-title">Teach it your business</h2>
-      <p class="step-sub">Drop a website URL or PDF — ChatterMate reads and indexes it automatically.</p>
+      <h2 class="step-title">注入业务知识库</h2>
+      <p class="step-sub">输入官网/帮助中心网址或上传 PDF 产品手册 — 系统将自动解析并构建专属知识库。</p>
     </header>
 
     <div class="source-input">
@@ -116,15 +116,15 @@ const removeFile = (index: number) => {
         v-model="newUrl"
         class="text-input mono"
         type="text"
-        placeholder="https://docs.yourcompany.com"
+        placeholder="https://docs.yourcompany.com (输入网页地址)"
         :disabled="isUploading"
         @keydown.enter.prevent="handleUrlAdd"
       />
       <!-- "Add" acts on the URL beside it, so the object is implicit. The PDF
            button opens a file picker, a different action — it keeps its own
            label rather than reading as a second way to add the same thing. -->
-      <button type="button" class="btn-soft" :disabled="isUploading" @click="handleUrlAdd">Add</button>
-      <button type="button" class="btn-soft" :disabled="isUploading" @click="triggerFileInput">Upload PDF</button>
+      <button type="button" class="btn-soft" :disabled="isUploading" @click="handleUrlAdd">添加网址</button>
+      <button type="button" class="btn-soft" :disabled="isUploading" @click="triggerFileInput">上传 PDF</button>
       <input
         ref="fileInput"
         type="file"
@@ -142,12 +142,12 @@ const removeFile = (index: number) => {
       <li v-for="(url, i) in urls" :key="`u-${i}`" class="source-row">
         <span class="source-icon" aria-hidden="true">🌐</span>
         <span class="source-name">{{ url }}</span>
-        <button type="button" class="source-remove" :disabled="isUploading" @click="removeUrl(i)" aria-label="Remove">×</button>
+        <button type="button" class="source-remove" :disabled="isUploading" @click="removeUrl(i)" aria-label="移除">×</button>
       </li>
       <li v-for="(file, i) in files" :key="`f-${i}`" class="source-row">
         <span class="source-icon" aria-hidden="true">📄</span>
         <span class="source-name">{{ file.name }}</span>
-        <button type="button" class="source-remove" :disabled="isUploading" @click="removeFile(i)" aria-label="Remove">×</button>
+        <button type="button" class="source-remove" :disabled="isUploading" @click="removeFile(i)" aria-label="移除">×</button>
       </li>
     </ul>
 
@@ -156,7 +156,7 @@ const removeFile = (index: number) => {
       <li v-for="item in knowledgeItems" :key="item.id" class="source-row">
         <span class="source-icon" aria-hidden="true">✓</span>
         <span class="source-name">{{ item.name }}</span>
-        <span class="source-tag">indexed</span>
+        <span class="source-tag">已索引</span>
       </li>
     </ul>
 
@@ -164,13 +164,13 @@ const removeFile = (index: number) => {
       <div class="progress-bar" :style="{ width: `${uploadProgress}%` }"></div>
     </div>
 
-    <p v-if="successMessage" class="step-hint">{{ successMessage }} Processing in the background — you can continue.</p>
+    <p v-if="successMessage" class="step-hint">{{ successMessage }} 正在后台异步处理切片与索引，您可以继续下一步。</p>
     <p v-if="uploadError" class="step-error">{{ uploadError }}</p>
 
     <div class="step-actions">
-      <button type="button" class="btn-ghost" :disabled="advancing || isUploading" @click="emit('back')">Back</button>
+      <button type="button" class="btn-ghost" :disabled="advancing || isUploading" @click="emit('back')">上一步</button>
       <button type="button" class="btn-accent" :disabled="advancing || isUploading" @click="handleContinue">
-        {{ advancing ? 'Saving…' : 'Continue' }}
+        {{ advancing ? '正在保存…' : '继续下一步' }}
         <span v-if="!advancing" class="arrow">→</span>
       </button>
     </div>

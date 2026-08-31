@@ -79,62 +79,88 @@ watch(() => [props.open, props.sessionId], ([open]) => {
 </script>
 
 <template>
-  <div v-if="open" class="picker-backdrop" @click.self="emit('close')">
-    <section class="picker" role="dialog" aria-modal="true" aria-labelledby="product-picker-title">
-      <header class="picker-header">
-        <div>
-          <h2 id="product-picker-title">选择 Shopify 商品</h2>
-          <p>{{ shopDomain || '仅显示当前会话关联店铺的在售商品' }}</p>
+  <div v-if="open" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-in fade-in duration-200" @click.self="emit('close')">
+    <div class="w-full max-w-lg bg-[#0F1523] border border-white/10 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
+      <!-- 头部 -->
+      <div class="px-5 py-4 border-b border-white/[0.08] flex items-center justify-between bg-[#141B2E]">
+        <div class="flex items-center gap-3">
+          <div class="w-9 h-9 rounded-xl bg-purple-500/15 border border-purple-500/30 text-purple-400 flex items-center justify-center text-sm shadow-[0_0_12px_rgba(168,85,247,0.3)]">
+            <i class="fa-solid fa-bag-shopping"></i>
+          </div>
+          <div>
+            <h3 class="font-bold text-slate-100 text-sm">选择 Shopify 商品卡片</h3>
+            <p class="text-[11px] text-slate-400 mt-0.5">{{ shopDomain || '仅显示当前会话关联店铺的在售商品' }}</p>
+          </div>
         </div>
-        <button type="button" class="icon-button" aria-label="关闭" @click="emit('close')">×</button>
-      </header>
+        <button
+          type="button"
+          @click="emit('close')"
+          class="w-7 h-7 rounded-lg hover:bg-white/10 text-slate-400 hover:text-slate-100 flex items-center justify-center transition-colors"
+        >
+          <i class="fa-solid fa-xmark text-sm"></i>
+        </button>
+      </div>
 
-      <div class="picker-body">
-        <input v-model="query" type="search" placeholder="搜索商品名称、品牌或链接标识" class="search-input" />
-        <p v-if="loading" class="state">正在加载商品目录...</p>
-        <p v-else-if="error" class="state">{{ error }}</p>
-        <p v-else-if="filteredProducts.length === 0" class="state">没有匹配的商品。</p>
-        <div v-else class="product-list">
-          <button
-            v-for="product in filteredProducts"
-            :key="product.id"
-            type="button"
-            class="product-row"
-            @click="emit('select', product, shopDomain); emit('close')"
-          >
-            <img v-if="product.image?.src" :src="product.image.src" :alt="product.image.alt || product.title" class="product-image" />
-            <span v-else class="product-image fallback"><i class="fa-solid fa-box"></i></span>
-            <span class="product-copy">
-              <strong>{{ product.title }}</strong>
-              <small>{{ product.vendor || 'Shopify 商品' }}</small>
-            </span>
-            <span class="price">{{ priceLabel(product) }}</span>
-          </button>
+      <!-- 搜索框 -->
+      <div class="p-3.5 border-b border-white/[0.06] bg-[#0C111C]">
+        <div class="relative">
+          <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-slate-500 text-xs"></i>
+          <input
+            v-model="query"
+            type="search"
+            placeholder="搜索商品名称、品牌或商品链接标识…"
+            class="w-full bg-[#161E31] border border-white/10 rounded-xl pl-8 pr-3 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-purple-500/50"
+            autofocus
+          />
         </div>
       </div>
-    </section>
+
+      <!-- 商品列表 -->
+      <div class="p-4 space-y-2 overflow-y-auto flex-1">
+        <div v-if="loading" class="p-8 text-center text-slate-400 text-xs flex items-center justify-center gap-2">
+          <i class="fa-solid fa-circle-notch fa-spin text-purple-400"></i>
+          <span>正在同步商品目录…</span>
+        </div>
+        <div v-else-if="error" class="p-4 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-300 text-xs">
+          {{ error }}
+        </div>
+        <div v-else-if="filteredProducts.length === 0" class="p-8 text-center text-slate-500 text-xs">
+          没有找到匹配的商品
+        </div>
+        <template v-else>
+          <div
+            v-for="product in filteredProducts"
+            :key="product.id"
+            @click="emit('select', product, shopDomain); emit('close')"
+            class="p-2.5 rounded-xl border border-white/[0.06] bg-[#141B2E] hover:bg-[#1A233A] hover:border-purple-500/40 cursor-pointer transition-all flex items-center justify-between gap-3 group"
+          >
+            <div class="flex items-center gap-3 min-w-0">
+              <img
+                v-if="product.image?.src"
+                :src="product.image.src"
+                :alt="product.image.alt || product.title"
+                class="w-11 h-11 rounded-lg object-cover bg-slate-800 shrink-0 border border-white/10"
+              />
+              <div v-else class="w-11 h-11 rounded-lg bg-slate-800 flex items-center justify-center text-slate-500 shrink-0 border border-white/10">
+                <i class="fa-solid fa-box"></i>
+              </div>
+              <div class="min-w-0">
+                <div class="text-xs font-semibold text-slate-100 group-hover:text-purple-300 transition-colors truncate">
+                  {{ product.title }}
+                </div>
+                <div class="text-[10px] text-slate-400 mt-0.5 truncate">{{ product.vendor || 'Shopify 官方在售' }}</div>
+              </div>
+            </div>
+            <div class="shrink-0 text-right">
+              <div class="text-xs font-mono font-bold text-purple-400">{{ priceLabel(product) }}</div>
+              <div class="text-[10px] text-slate-500 mt-0.5 flex items-center gap-1 justify-end group-hover:text-purple-400">
+                <span>插入</span>
+                <i class="fa-solid fa-arrow-right text-[9px]"></i>
+              </div>
+            </div>
+          </div>
+        </template>
+      </div>
+    </div>
   </div>
 </template>
-
-<style scoped>
-.picker-backdrop { position: fixed; inset: 0; z-index: 65; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgba(0, 0, 0, .68); }
-.picker { width: min(620px, 100%); max-height: 85vh; display: flex; flex-direction: column; overflow: hidden; border: 1px solid var(--o12); border-radius: 10px; background: var(--bg2); color: var(--text); box-shadow: 0 24px 80px rgba(0, 0, 0, .35); }
-.picker-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px; border-bottom: 1px solid var(--o08); }
-.picker-header h2 { margin: 0; font-size: 16px; }
-.picker-header p { margin: 5px 0 0; color: var(--muted); font-size: 11px; }
-.icon-button { width: 30px; height: 30px; border: 0; border-radius: 6px; background: transparent; color: var(--muted); font-size: 22px; cursor: pointer; }
-.icon-button:hover { background: var(--o08); color: var(--text); }
-.picker-body { min-height: 180px; padding: 14px; overflow-y: auto; }
-.search-input { width: 100%; box-sizing: border-box; min-height: 36px; padding: 0 10px; border: 1px solid var(--o12); border-radius: 7px; background: var(--bg); color: var(--text); font: inherit; font-size: 12px; outline: 0; }
-.search-input:focus { border-color: var(--teal-border); }
-.state { margin: 28px 0; color: var(--muted); text-align: center; font-size: 12px; }
-.product-list { display: grid; gap: 8px; margin-top: 12px; }
-.product-row { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 64px; padding: 8px; border: 1px solid var(--o08); border-radius: 7px; background: var(--bg); color: var(--text); text-align: left; cursor: pointer; }
-.product-row:hover { border-color: var(--teal-border); background: var(--o06); }
-.product-image { width: 46px; height: 46px; flex: 0 0 auto; border-radius: 5px; object-fit: cover; background: var(--o06); }
-.fallback { display: inline-flex; align-items: center; justify-content: center; color: var(--muted); }
-.product-copy { display: grid; min-width: 0; gap: 3px; flex: 1; }
-.product-copy strong { overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
-.product-copy small { overflow: hidden; color: var(--muted); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
-.price { color: var(--c-teal); font-size: 11px; font-weight: 600; white-space: nowrap; }
-</style>

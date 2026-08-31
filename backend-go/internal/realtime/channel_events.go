@@ -19,9 +19,11 @@ func (s *Server) BroadcastChannelMessage(ctx context.Context, organizationID, se
 	}
 	payload["session_id"] = sessionID.String()
 	_ = s.agentNS.To(socket.Room(sessionID.String())).Emit("chat_reply", payload)
+	_ = s.agentNS.To(socket.Room("org_chats_"+organizationID.String())).Emit("chat_reply", payload)
 	if managed, err := s.managedByID(ctx, sessionID, organizationID); err == nil && managed != nil && managed.UserID != nil {
 		_ = s.agentNS.To(socket.Room("user_"+managed.UserID.String())).Emit("chat_reply", payload)
 	}
 	_ = s.widgetNS.To(socket.Room(sessionID.String())).Emit("chat_response", payload)
+	s.BroadcastConversationUpdated(ctx, organizationID, sessionID, nil)
 	return nil
 }

@@ -16,12 +16,9 @@ limitations under the License.
 
 import { computed } from 'vue'
 import { permissionChecks } from '@/utils/permissions'
-// Visibility comes from the same map the router enforces, so a link can never
-// appear for a page the guard will refuse (People used to do exactly that).
 import { canAccessPath } from '@/router/routePermissions'
 import { useEnterpriseFeatures } from '@/composables/useEnterpriseFeatures'
 
-// Re-exported so nav consumers keep a single import site
 export { NAV_ICONS, navIconSvg } from './navIcons'
 
 export interface NavItem {
@@ -37,20 +34,14 @@ export interface NavGroup {
   items: NavItem[]
 }
 
-// Shared unread-badge cap (bottom nav, More sheet, header bell)
 export const formatBadgeCount = (count?: number) =>
   count && count > 99 ? '99+' : String(count || '')
 
-// Bottom-nav primary slots, in display order (remaining links go to the More sheet)
-export const PRIMARY_NAV_PATHS = ['/conversations', '/people', '/ai-agents', '/analytics']
+export const PRIMARY_NAV_PATHS = ['/conversations', '/stores', '/people', '/ai-agents', '/analytics']
 
 export function useNavItems() {
   const { hasEnterpriseModule } = useEnterpriseFeatures()
 
-  // Section membership is explicit rather than inferred from array position:
-  // a header can be permission-hidden while one of its items is not (User
-  // Settings is always visible), which silently orphaned items into the
-  // preceding section.
   const navGroups = computed<NavGroup[]>(() =>
     [
       {
@@ -65,7 +56,7 @@ export function useNavItems() {
           {
             to: '/human-agents',
             icon: 'humans',
-            label: '人工客服',
+            label: '团队与坐席',
             show: canAccessPath('/human-agents'),
           },
           {
@@ -73,6 +64,12 @@ export function useNavItems() {
             icon: 'inbox',
             label: '会话收件箱',
             show: canAccessPath('/conversations'),
+          },
+          {
+            to: '/stores',
+            icon: 'stores',
+            label: '店铺管理',
+            show: canAccessPath('/stores'),
           },
           {
             to: '/tickets',
@@ -83,7 +80,7 @@ export function useNavItems() {
           {
             to: '/people',
             icon: 'people',
-            label: '团队成员',
+            label: '客户档案 (CRM)',
             show: canAccessPath('/people'),
           },
           {
@@ -161,24 +158,19 @@ export function useNavItems() {
       },
     ]
       .map((group) => ({ ...group, items: group.items.filter((item) => item.show !== false) }))
-      // A section is visible when it has something to show — no separate
-      // permission flag to drift from its items
       .filter((group) => group.items.length > 0),
   )
 
-  // Flat list (heading followed by its links) for the desktop sidebar
   const navItems = computed<NavItem[]>(() =>
     navGroups.value.flatMap((group) => [{ section: group.section }, ...group.items]),
   )
 
-  // Bottom-nav slots in design order
   const primaryNavItems = computed<NavItem[]>(() =>
     PRIMARY_NAV_PATHS.map((path) => navItems.value.find((item) => item.to === path)).filter(
       (item): item is NavItem => !!item,
     ),
   )
 
-  // Everything the bottom nav doesn't carry, still grouped like the sidebar
   const moreNavGroups = computed<NavGroup[]>(() =>
     navGroups.value
       .map((group) => ({
@@ -188,7 +180,6 @@ export function useNavItems() {
       .filter((group) => group.items.length > 0),
   )
 
-  // Derived from the groups so there is one definition of "overflow link"
   const moreNavItems = computed<NavItem[]>(() =>
     moreNavGroups.value.flatMap((group) => group.items),
   )

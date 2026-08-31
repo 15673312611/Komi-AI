@@ -1,16 +1,18 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { listTeammates, type Teammate } from '@/services/users'
 
 const props = withDefaults(defineProps<{
   show: boolean
   currentUserId?: string | null
+  customerName?: string | null
   actionLoading?: boolean
-}>(), { currentUserId: null, actionLoading: false })
+}>(), { currentUserId: null, customerName: '', actionLoading: false })
 
 const emit = defineEmits<{
   (e: 'close'): void
   (e: 'transfer', targetUserId: string, note: string): void
+  (e: 'route-to-queue'): void
   (e: 'hand-back-to-ai'): void
 }>()
 
@@ -19,6 +21,7 @@ const selectedTarget = ref('')
 const note = ref('')
 const loading = ref(false)
 const error = ref('')
+const searchQuery = ref('')
 let teammatesRequestVersion = 0
 
 const loadTeammates = async () => {
@@ -34,7 +37,7 @@ const loadTeammates = async () => {
   try {
     const loadedTeammates = await listTeammates()
     if (!isCurrentRequest()) return
-    teammates.value = loadedTeammates.filter(user => user.id !== currentUserId)
+    teammates.value = (loadedTeammates || []).filter(user => user.id !== currentUserId)
     if (!selectedTarget.value || !teammates.value.some(user => user.id === selectedTarget.value)) {
       selectedTarget.value = teammates.value[0]?.id || ''
     }
@@ -46,13 +49,24 @@ const loadTeammates = async () => {
   }
 }
 
+const filteredTeammates = computed(() => {
+  if (!searchQuery.value.trim()) return teammates.value
+  const q = searchQuery.value.toLowerCase().trim()
+  return teammates.value.filter(u =>
+    (u.full_name && u.full_name.toLowerCase().includes(q)) ||
+    (u.email && u.email.toLowerCase().includes(q))
+  )
+})
+
 watch(() => [props.show, props.currentUserId], ([show]) => {
   if (!show) {
     teammatesRequestVersion += 1
     loading.value = false
+    searchQuery.value = ''
     return
   }
   note.value = ''
+  searchQuery.value = ''
   void loadTeammates()
 }, { immediate: true })
 
@@ -63,59 +77,167 @@ const confirm = () => {
 </script>
 
 <template>
-  <div v-if="show" class="modal-backdrop" @click.self="emit('close')">
-    <section class="modal" role="dialog" aria-modal="true" aria-labelledby="transfer-title">
-      <header class="modal-header">
-        <div>
-          <h2 id="transfer-title">转交会话</h2>
-          <p>选择实际可处理该客户问题的团队成员。</p>
+  <div v-if="show" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-in fade-in duration-200" @click.self="emit('close')">
+    <div class="w-full max-w-lg bg-[#0F1523] border border-white/10 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+      <!-- 头部 -->
+      <div class="px-5 py-4 border-b border-white/[0.08] flex items-center justify-between bg-[#141B2E]">
+        <div class="flex items-center gap-3">
+          <div class="w-9 h-9 rounded-xl bg-blue-500/15 border border-blue-500/30 text-blue-400 flex items-center justify-center text-sm shadow-[0_0_12px_rgba(59,130,246,0.3)]">
+            <i class="fa-solid fa-arrow-right-arrow-left"></i>
+          </div>
+          <div>
+            <h3 class="font-bold text-slate-100 text-sm flex items-center gap-2">
+              <span>转交会话 / 团队分配</span>
+              <span v-if="customerName" class="text-xs font-normal text-slate-400 font-sans">({{ customerName }})</span>
+            </h3>
+            <p class="text-[11px] text-slate-400 mt-0.5">将当前会话转派给特定团队成员或转入公共排队队列</p>
+          </div>
         </div>
-        <button type="button" class="icon-button" aria-label="关闭" @click="emit('close')">×</button>
-      </header>
-      <div class="modal-body">
-        <label class="field-label" for="transfer-target">团队成员</label>
-        <select id="transfer-target" v-model="selectedTarget" :disabled="loading || !teammates.length || actionLoading">
-          <option value="" disabled>{{ loading ? '正在加载…' : '请选择成员' }}</option>
-          <option v-for="user in teammates" :key="user.id" :value="user.id">
-            {{ user.full_name || user.email }}<template v-if="user.full_name"> · {{ user.email }}</template><template v-if="user.is_online"> · 在线</template>
-          </option>
-        </select>
-        <p v-if="error" class="error-text">{{ error }}</p>
-        <p v-else-if="!loading && !teammates.length" class="muted">当前没有可接收并处理会话的团队成员。</p>
-
-        <label class="field-label" for="transfer-note">交接备注（可选，仅团队可见）</label>
-        <textarea id="transfer-note" v-model="note" rows="3" :disabled="actionLoading" placeholder="说明已核实的事实、待处理事项或客户的明确诉求…" />
-        <p class="muted">备注会先以内部便签保存，再执行转交。</p>
+        <button
+          @click="emit('close')"
+          class="w-7 h-7 rounded-lg hover:bg-white/10 text-slate-400 hover:text-slate-100 flex items-center justify-center transition-colors"
+        >
+          <i class="fa-solid fa-xmark text-sm"></i>
+        </button>
       </div>
-      <footer class="modal-footer">
-        <button type="button" class="btn-secondary" :disabled="actionLoading" @click="emit('hand-back-to-ai')">交还给 AI</button>
-        <span class="footer-spacer" />
-        <button type="button" class="btn-secondary" :disabled="actionLoading" @click="emit('close')">取消</button>
-        <button type="button" class="btn-primary" :disabled="loading || !selectedTarget || actionLoading" @click="confirm">{{ actionLoading ? '处理中…' : '确认转交' }}</button>
-      </footer>
-    </section>
+
+      <!-- 主体内容 -->
+      <div class="p-5 space-y-4 overflow-y-auto flex-1">
+        <!-- 成员选择 -->
+        <div class="space-y-2">
+          <div class="flex items-center justify-between">
+            <label class="text-xs font-semibold text-slate-200 flex items-center gap-1.5">
+              <i class="fa-solid fa-user-group text-blue-400 text-[11px]"></i>
+              <span>选择接收成员</span>
+            </label>
+            <span v-if="teammates.length" class="text-[10px] text-slate-500">{{ teammates.length }} 位可用成员</span>
+          </div>
+
+          <div v-if="loading" class="p-6 text-center text-slate-400 text-xs flex items-center justify-center gap-2 bg-white/[0.02] border border-white/[0.06] rounded-xl">
+            <i class="fa-solid fa-circle-notch fa-spin text-blue-400"></i>
+            <span>正在加载团队成员…</span>
+          </div>
+
+          <div v-else-if="error" class="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-300 text-xs">
+            {{ error }}
+          </div>
+
+          <div v-else-if="!teammates.length" class="p-4 rounded-xl bg-white/[0.02] border border-white/[0.06] text-center text-slate-400 text-xs">
+            暂无其他可用团队成员
+          </div>
+
+          <div v-else class="space-y-2">
+            <!-- 搜索框 -->
+            <div class="relative">
+              <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-slate-500 text-xs"></i>
+              <input
+                v-model="searchQuery"
+                type="text"
+                placeholder="搜索成员姓名或邮箱…"
+                class="w-full bg-[#161E31] border border-white/10 rounded-xl pl-8 pr-3 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-blue-500/50"
+              />
+            </div>
+
+            <!-- 成员单选列表 -->
+            <div class="max-h-44 overflow-y-auto space-y-1 pr-1">
+              <div
+                v-for="user in filteredTeammates"
+                :key="user.id"
+                @click="selectedTarget = user.id"
+                :class="[
+                  'p-2.5 rounded-xl border flex items-center justify-between cursor-pointer transition-all',
+                  selectedTarget === user.id
+                    ? 'bg-blue-500/15 border-blue-500/40 text-blue-200 shadow-[0_0_10px_rgba(59,130,246,0.15)]'
+                    : 'bg-[#141B2E] border-white/[0.06] hover:bg-[#1A233A] text-slate-300'
+                ]"
+              >
+                <div class="flex items-center gap-2.5 min-w-0">
+                  <div class="w-7 h-7 rounded-lg bg-slate-700 text-white text-xs font-bold flex items-center justify-center shrink-0">
+                    {{ (user.full_name || user.email || '?').slice(0, 1).toUpperCase() }}
+                  </div>
+                  <div class="min-w-0">
+                    <div class="text-xs font-semibold text-slate-100 truncate flex items-center gap-1.5">
+                      <span>{{ user.full_name || user.email }}</span>
+                      <span v-if="user.is_online" class="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" title="在线"></span>
+                    </div>
+                    <div v-if="user.full_name" class="text-[10px] text-slate-500 truncate">{{ user.email }}</div>
+                  </div>
+                </div>
+
+                <div class="shrink-0 ml-2">
+                  <div :class="['w-4 h-4 rounded-full border flex items-center justify-center', selectedTarget === user.id ? 'border-blue-400 bg-blue-500' : 'border-slate-600 bg-transparent']">
+                    <i v-if="selectedTarget === user.id" class="fa-solid fa-check text-[9px] text-white"></i>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 交接便签 -->
+        <div class="space-y-1.5">
+          <label class="text-xs font-semibold text-slate-200 flex items-center gap-1.5">
+            <i class="fa-solid fa-note-sticky text-amber-400 text-[11px]"></i>
+            <span>交接备注（可选，内部便签仅团队可见）</span>
+          </label>
+          <textarea
+            v-model="note"
+            rows="2"
+            :disabled="actionLoading"
+            placeholder="例如：客户需要确认加急物流单号与退货单据，已完成初步核对…"
+            class="w-full bg-[#161E31] border border-white/10 rounded-xl p-3 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500/50 resize-none font-sans"
+          ></textarea>
+        </div>
+      </div>
+
+      <!-- 底部操作栏 -->
+      <div class="px-5 py-3.5 border-t border-white/[0.08] bg-[#141B2E] flex items-center justify-between gap-2">
+        <div class="flex items-center gap-2">
+          <button
+            type="button"
+            :disabled="actionLoading"
+            @click="emit('hand-back-to-ai')"
+            class="px-3 py-1.5 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-300 text-xs font-medium flex items-center gap-1.5 transition-all disabled:opacity-50"
+            title="交还给 AI 自动回复"
+          >
+            <i class="fa-solid fa-robot text-xs"></i>
+            <span>转给 AI</span>
+          </button>
+
+          <button
+            type="button"
+            :disabled="actionLoading"
+            @click="emit('route-to-queue')"
+            class="px-3 py-1.5 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-300 text-xs font-medium flex items-center gap-1.5 transition-all disabled:opacity-50"
+            title="转入公共人工接入队列"
+          >
+            <i class="fa-solid fa-clock text-xs"></i>
+            <span>转入队列</span>
+          </button>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <button
+            type="button"
+            :disabled="actionLoading"
+            @click="emit('close')"
+            class="px-3.5 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 text-xs font-medium transition-all"
+          >
+            取消
+          </button>
+          <button
+            type="button"
+            :disabled="loading || !selectedTarget || actionLoading"
+            @click="confirm"
+            class="px-4 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-[0_0_12px_rgba(59,130,246,0.3)] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <i v-if="actionLoading" class="fa-solid fa-circle-notch fa-spin text-xs"></i>
+            <i v-else class="fa-solid fa-check text-xs"></i>
+            <span>{{ actionLoading ? '正在转派…' : '确认转交' }}</span>
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
-<style scoped>
-.modal-backdrop { position: fixed; inset: 0; z-index: 60; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgba(0,0,0,.68); }
-.modal { width: min(520px, 100%); max-height: 90vh; overflow: hidden; display: flex; flex-direction: column; border: 1px solid var(--o12); border-radius: 10px; background: var(--bg2); color: var(--text); box-shadow: 0 24px 80px rgba(0,0,0,.35); }
-.modal-header, .modal-footer { display: flex; align-items: center; gap: 12px; padding: 16px; border-bottom: 1px solid var(--o08); }
-.modal-header { justify-content: space-between; }
-.modal-footer { border-top: 1px solid var(--o08); border-bottom: 0; }
-.modal-header h2 { margin: 0; font-size: 16px; }
-.modal-header p, .muted { margin: 5px 0 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
-.icon-button { width: 30px; height: 30px; border: 0; border-radius: 6px; background: transparent; color: var(--muted); font-size: 22px; cursor: pointer; }
-.icon-button:hover { background: var(--o08); color: var(--text); }
-.modal-body { padding: 16px; overflow-y: auto; display: grid; gap: 8px; }
-.field-label { margin-top: 3px; font-size: 12px; font-weight: 600; }
-select, textarea { width: 100%; border: 1px solid var(--o12); border-radius: 7px; background: var(--bg); color: var(--text); padding: 10px; outline: none; font: inherit; font-size: 13px; }
-select:focus, textarea:focus { border-color: var(--teal-border); }
-textarea { resize: vertical; }
-.error-text { margin: 0; color: var(--c-danger); font-size: 12px; }
-.footer-spacer { flex: 1; }
-.btn-primary, .btn-secondary { min-height: 34px; padding: 0 12px; border-radius: 7px; border: 1px solid transparent; font-size: 12px; cursor: pointer; white-space: nowrap; }
-.btn-primary { background: var(--accent-solid); color: var(--on-accent-solid); }
-.btn-secondary { background: var(--o06); border-color: var(--o12); color: var(--text); }
-button:disabled { opacity: .5; cursor: not-allowed; }
-</style>

@@ -351,3 +351,26 @@ VALUES ($1, $2, $3, $4, $5, $6, 'user', $7),
 		t.Fatalf("delete widget app valid=%t err=%v", valid, err)
 	}
 }
+
+func TestChatGetDetailRealDB(t *testing.T) {
+	pool, ctx := openIntegrationPool(t)
+	chatRepo := chat.NewRepository(pool)
+	var sessionID, orgID uuid.UUID
+	err := pool.QueryRow(ctx, `SELECT session_id, organization_id FROM session_to_agents ORDER BY assigned_at DESC LIMIT 1`).Scan(&sessionID, &orgID)
+	if err != nil {
+		t.Skipf("no session found: %v", err)
+	}
+	t.Logf("Testing session_id: %s, org_id: %s", sessionID, orgID)
+	detail, err := chatRepo.GetDetail(ctx, sessionID, orgID)
+	if err != nil {
+		t.Fatalf("GetDetail error: %v", err)
+	}
+	if detail == nil {
+		t.Fatalf("GetDetail returned nil detail")
+	}
+	t.Logf("detail: SessionID=%s, Customer=%+v, Agent=%+v, MessagesCount=%d, AIAutoReply=%t",
+		detail.SessionID, detail.Customer, detail.Agent, len(detail.Messages), detail.AIAutoReply)
+	for i, m := range detail.Messages {
+		t.Logf("  Message %d: [%s] %s (author: %v, created_at: %s)", i, m.MessageType, m.Message, m.UserName, m.CreatedAt)
+	}
+}

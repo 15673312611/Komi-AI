@@ -134,7 +134,7 @@ func (r *Repository) ready() error {
 
 const settingsProjection = `
 SELECT id, organization_id, enabled, slug, title, description, logo_url,
-       COALESCE(favicon_url, NULL), brand_color, COALESCE(header_links, '[]'::jsonb),
+       COALESCE(favicon_url, NULL), brand_color, COALESCE(header_links, '[]'::json),
        cta_text, cta_url, COALESCE(cta_enabled, TRUE), auto_generate, agent_id,
        ai_search_enabled, COALESCE(chat_widget_enabled, TRUE), custom_domain,
        domain_verification_token, txt_record_verified, cname_record_verified,

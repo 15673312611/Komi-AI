@@ -15,7 +15,8 @@ limitations under the License.
 """
 
 from pydantic import BaseModel, EmailStr
-from typing import Optional, Dict, TypedDict
+from typing import Optional, Dict
+from typing_extensions import TypedDict
 from uuid import UUID
 
 from app.models.schemas.user import UserResponse

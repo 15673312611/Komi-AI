@@ -134,6 +134,22 @@ def create_model(model_type: str, api_key: str, model_name: str, max_tokens: int
         elif model_type == 'XAI':
             from agno.models.xai import xAI
             return xAI(api_key=api_key, id=model_name, max_tokens=max_tokens)
+        elif model_type == 'ZHIPU':
+            return OpenAIChat(
+                api_key=api_key,
+                id=model_name,
+                max_tokens=max_tokens,
+                base_url="https://open.bigmodel.cn/api/paas/v4",
+                **({"response_format": response_format} if response_format else {}),
+            )
+        elif model_type == 'KIMI':
+            return OpenAIChat(
+                api_key=api_key,
+                id=model_name,
+                max_tokens=max_tokens,
+                base_url="https://api.moonshot.cn/v1",
+                **({"response_format": response_format} if response_format else {}),
+            )
         else:
             raise ValueError(f"Unsupported model type: {model_type}")
     except ImportError as e:
@@ -170,4 +186,4 @@ async def test_model_api_key(api_key: str, model_type: str, model_name: str) -> 
         return True
     except Exception as e:
         logger.error(f"API key test failed: {str(e)}")
-        return False 
+        return False

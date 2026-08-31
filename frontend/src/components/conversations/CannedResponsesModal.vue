@@ -77,59 +77,92 @@ watch(() => props.open, (open) => {
 </script>
 
 <template>
-  <div v-if="open" class="modal-backdrop" @click.self="emit('close')">
-    <section class="modal" role="dialog" aria-modal="true" aria-labelledby="canned-title">
-      <header class="modal-header">
-        <div>
-          <h2 id="canned-title">快捷话术</h2>
-          <p>从已配置的团队话术中选择，插入后仍可编辑。</p>
+  <div v-if="open" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-in fade-in duration-200" @click.self="emit('close')">
+    <div class="w-full max-w-xl bg-[#0F1523] border border-white/10 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
+      <!-- 头部 -->
+      <div class="px-5 py-4 border-b border-white/[0.08] flex items-center justify-between bg-[#141B2E]">
+        <div class="flex items-center gap-3">
+          <div class="w-9 h-9 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-400 flex items-center justify-center text-sm shadow-[0_0_12px_rgba(245,158,11,0.3)]">
+            <i class="fa-solid fa-bolt"></i>
+          </div>
+          <div>
+            <h3 class="font-bold text-slate-100 text-sm">常用快捷话术库</h3>
+            <p class="text-[11px] text-slate-400 mt-0.5">选取官方与团队标准化话术模板，支持变量自动填充</p>
+          </div>
         </div>
-        <div class="header-actions">
-          <button v-if="canManageResponses" type="button" class="manage-button" @click="router.push('/settings/canned-responses'); emit('close')">管理</button>
-          <button type="button" class="icon-button" aria-label="关闭" @click="emit('close')">×</button>
+        <div class="flex items-center gap-2">
+          <button
+            v-if="canManageResponses"
+            type="button"
+            @click="router.push('/settings/canned-responses'); emit('close')"
+            class="px-2.5 py-1 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 text-xs font-medium transition-all"
+          >
+            <i class="fa-solid fa-gear text-[11px] mr-1"></i>管理
+          </button>
+          <button
+            type="button"
+            @click="emit('close')"
+            class="w-7 h-7 rounded-lg hover:bg-white/10 text-slate-400 hover:text-slate-100 flex items-center justify-center transition-colors"
+          >
+            <i class="fa-solid fa-xmark text-sm"></i>
+          </button>
         </div>
-      </header>
-      <div class="filters">
-        <input v-model="query" type="search" placeholder="搜索标题、内容或快捷指令" autofocus />
-        <select v-model="category" aria-label="话术分类">
+      </div>
+
+      <!-- 搜索与分类过滤 -->
+      <div class="p-3.5 border-b border-white/[0.06] bg-[#0C111C] flex gap-2">
+        <div class="relative flex-1">
+          <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-slate-500 text-xs"></i>
+          <input
+            v-model="query"
+            type="search"
+            placeholder="搜索话术标题、内容或 /快捷指令…"
+            class="w-full bg-[#161E31] border border-white/10 rounded-xl pl-8 pr-3 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-amber-500/50"
+            autofocus
+          />
+        </div>
+        <select
+          v-model="category"
+          class="bg-[#161E31] border border-white/10 rounded-xl px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-amber-500/50"
+        >
           <option v-for="item in categories" :key="item" :value="item">{{ item === 'all' ? '全部分类' : item }}</option>
         </select>
       </div>
-      <div class="response-list">
-        <p v-if="loading" class="empty">正在加载快捷话术…</p>
-        <p v-else-if="error" class="empty error-text">{{ error }}<button type="button" class="retry-button" @click="loadResponses">重试</button></p>
-        <button v-for="item in filtered" :key="item.id" type="button" class="response-item" @click="select(item)">
-          <span class="response-item__title">{{ item.title }}</span>
-          <span class="response-item__meta">{{ item.category }}<template v-if="item.shortcut"> · {{ item.shortcut }}</template></span>
-          <span class="response-item__content">{{ item.content }}</span>
-        </button>
-        <p v-if="!loading && !error && !filtered.length" class="empty">没有匹配的话术。</p>
+
+      <!-- 话术列表 -->
+      <div class="p-3.5 space-y-2 overflow-y-auto flex-1">
+        <div v-if="loading" class="p-8 text-center text-slate-400 text-xs flex items-center justify-center gap-2">
+          <i class="fa-solid fa-circle-notch fa-spin text-amber-400"></i>
+          <span>正在加载快捷话术…</span>
+        </div>
+        <div v-else-if="error" class="p-4 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-300 text-xs flex items-center justify-between">
+          <span>{{ error }}</span>
+          <button type="button" class="underline text-amber-400 font-bold ml-2" @click="loadResponses">重试</button>
+        </div>
+        <template v-else>
+          <div
+            v-for="item in filtered"
+            :key="item.id"
+            @click="select(item)"
+            class="p-3 rounded-xl border border-white/[0.06] bg-[#141B2E] hover:bg-[#1A233A] hover:border-amber-500/40 cursor-pointer transition-all space-y-1.5 group"
+          >
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-bold text-slate-100 group-hover:text-amber-300 transition-colors flex items-center gap-1.5">
+                <i class="fa-solid fa-comment-dots text-amber-400 text-[11px]"></i>
+                {{ item.title }}
+              </span>
+              <div class="flex items-center gap-1.5">
+                <span v-if="item.shortcut" class="px-1.5 py-0.5 rounded bg-white/5 border border-white/10 text-[10px] font-mono text-slate-400">/{{ item.shortcut.replace(/^\//, '') }}</span>
+                <span class="px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-400 text-[10px] font-medium">{{ item.category }}</span>
+              </div>
+            </div>
+            <p class="text-xs text-slate-300 leading-relaxed line-clamp-2">{{ item.content }}</p>
+          </div>
+          <div v-if="!filtered.length" class="p-8 text-center text-slate-500 text-xs">
+            没有找到匹配的话术
+          </div>
+        </template>
       </div>
-    </section>
+    </div>
   </div>
 </template>
-
-<style scoped>
-.modal-backdrop { position: fixed; inset: 0; z-index: 60; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgba(0,0,0,.68); }
-.modal { width: min(620px, 100%); max-height: min(680px, 90vh); overflow: hidden; display: flex; flex-direction: column; border: 1px solid var(--o12); border-radius: 10px; background: var(--bg2); color: var(--text); box-shadow: 0 24px 80px rgba(0,0,0,.35); }
-.modal-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 16px; border-bottom: 1px solid var(--o08); }
-.header-actions { display: flex; align-items: center; gap: 6px; }
-.manage-button, .retry-button { border: 1px solid var(--o12); border-radius: 6px; background: var(--o06); color: var(--text); cursor: pointer; font-size: 11px; padding: 5px 8px; }
-.retry-button { margin-left: 8px; color: var(--c-teal); }
-.modal-header h2 { margin: 0; font-size: 16px; }
-.modal-header p { margin: 5px 0 0; color: var(--muted); font-size: 12px; }
-.icon-button { width: 30px; height: 30px; border: 0; border-radius: 6px; background: transparent; color: var(--muted); font-size: 22px; cursor: pointer; }
-.icon-button:hover { background: var(--o08); color: var(--text); }
-.filters { display: grid; grid-template-columns: 1fr 150px; gap: 8px; padding: 12px 16px; border-bottom: 1px solid var(--o08); }
-.filters input, .filters select { min-width: 0; border: 1px solid var(--o12); border-radius: 7px; background: var(--bg); color: var(--text); padding: 9px 10px; font-size: 12px; outline: none; }
-.filters input:focus, .filters select:focus { border-color: var(--teal-border); }
-.response-list { padding: 10px; overflow-y: auto; display: grid; gap: 7px; }
-.response-item { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; text-align: left; border: 1px solid var(--o08); border-radius: 8px; padding: 11px; background: transparent; color: var(--text); cursor: pointer; }
-.response-item:hover { border-color: var(--teal-border); background: var(--o05); }
-.response-item__title { font-size: 13px; font-weight: 600; }
-.response-item__meta { color: var(--muted); font-size: 10px; }
-.response-item__content { grid-column: 1 / -1; color: var(--muted); font-size: 12px; line-height: 1.5; }
-.empty { padding: 36px 16px; margin: 0; text-align: center; color: var(--muted); font-size: 12px; }
-.error-text { color: var(--c-danger); }
-@media (max-width: 520px) { .filters { grid-template-columns: 1fr; } .response-item { grid-template-columns: 1fr; } }
-</style>

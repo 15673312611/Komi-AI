@@ -98,12 +98,12 @@ ChatterMate.on('ready', () => { /* widget loaded */ });
 
 const copyText = (text: string) => {
   if (!navigator.clipboard) {
-    toast.error('Clipboard unavailable — copy the snippet manually')
+    toast.error('剪贴板不可用 — 请手动复制')
     return
   }
   navigator.clipboard.writeText(text)
-    .then(() => toast.success('Copied to clipboard'))
-    .catch(() => toast.error('Copy failed — copy the snippet manually'))
+    .then(() => toast.success('已复制到剪贴板'))
+    .catch(() => toast.error('复制失败 — 请手动复制'))
 }
 
 // Generate iframe URL

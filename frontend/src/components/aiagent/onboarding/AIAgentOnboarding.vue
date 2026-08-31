@@ -33,7 +33,7 @@ const emit = defineEmits<{
 const onboarding = useOnboardingState()
 
 const orgId = userService.getCurrentUser()?.organization_id || ''
-const steps = ['Create', 'Teach', 'Test', 'Launch']
+const steps = ['创建智能体', '注入知识库', '测试体验', '上线部署']
 
 const currentStep = ref<OnboardingStepIndex>(0)
 const agentId = ref<string | null>(null)
@@ -112,8 +112,8 @@ const handleFinish = () => {
 <template>
   <div class="onboarding">
     <header class="onb-header">
-      <h1 class="onb-title">Let's get your first agent live</h1>
-      <p class="onb-sub">Four quick steps. No code, no model setup — we'll handle the AI.</p>
+      <h1 class="onb-title">开启您的第一个 AI 智能客服</h1>
+      <p class="onb-sub">仅需简单四步。无需编写代码，无需繁琐配置，即可让 AI 赋能您的业务。</p>
     </header>
 
     <!-- Stepper -->

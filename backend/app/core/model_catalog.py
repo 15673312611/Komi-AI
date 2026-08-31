@@ -32,7 +32,8 @@ Every provider key MUST match a value in ``app.models.ai_config.AIModelType`` an
 branch in ``app.utils.agno_utils.create_model``.
 """
 
-from typing import Dict, List, TypedDict
+from typing import Dict, List
+from typing_extensions import TypedDict
 
 
 class CatalogModel(TypedDict):
@@ -62,11 +63,9 @@ MODEL_CATALOG: Dict[str, CatalogProvider] = {
         "custom_allowed": True,
         "api_key_url": "https://platform.openai.com/api-keys",
         "models": [
-            _m("gpt-4.1", "GPT-4.1"),
-            _m("gpt-4o", "GPT-4o"),
-            _m("gpt-4.1-mini", "GPT-4.1 Mini"),
-            _m("gpt-4o-mini", "GPT-4o Mini"),
-            _m("o4-mini", "o4-mini"),
+            _m("gpt-5.6-sol", "GPT-5.6 Sol (旗舰推理与编程)"),
+            _m("gpt-5.6-terra", "GPT-5.6 Terra (智能与成本平衡)"),
+            _m("gpt-5.6-luna", "GPT-5.6 Luna (高并发低成本)"),
         ],
     },
     "ANTHROPIC": {
@@ -76,10 +75,10 @@ MODEL_CATALOG: Dict[str, CatalogProvider] = {
         "api_key_url": "https://console.anthropic.com/settings/keys",
         # Current-gen Claude IDs are complete stable strings — do NOT append a date.
         "models": [
-            _m("claude-opus-4-8", "Claude Opus 4.8"),
+            _m("claude-opus-5", "Claude Opus 5"),
             _m("claude-sonnet-5", "Claude Sonnet 5"),
-            _m("claude-sonnet-4-6", "Claude Sonnet 4.6"),
-            _m("claude-haiku-4-5", "Claude Haiku 4.5"),
+            _m("claude-fable-5", "Claude Fable 5"),
+            _m("claude-haiku-4-5-20251001", "Claude Haiku 4.5"),
         ],
     },
     "GOOGLE": {
@@ -87,12 +86,11 @@ MODEL_CATALOG: Dict[str, CatalogProvider] = {
         "requires_api_key": True,
         "custom_allowed": True,
         "api_key_url": "https://aistudio.google.com/app/apikey",
-        # gemini-2.0-flash is shut down; use bare 2.5 IDs (avoid -latest/-preview).
         "models": [
-            _m("gemini-2.5-pro", "Gemini 2.5 Pro"),
-            _m("gemini-2.5-flash", "Gemini 2.5 Flash"),
-            _m("gemini-2.5-flash-lite", "Gemini 2.5 Flash-Lite"),
+            _m("gemini-3.7-flash", "Gemini 3.7 Flash (最新通用)"),
+            _m("gemini-3.6-flash", "Gemini 3.6 Flash"),
             _m("gemini-3.5-flash", "Gemini 3.5 Flash"),
+            _m("gemini-3.1-pro", "Gemini 3.1 Pro (高级推理)"),
         ],
     },
     "MISTRAL": {
@@ -102,9 +100,10 @@ MODEL_CATALOG: Dict[str, CatalogProvider] = {
         "api_key_url": "https://console.mistral.ai/api-keys",
         # -latest aliases auto-advance to the current dated snapshot.
         "models": [
-            _m("mistral-large-latest", "Mistral Large"),
-            _m("mistral-medium-latest", "Mistral Medium"),
-            _m("mistral-small-latest", "Mistral Small"),
+            _m("mistral-medium-3.5-26.04", "Mistral Medium 3.5 (旗舰多模态)"),
+            _m("mistral-large-3-25-12", "Mistral Large 3"),
+            _m("mistral-small-4-0-26-03", "Mistral Small 4"),
+            _m("devstral-2512", "Devstral 2 (代码)"),
         ],
     },
     "XAI": {
@@ -115,10 +114,10 @@ MODEL_CATALOG: Dict[str, CatalogProvider] = {
         # X/Twitter OAuth app credentials (consumer key / access token / bearer token).
         "api_key_url": "https://console.x.ai",
         "models": [
-            _m("grok-4", "Grok 4"),
-            _m("grok-4-fast-reasoning", "Grok 4 Fast (Reasoning)"),
-            _m("grok-4-fast-non-reasoning", "Grok 4 Fast (Non-Reasoning)"),
-            _m("grok-3", "Grok 3"),
+            _m("grok-4.20", "Grok 4.20 (最新旗舰)"),
+            _m("grok-4.20-reasoning", "Grok 4.20 Reasoning"),
+            _m("grok-4.20-non-reasoning", "Grok 4.20 Non-Reasoning"),
+            _m("grok-code-fast-1", "Grok Code Fast 1"),
         ],
     },
     "DEEPSEEK": {
@@ -126,11 +125,9 @@ MODEL_CATALOG: Dict[str, CatalogProvider] = {
         "requires_api_key": True,
         "custom_allowed": True,
         "api_key_url": "https://platform.deepseek.com/api_keys",
-        # deepseek-chat/reasoner scheduled for EOL 2026-07-24; successors are
-        # deepseek-v4-flash / deepseek-v4-pro — add here once live.
         "models": [
-            _m("deepseek-chat", "DeepSeek Chat (V3)"),
-            _m("deepseek-reasoner", "DeepSeek Reasoner"),
+            _m("deepseek-v4-pro", "DeepSeek-V4 Pro (旗舰推理)"),
+            _m("deepseek-v4-flash", "DeepSeek-V4 Flash (快速通用)"),
         ],
     },
     "GROQ": {
@@ -144,8 +141,34 @@ MODEL_CATALOG: Dict[str, CatalogProvider] = {
         # llama-3.3-70b-versatile is kept for continuity but is deprecated (EOL
         # 2026-08-16). Org-prefixed IDs must be passed exactly.
         "models": [
+            _m("qwen/qwen3.8-27b", "Qwen 3.8 27B"),
+            _m("qwen/qwen3.6-27b", "Qwen 3.6 27B"),
+            _m("meta-llama/llama-4-maverick-17b-128e-instruct", "Llama 4 Maverick 17B"),
+            _m("meta-llama/llama-4-scout-17b-16e-instruct", "Llama 4 Scout 17B"),
             _m("openai/gpt-oss-120b", "GPT-OSS 120B"),
-            _m("llama-3.3-70b-versatile", "Llama 3.3 70B Versatile"),
+        ],
+    },
+    "ZHIPU": {
+        "label": "智谱 AI (GLM)",
+        "requires_api_key": True,
+        "custom_allowed": True,
+        "api_key_url": "https://open.bigmodel.cn/usercenter/apikeys",
+        "models": [
+            _m("glm-5.3", "GLM-5.3 (最新旗舰)"),
+            _m("glm-5.3-flash", "GLM-5.3-Flash (高速)"),
+            _m("glm-5.2", "GLM-5.2"),
+        ],
+    },
+    "KIMI": {
+        "label": "Kimi (Moonshot AI)",
+        "requires_api_key": True,
+        "custom_allowed": True,
+        "api_key_url": "https://platform.moonshot.cn/console/api-keys",
+        "models": [
+            _m("kimi-k3", "Kimi K3 (最新旗舰)"),
+            _m("kimi-k2.7-code-highspeed", "Kimi K2.7 Code Highspeed"),
+            _m("kimi-k2.6", "Kimi K2.6"),
+            _m("kimi-k2.5", "Kimi K2.5"),
         ],
     },
 }

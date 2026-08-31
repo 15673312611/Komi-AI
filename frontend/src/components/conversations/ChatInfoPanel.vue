@@ -7,6 +7,7 @@ Copyright 2024-2026 ChatterMate
 import { ref, computed, watch } from 'vue'
 import type { ChatDetail, Conversation } from '@/types/chat'
 import ShopifyOrderPanel from '@/components/conversations/ShopifyOrderPanel.vue'
+import CreateTicketModal from '@/components/conversations/CreateTicketModal.vue'
 import { chatService, type CustomerSummary } from '@/services/chat'
 import { permissionChecks } from '@/utils/permissions'
 import { chatHandler } from '@/utils/chatState'
@@ -14,6 +15,18 @@ import { chatHandler } from '@/utils/chatState'
 const props = defineProps<{
   chatInfo?: ChatDetail | null
 }>()
+
+const showCreateTicketModal = ref(false)
+
+const onTicketCreated = (ticketId: string) => {
+  if (props.chatInfo?.session_id) {
+    if (!tagNames.value.includes('已转工单')) {
+      tagNames.value.push('已转工单')
+    }
+  }
+  emit('action-toast', '工单已创建成功并完成会话关联！', 'success')
+}
+
 const customerName = computed(() => props.chatInfo?.customer?.full_name || props.chatInfo?.customer?.email || '未知客户')
 const customerEmail = computed(() => props.chatInfo?.customer?.email || '')
 const customerInitial = computed(() => customerName.value.trim().slice(0, 1).toUpperCase() || '?')
@@ -175,7 +188,7 @@ const loadCustomerHistory = async () => {
       .map(chat => ({
         sessionId: chat.session_id,
         channel: chat.channel === 'web' ? '网页会话' : (chat.channel || 'web')[0].toUpperCase() + (chat.channel || 'web').slice(1),
-        date: new Date(chat.updated_at).toLocaleDateString('zh-CN'),
+        date: isNaN(new Date(chat.updated_at).getTime()) ? '' : new Date(chat.updated_at).toLocaleDateString('zh-CN'),
         title: chat.last_message || '（无消息内容）',
         outcome: historyOutcome(chat),
       }))
@@ -230,6 +243,18 @@ watch(() => props.chatInfo?.session_id, () => { void loadCustomerSummary() }, { 
           <div class="text-xs font-bold text-amber-400 font-mono mt-0.5" :title="customerSummary?.rating_count ? `${customerSummary.rating_count} 条评分` : ''">{{ customerSummaryLoading ? '…' : formatSatisfaction(customerSummary) }}</div>
         </div>
       </div>
+
+      <!-- 快捷转工单入口 -->
+      <div class="mt-3">
+        <button
+          @click="showCreateTicketModal = true"
+          class="w-full py-1.5 px-3 rounded-lg text-xs font-semibold bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/25 flex items-center justify-center gap-1.5 transition-all shadow-sm active:scale-[0.98]"
+          title="将当前会话转为售后/技术流转工单"
+        >
+          <i class="fa-solid fa-ticket text-[11px]"></i>
+          <span>一键转为工单</span>
+        </button>
+      </div>
     </div>
 
     <!-- 🏷️ 对话标签系统 (1:1 原版复刻) -->
@@ -260,7 +285,7 @@ watch(() => props.chatInfo?.session_id, () => { void loadCustomerSummary() }, { 
           ]"
         >
           <span>{{ t.name }}</span>
-          <i class="fa-solid fa-xmark fa-times text-[9px] opacity-70"></i>
+          <i class="fa-solid fa-xmark text-[9px] opacity-70"></i>
         </span>
       </div>
 
@@ -286,28 +311,28 @@ watch(() => props.chatInfo?.session_id, () => { void loadCustomerSummary() }, { 
           <span class="text-slate-500">常用:</span>
           <button
             :disabled="!canEditTags || tagsSaving"
-            @click="addPresetTag('🔥 VIP客户')"
+            @click="addPresetTag('VIP客户')"
             class="px-1.5 py-0.5 rounded bg-white/5 hover:bg-white/10 text-slate-300"
           >
             + VIP客户
           </button>
           <button
             :disabled="!canEditTags || tagsSaving"
-            @click="addPresetTag('📦 物流催件')"
+            @click="addPresetTag('物流催件')"
             class="px-1.5 py-0.5 rounded bg-white/5 hover:bg-white/10 text-slate-300"
           >
             + 物流催件
           </button>
           <button
             :disabled="!canEditTags || tagsSaving"
-            @click="addPresetTag('💰 退款咨询')"
+            @click="addPresetTag('退款咨询')"
             class="px-1.5 py-0.5 rounded bg-white/5 hover:bg-white/10 text-slate-300"
           >
             + 退款咨询
           </button>
           <button
             :disabled="!canEditTags || tagsSaving"
-            @click="addPresetTag('👗 尺码偏小')"
+            @click="addPresetTag('尺码偏小')"
             class="px-1.5 py-0.5 rounded bg-white/5 hover:bg-white/10 text-slate-300"
           >
             + 尺码偏小
@@ -330,7 +355,7 @@ watch(() => props.chatInfo?.session_id, () => { void loadCustomerSummary() }, { 
     <div class="p-3.5 border-b border-white/[0.08]">
       <div class="flex items-center justify-between mb-2">
         <span class="text-xs font-bold text-slate-300 flex items-center gap-1.5">
-          <i class="fa-solid fa-user-group fa-users text-blue-400 text-[11px]"></i>
+          <i class="fa-solid fa-user-group text-blue-400 text-[11px]"></i>
           <span>团队协同与工单指派</span>
         </span>
         <span class="text-[10px] text-slate-400">{{ assignmentLabel }}</span>
@@ -362,7 +387,7 @@ watch(() => props.chatInfo?.session_id, () => { void loadCustomerSummary() }, { 
     <div class="p-3.5 flex-1">
       <div class="flex items-center justify-between mb-3">
         <span class="text-xs font-bold text-slate-300 flex items-center gap-1.5">
-          <i class="fa-solid fa-clock-rotate-left fa-history text-purple-400 text-[11px]"></i>
+          <i class="fa-solid fa-clock-rotate-left text-purple-400 text-[11px]"></i>
           <span>往期多渠道咨询历史 ({{ historyLoading ? '…' : histories.length }})</span>
         </span>
       </div>
@@ -386,5 +411,14 @@ watch(() => props.chatInfo?.session_id, () => { void loadCustomerSummary() }, { 
         <p v-if="!historyLoading && histories.length === 0" class="text-slate-500 text-[11px]">暂无可访问的往期会话。</p>
       </div>
     </div>
+
+    <!-- 关联工单弹窗 -->
+    <CreateTicketModal
+      v-if="showCreateTicketModal"
+      :show="showCreateTicketModal"
+      :chat-info="props.chatInfo"
+      @close="showCreateTicketModal = false"
+      @ticket-created="onTicketCreated"
+    />
   </aside>
 </template>

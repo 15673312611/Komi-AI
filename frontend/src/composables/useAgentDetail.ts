@@ -87,13 +87,13 @@ export function useAgentDetail(agentData: { value: AgentWithCustomization }, emi
 
     // Validate file size
     if (file.size > MAX_FILE_SIZE) {
-      alert('File size should not exceed 5MB')
+      toast.error('文件大小不能超过 5MB')
       return
     }
 
     // Validate file type
     if (!ALLOWED_TYPES.includes(file.type)) {
-      alert('Only JPEG, PNG and WebP images are allowed')
+      toast.error('仅支持 JPEG、PNG 和 WebP 图片格式')
       return
     }
 
@@ -134,7 +134,7 @@ export function useAgentDetail(agentData: { value: AgentWithCustomization }, emi
       cropperImage.value = ''
     } catch (error) {
       console.error('Failed to upload photo:', error)
-      alert('Failed to upload photo')
+      toast.error('上传头像图片失败')
     } finally {
       isUploading.value = false
     }
@@ -156,7 +156,7 @@ export function useAgentDetail(agentData: { value: AgentWithCustomization }, emi
       agentData.value.customization = updatedCustomization
     } catch (error) {
       console.error('Failed to apply preset avatar:', error)
-      alert('Failed to update photo')
+      toast.error('设置头像失败')
     } finally {
       isUploading.value = false
     }
@@ -201,8 +201,8 @@ export function useAgentDetail(agentData: { value: AgentWithCustomization }, emi
     navigator.clipboard.writeText(code)
       .then(() => {
         toast.success(requireTokenAuth 
-          ? 'Widget code with token authentication copied to clipboard!' 
-          : 'Widget code copied to clipboard!', 
+          ? '安全令牌认证挂件代码已复制到剪贴板！' 
+          : '挂件嵌入代码已复制到剪贴板！', 
           { duration: 3000 }
         )
       })
@@ -219,13 +219,13 @@ export function useAgentDetail(agentData: { value: AgentWithCustomization }, emi
         ...agentData.value,
         ask_for_rating: updatedAgent.ask_for_rating
       }
-      toast.success(`Rating requests ${updatedAgent.ask_for_rating ? 'enabled' : 'disabled'}`, {
+      toast.success(updatedAgent.ask_for_rating ? '已启用会话结束评价邀请' : '已停用会话结束评价邀请', {
         duration: 4000,
         closeButton: true
       })
     } catch (error) {
       console.error('Failed to update rating setting:', error)
-      toast.error('Failed to update rating setting', {
+      toast.error('更新评价设置失败', {
         duration: 4000,
         closeButton: true
       })
@@ -241,13 +241,13 @@ export function useAgentDetail(agentData: { value: AgentWithCustomization }, emi
         ...agentData.value,
         transfer_to_human: updatedAgent.transfer_to_human
       }
-      toast.success(`Transfer to human ${updatedAgent.transfer_to_human ? 'enabled' : 'disabled'}`, {
+      toast.success(updatedAgent.transfer_to_human ? '已启用自动转人工' : '已停用自动转人工', {
         duration: 4000,
         closeButton: true
       })
     } catch (error) {
       console.error('Failed to update transfer setting:', error)
-      toast.error('Failed to update transfer setting', {
+      toast.error('更新转人工设置失败', {
         duration: 4000,
         closeButton: true
       })
@@ -272,7 +272,7 @@ export function useAgentDetail(agentData: { value: AgentWithCustomization }, emi
       selectedGroupIds.value = updatedAgent.groups?.map(g => g.id) || []
     } catch (error) {
       console.error('Failed to fetch user groups:', error)
-      toast.error('Failed to load user groups')
+      toast.error('加载客服分组失败')
     } finally {
       loadingGroups.value = false
     }
@@ -286,10 +286,10 @@ export function useAgentDetail(agentData: { value: AgentWithCustomization }, emi
         groups: updatedAgent.groups
       }
       agentStorage.updateAgent(updatedAgent)
-      toast.success('Transfer groups updated')
+      toast.success('转接客服分组已更新')
     } catch (error) {
       console.error('Failed to update agent groups:', error)
-      toast.error('Failed to update transfer groups')
+      toast.error('更新转接客服分组失败')
     }
   }
 

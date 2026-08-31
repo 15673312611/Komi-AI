@@ -22,6 +22,7 @@ import (
 	"github.com/chattermate/chattermate/backend-go/internal/leadcapture"
 	"github.com/chattermate/chattermate/backend-go/internal/organization"
 	"github.com/chattermate/chattermate/backend-go/internal/session"
+	"github.com/chattermate/chattermate/backend-go/internal/store"
 	"github.com/chattermate/chattermate/backend-go/internal/user"
 )
 
@@ -112,6 +113,7 @@ type ProcessorDependencies struct {
 	Users             user.Store
 	AIConfigs         aiconfig.Store
 	Organizations     organization.Store
+	Stores            store.Service
 	GuardrailSettings guardrail.Settings
 	GuardrailEvents   guardrail.EventStore
 	Responder         Responder
@@ -377,6 +379,21 @@ func (p ProcessorDependencies) Process(ctx context.Context, accountID uuid.UUID,
 	if err != nil {
 		return err
 	}
+	if agentID == nil && p.Stores != nil {
+		if st, stErr := p.Stores.GetByEmailAccountID(ctx, account.ID); stErr == nil && st != nil && st.AgentID != nil {
+			agentID = st.AgentID
+		}
+	}
+	if agentID == nil && p.Agents != nil {
+		if defaultAgents, listErr := p.Agents.List(ctx, account.OrganizationID); listErr == nil && len(defaultAgents) > 0 {
+			for _, da := range defaultAgents {
+				if da.IsActive {
+					agentID = &da.ID
+					break
+				}
+			}
+		}
+	}
 	if agentID == nil {
 		return errors.New("channel account has no active agent")
 	}
@@ -511,8 +528,14 @@ func (p ProcessorDependencies) Process(ctx context.Context, accountID uuid.UUID,
 	if err != nil {
 		return err
 	}
+
+	fmt.Printf("[Channel Inbound] 收到 %s 消息: 来自=%s, 内容=%q (SessionID: %s, isNewSession: %v)\n", account.ChannelType, inbound.ExternalUserID, inbound.Text, conversation.SessionID, isNewSession)
+
+	// Always broadcast incoming user message so conversation center updates in real-time
+	p.broadcastHumanMessage(ctx, account.OrganizationID, conversation.SessionID, stored, managed.UserID)
+
 	if managed.UserID != nil || strings.EqualFold(managed.Status, "transferred") || !aiEnabled {
-		p.broadcastHumanMessage(ctx, account.OrganizationID, conversation.SessionID, stored, managed.UserID)
+		fmt.Printf("[Channel Inbound] 跳过 AI 自动回复 (原因: UserID=%v, Status=%s, aiEnabled=%v)\n", managed.UserID, managed.Status, aiEnabled)
 		if isNewSession && !aiEnabled && p.Sender != nil {
 			p.persistAndDeliver(ctx, account, conversation, managed,
 				"Thanks for your message. Someone from our team will reply here shortly.",
@@ -528,13 +551,41 @@ func (p ProcessorDependencies) Process(ctx context.Context, accountID uuid.UUID,
 		return nil
 	}
 
+	channelTerm := "咨询"
+	if account.ChannelType == "email" {
+		channelTerm = "邮件"
+	} else if account.ChannelType == "whatsapp" {
+		channelTerm = "WhatsApp 消息"
+	}
+
+	canTransfer := configuredAgent != nil && configuredAgent.TransferToHuman && len(configuredAgent.Groups) > 0
+
 	if p.AIConfigs != nil {
 		if _, configErr := p.AIConfigs.GetActive(ctx, account.OrganizationID); configErr != nil {
-			return configErr
+			if isNewSession {
+				fallback := fmt.Sprintf("您好！我们已收到您的%s。人工客服团队正在处理中，稍后将尽快回复您。", channelTerm)
+				if canTransfer {
+					if store, ok := p.Sessions.(session.ActionStore); ok {
+						_, _ = store.RouteToHuman(ctx, conversation.SessionID, account.OrganizationID, "ai_config_missing", "未配置 AI 模型，已自动转入人工接待")
+					}
+					fallback = fmt.Sprintf("您好！我们已收到您的%s。已为您转接人工客服专员，坐席稍后将尽快为您回复处理。", channelTerm)
+				}
+				if fallbackMessage, fallbackErr := chatStore.CreateMessage(ctx, chat.MessageInput{
+					Message: fallback, MessageType: "bot", SessionID: conversation.SessionID,
+					OrganizationID: account.OrganizationID, CustomerID: customerRecord.ID, AgentID: agentID,
+					Attributes: map[string]any{"warning": configErr.Error(), "ai_generated": true, "transfer_to_human": canTransfer},
+				}); fallbackErr == nil {
+					if p.Sender != nil {
+						_ = p.Sender.Deliver(ctx, account, conversation, fallback)
+					}
+					p.broadcastBotMessage(ctx, account.OrganizationID, conversation.SessionID, fallbackMessage, Reply{TransferToHuman: canTransfer})
+				}
+			}
+			return nil
 		}
 	}
 	if p.Responder == nil {
-		return errors.New("channel AI responder is not configured")
+		return nil
 	}
 	if p.Sender != nil {
 		_ = p.Sender.Typing(ctx, account, conversation)
@@ -545,29 +596,35 @@ func (p ProcessorDependencies) Process(ctx context.Context, accountID uuid.UUID,
 		ConversationExtra: conversation.Extra,
 	})
 	if err != nil {
-		fallback := "Sorry, I hit an error handling that. Please try again."
-		if fallbackMessage, fallbackErr := chatStore.CreateMessage(ctx, chat.MessageInput{
-			Message: fallback, MessageType: "bot", SessionID: conversation.SessionID,
-			OrganizationID: account.OrganizationID, CustomerID: customerRecord.ID, AgentID: agentID,
-			Attributes: map[string]any{"error": err.Error(), "ai_generated": true},
-		}); fallbackErr == nil {
-			if p.Sender != nil {
-				result := p.Sender.Deliver(ctx, account, conversation, fallback)
-				if !result.OK {
-					if deliveryStore, ok := p.Chats.(chat.DeliveryStore); ok {
-						_ = deliveryStore.MarkDeliveryFailed(ctx, fallbackMessage.ID, result.Error)
+		if isNewSession {
+			fallback := fmt.Sprintf("您好！我们已收到您的%s，客服团队正在为您核对处理，请稍候。", channelTerm)
+			if canTransfer {
+				if store, ok := p.Sessions.(session.ActionStore); ok {
+					_, _ = store.RouteToHuman(ctx, conversation.SessionID, account.OrganizationID, "ai_error", "AI 回复异常，已自动转接人工")
+				}
+				fallback = fmt.Sprintf("您好！我们已收到您的%s。已为您转接人工客服专员，坐席稍后将尽快为您核对处理。", channelTerm)
+			}
+			if fallbackMessage, fallbackErr := chatStore.CreateMessage(ctx, chat.MessageInput{
+				Message: fallback, MessageType: "bot", SessionID: conversation.SessionID,
+				OrganizationID: account.OrganizationID, CustomerID: customerRecord.ID, AgentID: agentID,
+				Attributes: map[string]any{"error": err.Error(), "ai_generated": true, "transfer_to_human": canTransfer},
+			}); fallbackErr == nil {
+				if p.Sender != nil {
+					result := p.Sender.Deliver(ctx, account, conversation, fallback)
+					if !result.OK {
+						if deliveryStore, ok := p.Chats.(chat.DeliveryStore); ok {
+							_ = deliveryStore.MarkDeliveryFailed(ctx, fallbackMessage.ID, result.Error)
+						}
 					}
 				}
+				p.broadcastBotMessage(ctx, account.OrganizationID, conversation.SessionID, fallbackMessage, Reply{TransferToHuman: canTransfer})
 			}
-			p.broadcastBotMessage(ctx, account.OrganizationID, conversation.SessionID, fallbackMessage, Reply{})
 		}
-		return err
+		return nil
 	}
 	if strings.TrimSpace(reply.Message) == "" {
-		reply.Message = "I'm sorry, I did not quite catch that. Could you rephrase or give me a bit more detail?"
+		reply.Message = fmt.Sprintf("您好，我们已收到您的%s，请问有什么可以具体帮您的吗？", channelTerm)
 	}
-
-	canTransfer := configuredAgent != nil && configuredAgent.TransferToHuman && len(configuredAgent.Groups) > 0
 	if !canTransfer {
 		reply.TransferToHuman = false
 		reply.TransferReason = ""
@@ -637,6 +694,11 @@ func (p ProcessorDependencies) Process(ctx context.Context, accountID uuid.UUID,
 			if _, closeErr := store.Close(ctx, conversation.SessionID, optionalString(normalizeEndReason(reply.EndChatReason)), optionalString(reply.EndChatDescription)); closeErr != nil {
 				return closeErr
 			}
+		}
+	}
+	if configuredAgent != nil {
+		if delay := calculateChannelResponseDelay(configuredAgent, reply.Message); delay > 0 {
+			time.Sleep(delay)
 		}
 	}
 	if p.Sender != nil {
@@ -817,9 +879,20 @@ func (p ProcessorDependencies) resolveCustomer(ctx context.Context, account *Acc
 			placeholder := placeholderName(account.ChannelType, inbound.ExternalUserID)
 			namePtr = &placeholder
 		}
-		created, err := p.Customers.Create(ctx, email, namePtr, account.OrganizationID, map[string]any{
+		metaData := map[string]any{
 			"channel": account.ChannelType, "external_user_id": inbound.ExternalUserID, "phone": phone,
-		}, false)
+		}
+		storeName := ""
+		if p.Accounts != nil {
+			storeName = p.Accounts.GetStoreName(ctx, account.ID)
+		}
+		if storeName == "" && account.DisplayName != nil && strings.TrimSpace(*account.DisplayName) != "" {
+			storeName = strings.TrimSpace(*account.DisplayName)
+		}
+		if storeName != "" {
+			metaData["store_name"] = storeName
+		}
+		created, err := p.Customers.Create(ctx, email, namePtr, account.OrganizationID, metaData, false)
 		if err != nil {
 			return nil, err
 		}
@@ -1129,4 +1202,44 @@ func firstNonEmpty(values ...string) string {
 		}
 	}
 	return ""
+}
+
+func calculateChannelResponseDelay(configured *agent.Agent, replyText string) time.Duration {
+	if configured == nil || configured.Customization == nil || configured.Customization.CustomizationMetadata == nil {
+		return 1200 * time.Millisecond
+	}
+	raw, ok := configured.Customization.CustomizationMetadata["response_delay"]
+	if !ok || raw == nil {
+		return 1200 * time.Millisecond
+	}
+	delayConfig, ok := raw.(map[string]any)
+	if !ok {
+		return 1200 * time.Millisecond
+	}
+	mode, _ := delayConfig["mode"].(string)
+	switch strings.ToLower(mode) {
+	case "instant":
+		return 0
+	case "custom":
+		sec, _ := delayConfig["custom_delay_seconds"].(float64)
+		if sec <= 0 {
+			sec = 2
+		}
+		if sec > 15 {
+			sec = 15
+		}
+		return time.Duration(sec * float64(time.Second))
+	case "human_like", "":
+		runeCount := len([]rune(replyText))
+		delayMs := 1000 + (runeCount * 12)
+		if delayMs < 1200 {
+			delayMs = 1200
+		}
+		if delayMs > 4000 {
+			delayMs = 4000
+		}
+		return time.Duration(delayMs) * time.Millisecond
+	default:
+		return 1200 * time.Millisecond
+	}
 }

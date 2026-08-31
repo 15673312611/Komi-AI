@@ -38,13 +38,6 @@ const { hasEnterpriseModule, loadModule, moduleImports, NotAvailableComponent } 
 const baseRoutes = [
   {
     path: '/',
-    // A function, not a string: permissions live in localStorage and are not
-    // readable when this module is first evaluated. Also the landing spot for
-    // an installed PWA (manifest start_url) and for pushes with no session.
-    //
-    // Only resolve with a session in hand. Resolving for a signed-out visitor
-    // yields the no-permission floor, which the guard then carries into
-    // ?redirect= and honours after login — landing an admin on User Settings.
     redirect: () => (userService.isAuthenticated() ? resolveLandingRoute() : '/login'),
   },
   {
@@ -135,16 +128,23 @@ const baseRoutes = [
     path: '/conversations',
     name: 'conversations',
     component: () => import('../views/ConversationsView.vue'),
-    // Any inbox grant — own/group chats, the unclaimed queue, or everything
     meta: {
       requiresAuth: true,
     },
   },
   {
+    path: '/stores',
+    name: 'stores',
+    component: () => import('../views/StoreManagementView.vue'),
+    meta: {
+      requiresAuth: true,
+      layout: 'dashboard',
+      title: 'Store Management',
+    },
+  },
+  {
     path: '/people',
     name: 'people',
-    // Without meta the page rendered and then 403'd on every request; the
-    // guard sends users who can't read the directory to /403 instead.
     component: () => import('../views/PeopleView.vue'),
     meta: {
       requiresAuth: true,
@@ -211,10 +211,6 @@ const baseRoutes = [
     },
   },
   {
-    // Registered, and reachable: the guard used to send denials to /403 with
-    // no such route, so they fell through this catch-all onto /ai-agents —
-    // which had no meta.permissions and therefore always rendered. A user was
-    // silently dropped on a page they had just been refused.
     path: '/403',
     name: 'forbidden',
     component: () => import('@/views/403.vue'),
@@ -279,7 +275,7 @@ const allRoutes = hasEnterpriseModule
         path: '/shopify/connect',
         name: 'shopify-connect',
         component: loadEnterpriseComponent(moduleImports.shopifyConnect),
-        meta: { requiresAuth: false }, // Session token auth instead
+        meta: { requiresAuth: false },
       },
       {
         path: '/shopify/auth-complete',
@@ -291,13 +287,13 @@ const allRoutes = hasEnterpriseModule
         path: '/shopify/agent-selection',
         name: 'shopify-agent-selection',
         component: loadEnterpriseComponent(moduleImports.shopifyAgentSelection),
-        meta: { requiresAuth: false }, // Session token auth instead
+        meta: { requiresAuth: false },
       },
       {
         path: '/shopify/agent-management',
         name: 'shopify-agent-management',
         component: loadEnterpriseComponent(moduleImports.shopifyAgentManagement),
-        meta: { requiresAuth: false }, // Session token auth instead
+        meta: { requiresAuth: false },
       },
       {
         path: '/shopify/inbox',
@@ -334,39 +330,39 @@ if (hasEnterpriseModule) {
   loadGuard()
 }
 
+let cachedSetupComplete: boolean | null = null
+
 // Navigation guard
 router.beforeEach(async (to, from, next) => {
-  // Skip auth check for Shopify routes (they use session tokens)
   if (to.path.startsWith('/shopify/')) {
     return next()
   }
 
-  // Check for standard app conditions
+  if (from.path && to.path === from.path) {
+    return next()
+  }
+
   const isAuthenticated = userService.isAuthenticated()
-  // Always check setup status to decide between Setup vs Login/Signup
-  const isSetupComplete = await getSetupStatus()
+  let isSetupComplete = cachedSetupComplete
+  if (isSetupComplete === null) {
+    isSetupComplete = await getSetupStatus()
+    if (isSetupComplete) cachedSetupComplete = true
+  }
   const requiresAuth = to.matched.some((record) => record.meta.requiresAuth)
 
-  // Standard app navigation logic
   if (!isAuthenticated) {
-    // If setup is not complete, always go to setup page first
     if (!isSetupComplete && to.path !== '/setup') {
       return next('/setup')
     } else if (requiresAuth) {
-      // Preserve where they were headed (e.g. the Slack install landing link)
-      // so login can send them straight back instead of the default page.
       return next({ path: '/login', query: { redirect: to.fullPath } })
     }
-    // Public route; allow
     return next()
   } else {
-    if (!isSetupComplete && to.path !== '/setup') {
-      return next('/setup')
+    if (to.path === '/setup') {
+      return next('/')
     }
   }
 
-  // ROUTE_PERMISSIONS is the single source of truth, shared with the sidebar
-  // so a visible link can never lead to a refusal.
   if (!canAccessMatchedPaths(to.matched.map((record) => record.path))) {
     return next({ name: 'forbidden' })
   }

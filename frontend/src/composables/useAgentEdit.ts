@@ -50,9 +50,9 @@ export function useAgentEdit(agent: Agent) {
       return response
     } catch (err: any) {
       if (err?.response?.status === 429) {
-        error.value = err?.response?.data?.detail || 'Rate limit exceeded. Please try again later.';
+        error.value = err?.response?.data?.detail || '已超出请求频率限制，请稍后重试。';
       } else {
-        error.value = 'Failed to generate instructions'
+        error.value = 'AI 生成人设指令失败'
       }
       console.error('Generate instructions error:', err)
       return []
@@ -78,7 +78,7 @@ export function useAgentEdit(agent: Agent) {
 
       return updatedAgent
     } catch (err) {
-      error.value = 'Failed to update agent'
+      error.value = '更新智能体失败'
       console.error('Save error:', err)
       throw err
     } finally {

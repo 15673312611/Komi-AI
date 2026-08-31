@@ -150,6 +150,9 @@ const connect = async () => {
       Object.entries(values.value).map(([k, v]) => [k, v.trim()]))
     account.value = await form.value.connect(trimmed)
     toast.success(`已成功连接 ${account.value.display_name || form.value.title.replace('连接 ', '')}`)
+    if (props.channel === 'email' || !account.value.webhook_url) {
+      emit('connected', account.value)
+    }
   } catch (error: any) {
     toast.error(error?.response?.data?.detail || `连接 ${props.channel} 失败`)
   } finally {
@@ -161,20 +164,6 @@ const copyWebhookUrl = async () => {
   if (!account.value?.webhook_url) return
   await navigator.clipboard.writeText(account.value.webhook_url)
   toast.success('Webhook 回调地址已复制到剪贴板')
-}
-
-const saveAgent = async () => {
-  if (!account.value || !selectedAgentId.value) return
-  try {
-    savingAgent.value = true
-    const updated = await channelsService.setAccountAgent(account.value.id, selectedAgentId.value)
-    toast.success('已指定接待智能体 — 该渠道已正式上线！')
-    emit('connected', updated)
-  } catch (error: any) {
-    toast.error(error?.response?.data?.detail || '指定接待智能体失败')
-  } finally {
-    savingAgent.value = false
-  }
 }
 </script>
 
@@ -220,7 +209,7 @@ const saveAgent = async () => {
         </div>
       </div>
 
-      <!-- Step 2: webhook URL (if applicable) + agent routing -->
+      <!-- Step 2: webhook URL (if applicable) -->
       <div v-else class="cc-modal-body">
         <p class="cc-intro">
           <strong>{{ account.display_name }}</strong> 已成功连接。
@@ -232,20 +221,11 @@ const saveAgent = async () => {
             <button class="cc-btn cc-btn-secondary" @click="copyWebhookUrl">复制</button>
           </div>
         </div>
-        <label class="cc-label" for="cc-agent">负责接待并答复此渠道的 AI 智能体</label>
-        <select id="cc-agent" v-model="selectedAgentId" class="cc-input">
-          <option v-for="agent in agents" :key="String(agent.id)" :value="String(agent.id)">
-            {{ agent.display_name || agent.name }}
-          </option>
-        </select>
         <div class="cc-actions">
           <button v-if="isManage && channel !== 'slack'" class="cc-btn cc-btn-secondary" @click="account = null">
             重新配置凭证
           </button>
-          <button v-else class="cc-btn cc-btn-secondary" @click="emit('connected', account)">稍后指定</button>
-          <button class="cc-btn cc-btn-primary" :disabled="savingAgent || !selectedAgentId" @click="saveAgent">
-            {{ savingAgent ? '正在保存…' : '确认指定智能体' }}
-          </button>
+          <button class="cc-btn cc-btn-primary" @click="emit('connected', account)">完成</button>
         </div>
       </div>
     </div>

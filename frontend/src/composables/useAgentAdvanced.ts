@@ -43,15 +43,15 @@ export function useAgentAdvanced(agent: Ref<Agent>) {
   
   // Tooltip content
   const rateLimitTooltipContent = () => {
-    return `Enable to:\n• Limit requests per IP address\n• Prevent abuse\n• Control traffic\n• Protect your API`
+    return `开启后：\n• 限制单 IP 地址的访问频率\n• 防止恶意滥用与刷量\n• 精细化流量管控\n• 保护 API 算力资源安全`
   }
 
   const dailyLimitTooltipContent = () => {
-    return `Maximum number of requests allowed per IP address per day.\nRecommended: 100-500 for most use cases.`
+    return `单个 IP 地址每日允许的最大请求次数。\n推荐设置：通常业务场景设为 100-500 次。`
   }
 
   const requestsPerSecTooltipContent = () => {
-    return `Maximum requests per second allowed from a single IP address.\nUse whole numbers (1-10) for better control.`
+    return `单个 IP 每秒允许的最大请求数。\n建议设为 1-10 之间的整数以保证稳定性。`
   }
   
   // Toggle rate limiting with API call
@@ -82,7 +82,7 @@ export function useAgentAdvanced(agent: Ref<Agent>) {
       
       return updatedAgent
     } catch (err) {
-      error.value = 'Failed to update rate limiting setting'
+      error.value = '更新频率限制设置失败'
       console.error('Toggle rate limiting error:', err)
       throw err
     } finally {
@@ -131,7 +131,7 @@ export function useAgentAdvanced(agent: Ref<Agent>) {
       
       return updatedAgent
     } catch (err) {
-      error.value = 'Failed to update rate limit settings'
+      error.value = '保存频率限制设置失败'
       console.error('Update rate limit settings error:', err)
       throw err
     } finally {

@@ -55,6 +55,34 @@ var helpCenterAskRate = struct {
 
 func registerHelpCenterAdminRoutes(r chi.Router, deps Dependencies) {
 	manage := requireAllPermissions(deps, "manage_knowledge")
+	r.With(manage).Get("/help-center/settings", getHelpCenterSettings(deps))
+	r.With(manage).Put("/help-center/settings", updateHelpCenterSettings(deps))
+	r.With(manage).Post("/help-center/logo", uploadHelpCenterBranding(deps, false))
+	r.With(manage).Delete("/help-center/logo", removeHelpCenterBranding(deps, false))
+	r.With(manage).Post("/help-center/favicon", uploadHelpCenterBranding(deps, true))
+	r.With(manage).Delete("/help-center/favicon", removeHelpCenterBranding(deps, true))
+	r.With(manage).Post("/help-center/domain", setHelpCenterDomain(deps))
+	r.With(manage).Delete("/help-center/domain", removeHelpCenterDomain(deps))
+	r.With(manage).Get("/help-center/domain/status", getHelpCenterDomainStatus(deps))
+	r.With(manage).Post("/help-center/domain/verify", verifyHelpCenterDomain(deps))
+
+	r.With(manage).Get("/help-center/faqs", listHelpCenterFAQs(deps))
+	r.With(manage).Get("/help-center/faqs/categories", listHelpCenterFAQCategories(deps))
+	r.With(manage).Post("/help-center/faqs", createHelpCenterFAQ(deps))
+	r.With(manage).Put("/help-center/faqs/{faq_id}", updateHelpCenterFAQ(deps))
+	r.With(manage).Delete("/help-center/faqs/{faq_id}", deleteHelpCenterFAQ(deps))
+	r.With(manage).Post("/help-center/faqs/bulk-status", bulkHelpCenterFAQStatus(deps))
+	r.With(manage).Post("/help-center/faqs/bulk-delete", bulkDeleteHelpCenterFAQs(deps))
+	r.With(manage).Post("/help-center/faqs/image", uploadHelpCenterFAQImage(deps))
+
+	r.With(manage).Get("/help-center/generate/estimate", estimateHelpCenterGeneration(deps))
+	r.With(manage).Post("/help-center/generate", startHelpCenterGeneration(deps))
+	r.With(manage).Post("/help-center/import", startHelpCenterImport(deps))
+	r.With(manage).Post("/help-center/import/pdf", startHelpCenterPDFImport(deps))
+	r.With(manage).Get("/help-center/jobs", getHelpCenterJob(deps))
+	r.With(manage).Get("/help-center/jobs/{job_id}", getHelpCenterJobByID(deps))
+
+	// Backward compatibility aliases for nested routes if any clients use them
 	r.With(manage).Get("/help-center/branding/settings", getHelpCenterSettings(deps))
 	r.With(manage).Put("/help-center/branding/settings", updateHelpCenterSettings(deps))
 	r.With(manage).Post("/help-center/branding/logo", uploadHelpCenterBranding(deps, false))
@@ -65,7 +93,6 @@ func registerHelpCenterAdminRoutes(r chi.Router, deps Dependencies) {
 	r.With(manage).Delete("/help-center/domain/domain", removeHelpCenterDomain(deps))
 	r.With(manage).Get("/help-center/domain/domain/status", getHelpCenterDomainStatus(deps))
 	r.With(manage).Post("/help-center/domain/domain/verify", verifyHelpCenterDomain(deps))
-
 	r.With(manage).Get("/help-center/faqs/faqs", listHelpCenterFAQs(deps))
 	r.With(manage).Get("/help-center/faqs/faqs/categories", listHelpCenterFAQCategories(deps))
 	r.With(manage).Post("/help-center/faqs/faqs", createHelpCenterFAQ(deps))
@@ -74,7 +101,6 @@ func registerHelpCenterAdminRoutes(r chi.Router, deps Dependencies) {
 	r.With(manage).Post("/help-center/faqs/faqs/bulk-status", bulkHelpCenterFAQStatus(deps))
 	r.With(manage).Post("/help-center/faqs/faqs/bulk-delete", bulkDeleteHelpCenterFAQs(deps))
 	r.With(manage).Post("/help-center/faqs/faqs/image", uploadHelpCenterFAQImage(deps))
-
 	r.With(manage).Get("/help-center/generation/generate/estimate", estimateHelpCenterGeneration(deps))
 	r.With(manage).Post("/help-center/generation/generate", startHelpCenterGeneration(deps))
 	r.With(manage).Post("/help-center/generation/import", startHelpCenterImport(deps))

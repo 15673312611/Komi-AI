@@ -44,11 +44,13 @@ class SocketService {
     // Use the runtime-resolved WS URL (window.APP_CONFIG → VITE_WS_URL → localhost),
     // same as every other consumer. Reading import.meta.env directly baked the
     // published image to ws://localhost:8000 and broke self-hosted dashboards.
-    const apiUrl = getWsUrl()
+    const apiUrl = (getWsUrl() || '').replace(/^ws(s)?:/i, 'http$1:')
+    const token = localStorage.getItem('access_token') || ''
     this.socket = io(apiUrl + namespace, {
       transports: ['websocket', 'polling'],
       withCredentials: true,
       autoConnect: true,
+      auth: token ? { token, access_token: token } : undefined,
     })
 
     this.socket.on('connect', () => {
@@ -62,6 +64,7 @@ class SocketService {
     this.socket.on('cookie_set', (data) => {
       if (data.access_token) {
         setCookie('access_token', data.access_token)
+        localStorage.setItem('access_token', data.access_token)
         // Reconnect socket with new token
         this.socket?.disconnect()
         this.connect()

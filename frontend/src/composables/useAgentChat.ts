@@ -29,7 +29,7 @@ export function useAgentChat(agentId: string) {
     messages.value = [
       {
         role: 'bot',
-        content: 'Hello! How can I help you today?',
+        content: '您好！请问有什么可以协助您的？',
       },
     ]
 
@@ -71,7 +71,7 @@ export function useAgentChat(agentId: string) {
 
 
     } catch (err) {
-      error.value = 'Failed to send message'
+      error.value = '发送消息失败'
       console.error('Chat error:', err)
     }
   }

@@ -480,8 +480,8 @@ const availableIntegrations = computed<IntegrationCard[]>(() => [
   }),
   ...(['email', 'sms', 'line'] as const).map(channel => {
     const meta = {
-      email: { name: 'Email', logo: emailLogo, color: 'purple',
-        description: '接入企业客服支持邮箱，客户邮件将由 AI 智能体自动解析并答复。',
+      email: { name: 'Email 客服支持邮箱', logo: emailLogo, color: 'purple',
+        description: '接入企业客服支持邮箱，可为各个店铺 1:1 独立绑定。客户邮件将由对应店铺的 AI 智能体自动解析并答复。',
         disconnect: handleDisconnectEmail },
       sms: { name: 'SMS 短信', logo: smsLogo, color: 'coral',
         description: '连接 Twilio 短信号码，让客户通过发送手机短信与 AI 客服交流。',
@@ -491,6 +491,10 @@ const availableIntegrations = computed<IntegrationCard[]>(() => [
         disconnect: handleDisconnectLine },
     }[channel]
     const accounts = accountsFor(channel)
+    const displayName = channel === 'email' && accounts.length > 1
+      ? `${accounts.length} 个邮箱已接入: ${accounts.map(a => a.display_name).filter(Boolean).join(', ')}`
+      : accounts.map(a => a.display_name).filter(Boolean).join(', ')
+
     return {
       id: channel,
       name: meta.name,
@@ -499,9 +503,9 @@ const availableIntegrations = computed<IntegrationCard[]>(() => [
       category: '即时通讯',
       color: meta.color,
       connected: accounts.length > 0,
-      teamName: accounts.map(a => a.display_name).filter(Boolean).join(', '),
+      teamName: displayName,
       isLoading: channelsLoading.value,
-      connectAction: () => { credentialModalChannel.value = channel },
+      connectAction: () => { credentialModalAccount.value = null; credentialModalChannel.value = channel },
       disconnectAction: meta.disconnect
     }
   }),
@@ -645,7 +649,32 @@ onMounted(async () => {
     if (accountsFor('slack').length === 0) {
       connectSlack()
     }
+  } else {
+    handleRouteQueryAction()
   }
+})
+
+const handleRouteQueryAction = () => {
+  const target = (route.query.open || route.query.connect || route.query.action || route.query.channel) as string | undefined
+  if (!target) return
+
+  if (target === 'email' || target === 'add-email') {
+    credentialModalAccount.value = null
+    credentialModalChannel.value = 'email'
+  } else if (target === 'telegram') {
+    telegramModalAccount.value = null
+    showTelegramModal.value = true
+  } else if (target === 'whatsapp' || target === 'messenger' || target === 'instagram') {
+    metaModalAccount.value = null
+    metaModalChannel.value = target as 'whatsapp' | 'messenger' | 'instagram'
+  } else if (target === 'sms' || target === 'line') {
+    credentialModalAccount.value = null
+    credentialModalChannel.value = target as 'sms' | 'line'
+  }
+}
+
+watch(() => route.query, () => {
+  handleRouteQueryAction()
 })
 </script>
 

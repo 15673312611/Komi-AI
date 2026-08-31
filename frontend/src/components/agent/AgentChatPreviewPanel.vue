@@ -60,9 +60,9 @@ watch(() => props.customization, (newCustomization) => {
 
 // Sample conversation shown in the preview for every (non Ask-AI) design
 const sampleConversation = (): any[] => ([
-    { role: 'bot', content: 'Hi! How can I help you today?' },
-    { role: 'user', content: 'Do you offer free returns?' },
-    { role: 'bot', content: 'Yes — free 30-day returns on everything.' },
+    { role: 'bot', content: '您好！请问有什么可以协助您的？' },
+    { role: 'user', content: '请问支持 7 天无理由退换货吗？' },
+    { role: 'bot', content: '支持的，我们为您提供全方位的无忧退换货保障。' },
 ])
 
 // Handle chat style changes
@@ -431,13 +431,13 @@ const shouldShowChatPanel = computed(() => {
 const welcomeTitle = computed(() => {
     const title = props.customization.welcome_title
     console.log('Welcome title computed:', title)
-    return title || `Welcome to ${props.agentName}`
+    return title || `欢迎咨询 ${props.agentName}`
 })
 
 const welcomeSubtitle = computed(() => {
     const subtitle = props.customization.welcome_subtitle
     console.log('Welcome subtitle computed:', subtitle)
-    return subtitle || "I'm here to help you with anything you need. What can I assist you with today?"
+    return subtitle || "我是您的专属 AI 助手，随时在线为您解答关于产品、订单与售后的任何问题。"
 })
 
 // Computed property to check if chat initiation messages are available
@@ -629,7 +629,7 @@ const handleInitiationClick = () => {
                         <h3 :style="messageNameStyles">{{ agentName }}</h3>
                         <div class="status">
                             <span class="status-indicator" :class="{ online: isActive }"></span>
-                            <span class="status-text cm-presence">{{ isActive ? 'Online · replies instantly' : 'Offline' }}</span>
+                            <span class="status-text cm-presence">{{ isActive ? '在线 · 极速响应' : '离线' }}</span>
                         </div>
                     </div>
                 </div>
@@ -643,8 +643,8 @@ const handleInitiationClick = () => {
                                 stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
                         </svg>
                     </div>
-                    <h4 class="disabled-content-title">Agent is Offline</h4>
-                    <p>Enable the agent to start testing conversations</p>
+                    <h4 class="disabled-content-title">智能体当前处于离线状态</h4>
+                    <p>请在上方启用智能体以开始测试对话效果</p>
                 </div>
             </div>
             <div class="chat-messages">
@@ -682,7 +682,7 @@ const handleInitiationClick = () => {
                     <input 
                         v-model="currentInput" 
                         type="text" 
-                        :placeholder="isAskAnythingStyle ? 'Ask me anything...' : 'Type a message...'"
+                        :placeholder="isAskAnythingStyle ? '向智能体提问任何问题…' : '输入消息…'"
                         @keypress="() => {}"
                         :disabled="true"
                         :class="{ 'ask-anything-field': isAskAnythingStyle }"

@@ -285,7 +285,7 @@ const submitAction = async () => {
         @click="showAllOrders = !showAllOrders"
       >
         <span>{{ loading ? '正在加载…' : showAllOrders ? '收起订单' : `查看全部 ${orderCount} 笔` }}</span>
-        <i class="fa-solid fa-arrow-up-right-from-square fa-external-link-alt text-[9px]"></i>
+        <i class="fa-solid fa-arrow-up-right-from-square text-[9px]"></i>
       </button>
     </div>
 
@@ -337,7 +337,7 @@ const submitAction = async () => {
       <div class="p-2 rounded-lg bg-[#080B11] border border-white/[0.08] text-xs space-y-1.5 shadow-inner">
         <div class="flex items-center justify-between text-[11px]">
           <span class="text-slate-400 flex items-center gap-1">
-            <i class="fa-solid fa-truck-fast fa-shipping-fast text-emerald-400"></i>
+            <i class="fa-solid fa-truck-fast text-emerald-400"></i>
             <span>{{ order.carrier }}</span>
           </span>
           <span class="text-emerald-400 font-mono text-[10px]">{{ order.fulfillment_status || '暂无履约状态' }}</span>
@@ -372,7 +372,7 @@ const submitAction = async () => {
           @click="openRefund"
           class="px-2 py-1.5 rounded bg-white/5 hover:bg-rose-500/20 hover:text-rose-300 disabled:opacity-40 text-[11px] text-slate-300 text-center font-medium border border-white/[0.08] transition-colors flex items-center justify-center gap-1"
         >
-          <i class="fa-solid fa-rotate-left fa-undo text-[10px]"></i>
+          <i class="fa-solid fa-rotate-left text-[10px]"></i>
           <span>发起退款</span>
         </button>
         <button
@@ -382,7 +382,7 @@ const submitAction = async () => {
           @click="openAddress"
           class="px-2 py-1.5 rounded bg-white/5 hover:bg-blue-500/20 hover:text-blue-300 disabled:opacity-40 text-[11px] text-slate-300 text-center font-medium border border-white/[0.08] transition-colors flex items-center justify-center gap-1"
         >
-          <i class="fa-solid fa-location-dot fa-map-marker-alt text-[10px]"></i>
+          <i class="fa-solid fa-location-dot text-[10px]"></i>
           <span>改派地址</span>
         </button>
         <button

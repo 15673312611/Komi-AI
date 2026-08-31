@@ -93,6 +93,12 @@ const ensureWidget = async (): Promise<string | null> => {
   }
 }
 
+const handleRetry = async () => {
+  setupError.value = ''
+  const widgetId = await ensureWidget()
+  if (widgetId) await start(widgetId)
+}
+
 onMounted(async () => {
   const widgetId = await ensureWidget()
   if (widgetId) await start(widgetId)
@@ -148,9 +154,16 @@ const formatMessage = (content: string) => sanitizeHtml(marked(content) as strin
     </div>
 
     <div class="test-chat">
-      <div v-if="connecting" class="chat-state">正在连接智能体…</div>
+      <div v-if="connecting" class="chat-state connecting">
+        <span class="state-spinner"></span>
+        <span>正在建立智能体实时连接通道…</span>
+      </div>
       <div v-else-if="setupError || connectionError" class="chat-state error">
-        {{ setupError || connectionError }}
+        <div class="error-text">{{ setupError || connectionError }}</div>
+        <button type="button" class="retry-link-btn" @click="handleRetry">
+          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+          重新连接
+        </button>
       </div>
 
       <div ref="scrollEl" class="chat-scroll">
@@ -281,8 +294,56 @@ const formatMessage = (content: string) => sanitizeHtml(marked(content) as strin
   border-bottom: 1px solid var(--o08);
 }
 
+.chat-state.connecting {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--accent-ink, #C9F24E);
+}
+
+.state-spinner {
+  width: 13px;
+  height: 13px;
+  border: 2px solid var(--o20, rgba(255, 255, 255, 0.2));
+  border-top-color: currentColor;
+  border-radius: 50%;
+  animation: kb-spin 0.7s linear infinite;
+  flex-shrink: 0;
+}
+
 .chat-state.error {
-  color: var(--error-color);
+  color: var(--error-color, #f87171);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  background: rgba(239, 68, 68, 0.06);
+}
+
+.error-text {
+  flex: 1;
+}
+
+.retry-link-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: var(--text, #F5F6F8);
+  padding: 4px 10px;
+  border-radius: 5px;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.retry-link-btn:hover {
+  background: var(--accent-bg-12, rgba(201, 242, 78, 0.12));
+  border-color: var(--accent-ink, #C9F24E);
+  color: var(--accent-ink, #C9F24E);
 }
 
 .chat-scroll {

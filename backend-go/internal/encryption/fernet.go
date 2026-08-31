@@ -71,6 +71,14 @@ func EncryptAtRest(value string) (string, error) {
 }
 
 func Decrypt(value string) (string, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return "", nil
+	}
+	// If it doesn't look like a Fernet token, return as plaintext directly
+	if !strings.HasPrefix(value, "gAAAAA") && !strings.HasPrefix(value, "enc:") {
+		return value, nil
+	}
 	key, err := loadKey()
 	if err != nil {
 		return "", err

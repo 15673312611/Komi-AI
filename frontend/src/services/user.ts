@@ -30,6 +30,9 @@ export const userService = {
   getUserId(): string {
     return this.getCurrentUser()?.id || ''
   },
+  getOrganizationId(): string {
+    return this.getCurrentUser()?.organization_id || ''
+  },
 
   getCurrentUser(): User | null {
     if (this.userInfo) return this.userInfo

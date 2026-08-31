@@ -21,6 +21,7 @@ const props = defineProps<{
   aiAutoReplyDisabled?: boolean
   aiAutoReplyLoading?: boolean
   disabled?: boolean
+  isResolved?: boolean
   allowAttachments?: boolean
   allowedAttachmentTypes?: string[] | null
   draft?: string
@@ -262,7 +263,7 @@ const removePendingFile = (index: number) => { pendingFiles.value.splice(index, 
       class="px-4 py-2 bg-[#0F1523] border-t border-white/[0.08] flex items-center gap-2 overflow-x-auto text-xs shrink-0"
     >
       <div class="flex items-center gap-1.5 text-emerald-400 font-bold shrink-0 text-xs">
-        <i class="fa-solid fa-wand-magic-sparkles fa-magic text-xs"></i>
+        <i class="fa-solid fa-wand-magic-sparkles text-xs"></i>
         <span>AI Copilot 推荐回复：</span>
       </div>
       <span v-if="props.aiSuggestionsLoading" class="text-[11px] text-slate-400 whitespace-nowrap">正在生成…</span>
@@ -292,7 +293,7 @@ const removePendingFile = (index: number) => { pendingFiles.value.splice(index, 
           ]"
         >
           <i class="fa-solid fa-reply text-xs"></i>
-          <span>💬 回复客户</span>
+          <span>回复客户</span>
         </button>
 
         <button
@@ -304,14 +305,14 @@ const removePendingFile = (index: number) => { pendingFiles.value.splice(index, 
               : 'text-slate-400 hover:text-amber-300 hover:bg-amber-500/5',
           ]"
         >
-          <i class="fa-solid fa-note-sticky fa-sticky-note text-xs"></i>
-          <span>📝 内部团队便签 (Private Note)</span>
+          <i class="fa-solid fa-note-sticky text-xs"></i>
+          <span>内部团队便签 (Private Note)</span>
         </button>
       </div>
 
       <!-- AI 自动回复 Toggle -->
       <div class="flex items-center gap-2 text-xs text-slate-400 pb-1">
-        <span class="text-[11px] font-medium">🤖 AI 自动回复接管</span>
+        <span class="text-[11px] font-medium flex items-center gap-1"><i class="fa-solid fa-robot text-emerald-400"></i> AI 自动回复接管</span>
         <label class="relative inline-flex items-center cursor-pointer">
           <input
             type="checkbox"
@@ -351,7 +352,7 @@ const removePendingFile = (index: number) => { pendingFiles.value.splice(index, 
           rows="3"
           :placeholder="
             currentReplyMode === 'reply'
-              ? '输入回复内容... (按 Enter 发送，Shift+Enter 换行，输入 \'/\' 快捷调用话术)'
+              ? (props.isResolved ? '💬 会话已解决归档，输入新回复将自动重新打开会话... (按 Enter 发送)' : '输入回复内容... (按 Enter 发送，Shift+Enter 换行，输入 \'/\' 快捷调用话术)')
               : '输入内部便签... (仅团队成员可见；输入 \'@\' 提及团队成员)'
           "
           @keydown="handleTextareaKeydown"
@@ -414,7 +415,7 @@ const removePendingFile = (index: number) => { pendingFiles.value.splice(index, 
               class="w-7 h-7 rounded hover:bg-white/5 hover:text-emerald-300 flex items-center justify-center transition-colors"
               title="AI 智能润色/多语言母语级翻译"
             >
-              <i class="fa-solid fa-wand-sparkles fa-magic text-xs text-emerald-400"></i>
+              <i class="fa-solid fa-wand-magic-sparkles text-xs text-emerald-400"></i>
             </button>
             <button
               @click="emit('open-product')"

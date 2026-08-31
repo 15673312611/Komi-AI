@@ -103,11 +103,13 @@ export function useWidgetSocket() {
             auth.page_url = document.referrer || ''
         }
         
-        socket = io(`${widgetEnv.WS_URL}/widget`, {
-            transports: ['websocket'],
+        const wsUrl = (widgetEnv.WS_URL || '').replace(/^ws(s)?:/i, 'http$1:')
+        socket = io(`${wsUrl}/widget`, {
+            transports: ['websocket', 'polling'],
             reconnection: true,
             reconnectionAttempts: MAX_RETRIES,
             reconnectionDelay: 1000,
+            timeout: 8000,
             auth: Object.keys(auth).length > 0 ? auth : undefined
         })
 
@@ -270,7 +272,6 @@ export function useWidgetSocket() {
 
     const connect = async (): Promise<boolean> => {
         try {
-           
             connectionStatus.value = 'connecting'
             retryCount.value = 0
 
@@ -285,19 +286,51 @@ export function useWidgetSocket() {
             socket = initializeSocket('')
 
             return new Promise((resolve) => {
-                socket?.on('connect', () => {
-                    resolve(true)
+                let resolved = false
+
+                const timer = setTimeout(() => {
+                    if (!resolved) {
+                        resolved = true
+                        const isConn = socket?.connected ?? false
+                        connectionStatus.value = isConn ? 'connected' : 'failed'
+                        resolve(isConn)
+                    }
+                }, 5000)
+
+                socket?.once('connect', () => {
+                    if (!resolved) {
+                        resolved = true
+                        clearTimeout(timer)
+                        connectionStatus.value = 'connected'
+                        resolve(true)
+                    }
                 })
 
-                socket?.on('connect_error', () => {
-                    if (retryCount.value >= MAX_RETRIES) {
+                socket?.on('connect_error', (err: any) => {
+                    console.warn('Socket connect error:', err)
+                    if (retryCount.value >= 2 && !resolved) {
+                        resolved = true
+                        clearTimeout(timer)
+                        connectionStatus.value = 'failed'
                         resolve(false)
+                    }
+                })
+
+                socket?.on('error', (err: any) => {
+                    console.warn('Socket error from server:', err)
+                    if (err?.type === 'ai_config_missing' || err?.type === 'auth_error') {
+                        errorMessage.value = err?.error || 'AI 配置缺失或认证失败'
+                        if (!resolved) {
+                            resolved = true
+                            clearTimeout(timer)
+                            connectionStatus.value = 'failed'
+                            resolve(false)
+                        }
                     }
                 })
             })
         } catch (error) {
             console.error('Socket initialization failed:', error)
-           
             connectionStatus.value = 'failed'
             return false
         }

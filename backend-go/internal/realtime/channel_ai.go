@@ -92,12 +92,15 @@ func (s *Server) ChannelReply(ctx context.Context, request channel.ReplyRequest)
 	if toolState.MCPRuntime != nil {
 		system += mcpAIInstructions
 	}
-	raw, toolState, err := completeChannelAI(ctx, cfg.ModelType, cfg.ModelName, key, system, messages, 1200, tools, toolState)
+	fmt.Printf("[Channel AI] 正在调用大模型生成回复: AgentID=%s, OrgID=%s, 模型=%s/%s...\n", request.AgentID, request.OrganizationID, cfg.ModelType, cfg.ModelName)
+	raw, toolState, err := completeChannelAIWithConfig(ctx, cfg, key, system, messages, 1200, tools, toolState)
 	if err != nil {
+		fmt.Printf("[Channel AI Error] 大模型调用失败: %v\n", err)
 		return channel.Reply{}, err
 	}
 	reply := parseChannelReply(raw)
 	reply = applyAIToolState(reply, toolState)
+	fmt.Printf("[Channel AI Success] 回复生成成功 (字数=%d): %q\n", len(reply.Message), reply.Message)
 	originalMessage := reply.Message
 	var outputRules []string
 	reply.Message, outputRules = guardrail.CheckOutput(originalMessage, guardrailCtx, guardrailConfig)
@@ -138,6 +141,28 @@ Set transfer_to_human=true only when human transfer is appropriate. Set end_chat
 	} else {
 		prompt += " Lead capture is disabled; keep request_lead_capture=false and do not ask for contact details solely for lead capture."
 	}
+
+	fallbackStrategy := "transfer_human"
+	if configured.Customization != nil && configured.Customization.CustomizationMetadata != nil {
+		if s, ok := configured.Customization.CustomizationMetadata["unknown_fallback_strategy"].(string); ok && strings.TrimSpace(s) != "" {
+			fallbackStrategy = strings.TrimSpace(s)
+		}
+	}
+	strategyPrompt := "\nWhen the knowledge base does not contain the answer or when you are uncertain:\n"
+	switch fallbackStrategy {
+	case "create_ticket":
+		strategyPrompt += "- Politely explain that this inquiry needs specialist follow-up, ask for their email/order info, and set create_ticket=true or request_lead_capture=true to create a follow-up ticket.\n"
+	case "clarify":
+		strategyPrompt += "- Politely state what you know and ask the customer for clarifying details such as their order number or more specifics. Never guess or hallucinate.\n"
+	default: // "transfer_human"
+		if configured.TransferToHuman {
+			strategyPrompt += "- Politely let the customer know you are transferring them to a human agent specialist, and set transfer_to_human=true with transfer_reason=\"knowledge_uncovered\".\n"
+		} else {
+			strategyPrompt += "- Politely state what you know and offer assistance, never hallucinating false facts.\n"
+		}
+	}
+	prompt += strategyPrompt
+
 	return guardrail.ApplyPolicy(prompt, guardrailCtx, guardrailConfig.PolicyEnabled)
 }
 
@@ -228,7 +253,21 @@ const channelAIToolCallLimit = 5
 // providers, feeds tool results back into the same conversation until the
 // model produces its final answer. The limit is deliberately per turn so a
 // malformed model cannot create an unbounded external side-effect loop.
+func completeChannelAIWithConfig(ctx context.Context, cfg *aiconfig.Config, key, system string, messages []channelAIMessage, maxTokens int, tools []aiToolDefinition, state *aiToolState) (string, *aiToolState, error) {
+	customBaseURL := ""
+	if cfg != nil && cfg.Settings != nil {
+		if u, ok := cfg.Settings["base_url"].(string); ok && strings.TrimSpace(u) != "" {
+			customBaseURL = strings.TrimRight(strings.TrimSpace(u), "/")
+		}
+	}
+	return completeChannelAIWithBaseURL(ctx, cfg.ModelType, cfg.ModelName, key, customBaseURL, system, messages, maxTokens, tools, state)
+}
+
 func completeChannelAI(ctx context.Context, modelType, modelName, key, system string, messages []channelAIMessage, maxTokens int, tools []aiToolDefinition, state *aiToolState) (string, *aiToolState, error) {
+	return completeChannelAIWithBaseURL(ctx, modelType, modelName, key, "", system, messages, maxTokens, tools, state)
+}
+
+func completeChannelAIWithBaseURL(ctx context.Context, modelType, modelName, key, customBaseURL, system string, messages []channelAIMessage, maxTokens int, tools []aiToolDefinition, state *aiToolState) (string, *aiToolState, error) {
 	modelType = strings.ToUpper(strings.TrimSpace(modelType))
 	if state == nil {
 		state = &aiToolState{}
@@ -292,7 +331,10 @@ func completeChannelAI(ctx context.Context, modelType, modelName, key, system st
 		})
 		return raw, state, err
 	}
-	base := strings.TrimRight(os.Getenv("AI_OPENAI_BASE_URL"), "/")
+	base := customBaseURL
+	if base == "" {
+		base = strings.TrimRight(os.Getenv("AI_OPENAI_BASE_URL"), "/")
+	}
 	if base == "" {
 		switch modelType {
 		case "GROQ":
@@ -303,6 +345,10 @@ func completeChannelAI(ctx context.Context, modelType, modelName, key, system st
 			base = "https://api.mistral.ai/v1"
 		case "XAI":
 			base = "https://api.x.ai/v1"
+		case "ZHIPU":
+			base = "https://open.bigmodel.cn/api/paas/v4"
+		case "KIMI":
+			base = "https://api.moonshot.cn/v1"
 		case "OLLAMA":
 			base = "http://localhost:11434/v1"
 		case "HUGGINGFACE":

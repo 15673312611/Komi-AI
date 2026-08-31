@@ -49,18 +49,18 @@ const emit = defineEmits<{
 }>()
 
 const agentTypes = [
-  { value: 'customer_support', label: 'Customer support' },
-  { value: 'sales', label: 'Sales' },
-  { value: 'tech_support', label: 'Tech support' },
-  { value: 'general', label: 'General' },
+  { value: 'customer_support', label: '客户支持与售后' },
+  { value: 'sales', label: '售前导购与销售' },
+  { value: 'tech_support', label: '技术支持与排障' },
+  { value: 'general', label: '通用全能助手' },
 ] as const
 
 // Sensible starter instructions per agent type — prefilled so setup is quick
 const TYPE_DEFAULTS: Record<string, string> = {
-  customer_support: 'Be concise, friendly, and empathetic. Answer questions using the knowledge base. Escalate billing or account issues to a human agent.',
-  sales: 'Be enthusiastic and helpful. Highlight product benefits, answer pricing questions, and guide visitors toward booking a demo or starting a trial. Capture lead details when it feels natural.',
-  tech_support: 'Be clear and patient. Help users troubleshoot step by step using the documentation. Ask for error messages or screenshots when needed, and escalate unresolved issues to a human.',
-  general: 'Be helpful, concise, and friendly. Answer questions accurately using the knowledge base, and hand off to a human when a request needs personal attention.',
+  customer_support: '回答清晰简洁、态度温和友善且富有同理心。基于知识库解答客户问题。若遇到复杂的退款、账单或账号纠纷，主动引导转接人工客服。',
+  sales: '保持热情、专业与积极。重点介绍产品核心优势与卖点，解答价格与规格疑问，引导意向客户下单或预约演示。在对话适当时机自然获取潜在客户联系方式。',
+  tech_support: '回答严谨详尽且富有耐心。根据技术文档一步步引导用户进行故障排查。必要时索取报错截图或日志信息，对于无法解决的问题及时转交人工技术团队。',
+  general: '热情有礼、回答专业高效。严格依据知识库内容解答用户提问，在用户提出超出能力范围或需要人工处理的需求时，顺畅转交人工。',
 }
 const DEFAULT_VALUES = Object.values(TYPE_DEFAULTS)
 
@@ -89,10 +89,10 @@ const leadCaptureLocked = computed(() =>
 // Default off when locked so we never try to save it on a non-Pro plan.
 const leadEnabled = ref(!leadCaptureLocked.value)
 const LEAD_FIELDS = [
-  { key: 'name', label: 'Name' },
-  { key: 'email', label: 'Email' },
-  { key: 'company', label: 'Company' },
-  { key: 'phone', label: 'Phone' },
+  { key: 'name', label: '姓名' },
+  { key: 'email', label: '邮箱' },
+  { key: 'company', label: '公司/店铺' },
+  { key: 'phone', label: '手机号' },
 ]
 const leadFields = ref<Record<string, boolean>>({ name: true, email: true, company: true, phone: false })
 
@@ -204,7 +204,7 @@ const generateWithAI = async () => {
     const generated = await agentService.generateInstructions(prompt, instructions.value.trim() ? [instructions.value.trim()] : undefined)
     if (generated.length) instructions.value = generated.join('\n')
   } catch (err: any) {
-    error.value = err?.response?.data?.detail || 'Could not generate instructions. Please try again.'
+    error.value = err?.response?.data?.detail || '智能生成人设指令失败，请重试。'
   } finally {
     isGenerating.value = false
   }

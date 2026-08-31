@@ -21,6 +21,7 @@ export const NAV_ICONS: Record<string, string> = {
     agents: '<rect x="5" y="8" width="14" height="11" rx="3"/><line x1="12" y1="4" x2="12" y2="8"/><circle cx="9" cy="13" r="1" fill="currentColor"/><circle cx="15" cy="13" r="1" fill="currentColor"/>',
     humans: '<circle cx="9" cy="8" r="3"/><path d="M3.5 19a5.5 5 0 0 1 11 0"/><circle cx="16.5" cy="9" r="2.3"/><path d="M15 19a4.5 4 0 0 1 5.5-3.6"/>',
     inbox: '<rect x="3" y="5" width="18" height="14" rx="3"/><path d="M3 13h5l1.5 2.5h4L19 13h2"/>',
+    stores: '<path d="M2 7l4.41-4.41A2 2 0 0 1 7.83 2h8.34a2 2 0 0 1 1.42.59L22 7"/><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><path d="M15 22v-4a2 2 0 0 0-2-2h-2a2 2 0 0 0-2 2v4"/><path d="M2 7h20"/>',
     people: '<circle cx="9" cy="8" r="2.6"/><path d="M4 18a5 4.5 0 0 1 10 0"/><path d="M15.5 6.2a2.6 2.6 0 0 1 0 4.6"/><path d="M16 13.6A5 4.5 0 0 1 20 18"/>',
     analytics: '<line x1="5" y1="17" x2="5" y2="13"/><line x1="10" y1="17" x2="10" y2="9"/><line x1="15" y1="17" x2="15" y2="6"/><line x1="20" y1="17" x2="20" y2="11"/>',
     knowledge: '<path d="M4 5.5A2 2 0 0 1 6 4h5v16H6a2 2 0 0 0-2 1.5z"/><path d="M20 5.5A2 2 0 0 0 18 4h-5v16h5a2 2 0 0 1 2 1.5z"/>',
@@ -56,3 +57,4 @@ export const navIconSvg = (name?: string, size = 19) => {
     }
     return svg
 }
+

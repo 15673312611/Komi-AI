@@ -20,7 +20,7 @@ limitations under the License.
  * Copy and visibility rule live here, not in each template, so the live widget,
  * the dashboard preview and the settings description cannot drift apart.
  */
-export const AI_DISCLAIMER_TEXT = 'AI can make mistakes. Check important info.'
+export const AI_DISCLAIMER_TEXT = 'AI 生成内容仅供参考，请核对重要信息。'
 
 /**
  * Whether the disclosure should be rendered.

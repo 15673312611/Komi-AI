@@ -141,6 +141,20 @@ const localHandoffCollectEmail = ref(props.handoffCollectEmail)
 const localHandoffCollectName = ref(props.handoffCollectName)
 const localSelectedGroupIds = ref<string[]>([...props.selectedGroupIds])
 
+// Human-like response delay & typing simulation state
+const initialResponseDelay = props.agent?.customization?.customization_metadata?.response_delay || {
+  mode: 'human_like',
+  custom_delay_seconds: 3,
+  simulate_typing: true
+}
+const localResponseDelayMode = ref<'human_like' | 'instant' | 'custom'>(initialResponseDelay.mode || 'human_like')
+const localCustomDelaySeconds = ref<number>(initialResponseDelay.custom_delay_seconds ?? 3)
+const localSimulateTyping = ref<boolean>(initialResponseDelay.simulate_typing !== false)
+
+// Unknown question & knowledge miss fallback strategy
+const initialFallbackStrategy = (props.agent?.customization?.customization_metadata as any)?.unknown_fallback_strategy || 'transfer_human'
+const localUnknownFallbackStrategy = ref<'transfer_human' | 'create_ticket' | 'clarify'>(initialFallbackStrategy)
+
 // Watch for changes in props to update local state
 // Show the shipped rule when this agent has not written its own. Fetched rather
 // than duplicated here so the box can never drift from the wording actually sent
@@ -190,20 +204,34 @@ watch(() => props.selectedGroupIds, (newValue) => {
   localSelectedGroupIds.value = [...newValue]
 }, { deep: true })
 
+watch(() => props.agent?.customization?.customization_metadata?.response_delay, (v) => {
+  if (v) {
+    localResponseDelayMode.value = v.mode || 'human_like'
+    localCustomDelaySeconds.value = v.custom_delay_seconds ?? 3
+    localSimulateTyping.value = v.simulate_typing !== false
+  }
+}, { deep: true })
+
+watch(() => (props.agent?.customization?.customization_metadata as any)?.unknown_fallback_strategy, (v) => {
+  if (v) {
+    localUnknownFallbackStrategy.value = v
+  }
+})
+
 const transferReasons = [
-  "Knowledge gaps",
-  "Need human contact",
-  "Customer frustration",
-  "High priority issues",
-  "Compliance matters"
+  "知识库未覆盖或无法解答",
+  "客户明确要求人工客服",
+  "检测到客户负面或不满情绪",
+  "高优先级或紧急业务咨询",
+  "涉及退款、合规或安全事项"
 ]
 
 const tooltipContent = computed(() => {
-  return `Auto-transfer when:\n${transferReasons.map(reason => `• ${reason}`).join('\n')}`
+  return `满足以下情况时自动转人工：\n${transferReasons.map(reason => `• ${reason}`).join('\n')}`
 })
 
 const ratingTooltipContent = computed(() => {
-  return `Enable to:\n• Request feedback after chat ends\n• Collect star ratings (1-5)\n• Gather optional comments\n• Track customer satisfaction`
+  return `开启后：\n• 会话结束时邀请客户评价\n• 收集 1-5 星级满意度评分\n• 收集客户反馈建议\n• 持续追踪与提升服务体验`
 })
 
 // AI generation state
@@ -253,7 +281,13 @@ const handleSave = () => {
     askForRating: localAskForRating.value,
     handoffCollectEmail: localHandoffCollectEmail.value,
     handoffCollectName: localHandoffCollectName.value,
-    selectedGroupIds: localSelectedGroupIds.value
+    selectedGroupIds: localSelectedGroupIds.value,
+    responseDelay: {
+      mode: localResponseDelayMode.value,
+      custom_delay_seconds: Number(localCustomDelaySeconds.value) || 3,
+      simulate_typing: localSimulateTyping.value
+    },
+    unknownFallbackStrategy: localUnknownFallbackStrategy.value
   })
 }
 </script>
@@ -350,21 +384,261 @@ const handleSave = () => {
     <!-- Transfer and Rating Section -->
     <section class="detail-section">
       <div class="transfer-section">
-        <!-- AI 应答总开关 -->
-        <div class="transfer-toggle">
-          <div class="toggle-header">
-            <h4 class="section-title">允许 AI 自动应答</h4>
+        <!-- 默认接待模式选择 -->
+        <div class="routing-mode-selector mb-6">
+          <div class="flex items-center justify-between mb-2">
+            <div>
+              <h4 class="section-title text-sm font-bold text-slate-100 flex items-center gap-2">
+                <span>会话默认接待模式</span>
+                <span class="text-[11px] font-normal text-slate-400">（新会话进入时的默认接待方）</span>
+              </h4>
+              <p class="helper-text text-xs text-slate-400 mt-0.5">
+                配置新客户咨询进入系统时，默认优先由 AI 智能体接待还是直接进入人工客服队列。
+              </p>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
+            <!-- AI优先卡片 -->
+            <div
+              @click="isEditing && (localAiRepliesEnabled = true)"
+              :class="[
+                'p-3.5 rounded-xl border transition-all flex items-start gap-3',
+                isEditing ? 'cursor-pointer' : 'cursor-default opacity-80',
+                localAiRepliesEnabled
+                  ? 'bg-emerald-500/10 border-emerald-500/50 text-slate-100 shadow-[0_0_15px_rgba(16,185,129,0.15)] ring-1 ring-emerald-500/30'
+                  : 'bg-[#141B2E] border-white/[0.08] text-slate-400 hover:border-white/20'
+              ]"
+            >
+              <div :class="[
+                'w-9 h-9 rounded-xl flex items-center justify-center shrink-0 text-sm mt-0.5',
+                localAiRepliesEnabled ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-800 text-slate-500'
+              ]">
+                <font-awesome-icon icon="fa-solid fa-robot" />
+              </div>
+              <div class="flex-1 min-w-0">
+                <div class="flex items-center justify-between">
+                  <span class="text-xs font-bold" :class="localAiRepliesEnabled ? 'text-emerald-300' : 'text-slate-200'">
+                    🤖 AI 智能客服优先 (推荐)
+                  </span>
+                  <font-awesome-icon v-if="localAiRepliesEnabled" icon="fa-solid fa-circle-check" class="text-emerald-400 text-sm" />
+                </div>
+                <p class="text-[11px] mt-1 text-slate-400 leading-relaxed">
+                  收到新咨询后，AI 智能体基于知识库与业务规则自动应答，支持 7×24 小时即时响应。
+                </p>
+              </div>
+            </div>
+
+            <!-- 人工优先卡片 -->
+            <div
+              @click="isEditing && (localAiRepliesEnabled = false)"
+              :class="[
+                'p-3.5 rounded-xl border transition-all flex items-start gap-3',
+                isEditing ? 'cursor-pointer' : 'cursor-default opacity-80',
+                !localAiRepliesEnabled
+                  ? 'bg-blue-500/10 border-blue-500/50 text-slate-100 shadow-[0_0_15px_rgba(59,130,246,0.15)] ring-1 ring-blue-500/30'
+                  : 'bg-[#141B2E] border-white/[0.08] text-slate-400 hover:border-white/20'
+              ]"
+            >
+              <div :class="[
+                'w-9 h-9 rounded-xl flex items-center justify-center shrink-0 text-sm mt-0.5',
+                !localAiRepliesEnabled ? 'bg-blue-500/20 text-blue-400' : 'bg-slate-800 text-slate-500'
+              ]">
+                <font-awesome-icon icon="fa-solid fa-headset" />
+              </div>
+              <div class="flex-1 min-w-0">
+                <div class="flex items-center justify-between">
+                  <span class="text-xs font-bold" :class="!localAiRepliesEnabled ? 'text-blue-300' : 'text-slate-200'">
+                    👤 真人客服优先 (纯人工接待)
+                  </span>
+                  <font-awesome-icon v-if="!localAiRepliesEnabled" icon="fa-solid fa-circle-check" class="text-blue-400 text-sm" />
+                </div>
+                <p class="text-[11px] mt-1 text-slate-400 leading-relaxed">
+                  新咨询直接路由至人工客服排队队列，AI 不自动对外发送回复，完全由人工坐席承接。
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 拟人化回复间隔与打字仿真 (AI模式下可用) -->
+        <div v-if="localAiRepliesEnabled" class="response-delay-box p-4 rounded-xl bg-[#0F1523] border border-white/[0.08] mb-6">
+          <div class="flex items-center justify-between mb-2">
+            <div class="flex items-center gap-2">
+              <span class="text-xs font-bold text-slate-100">⏱️ AI 拟人化回复间隔与输入仿真</span>
+              <span class="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-medium">防机器感辨识</span>
+            </div>
             <label class="switch">
-              <input type="checkbox"
-                v-model="localAiRepliesEnabled"
-                :disabled="!isEditing"
-              >
+              <input type="checkbox" v-model="localSimulateTyping" :disabled="!isEditing">
               <span class="slider"></span>
             </label>
           </div>
-          <p class="helper-text">
-            关闭此开关后，所有新进入的客户咨询将直接路由至人工客服团队，AI 不会对外发送回复。
+          <p class="helper-text text-xs text-slate-400 mb-3">
+            开启打字中状态模拟与回复间隔，避免毫秒级秒回长篇文本给客户带来生硬的机器人感。
           </p>
+
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5 mb-3">
+            <button
+              type="button"
+              :disabled="!isEditing"
+              @click="localResponseDelayMode = 'human_like'"
+              :class="[
+                'p-2.5 rounded-xl border text-left transition-all',
+                localResponseDelayMode === 'human_like'
+                  ? 'bg-emerald-500/15 border-emerald-500/50 text-emerald-300 shadow-[0_0_10px_rgba(16,185,129,0.15)]'
+                  : 'bg-[#161E31] border-white/[0.06] text-slate-400 hover:border-white/20'
+              ]"
+            >
+              <div class="text-xs font-bold flex items-center gap-1.5">
+                <font-awesome-icon icon="fa-solid fa-wand-magic-sparkles" />
+                <span>智能动态拟人 (推荐)</span>
+              </div>
+              <p class="text-[10px] text-slate-400 mt-1">2~4秒，根据文本长短智能计算打字时长</p>
+            </button>
+
+            <button
+              type="button"
+              :disabled="!isEditing"
+              @click="localResponseDelayMode = 'instant'"
+              :class="[
+                'p-2.5 rounded-xl border text-left transition-all',
+                localResponseDelayMode === 'instant'
+                  ? 'bg-emerald-500/15 border-emerald-500/50 text-emerald-300 shadow-[0_0_10px_rgba(16,185,129,0.15)]'
+                  : 'bg-[#161E31] border-white/[0.06] text-slate-400 hover:border-white/20'
+              ]"
+            >
+              <div class="text-xs font-bold flex items-center gap-1.5">
+                <font-awesome-icon icon="fa-solid fa-bolt" />
+                <span>极速即时响应</span>
+              </div>
+              <p class="text-[10px] text-slate-400 mt-1">0秒延迟，生成完成后立即送达客户</p>
+            </button>
+
+            <button
+              type="button"
+              :disabled="!isEditing"
+              @click="localResponseDelayMode = 'custom'"
+              :class="[
+                'p-2.5 rounded-xl border text-left transition-all',
+                localResponseDelayMode === 'custom'
+                  ? 'bg-emerald-500/15 border-emerald-500/50 text-emerald-300 shadow-[0_0_10px_rgba(16,185,129,0.15)]'
+                  : 'bg-[#161E31] border-white/[0.06] text-slate-400 hover:border-white/20'
+              ]"
+            >
+              <div class="text-xs font-bold flex items-center gap-1.5">
+                <font-awesome-icon icon="fa-solid fa-sliders" />
+                <span>自定义固定延迟</span>
+              </div>
+              <p class="text-[10px] text-slate-400 mt-1">手动指定固定等待回复秒数</p>
+            </button>
+          </div>
+
+          <div v-if="localResponseDelayMode === 'custom'" class="flex items-center gap-3 p-2.5 rounded-xl bg-[#161E31] border border-white/[0.06]">
+            <span class="text-xs text-slate-300 shrink-0">回复延迟时间：</span>
+            <input
+              type="range"
+              min="1"
+              max="10"
+              step="1"
+              v-model.number="localCustomDelaySeconds"
+              :disabled="!isEditing"
+              class="flex-1 accent-emerald-500"
+            />
+            <span class="text-xs font-mono font-bold text-emerald-400 w-14 text-right">{{ localCustomDelaySeconds }} 秒</span>
+          </div>
+        </div>
+
+        <!-- 未知问题与知识库未命中应对策略 -->
+        <div v-if="localAiRepliesEnabled" class="unknown-fallback-section p-4 rounded-xl bg-[#0F1523] border border-white/[0.08] mb-6">
+          <div class="flex items-center justify-between mb-2">
+            <div class="flex items-center gap-2">
+              <span class="text-xs font-bold text-slate-100">🛡️ 知识库未覆盖与未知问题应对策略</span>
+              <span class="text-[10px] px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300 border border-blue-500/30 font-medium">防幻觉与胡编</span>
+            </div>
+          </div>
+          <p class="helper-text text-xs text-slate-400 mb-3">
+            当客户提问超出知识库已知范围或 AI 不确定时，系统采取的优雅降级与承接方式。
+          </p>
+
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+            <!-- 自动转人工 (推荐) -->
+            <button
+              type="button"
+              :disabled="!isEditing"
+              @click="localUnknownFallbackStrategy = 'transfer_human'"
+              :class="[
+                'p-3 rounded-xl border text-left transition-all flex flex-col justify-between',
+                localUnknownFallbackStrategy === 'transfer_human'
+                  ? 'bg-blue-500/15 border-blue-500/50 text-blue-200 shadow-[0_0_12px_rgba(59,130,246,0.15)] ring-1 ring-blue-500/30'
+                  : 'bg-[#161E31] border-white/[0.06] text-slate-400 hover:border-white/20'
+              ]"
+            >
+              <div>
+                <div class="text-xs font-bold flex items-center justify-between">
+                  <span class="flex items-center gap-1.5" :class="localUnknownFallbackStrategy === 'transfer_human' ? 'text-blue-300' : 'text-slate-200'">
+                    <font-awesome-icon icon="fa-solid fa-headset" />
+                    <span>自动转交人工 (推荐)</span>
+                  </span>
+                  <font-awesome-icon v-if="localUnknownFallbackStrategy === 'transfer_human'" icon="fa-solid fa-circle-check" class="text-blue-400 text-xs" />
+                </div>
+                <p class="text-[11px] text-slate-400 mt-1.5 leading-relaxed">
+                  礼貌说明已知情况，并自动将该会话排队转交人工客服专员接管。
+                </p>
+              </div>
+            </button>
+
+            <!-- 引导留资 / 生成工单 -->
+            <button
+              type="button"
+              :disabled="!isEditing"
+              @click="localUnknownFallbackStrategy = 'create_ticket'"
+              :class="[
+                'p-3 rounded-xl border text-left transition-all flex flex-col justify-between',
+                localUnknownFallbackStrategy === 'create_ticket'
+                  ? 'bg-blue-500/15 border-blue-500/50 text-blue-200 shadow-[0_0_12px_rgba(59,130,246,0.15)] ring-1 ring-blue-500/30'
+                  : 'bg-[#161E31] border-white/[0.06] text-slate-400 hover:border-white/20'
+              ]"
+            >
+              <div>
+                <div class="text-xs font-bold flex items-center justify-between">
+                  <span class="flex items-center gap-1.5" :class="localUnknownFallbackStrategy === 'create_ticket' ? 'text-blue-300' : 'text-slate-200'">
+                    <font-awesome-icon icon="fa-solid fa-ticket" />
+                    <span>引导留资 / 建立工单</span>
+                  </span>
+                  <font-awesome-icon v-if="localUnknownFallbackStrategy === 'create_ticket'" icon="fa-solid fa-circle-check" class="text-blue-400 text-xs" />
+                </div>
+                <p class="text-[11px] text-slate-400 mt-1.5 leading-relaxed">
+                  主动询问客户联系邮箱与订单问题，自动生成待办售后工单后续跟进。
+                </p>
+              </div>
+            </button>
+
+            <!-- 礼貌答复并引导补充 -->
+            <button
+              type="button"
+              :disabled="!isEditing"
+              @click="localUnknownFallbackStrategy = 'clarify'"
+              :class="[
+                'p-3 rounded-xl border text-left transition-all flex flex-col justify-between',
+                localUnknownFallbackStrategy === 'clarify'
+                  ? 'bg-blue-500/15 border-blue-500/50 text-blue-200 shadow-[0_0_12px_rgba(59,130,246,0.15)] ring-1 ring-blue-500/30'
+                  : 'bg-[#161E31] border-white/[0.06] text-slate-400 hover:border-white/20'
+              ]"
+            >
+              <div>
+                <div class="text-xs font-bold flex items-center justify-between">
+                  <span class="flex items-center gap-1.5" :class="localUnknownFallbackStrategy === 'clarify' ? 'text-blue-300' : 'text-slate-200'">
+                    <font-awesome-icon icon="fa-solid fa-comments" />
+                    <span>礼貌答复并引导澄清</span>
+                  </span>
+                  <font-awesome-icon v-if="localUnknownFallbackStrategy === 'clarify'" icon="fa-solid fa-circle-check" class="text-blue-400 text-xs" />
+                </div>
+                <p class="text-[11px] text-slate-400 mt-1.5 leading-relaxed">
+                  说明目前暂未查询到确切信息，引导客户补充具体订单号或详细描述。
+                </p>
+              </div>
+            </button>
+          </div>
         </div>
 
         <!-- 转人工开关 -->

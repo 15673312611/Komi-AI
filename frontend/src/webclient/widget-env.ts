@@ -44,14 +44,34 @@ function getRuntimeConfig() {
 export const widgetEnv = {
     get API_URL() {
         const config = getRuntimeConfig();
-        // Default to the production API so a plain `build:widget` (no VITE_API_URL,
-        // no runtime APP_CONFIG) ships a working widget instead of localhost. Local
-        // dev overrides via VITE_API_URL; self-hosters via window.APP_CONFIG.
-        return config.API_URL || import.meta.env.VITE_API_URL || 'https://api.chattermate.chat/api/v1';
+        if (config.API_URL) return config.API_URL;
+        if (import.meta.env.VITE_API_URL) return import.meta.env.VITE_API_URL;
+        if (typeof window !== 'undefined' && window.location) {
+            if (window.location.port === '3001') {
+                return `${window.location.protocol}//${window.location.hostname}:8001/api/v1`;
+            }
+            if (window.location.port === '5173' || window.location.port === '3000') {
+                return `${window.location.protocol}//${window.location.hostname}:8000/api/v1`;
+            }
+            return `${window.location.origin}/api/v1`;
+        }
+        return 'http://localhost:8000/api/v1';
     },
     get WS_URL() {
         const config = getRuntimeConfig();
-        return config.WS_URL || import.meta.env.VITE_WS_URL || 'wss://api.chattermate.chat';
+        if (config.WS_URL) return config.WS_URL;
+        if (import.meta.env.VITE_WS_URL) return import.meta.env.VITE_WS_URL;
+        if (typeof window !== 'undefined' && window.location) {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            if (window.location.port === '3001') {
+                return `${protocol}//${window.location.hostname}:8001`;
+            }
+            if (window.location.port === '5173' || window.location.port === '3000') {
+                return `${protocol}//${window.location.hostname}:8000`;
+            }
+            return `${protocol}//${window.location.host}`;
+        }
+        return 'ws://localhost:8000';
     }
 }
 

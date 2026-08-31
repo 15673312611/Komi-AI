@@ -261,7 +261,7 @@ func (r *Repository) Takeover(ctx context.Context, id, organizationID, userID uu
 	result, err := r.pool.Exec(ctx, `
 UPDATE session_to_agents
 SET user_id = $3, group_id = NULL, status = 'OPEN'::sessionstatus, updated_at = NOW()
-WHERE session_id = $1 AND organization_id = $2 AND user_id IS NULL`, id, organizationID, userID)
+WHERE session_id = $1 AND organization_id = $2 AND (user_id IS NULL OR user_id = $3 OR status = 'CLOSED'::sessionstatus)`, id, organizationID, userID)
 	if err != nil {
 		return false, err
 	}

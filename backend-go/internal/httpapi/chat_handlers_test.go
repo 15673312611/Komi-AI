@@ -161,7 +161,7 @@ func TestChatUnreadShapesAndReadMigrationGuard(t *testing.T) {
 	store.detail = &chat.Detail{SessionID: sessionID, Status: "open"}
 	read = httptest.NewRecorder()
 	handler.ServeHTTP(read, widgetAppRequestWithToken(t, http.MethodPut, "/api/v1/chats/"+sessionID.String()+"/read", "", manager))
-	if read.Code != http.StatusNotImplemented {
-		t.Fatalf("missing read state status=%d body=%s", read.Code, read.Body.String())
+	if read.Code != http.StatusOK || !strings.Contains(read.Body.String(), sessionID.String()) {
+		t.Fatalf("mark read status=%d body=%s", read.Code, read.Body.String())
 	}
 }

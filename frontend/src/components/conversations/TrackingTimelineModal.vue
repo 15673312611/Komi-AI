@@ -43,72 +43,100 @@ const insertDraft = () => {
 </script>
 
 <template>
-  <div v-if="show" class="modal-backdrop" @click.self="emit('close')">
-    <section class="modal" role="dialog" aria-modal="true" aria-labelledby="tracking-title">
-      <header class="modal-header">
-        <div>
-          <h2 id="tracking-title">物流信息</h2>
-          <p>{{ order?.name || '当前订单' }} · 仅展示 Shopify 返回的数据</p>
+  <div v-if="show" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-in fade-in duration-200" @click.self="emit('close')">
+    <div class="w-full max-w-lg bg-[#0F1523] border border-white/10 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
+      <!-- 头部 -->
+      <div class="px-5 py-4 border-b border-white/[0.08] flex items-center justify-between bg-[#141B2E]">
+        <div class="flex items-center gap-3">
+          <div class="w-9 h-9 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 flex items-center justify-center text-sm shadow-[0_0_12px_rgba(16,185,129,0.3)]">
+            <i class="fa-solid fa-truck-fast"></i>
+          </div>
+          <div>
+            <h3 class="font-bold text-slate-100 text-sm">物流追踪与履约详情</h3>
+            <p class="text-[11px] text-slate-400 mt-0.5">{{ order?.name || '当前订单' }} · 实时同步 Shopify 物流轨迹</p>
+          </div>
         </div>
-        <button type="button" class="icon-button" aria-label="关闭" @click="emit('close')">×</button>
-      </header>
-      <div class="modal-body">
-        <div v-if="!hasData" class="empty">Shopify 尚未返回可用的运单号、物流链接或履约记录。</div>
+        <button
+          type="button"
+          @click="emit('close')"
+          class="w-7 h-7 rounded-lg hover:bg-white/10 text-slate-400 hover:text-slate-100 flex items-center justify-center transition-colors"
+        >
+          <i class="fa-solid fa-xmark text-sm"></i>
+        </button>
+      </div>
+
+      <!-- 主体列表 -->
+      <div class="p-5 space-y-4 overflow-y-auto flex-1">
+        <div v-if="!hasData" class="p-8 text-center text-slate-400 text-xs bg-white/[0.02] border border-white/[0.06] rounded-xl">
+          <i class="fa-solid fa-box-open text-slate-500 text-2xl mb-2 block"></i>
+          Shopify 尚未返回可用的运单号、物流链接或履约轨迹。
+        </div>
+
         <template v-else>
-          <article v-for="(fulfillment, index) in fulfillments" :key="index" class="fulfillment">
-            <div class="timeline-dot" :class="{ active: index === fulfillments.length - 1 }" />
-            <div class="fulfillment-content">
-              <strong>{{ (fulfillment as any).status || (fulfillment as any).shipment_status || '履约记录' }}</strong>
-              <span v-if="(fulfillment as any).tracking_company">{{ (fulfillment as any).tracking_company }}</span>
-              <span v-if="fulfillment.tracking_numbers?.length">运单号：{{ fulfillment.tracking_numbers.join('、') }}</span>
-              <div v-if="fulfillment.tracking_urls?.length" class="url-list">
-                <a v-for="url in fulfillment.tracking_urls" :key="url" :href="url" target="_blank" rel="noreferrer">{{ url }}</a>
+          <!-- 轨迹节点 -->
+          <div class="space-y-3">
+            <div
+              v-for="(fulfillment, index) in fulfillments"
+              :key="index"
+              class="p-3.5 rounded-xl bg-[#141B2E] border border-white/[0.06] space-y-2 relative"
+            >
+              <div class="flex items-center justify-between">
+                <span class="text-xs font-bold text-emerald-300 flex items-center gap-1.5">
+                  <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                  {{ (fulfillment as any).status || (fulfillment as any).shipment_status || '履约就绪' }}
+                </span>
+                <span v-if="(fulfillment as any).tracking_company" class="px-2 py-0.5 rounded-full bg-white/5 border border-white/10 text-[10px] text-slate-300">
+                  {{ (fulfillment as any).tracking_company }}
+                </span>
+              </div>
+
+              <div v-if="fulfillment.tracking_numbers?.length" class="text-xs text-slate-300 flex items-center justify-between pt-1 border-t border-white/[0.06]">
+                <span class="font-mono">运单号：{{ fulfillment.tracking_numbers.join('、') }}</span>
+                <button
+                  type="button"
+                  @click="copy(fulfillment.tracking_numbers.join(', '), '运单号已复制')"
+                  class="text-[11px] text-emerald-400 hover:text-emerald-300 font-medium"
+                >
+                  <i class="fa-regular fa-copy mr-1"></i>复制
+                </button>
+              </div>
+
+              <div v-if="fulfillment.tracking_urls?.length" class="text-xs text-slate-400 space-y-1">
+                <div v-for="url in fulfillment.tracking_urls" :key="url" class="flex items-center justify-between gap-2">
+                  <a :href="url" target="_blank" rel="noreferrer" class="text-[11px] text-blue-400 hover:underline truncate">{{ url }}</a>
+                  <button
+                    type="button"
+                    @click="copy(url, '物流链接已复制')"
+                    class="text-[11px] text-slate-400 hover:text-slate-200 shrink-0"
+                  >
+                    复制
+                  </button>
+                </div>
               </div>
             </div>
-          </article>
-          <div v-if="trackingNumbers.length" class="copy-row">
-            <span>运单号：{{ trackingNumbers.join('、') }}</span>
-            <button type="button" class="link-button" @click="copy(trackingNumbers.join(', '), '运单号已复制')">复制</button>
-          </div>
-          <div v-if="trackingUrls.length" class="copy-row">
-            <span>追踪链接：{{ trackingUrls[0] }}</span>
-            <button type="button" class="link-button" @click="copy(trackingUrls[0], '物流链接已复制')">复制链接</button>
           </div>
         </template>
       </div>
-      <footer class="modal-footer">
-        <button type="button" class="btn-secondary" @click="emit('close')">关闭</button>
-        <button type="button" class="btn-primary" :disabled="!hasData" @click="insertDraft">插入回复草稿</button>
-      </footer>
-    </section>
+
+      <!-- 底部栏 -->
+      <div class="px-5 py-3.5 border-t border-white/[0.08] bg-[#141B2E] flex items-center justify-between gap-2">
+        <button
+          type="button"
+          @click="emit('close')"
+          class="px-3.5 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 text-xs font-medium transition-all"
+        >
+          关闭
+        </button>
+        <button
+          type="button"
+          :disabled="!hasData"
+          @click="insertDraft"
+          class="px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-[0_0_12px_rgba(16,185,129,0.3)] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          <i class="fa-solid fa-file-import text-xs"></i>
+          <span>插入回复草稿</span>
+        </button>
+      </div>
+    </div>
   </div>
 </template>
-
-<style scoped>
-.modal-backdrop { position: fixed; inset: 0; z-index: 65; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgba(0,0,0,.68); }
-.modal { width: min(560px, 100%); max-height: 90vh; overflow: hidden; display: flex; flex-direction: column; border: 1px solid var(--o12); border-radius: 10px; background: var(--bg2); color: var(--text); box-shadow: 0 24px 80px rgba(0,0,0,.35); }
-.modal-header, .modal-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px; border-bottom: 1px solid var(--o08); }
-.modal-footer { justify-content: flex-end; border-top: 1px solid var(--o08); border-bottom: 0; }
-.modal-header h2 { margin: 0; font-size: 16px; }
-.modal-header p { margin: 5px 0 0; color: var(--muted); font-size: 11px; }
-.icon-button { width: 30px; height: 30px; border: 0; border-radius: 6px; background: transparent; color: var(--muted); font-size: 22px; cursor: pointer; }
-.icon-button:hover { background: var(--o08); color: var(--text); }
-.modal-body { padding: 16px; overflow-y: auto; }
-.empty { margin: 0; padding: 35px 10px; color: var(--muted); text-align: center; font-size: 12px; line-height: 1.5; }
-.fulfillment { position: relative; display: flex; gap: 12px; padding: 0 0 18px 18px; border-left: 1px solid var(--o12); }
-.fulfillment:last-of-type { padding-bottom: 8px; }
-.timeline-dot { position: absolute; left: -5px; top: 2px; width: 9px; height: 9px; border: 2px solid var(--bg2); border-radius: 50%; background: var(--o12); }
-.timeline-dot.active { background: var(--c-teal); }
-.fulfillment-content { display: grid; gap: 4px; min-width: 0; font-size: 12px; }
-.fulfillment-content strong { font-size: 13px; }
-.fulfillment-content span { color: var(--muted); }
-.url-list { display: grid; gap: 3px; }
-.url-list a { color: var(--c-teal); font-size: 11px; overflow-wrap: anywhere; }
-.copy-row { display: flex; justify-content: space-between; gap: 8px; margin-top: 10px; padding: 9px; border: 1px solid var(--o08); border-radius: 7px; color: var(--muted); font-size: 11px; }
-.copy-row span { min-width: 0; overflow-wrap: anywhere; }
-.link-button { border: 0; background: transparent; color: var(--c-teal); cursor: pointer; white-space: nowrap; }
-.btn-primary, .btn-secondary { min-height: 34px; padding: 0 12px; border-radius: 7px; border: 1px solid transparent; font-size: 12px; cursor: pointer; }
-.btn-primary { background: var(--accent-solid); color: var(--on-accent-solid); }
-.btn-secondary { background: var(--o06); border-color: var(--o12); color: var(--text); }
-.btn-primary:disabled { opacity: .5; cursor: not-allowed; }
-</style>

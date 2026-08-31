@@ -361,19 +361,6 @@ const openNotificationsFromSheet = () => {
             <main class="content">
                 <slot></slot>
             </main>
-
-            <!-- Footer: omitted for full-page layouts (hideHeader, e.g. ConversationsView) —
-                 those pages size .content to a fixed 100vh, so a footer still taking up
-                 real space at the bottom clips the last message / message input out of view. -->
-            <footer v-if="!props.hideHeader" class="footer">
-                <div class="footer-content">
-                    <p>&copy; 2024 ChatterMate. All rights reserved.</p>
-                    <nav class="footer-links">
-                        <a href="https://chattermate.chat/privacy_policy.html">Privacy Policy</a>
-                        <a href="https://chattermate.chat/terms_and_conditions.html">Terms of Service</a>
-                    </nav>
-                </div>
-            </footer>
         </div>
 
         <!-- Notification drawer (fixed) — outside the header so the More sheet

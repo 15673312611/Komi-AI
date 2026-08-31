@@ -31,24 +31,19 @@ import { hasAnyPermission } from '@/utils/permissions'
 /**
  * The one place a route's required permissions are written down.
  *
- * Both the router guard and the sidebar (navItems `show`) read this. They used to name permissions independently and had drifted: People
- * was listed in the nav for anyone with a chat grant but the route required
- * view_people, so an assigned-chats-only agent saw a link that bounced them.
- *
+ * Both the router guard and the sidebar (navItems `show`) read this.
  * An empty array means "any authenticated user".
  */
 export const ROUTE_PERMISSIONS: Record<string, readonly string[]> = {
   '/ai-agents': AGENT_PERMISSIONS,
   '/analytics': ['view_analytics'],
   '/knowledge': KNOWLEDGE_PERMISSIONS,
-  // manage_knowledge, not the read pair: every /help-center endpoint the page
-  // calls requires manage_knowledge, so a view_knowledge role would get the
-  // link and a page that 403s on its first request.
   '/faq': ['manage_knowledge'],
   '/tickets': TICKET_PERMISSIONS,
   '/tickets/:id': TICKET_PERMISSIONS,
   '/settings/ticketing': ['manage_organization'],
   '/conversations': CHAT_VIEW_PERMISSIONS,
+  '/stores': CHAT_VIEW_PERMISSIONS,
   '/people': PEOPLE_PERMISSIONS,
   '/human-agents': ['manage_users'],
   '/settings/organization': ORGANIZATION_PERMISSIONS,
@@ -56,41 +51,28 @@ export const ROUTE_PERMISSIONS: Record<string, readonly string[]> = {
   '/settings/canned-responses': ['manage_organization'],
   '/settings/integrations': ['manage_organization'],
   '/settings/widget-apps': ['manage_organization'],
-  // Everyone can reach their own profile, and 403 must never deny itself or
-  // the guard has nowhere to send anyone.
   '/settings/user': [],
   '/403': [],
 }
 
-// Deliberately absent: /settings/subscription and its billing-setup child.
-// The enterprise subscription guard redirects an expired org THERE, so gating
-// it here would ping-pong (guard sends you to billing, this sends you to /403,
-// guard sends you back) until Vue Router aborts. The nav hides it via
-// canViewSubscription instead; gating the route needs the guard fixed first,
-// which is an enterprise-submodule change.
-
-/** Shopify embedded routes authenticate by session token, not by user role. */
-const isShopifyPath = (path: string) => path.startsWith('/shopify')
-
 /**
- * Whether the current user may open `path`.
- *
- * Unknown paths are allowed: the map lists what is restricted, so a public or
- * not-yet-mapped route must not become unreachable by omission.
+ * True if the current user holds at least one permission needed to visit `path`.
+ * Unlisted paths (login, setup, 404) are permitted unconditionally here; their
+ * gate is `requiresAuth` in the router definition.
  */
 export function canAccessPath(path: string): boolean {
-  if (isShopifyPath(path)) return true
   const required = ROUTE_PERMISSIONS[path]
   if (!required || required.length === 0) return true
   return hasAnyPermission([...required])
 }
 
 /**
- * Whether the user may open a resolved route.
- *
- * Takes the matched record paths rather than the URL so a parameterised route
- * is looked up by its pattern ('/tickets/:id'), not by '/tickets/42'.
+ * Guard helper: match against the router's matched route records (which include
+ * parameterised forms like `/tickets/:id`), taking the union of required
+ * permissions from every matched segment.
  */
-export function canAccessMatchedPaths(matchedPaths: string[]): boolean {
-  return matchedPaths.every(canAccessPath)
+export function canAccessMatchedPaths(paths: string[]): boolean {
+  const required = paths.flatMap((p) => ROUTE_PERMISSIONS[p] || [])
+  if (required.length === 0) return true
+  return hasAnyPermission([...required])
 }

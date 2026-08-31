@@ -116,10 +116,10 @@ onMounted(() => {
   <div class="mcp-tools-container">
     <div class="mcp-header">
       <div class="header-content">
-        <h3 class="section-title">MCP Tools</h3>
+        <h3 class="section-title">MCP 扩展工具 (MCP Tools)</h3>
         <p class="section-description">
-          Connect external tools and services to your agent using the Model Context Protocol (MCP).
-          These tools extend your agent's capabilities with access to file systems, APIs, databases, and more.
+          基于 Model Context Protocol (MCP) 协议连接外部工具与服务。
+          为智能体扩展本地/云端文件读取、私有 API 调用、数据库查询等丰富能力。
         </p>
       </div>
       <div class="header-actions">
@@ -129,14 +129,14 @@ onMounted(() => {
             <line x1="12" y1="8" x2="12" y2="16"/>
             <line x1="8" y1="12" x2="16" y2="12"/>
           </svg>
-          Create Tool
+          新建工具
         </button>
         <button class="action-button secondary" @click="openLinkModal">
           <svg class="button-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
             <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
           </svg>
-          Link Existing
+          关联已有工具
         </button>
       </div>
     </div>
@@ -144,7 +144,7 @@ onMounted(() => {
     <!-- Loading State -->
     <div v-if="isLoading" class="loading-state">
       <div class="loading-spinner"></div>
-      <p>Loading MCP tools...</p>
+      <p>正在加载 MCP 工具...</p>
     </div>
 
     <!-- Error State -->

@@ -51,7 +51,7 @@ func channelProcessor(deps Dependencies) channel.ProcessorDependencies {
 	processor := channel.ProcessorDependencies{
 		Accounts: deps.Channels, Customers: deps.Customers, Sessions: deps.Sessions, Chats: deps.Chats,
 		Agents: deps.Agents, Users: deps.Users, AIConfigs: deps.AIConfigs, LeadCapture: deps.LeadCapture,
-		Organizations: deps.Organizations,
+		Organizations: deps.Organizations, Stores: deps.Stores,
 		GuardrailSettings: guardrail.Settings{
 			PolicyEnabled: deps.Config.GuardrailPolicyEnabled, InboundAction: deps.Config.GuardrailInboundAction,
 			OfftopicAction: deps.Config.GuardrailOfftopicAction, OutputCheckEnabled: deps.Config.GuardrailOutputCheckEnabled,

@@ -51,7 +51,7 @@ let mentionableRequest = 0
 const emptyChat = (): ChatDetail => ({ session_id: '', customer: { id: '', email: '' }, agent: { id: '', name: '', display_name: null }, messages: [], status: 'closed', channel: 'web', user_id: null, group_id: null, ai_auto_reply: false, created_at: new Date().toISOString(), updated_at: new Date().toISOString() })
 const chatState = useConversationChat(props.chat || emptyChat(), emit as any)
 const chat = chatState.chat
-watch(() => props.chat, value => { if (value) chatState.replaceChatFromProps(value) }, { deep: true })
+watch(() => props.chat, value => { chatState.replaceChatFromProps(value || emptyChat()) })
 watch(() => chat.value.session_id, () => {
   showAiPolishModal.value = false
   showCannedModal.value = false
@@ -62,13 +62,38 @@ watch(() => chat.value.session_id, () => {
   mentionableTeammates.value = []
   mentionsLoading.value = false
 })
-const messages = computed(() => chatState.formattedMessages.value.map((msg: any) => ({
-  ...msg,
-  type: msg.message_type === 'user' ? 'customer' : msg.message_type === 'bot' ? 'ai' : msg.message_type === 'private_note' ? 'note' : 'agent',
-  author: msg.user_name || msg.agent_name || (msg.message_type === 'bot' ? chat.value.agent.display_name || chat.value.agent.name || 'AI 客服' : '客服'),
-  text: msg.message || '',
-  time: new Date(msg.created_at).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false }),
-})))
+const formatMessageTime = (dateStr?: string) => {
+  if (!dateStr) return ''
+  const d = new Date(dateStr)
+  return isNaN(d.getTime()) ? '' : d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false })
+}
+
+const messages = computed(() => (chatState.formattedMessages.value || []).map((msg: any) => {
+  const isCustomer = msg.message_type === 'user'
+  const isBot = msg.message_type === 'bot'
+  const isNote = msg.message_type === 'private_note'
+
+  let author = msg.user_name || msg.agent_name
+  if (!author) {
+    if (isCustomer) {
+      author = customerName.value || '客户'
+    } else if (isBot) {
+      author = chat.value.agent?.display_name || chat.value.agent?.name || 'AI 客服'
+    } else if (isNote) {
+      author = '内部便签'
+    } else {
+      author = '人工客服'
+    }
+  }
+
+  return {
+    ...msg,
+    type: isCustomer ? 'customer' : isBot ? 'ai' : isNote ? 'note' : 'agent',
+    author,
+    text: msg.message || '',
+    time: formatMessageTime(msg.created_at),
+  }
+}))
 const currentStatus = computed(() => chatState.isChatClosed.value ? 'resolved' : chatState.handledByAI.value ? 'ai' : chatState.isWaitingForHuman.value ? 'waiting' : 'human')
 const canManageChat = computed(() => permissionChecks.canTakeOverChats())
 const canToggleAiAutoReply = computed(() => canManageChat.value && !chatState.isChatClosed.value)
@@ -97,6 +122,10 @@ const latestCustomerMessage = computed(() => {
   return null
 })
 const suggestionContextKey = computed(() => {
+  // AI 自动应答模式下不触发 Copilot 推荐；仅在人工客服接管/排队等待人工时为坐席提供辅助推荐
+  if (currentStatus.value === 'ai' || currentStatus.value === 'resolved') {
+    return ''
+  }
   const message = latestCustomerMessage.value
   return message
     ? `${chat.value.session_id}:${message.id || message.client_message_id || message.created_at}:${message.message}`
@@ -106,7 +135,7 @@ const loadReplySuggestions = async () => {
   const key = suggestionContextKey.value
   const sessionId = chat.value.session_id
   const request = ++suggestionRequest
-  if (!key || !sessionId || chat.value.status === 'closed') {
+  if (!key || !sessionId || chat.value.status === 'closed' || currentStatus.value === 'ai') {
     aiSuggestions.value = []
     aiSuggestionsLoading.value = false
     return
@@ -125,7 +154,7 @@ const loadReplySuggestions = async () => {
 watch(suggestionContextKey, () => {
   if (suggestionTimer) clearTimeout(suggestionTimer)
   aiSuggestions.value = []
-  if (!suggestionContextKey.value || chat.value.status === 'closed') {
+  if (!suggestionContextKey.value || chat.value.status === 'closed' || currentStatus.value === 'ai') {
     aiSuggestionsLoading.value = false
     return
   }
@@ -190,6 +219,8 @@ const handleHandoverAI = () => void chatState.handleHandBackToAI()
 
 const handleResolveSession = () => void chatState.endChat(true)
 
+const handleReopenSession = () => void chatState.reopenChat()
+
 const insertProduct = (product: ShopifyProduct, shopDomain?: string) => {
   const price = product.price === undefined || product.price === null || product.price === ''
     ? ''
@@ -214,7 +245,7 @@ const insertProduct = (product: ShopifyProduct, shopDomain?: string) => {
           <span class="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-emerald-500 text-white flex items-center justify-center text-[9px] shadow-sm">
             <i v-if="chat.channel === 'whatsapp'" class="fa-brands fa-whatsapp"></i>
             <i v-else-if="chat.channel === 'email'" class="fa-regular fa-envelope"></i>
-            <i v-else class="fa-solid fa-comments"></i>
+            <i v-else class="fa-solid fa-message"></i>
           </span>
         </div>
         <div>
@@ -264,7 +295,7 @@ const insertProduct = (product: ShopifyProduct, shopDomain?: string) => {
           v-else
           class="flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-700/40 border border-white/10 text-slate-400 text-xs font-semibold"
         >
-          <span>🔒 已解决归档</span>
+          <span class="flex items-center gap-1"><i class="fa-solid fa-lock text-[10px] text-slate-400"></i>已解决归档</span>
         </div>
 
         <div class="h-5 w-px bg-white/10"></div>
@@ -281,32 +312,33 @@ const insertProduct = (product: ShopifyProduct, shopDomain?: string) => {
           </button>
 
           <button
-            v-if="canRouteToHuman"
-            @click="handleRouteToHuman"
-            class="px-2.5 py-1.5 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-300 font-medium text-xs flex items-center gap-1.5 transition-all"
-            title="停止 AI 回复并转入人工队列"
-          >
-            <i class="fa-solid fa-user-clock text-xs"></i>
-            <span>转交团队</span>
-          </button>
-
-          <button
             v-if="!chatState.showTakeoverButton.value && canHandBackToAI"
             @click="handleHandoverAI"
             class="px-2.5 py-1.5 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-300 font-medium text-xs flex items-center gap-1.5 transition-all"
+            title="交还给 AI 自动回复"
           >
             <i class="fa-solid fa-robot text-xs"></i>
             <span>转回 AI</span>
           </button>
 
           <button
-            v-if="currentStatus !== 'resolved' && canManageChat && chat.user_id"
+            v-if="currentStatus === 'resolved'"
+            @click="handleReopenSession"
+            class="px-2.5 py-1.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-300 font-semibold text-xs flex items-center gap-1.5 transition-all shadow-[0_0_10px_rgba(16,185,129,0.2)]"
+            title="重新打开并接管此会话"
+          >
+            <i class="fa-solid fa-arrow-rotate-left text-xs"></i>
+            <span>重新打开</span>
+          </button>
+
+          <button
+            v-if="currentStatus !== 'resolved' && canManageChat"
             @click="emit('open-transfer')"
             class="px-2.5 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 text-xs flex items-center gap-1.5 transition-all"
-            title="转交给售后/物流专员"
+            title="转派给特定团队成员或转入排队队列"
           >
-            <i class="fa-solid fa-arrow-right-arrow-left fa-exchange-alt text-xs"></i>
-            <span>转交</span>
+            <i class="fa-solid fa-arrow-right-arrow-left text-xs"></i>
+            <span>转交团队</span>
           </button>
 
           <button
@@ -324,7 +356,7 @@ const insertProduct = (product: ShopifyProduct, shopDomain?: string) => {
             class="w-8 h-8 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 flex items-center justify-center transition-all ml-1"
             title="展开/收起右侧栏"
           >
-            <i class="fa-solid fa-table-columns fa-columns text-xs"></i>
+            <i class="fa-solid fa-table-columns text-xs"></i>
           </button>
         </div>
 
@@ -334,14 +366,14 @@ const insertProduct = (product: ShopifyProduct, shopDomain?: string) => {
     <!-- WhatsApp 合规窗口提示条 -->
     <div v-if="chat.channel === 'whatsapp'" class="bg-amber-500/10 border-b border-amber-500/20 px-4 py-1.5 flex items-center justify-between text-xs text-amber-300 shrink-0">
       <div class="flex items-center gap-2">
-        <i class="fa-solid fa-triangle-exclamation fa-exclamation-triangle text-amber-400"></i>
+        <i class="fa-solid fa-triangle-exclamation text-amber-400"></i>
         <span><strong>WhatsApp 24小时会话窗口：</strong> 窗口关闭后，仅允许发送 Meta 已批准的模板消息。</span>
       </div>
       <button
         @click="showTemplateModal = true"
         class="px-2.5 py-0.5 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 rounded text-amber-200 text-[11px] font-medium transition-colors flex items-center gap-1"
       >
-        <i class="fa-solid fa-file-lines fa-file-alt text-[10px]"></i> 选取官方模板
+        <i class="fa-solid fa-file-lines text-[10px]"></i> 选取官方模板
       </button>
     </div>
 
@@ -356,10 +388,9 @@ const insertProduct = (product: ShopifyProduct, shopDomain?: string) => {
 
       <div
         v-for="(msg, idx) in messages"
-        :key="msg.id || msg.client_message_id || `${msg.created_at}-${idx}`"
+        :key="`msg-${msg.id || msg.client_message_id || idx}`"
         class="animate-in fade-in duration-200"
       >
-        <!-- 客户消息 -->
         <div
           v-if="msg.type === 'customer'"
           class="flex items-start gap-3 max-w-[80%]"
@@ -378,7 +409,6 @@ const insertProduct = (product: ShopifyProduct, shopDomain?: string) => {
           </div>
         </div>
 
-        <!-- AI 应答卡片 -->
         <div
           v-else-if="msg.type === 'ai'"
           class="flex flex-col items-end max-w-[85%] ml-auto space-y-1.5"
@@ -396,7 +426,6 @@ const insertProduct = (product: ShopifyProduct, shopDomain?: string) => {
           </div>
         </div>
 
-        <!-- 客服坐席消息 -->
         <div
           v-else-if="msg.type === 'agent'"
           class="flex flex-col items-end max-w-[80%] ml-auto space-y-1"
@@ -410,7 +439,6 @@ const insertProduct = (product: ShopifyProduct, shopDomain?: string) => {
           </div>
         </div>
 
-        <!-- 内部私信便签 -->
         <div
           v-else-if="msg.type === 'note'"
           class="my-2 p-3 rounded-xl note-crystal-bubble text-xs text-amber-200 space-y-1 shadow-sm"
@@ -425,7 +453,11 @@ const insertProduct = (product: ShopifyProduct, shopDomain?: string) => {
           <p class="leading-relaxed text-amber-100/90">{{ msg.text }}</p>
         </div>
 
-        <div v-if="msg.attachments?.length" :class="[msg.type === 'customer' ? 'ml-12 max-w-[80%]' : 'ml-auto max-w-[80%]', 'mt-1 flex flex-wrap gap-2']">
+        <div v-else class="my-2 p-2 rounded bg-white/5 text-center text-xs text-slate-400">
+          <span>{{ msg.text }}</span>
+        </div>
+
+        <div v-if="msg.attachments && msg.attachments.length > 0" :class="[msg.type === 'customer' ? 'ml-12 max-w-[80%]' : 'ml-auto max-w-[80%]', 'mt-1 flex flex-wrap gap-2']">
           <a
             v-for="attachment in msg.attachments"
             :key="attachment.id || attachment.filename"
@@ -441,6 +473,24 @@ const insertProduct = (product: ShopifyProduct, shopDomain?: string) => {
           </a>
         </div>
       </div>
+
+      <!-- AI 实时思考与知识库检索动态指示器 -->
+      <div
+        v-if="chatState.isAiTyping.value"
+        class="flex items-center gap-3 p-3 my-2 rounded-xl bg-indigo-950/40 border border-indigo-500/20 text-indigo-200 text-xs shadow-inner animate-pulse max-w-fit"
+      >
+        <div class="flex items-center justify-center w-6 h-6 rounded-lg bg-indigo-500/20 text-indigo-400">
+          <i class="fa-solid fa-sparkles text-xs animate-spin" style="animation-duration: 3s;"></i>
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="font-medium text-indigo-300">{{ chatState.typingMessage.value }}</span>
+          <span class="flex gap-1 items-center">
+            <span class="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-bounce" style="animation-delay: 0ms;"></span>
+            <span class="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-bounce" style="animation-delay: 150ms;"></span>
+            <span class="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-bounce" style="animation-delay: 300ms;"></span>
+          </span>
+        </div>
+      </div>
     </div>
 
     <!-- 底部回复多功能区 -->
@@ -453,8 +503,9 @@ const insertProduct = (product: ShopifyProduct, shopDomain?: string) => {
       :ai-auto-reply-disabled="!canToggleAiAutoReply"
       :ai-auto-reply-loading="chatState.aiToggleLoading.value"
       :disabled="!chatState.canSendMessage.value || chatState.isLoading.value"
-      :allow-attachments="chat.agent.allow_attachments"
-      :allowed-attachment-types="chat.agent.allowed_attachment_types"
+      :is-resolved="currentStatus === 'resolved'"
+      :allow-attachments="chat.agent?.allow_attachments ?? true"
+      :allowed-attachment-types="chat.agent?.allowed_attachment_types"
       :mentionable-teammates="mentionableTeammates"
       :mentions-loading="mentionsLoading"
       @send="handleSendMessage"

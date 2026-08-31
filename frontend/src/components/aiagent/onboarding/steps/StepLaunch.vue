@@ -36,10 +36,10 @@ const widgetSnippet = computed(() =>
 const copy = async (text: string, label: string) => {
   try {
     await navigator.clipboard.writeText(text)
-    toast.success(`${label} copied to clipboard!`, { duration: 3000 })
+    toast.success(`${label}已复制到剪贴板！`, { duration: 3000 })
   } catch (err) {
     console.error('Failed to copy:', err)
-    toast.error('Failed to copy to clipboard')
+    toast.error('复制到剪贴板失败')
   }
 }
 </script>
@@ -47,18 +47,18 @@ const copy = async (text: string, label: string) => {
 <template>
   <div class="step">
     <header class="step-head">
-      <h2 class="step-title">Go live</h2>
-      <p class="step-sub">Embed this snippet on your site to start chatting with visitors.</p>
+      <h2 class="step-title">上线部署</h2>
+      <p class="step-sub">将下方挂件代码嵌入至您的网站，即可全天候自动化接待客户。</p>
     </header>
 
     <div>
       <pre class="code-block">{{ widgetSnippet }}</pre>
-      <button type="button" class="btn-soft" :disabled="!widgetSnippet" @click="copy(widgetSnippet, 'Widget snippet')">Copy snippet</button>
+      <button type="button" class="btn-soft" :disabled="!widgetSnippet" @click="copy(widgetSnippet, '挂件嵌入代码')">复制嵌入代码</button>
     </div>
 
     <div class="step-actions">
-      <button type="button" class="btn-ghost" @click="emit('back')">Back</button>
-      <button type="button" class="btn-accent" @click="emit('finish')">Finish &amp; go to dashboard ✓</button>
+      <button type="button" class="btn-ghost" @click="emit('back')">上一步</button>
+      <button type="button" class="btn-accent" @click="emit('finish')">完成配置并进入工作台 ✓</button>
     </div>
   </div>
 </template>

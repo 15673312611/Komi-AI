@@ -161,13 +161,8 @@ func generateReplySuggestions(deps Dependencies) http.HandlerFunc {
 			return
 		}
 		cfg, key, err := loadAIConfig(r.Context(), deps, *current.OrganizationID)
-		if errors.Is(err, aiconfig.ErrNotFound) {
-			JSON(w, http.StatusOK, map[string]any{"suggestions": []string{}, "status": "ai_not_configured"})
-			return
-		}
 		if err != nil {
-			deps.Logger.Error().Err(err).Msg("load reply suggestion AI configuration failed")
-			Error(w, http.StatusServiceUnavailable, "AI reply suggestions are temporarily unavailable")
+			JSON(w, http.StatusOK, map[string]any{"suggestions": []string{}, "status": "ai_not_configured"})
 			return
 		}
 		history := visibleChatHistory(detail, 24)
@@ -190,16 +185,11 @@ Safety rules:
 		raw, err := callConfiguredAI(r.Context(), cfg, key,
 			"You generate safe customer-support reply options. Output valid JSON only.", prompt, 900, true)
 		if err != nil {
-			deps.Logger.Error().Err(err).Msg("reply suggestions failed")
-			Error(w, http.StatusServiceUnavailable, "AI reply suggestions are temporarily unavailable")
+			JSON(w, http.StatusOK, map[string]any{"suggestions": []string{}, "status": "ai_unavailable"})
 			return
 		}
 		suggestions := parseReplySuggestions(raw, body.MaxSuggestions)
-		if len(suggestions) == 0 {
-			Error(w, http.StatusServiceUnavailable, "AI reply suggestions are temporarily unavailable")
-			return
-		}
-		JSON(w, http.StatusOK, map[string]any{"suggestions": suggestions, "status": "ok"})
+		JSON(w, http.StatusOK, map[string]any{"suggestions": suggestions})
 	}
 }
 
@@ -243,7 +233,15 @@ func callConfiguredAI(ctx context.Context, cfg *aiconfig.Config, apiKey, system,
 	if modelType == "ANTHROPIC" {
 		return callAnthropicAI(ctx, cfg.ModelName, apiKey, system, prompt, maxTokens)
 	}
-	base := openAIBaseURL(modelType)
+	base := ""
+	if cfg.Settings != nil {
+		if u, ok := cfg.Settings["base_url"].(string); ok && strings.TrimSpace(u) != "" {
+			base = strings.TrimRight(strings.TrimSpace(u), "/")
+		}
+	}
+	if base == "" {
+		base = openAIBaseURL(modelType)
+	}
 	body := aiChatRequest{
 		Model: cfg.ModelName, Messages: []aiChatMessage{{Role: "system", Content: system}, {Role: "user", Content: prompt}},
 		MaxTokens: maxTokens, Temperature: 0.2,
@@ -368,6 +366,10 @@ func openAIBaseURL(modelType string) string {
 		return "https://api.mistral.ai/v1"
 	case "XAI":
 		return "https://api.x.ai/v1"
+	case "ZHIPU":
+		return "https://open.bigmodel.cn/api/paas/v4"
+	case "KIMI":
+		return "https://api.moonshot.cn/v1"
 	default:
 		return "https://api.openai.com/v1"
 	}

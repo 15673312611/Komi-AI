@@ -18,9 +18,21 @@ import  api  from './api'
 import type { AIConfigResponse, AISetupResponse, AIProvider } from '@/types/ai'
 
 export interface AIConfig {
+  id?: number;
+  organization_id?: string;
   model_type: string;
   model_name: string;
-  api_key: string;
+  api_key?: string;
+  has_api_key?: boolean;
+  api_key_masked?: string;
+  settings?: Record<string, any>;
+}
+
+export interface AITestResult {
+  success: boolean;
+  latency_ms?: number;
+  message?: string;
+  error?: string;
 }
 
 export const aiService = {
@@ -40,5 +52,10 @@ export const aiService = {
   
   async updateAI(config: AIConfig): Promise<void> {
     await api.put('/ai/config', config)
+  },
+
+  async testAI(config: AIConfig): Promise<AITestResult> {
+    const response = await api.post('/ai/test', config)
+    return response.data
   },
 }

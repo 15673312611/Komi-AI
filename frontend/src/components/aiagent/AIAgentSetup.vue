@@ -56,7 +56,7 @@ const checkAIConfig = async () => {
             // No AI config found
             isAISetupMode.value = true
         } else {
-            error.value = 'Failed to check AI configuration'
+            error.value = '检测 AI 服务配置失败'
             console.error(err)
         }
     } finally {
@@ -72,7 +72,7 @@ const fetchAgents = async () => {
             agentStorage.setAgents(agents)
         }
     } catch (err) {
-        error.value = 'Failed to fetch agents'
+        error.value = '获取智能体列表失败'
         console.error(err)
     } finally {
         isLoading.value = false
@@ -109,7 +109,7 @@ onMounted(async () => {
         // dropped into a creation wizard whose every step would 403.
         showOnboarding.value = permissionChecks.canManageAgents()
     } catch (err) {
-        error.value = 'Failed to load agents'
+        error.value = '加载智能体列表失败'
         console.error(err)
     } finally {
         isLoading.value = false
@@ -134,7 +134,6 @@ onMounted(async () => {
 
             <div v-else-if="isAISetupMode" class="setup-messages">
                 <div class="ai-provider-setup">
-                    <h3>Configure AI Provider</h3>
                     <div class="ai-setup-container">
                         <AISetup @ai-setup-complete="checkAIConfig" />
                     </div>

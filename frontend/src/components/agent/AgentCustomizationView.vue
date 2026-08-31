@@ -272,7 +272,7 @@ const fontPresets = [
     { value: 'Instrument Sans, sans-serif', label: 'Instrument Sans' },
     { value: 'Space Grotesk, sans-serif', label: 'Space Grotesk' },
     { value: 'JetBrains Mono, monospace', label: 'JetBrains Mono' },
-    { value: 'system-ui, sans-serif', label: 'System' },
+    { value: 'system-ui, sans-serif', label: '系统默认字体' },
 ]
 
 // Save state management
@@ -296,7 +296,7 @@ const handleSave = async () => {
         emit('preview', updatedCustomization)
         
         // Show success message
-        saveMessage.value = { type: 'success', text: 'Customization saved successfully!' }
+        saveMessage.value = { type: 'success', text: '外观配置保存成功！' }
         
         // Auto-hide success message after 3 seconds
         setTimeout(() => {
@@ -306,7 +306,7 @@ const handleSave = async () => {
         console.error('Failed to update customization:', error)
         saveMessage.value = { 
             type: 'error', 
-            text: error instanceof Error ? error.message : 'Failed to save customization. Please try again.' 
+            text: error instanceof Error ? error.message : '保存外观配置失败，请重试。' 
         }
     } finally {
         isSaving.value = false
@@ -583,10 +583,10 @@ const isSectionExpanded = (sectionId: string) => {
         <div class="form-content">
             <!-- Chat design Section -->
             <div class="form-section">
-                <h3 class="section-heading">Chat design</h3>
-                <p class="section-subtext">Every look from the marketing site — pick one, match it to your brand.</p>
+                <h3 class="section-heading">聊天界面风格 (Chat Theme)</h3>
+                <p class="section-subtext">多款精美设计风格 — 挑选最契合您品牌调性的界面外观。</p>
 
-                <div class="chat-style-group-label">Legacy</div>
+                <div class="chat-style-group-label">经典风格</div>
                 <div class="chat-style-grid">
                     <button
                         v-for="option in legacyStyleOptions"
@@ -608,7 +608,7 @@ const isSectionExpanded = (sectionId: string) => {
                     </button>
                 </div>
 
-                <div class="chat-style-group-label">New <span class="chat-style-group-badge">premium</span></div>
+                <div class="chat-style-group-label">全新高级风格 <span class="chat-style-group-badge">高颜值</span></div>
                 <div class="chat-style-grid">
                     <button
                         v-for="option in newStyleOptions"

@@ -8,6 +8,7 @@ import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import type { Conversation } from '@/types/chat'
 import { userService } from '@/services/user'
 import channelsService, { type ChannelAccount } from '@/services/channels'
+import storeService, { type Store } from '@/services/store'
 import ConversationFilters, { type FilterValues } from '@/components/conversations/ConversationFilters.vue'
 import NewWhatsAppConversation from '@/components/conversations/NewWhatsAppConversation.vue'
 
@@ -79,6 +80,12 @@ const statusFor = (conv: Conversation): InboxStatus => {
   if (conv.user_id) return 'assigned'
   return conv.status === 'transferred' || conv.ai_auto_reply === false || conv.agent?.ai_replies_enabled === false ? 'queue' : 'ai'
 }
+const safeTimeString = (dateStr?: string) => {
+  if (!dateStr) return ''
+  const d = new Date(dateStr)
+  return isNaN(d.getTime()) ? '' : d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false })
+}
+
 const normalizeConversations = (items: Conversation[]) => items.map(conv => {
   const meta = conv.customer?.meta_data || {}
   const storeName = typeof meta.store_name === 'string' && meta.store_name.trim() ? meta.store_name.trim() : '未关联店铺'
@@ -98,7 +105,7 @@ const normalizeConversations = (items: Conversation[]) => items.map(conv => {
     platformBadge: 'bg-slate-500/10 text-slate-300 border-slate-500/20',
     status,
     unreadCount: props.unreadCounts?.[conv.session_id] || 0,
-    lastTime: new Date(conv.updated_at).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false }),
+    lastTime: safeTimeString(conv.updated_at),
     lastMessage: conv.last_message || '（无消息内容）',
   }
 })
@@ -106,16 +113,37 @@ watch(() => [props.conversations, props.unreadCounts] as const, ([items]) => {
   conversations.value = normalizeConversations(items || [])
 }, { immediate: true, deep: true })
 
-const stores = computed(() => [
-  { id: 'all', name: '所有关联店铺', iconClass: 'fa-solid fa-store', badge: String(conversations.value.length), color: 'text-emerald-400 bg-emerald-500/15 border border-emerald-500/20' },
-  ...[...new Set(conversations.value.map(conv => conv.storeName).filter(name => name !== '未关联店铺'))].map(name => ({
-    id: name,
-    name,
-    iconClass: 'fa-solid fa-store',
-    badge: String(conversations.value.filter(conv => conv.storeId === name).length),
-    color: 'text-slate-300 bg-slate-500/10 border border-slate-500/20',
-  })),
-])
+const dbStores = ref<Store[]>([])
+const loadDbStores = async () => {
+  try {
+    dbStores.value = await storeService.getStores()
+  } catch (err) {
+    console.error('Failed to load stores for inbox:', err)
+  }
+}
+
+const stores = computed(() => {
+  const storeNames = new Set<string>()
+  dbStores.value.forEach(s => {
+    if (s.name) storeNames.add(s.name)
+  })
+  conversations.value.forEach(conv => {
+    if (conv.storeName && conv.storeName !== '未关联店铺') {
+      storeNames.add(conv.storeName)
+    }
+  })
+
+  return [
+    { id: 'all', name: '所有关联店铺', iconClass: 'fa-solid fa-store', badge: String(conversations.value.length), color: 'text-emerald-400 bg-emerald-500/15 border border-emerald-500/20' },
+    ...[...storeNames].map(name => ({
+      id: name,
+      name,
+      iconClass: 'fa-solid fa-store',
+      badge: String(conversations.value.filter(conv => conv.storeId === name || conv.storeName === name).length),
+      color: 'text-slate-300 bg-slate-500/10 border border-slate-500/20',
+    })),
+  ]
+})
 
 const selectedStoreObj = computed(() => {
   return stores.value.find((s) => s.id === currentStoreFilter.value) || stores.value[0]
@@ -201,7 +229,10 @@ const focusSearch = (event: KeyboardEvent) => {
   }
 }
 
-onMounted(() => window.addEventListener('keydown', focusSearch))
+onMounted(() => {
+  window.addEventListener('keydown', focusSearch)
+  loadDbStores()
+})
 onBeforeUnmount(() => window.removeEventListener('keydown', focusSearch))
 </script>
 
@@ -241,7 +272,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', focusSearch))
           class="w-7 h-7 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-white/[0.06] border border-transparent hover:border-white/10 flex items-center justify-center transition-colors"
           title="刷新列表"
         >
-          <i class="fa-solid fa-arrow-rotate-right fa-rotate text-xs"></i>
+          <i class="fa-solid fa-arrow-rotate-right text-xs"></i>
         </button>
       </div>
     </div>
@@ -250,7 +281,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', focusSearch))
     <div class="p-3 space-y-2.5 border-b border-[#1E2638] bg-[#0F1420]/80">
       <!-- 搜索框 -->
       <div class="relative">
-        <i class="fa-solid fa-magnifying-glass fa-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs pointer-events-none"></i>
+        <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs pointer-events-none"></i>
         <input
           ref="searchInputRef"
           v-model="searchQuery"
@@ -318,7 +349,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', focusSearch))
       @started="handleWhatsAppStarted"
     />
 
-    <!-- 零滚动 3+2 筛选矩阵 (原版原色，清晰边框，零发光) -->
+    <!-- 零滚动 3+2 筛选矩阵 (对齐 workbench_v2.html) -->
     <div class="p-2.5 border-b border-[#1E2638] bg-[#0A0E17]/60 space-y-1.5">
       <!-- 第一行 -->
       <div class="grid grid-cols-3 gap-1.5">
@@ -355,7 +386,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', focusSearch))
         >
           <span class="flex items-center gap-1.5 truncate">
             <span class="w-2 h-2 rounded-full bg-amber-400 shrink-0"></span>
-            <span class="truncate">⏳ 待人工接入</span>
+            <span class="truncate">待人工接入</span>
           </span>
           <span class="text-[10px] font-mono font-bold px-1.5 rounded bg-amber-500/20 text-amber-300">{{ countBy('queue') }}</span>
         </button>
@@ -366,7 +397,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', focusSearch))
         >
           <span class="flex items-center gap-1.5 truncate">
             <i class="fa-solid fa-lock text-[10px] text-slate-500"></i>
-            <span class="truncate">🔒 已解决关闭</span>
+            <span class="truncate">已解决关闭</span>
           </span>
           <span class="text-[10px] font-mono px-1 rounded bg-white/5 text-slate-400">{{ countBy('closed') }}</span>
         </button>
@@ -387,19 +418,19 @@ onBeforeUnmount(() => window.removeEventListener('keydown', focusSearch))
         <span class="font-mono text-slate-400 font-bold">{{ countBy() }}</span>
       </div>
       <div @click="selectStatus('ai')" class="flex items-center justify-between p-2 rounded-lg hover:bg-white/[0.06] cursor-pointer text-slate-200">
-        <span class="flex items-center gap-2"><i class="fa-solid fa-robot text-emerald-400"></i> 🤖 AI 智能应答中</span>
+        <span class="flex items-center gap-2"><i class="fa-solid fa-robot text-emerald-400"></i> AI 智能应答中</span>
         <span class="font-mono text-emerald-400 font-bold">{{ countBy('ai') }}</span>
       </div>
       <div @click="selectStatus('mine')" class="flex items-center justify-between p-2 rounded-lg hover:bg-white/[0.06] cursor-pointer text-slate-200">
-        <span class="flex items-center gap-2"><i class="fa-solid fa-user-check text-blue-400"></i> 👤 分配给我的接待</span>
+        <span class="flex items-center gap-2"><i class="fa-solid fa-user-check text-blue-400"></i> 分配给我的接待</span>
         <span class="font-mono text-blue-400 font-bold">{{ countBy('mine') }}</span>
       </div>
       <div @click="selectStatus('queue')" class="flex items-center justify-between p-2 rounded-lg hover:bg-white/[0.06] cursor-pointer text-slate-200">
-        <span class="flex items-center gap-2"><i class="fa-solid fa-clock text-amber-400"></i> ⏳ 排队等待人工接入</span>
+        <span class="flex items-center gap-2"><i class="fa-solid fa-clock text-amber-400"></i> 待人工接入队列</span>
         <span class="font-mono text-amber-400 font-bold">{{ countBy('queue') }}</span>
       </div>
       <div @click="selectStatus('closed')" class="flex items-center justify-between p-2 rounded-lg hover:bg-white/[0.06] cursor-pointer text-slate-200">
-        <span class="flex items-center gap-2"><i class="fa-solid fa-circle-check text-slate-400"></i> 🔒 已解决/历史归档</span>
+        <span class="flex items-center gap-2"><i class="fa-solid fa-circle-check text-slate-400"></i> 已解决/历史归档</span>
         <span class="font-mono text-slate-500">{{ countBy('closed') }}</span>
       </div>
     </div>
@@ -505,19 +536,19 @@ onBeforeUnmount(() => window.removeEventListener('keydown', focusSearch))
                   v-else-if="conv.status === 'mine'"
                   class="inline-flex items-center gap-1 px-1.5 py-0.2 text-[10px] font-semibold bg-blue-500/10 text-blue-400 border border-blue-500/25 rounded-md"
                 >
-                  👤 人工接管
+                  <i class="fa-solid fa-user-check text-[9px]"></i>人工接管
                 </span>
                 <span
                   v-else-if="conv.status === 'assigned'"
                   class="inline-flex items-center gap-1 px-1.5 py-0.2 text-[10px] font-semibold bg-blue-500/10 text-blue-400 border border-blue-500/25 rounded-md"
                 >
-                  👤 其他客服接待
+                  <i class="fa-solid fa-user text-[9px]"></i>其他客服接待
                 </span>
                 <span
                   v-else
                   class="inline-flex items-center gap-1 px-1.5 py-0.2 text-[10px] font-medium bg-slate-800/80 text-slate-400 border border-slate-700/50 rounded-md"
                 >
-                  🔒 已解决关闭
+                  <i class="fa-solid fa-lock text-[9px]"></i>已解决关闭
                 </span>
               </div>
 
