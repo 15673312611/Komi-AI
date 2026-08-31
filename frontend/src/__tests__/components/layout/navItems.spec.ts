@@ -54,6 +54,7 @@ describe('useNavItems', () => {
 
     expect(primaryNavItems.value.map((i) => i.to)).toEqual([
       '/conversations',
+      '/stores',
       '/people',
       '/ai-agents',
       '/analytics',
@@ -145,7 +146,7 @@ describe('useNavItems', () => {
 
   it('keeps the sidebar section headings in the More sheet', () => {
     const { moreNavGroups } = useNavItems()
-    expect(moreNavGroups.value.map((g) => g.section)).toEqual(['Main Menu', 'Settings'])
+    expect(moreNavGroups.value.map((g) => g.section)).toEqual(['主菜单', '系统设置'])
     // No empty groups — a section fully covered by the bottom nav is dropped
     moreNavGroups.value.forEach((g) => expect(g.items.length).toBeGreaterThan(0))
   })
@@ -158,10 +159,10 @@ describe('useNavItems', () => {
     asUser(['manage_knowledge'])
 
     const { moreNavGroups } = useNavItems()
-    const settings = moreNavGroups.value.find((g) => g.section === 'Settings')
+    const settings = moreNavGroups.value.find((g) => g.section === '系统设置')
 
     expect(settings?.items.map((i) => i.to)).toEqual(['/settings/user'])
-    expect(moreNavGroups.value.find((g) => g.section === 'Main Menu')?.items.map((i) => i.to))
+    expect(moreNavGroups.value.find((g) => g.section === '主菜单')?.items.map((i) => i.to))
       .not.toContain('/settings/user')
   })
 
@@ -171,7 +172,7 @@ describe('useNavItems', () => {
     const { moreNavGroups, navItems } = useNavItems()
 
     // Only User Settings survives, so Main Menu disappears entirely
-    expect(moreNavGroups.value.map((g) => g.section)).toEqual(['Settings'])
-    expect(navItems.value.filter((i) => i.section).map((i) => i.section)).toEqual(['Settings'])
+    expect(moreNavGroups.value.map((g) => g.section)).toEqual(['系统设置'])
+    expect(navItems.value.filter((i) => i.section).map((i) => i.section)).toEqual(['系统设置'])
   })
 })

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { toast } from 'vue-sonner'
 import DashboardLayout from '@/layouts/DashboardLayout.vue'
 import storeService, {
@@ -9,10 +9,7 @@ import storeService, {
   type UpdateStorePayload,
 } from '@/services/store'
 import channelsService from '@/services/channels'
-
-// SVG Platform & UI Icons
-import shopifyLogo from '@/assets/shopify-logo.svg'
-import emailLogo from '@/assets/email-logo.svg'
+import { copyTextToClipboard } from '@/utils/clipboard'
 
 const stores = ref<Store[]>([])
 const options = ref<StoreOptions>({ channels: [], agents: [], shopify: [] })
@@ -40,6 +37,10 @@ const showWebhookModal = ref(false)
 const activeStoreForWebhook = ref<Store | null>(null)
 const activeWebhookUrl = ref('')
 const isLoadingWebhook = ref(false)
+let dataRequestVersion = 0
+let webhookRequestVersion = 0
+const togglingStoreIds = ref(new Set<string>())
+const deletingStoreIds = ref(new Set<string>())
 
 // Form fields
 const formData = ref<{
@@ -93,24 +94,35 @@ const timezoneList = [
 ]
 
 const loadData = async () => {
+  const requestVersion = ++dataRequestVersion
   try {
     isLoading.value = true
     const [storeList, opts] = await Promise.all([
       storeService.getStores(),
       storeService.getOptions()
     ])
-    stores.value = storeList
-    options.value = opts
+    if (requestVersion !== dataRequestVersion) return
+    stores.value = storeList || []
+    options.value = {
+      channels: opts?.channels || [],
+      agents: opts?.agents || [],
+      shopify: opts?.shopify || [],
+    }
   } catch (error: any) {
     console.error('Failed to load stores:', error)
     toast.error('加载店铺列表失败，请刷新重试')
   } finally {
-    isLoading.value = false
+    if (requestVersion === dataRequestVersion) isLoading.value = false
   }
 }
 
 onMounted(() => {
   loadData()
+})
+
+onUnmounted(() => {
+  dataRequestVersion += 1
+  webhookRequestVersion += 1
 })
 
 const filteredStores = computed(() => {
@@ -183,13 +195,14 @@ const openEditModal = (store: Store) => {
 }
 
 const handleSaveStore = async () => {
+  if (isSubmitting.value) return
   if (!formData.value.name.trim()) {
     toast.error('请输入店铺名称')
     return
   }
 
   const emailAddr = storeEmailAddress.value.trim().toLowerCase()
-  if (!emailAddr || !emailAddr.includes('@')) {
+  if (!emailAddr || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailAddr)) {
     toast.error('请输入此店铺的专属客服接收邮箱 (如: support@yourstore.com)')
     return
   }
@@ -205,11 +218,15 @@ const handleSaveStore = async () => {
     if (smtpHost.value.trim()) {
       if (!smtpUsername.value.trim() || !smtpPassword.value) {
         toast.error('配置了 SMTP 服务器时，用户名与密码为必填项')
-        isSubmitting.value = false
+        return
+      }
+      const smtpPortNumber = Number(smtpPort.value.trim())
+      if (!Number.isInteger(smtpPortNumber) || smtpPortNumber < 1 || smtpPortNumber > 65535) {
+        toast.error('请输入有效的 SMTP 端口（1-65535）')
         return
       }
       emailPayload.smtp_host = smtpHost.value.trim()
-      emailPayload.smtp_port = Number(smtpPort.value) || 587
+      emailPayload.smtp_port = smtpPortNumber
       emailPayload.smtp_username = smtpUsername.value.trim()
       emailPayload.smtp_password = smtpPassword.value
       if (fromEmailName.value.trim()) {
@@ -252,6 +269,8 @@ const handleSaveStore = async () => {
 }
 
 const handleToggleStatus = async (store: Store) => {
+  if (togglingStoreIds.value.has(store.id)) return
+  togglingStoreIds.value.add(store.id)
   try {
     const nextState = !store.is_active
     await storeService.updateStore(store.id, { is_active: nextState })
@@ -260,14 +279,18 @@ const handleToggleStatus = async (store: Store) => {
   } catch (error: any) {
     console.error('Failed to toggle store status:', error)
     toast.error('修改店铺状态失败')
+  } finally {
+    togglingStoreIds.value.delete(store.id)
   }
 }
 
 const handleDeleteStore = async (store: Store) => {
+  if (deletingStoreIds.value.has(store.id)) return
   if (!confirm(`确定要删除店铺「${store.name}」吗？\n删除后该店铺绑定的邮箱渠道将被解绑。`)) {
     return
   }
 
+  deletingStoreIds.value.add(store.id)
   try {
     await storeService.deleteStore(store.id)
     toast.success('店铺删除成功')
@@ -275,10 +298,13 @@ const handleDeleteStore = async (store: Store) => {
   } catch (error: any) {
     console.error('Failed to delete store:', error)
     toast.error('删除店铺失败')
+  } finally {
+    deletingStoreIds.value.delete(store.id)
   }
 }
 
 const openWebhookModal = async (store: Store) => {
+  const requestVersion = ++webhookRequestVersion
   activeStoreForWebhook.value = store
   showWebhookModal.value = true
   activeWebhookUrl.value = ''
@@ -287,22 +313,44 @@ const openWebhookModal = async (store: Store) => {
   try {
     if (store.email_account_id) {
       const url = await channelsService.getEmailWebhookUrl(store.email_account_id)
-      activeWebhookUrl.value = url
+      if (requestVersion === webhookRequestVersion && activeStoreForWebhook.value?.id === store.id) {
+        activeWebhookUrl.value = url
+      }
     } else {
       activeWebhookUrl.value = ''
     }
   } catch (err: any) {
     console.error('Failed to get webhook url:', err)
-    activeWebhookUrl.value = `${window.location.origin}/api/v1/webhooks/email/${store.email_account_id || ''}`
+    if (requestVersion === webhookRequestVersion && activeStoreForWebhook.value?.id === store.id) {
+      activeWebhookUrl.value = `${window.location.origin}/api/v1/webhooks/email/${store.email_account_id || ''}`
+    }
   } finally {
-    isLoadingWebhook.value = false
+    if (requestVersion === webhookRequestVersion && activeStoreForWebhook.value?.id === store.id) {
+      isLoadingWebhook.value = false
+    }
   }
 }
 
-const copyToClipboard = (text: string, label = '内容') => {
+const closeWebhookModal = () => {
+  webhookRequestVersion += 1
+  showWebhookModal.value = false
+  activeStoreForWebhook.value = null
+  activeWebhookUrl.value = ''
+  isLoadingWebhook.value = false
+}
+
+const copyToClipboard = async (text: string, label = '内容') => {
   if (!text) return
-  navigator.clipboard.writeText(text)
-  toast.success(`${label}已复制到剪贴板！`)
+  try {
+    if (await copyTextToClipboard(text)) {
+      toast.success(`${label}已复制到剪贴板！`)
+    } else {
+      toast.error('复制失败，请手动选择并复制内容')
+    }
+  } catch (error) {
+    console.error(`Failed to copy ${label}:`, error)
+    toast.error('复制失败，请手动选择并复制内容')
+  }
 }
 
 const getPlatformBadge = (platform: string) => {
@@ -459,6 +507,7 @@ const getPlatformBadge = (platform: string) => {
                 class="status-btn"
                 :class="store.is_active ? 'active' : 'inactive'"
                 @click="handleToggleStatus(store)"
+                :disabled="togglingStoreIds.has(store.id)"
                 :title="store.is_active ? '点击停用店铺' : '点击启用店铺'"
               >
                 <span class="status-dot"></span>
@@ -555,7 +604,12 @@ const getPlatformBadge = (platform: string) => {
                 <i class="fa-solid fa-pen-to-square"></i>
                 <span>编辑</span>
               </button>
-              <button class="action-btn delete" @click="handleDeleteStore(store)" title="删除店铺">
+              <button
+                class="action-btn delete"
+                @click="handleDeleteStore(store)"
+                :disabled="deletingStoreIds.has(store.id)"
+                title="删除店铺"
+              >
                 <i class="fa-solid fa-trash-can"></i>
               </button>
             </div>
@@ -813,7 +867,7 @@ const getPlatformBadge = (platform: string) => {
       </div>
 
       <!-- Webhook Guide Modal -->
-      <div v-if="showWebhookModal && activeStoreForWebhook" class="modal-backdrop" @click.self="showWebhookModal = false">
+      <div v-if="showWebhookModal && activeStoreForWebhook" class="modal-backdrop" @click.self="closeWebhookModal">
         <div class="modal-card !max-w-2xl">
           <div class="modal-header">
             <div class="modal-title-group">
@@ -825,7 +879,7 @@ const getPlatformBadge = (platform: string) => {
                 <p class="modal-subtitle">专属客服邮箱：{{ activeStoreForWebhook.email_address || activeStoreForWebhook.email_display_name }}</p>
               </div>
             </div>
-            <button class="modal-close" @click="showWebhookModal = false">
+            <button class="modal-close" @click="closeWebhookModal">
               <i class="fa-solid fa-xmark"></i>
             </button>
           </div>
@@ -879,7 +933,7 @@ const getPlatformBadge = (platform: string) => {
           </div>
 
           <div class="modal-footer">
-            <button class="btn-save" @click="showWebhookModal = false">
+            <button class="btn-save" @click="closeWebhookModal">
               完成并关闭
             </button>
           </div>

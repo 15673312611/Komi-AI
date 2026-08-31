@@ -48,7 +48,7 @@ const createWrapper = (ticket: Partial<Ticket> = {}, linkedSessionIds: string[] 
   })
 
 const csatCard = (wrapper: ReturnType<typeof createWrapper>) =>
-  wrapper.findAll('.panel-card').find((card) => card.text().startsWith('CSAT'))!
+  wrapper.findAll('.panel-card').find((card) => card.find('.card-label').text().includes('CSAT'))!
 
 describe('TicketSidePanel CSAT card', () => {
   it('shows the score once the customer has rated', () => {
@@ -61,12 +61,12 @@ describe('TicketSidePanel CSAT card', () => {
     )
     expect(card.text()).toContain('4/5')
     expect(card.findAll('.csat-stars font-awesome-icon-stub')).toHaveLength(5)
-    expect(card.text()).toContain('Rated by the customer')
+    expect(card.text()).toContain('客户已在关联会话中完成评分')
   })
 
   it('shows pending while the ask is out', () => {
     const card = csatCard(createWrapper({ csat_requested_at: '2026-07-20T10:00:00Z' }))
-    expect(card.text()).toContain('Pending')
+    expect(card.text()).toContain('等待评价')
     expect(card.find('.csat-stars').exists()).toBe(false)
   })
 
@@ -78,18 +78,18 @@ describe('TicketSidePanel CSAT card', () => {
         csat_requested_at: '2026-07-21T09:00:00Z',
       }),
     )
-    expect(card.text()).toContain('Pending')
+    expect(card.text()).toContain('等待评价')
     expect(card.text()).not.toContain('2/5')
   })
 
   it('shows not requested before close', () => {
     const card = csatCard(createWrapper())
-    expect(card.text()).toContain('Not requested')
-    expect(card.text()).toContain('when the ticket is closed')
+    expect(card.text()).toContain('未发起评价')
+    expect(card.text()).toContain('工单关闭时将自动向关联会话发起满意度评价')
   })
 
   it('explains why a ticket with no conversation is never asked', () => {
     const card = csatCard(createWrapper({}, []))
-    expect(card.text()).toContain('No linked conversation to rate')
+    expect(card.text()).toContain('未关联客服会话，因此不采集该工单的 CSAT 评价')
   })
 })

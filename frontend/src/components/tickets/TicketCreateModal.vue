@@ -49,9 +49,19 @@ const customerEmail = ref('')
 const customerName = ref('')
 const customerSuggestions = ref<PersonListItem[]>([])
 let suggestTimer: ReturnType<typeof setTimeout> | null = null
+let suggestionRequestVersion = 0
+let draftRequestVersion = 0
+
+const invalidateSuggestions = () => {
+  suggestionRequestVersion += 1
+  if (suggestTimer) clearTimeout(suggestTimer)
+  suggestTimer = null
+}
 
 watch(customerEmail, (query) => {
+  const requestVersion = ++suggestionRequestVersion
   if (suggestTimer) clearTimeout(suggestTimer)
+  suggestTimer = null
   const term = query.trim()
   if (term.length < 2) {
     customerSuggestions.value = []
@@ -60,17 +70,22 @@ watch(customerEmail, (query) => {
   const matched = customerSuggestions.value.find((p) => p.email === term)
   if (matched && !customerName.value) customerName.value = matched.name || ''
   suggestTimer = setTimeout(async () => {
+    suggestTimer = null
     try {
       const response = await peopleService.listPeople({ search: term, page_size: 8 })
-      customerSuggestions.value = response.items.filter((p) => p.email)
+      if (requestVersion !== suggestionRequestVersion || !props.open) return
+      customerSuggestions.value = Array.isArray(response.items)
+        ? response.items.filter((p) => p.email)
+        : []
     } catch {
-      customerSuggestions.value = []
+      if (requestVersion === suggestionRequestVersion) customerSuggestions.value = []
     }
   }, 300)
 })
 
 onBeforeUnmount(() => {
-  if (suggestTimer) clearTimeout(suggestTimer)
+  invalidateSuggestions()
+  draftRequestVersion += 1
 })
 
 watch(
@@ -84,37 +99,56 @@ watch(
       customerEmail.value = ''
       customerName.value = ''
       customerSuggestions.value = []
-      if (props.sessionId) useConversationDraft()
+      if (props.sessionId) void useConversationDraft()
+    } else {
+      invalidateSuggestions()
+      draftRequestVersion += 1
+      isDrafting.value = false
     }
   },
+  { immediate: true },
 )
+
+function useBlankTicket() {
+  draftRequestVersion += 1
+  fromConversation.value = false
+  isDrafting.value = false
+}
 
 async function useConversationDraft() {
   if (!props.sessionId) return
+  const requestVersion = ++draftRequestVersion
+  const sessionId = props.sessionId
   fromConversation.value = true
   isDrafting.value = true
   try {
-    const draft = await ticketService.draftFromSession(props.sessionId)
+    const draft = await ticketService.draftFromSession(sessionId)
+    if (requestVersion !== draftRequestVersion || !props.open || props.sessionId !== sessionId) return
     if (!title.value) title.value = draft.title
     if (!description.value) description.value = draft.description
   } catch {
     // Draft is best-effort; the form still works blank.
   } finally {
-    isDrafting.value = false
+    if (requestVersion === draftRequestVersion) isDrafting.value = false
   }
 }
 
 async function submit() {
   if (!title.value.trim() || isSubmitting.value) return
+  const linkSession = fromConversation.value && props.sessionId
+  const email = customerEmail.value.trim()
+  if (!linkSession && email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    toast.error('请输入有效的客户邮箱地址')
+    return
+  }
   isSubmitting.value = true
   try {
-    const linkSession = fromConversation.value && props.sessionId
     const detail = await ticketService.createTicket({
       title: title.value.trim(),
       description: description.value.trim() || undefined,
       priority: priority.value,
       session_id: linkSession ? props.sessionId! : undefined,
-      customer_email: !linkSession ? customerEmail.value.trim() || undefined : undefined,
+      customer_email: !linkSession ? email || undefined : undefined,
       customer_name: !linkSession ? customerName.value.trim() || undefined : undefined,
     })
     toast.success(`已成功创建工单 ${detail.ticket.display_number}`)
@@ -141,7 +175,7 @@ async function submit() {
             <button
               class="source-option"
               :class="{ active: !fromConversation }"
-              @click="fromConversation = false"
+              @click="useBlankTicket"
             >
               空白工单
             </button>

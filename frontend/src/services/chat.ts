@@ -126,7 +126,7 @@ export const chatService = {
     
     const endpoint = hasShopParam ? '/chats/recent/shopify' : '/chats/recent'
     const response = await api.get(endpoint, { params })
-    return response.data as Conversation[]
+    return Array.isArray(response.data) ? response.data as Conversation[] : []
   },
 
   async getChatDetail(sessionId: string) {

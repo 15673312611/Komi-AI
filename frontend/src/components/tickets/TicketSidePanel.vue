@@ -25,6 +25,7 @@ const props = defineProps<{
   ticket: Ticket
   linkedSessionIds: string[]
   canManage: boolean
+  isSavingCustomer?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -115,7 +116,7 @@ function pickAssignee(userId: string | null) {
       </div>
       <div v-if="isPickingAssignee" class="assignee-picker">
         <button class="picker-option" @click="pickAssignee(null)">AI 智能体 (取消指定)</button>
-        <button
+  <button
           v-for="user in users"
           :key="user.id"
           class="picker-option"
@@ -155,10 +156,10 @@ function pickAssignee(userId: string | null) {
           <button class="customer-cancel" @click="isEditingCustomer = false">取消</button>
           <button
             class="customer-save"
-            :disabled="!customerEmailDraft.trim()"
+            :disabled="!customerEmailDraft.trim() || props.isSavingCustomer"
             @click="saveCustomer"
           >
-            保存
+            {{ props.isSavingCustomer ? '正在保存…' : '保存' }}
           </button>
         </div>
       </template>

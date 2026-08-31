@@ -25,10 +25,6 @@ const props = defineProps<{
   agent: AgentWithCustomization
 }>()
 
-const emit = defineEmits<{
-  (e: 'toggle-fullscreen', isFullscreen: boolean): void
-}>()
-
 const {
   workflow,
   workflowLoading,
@@ -79,7 +75,9 @@ const workflowStatusColor = computed(() => {
 })
 
 const formatDate = (dateString: string) => {
-  return new Date(dateString).toLocaleDateString('zh-CN', {
+  const date = new Date(dateString)
+  if (Number.isNaN(date.getTime())) return '时间未知'
+  return date.toLocaleDateString('zh-CN', {
     year: 'numeric',
     month: 'short',
     day: 'numeric',
@@ -94,10 +92,11 @@ const handleCreateWorkflow = async () => {
   }
 
   try {
-    await createWorkflow({
+    const created = await createWorkflow({
       name: workflowName.value.trim(),
       description: workflowDescription.value.trim() || undefined
     })
+    if (!created) return
     
     // Reset form
     workflowName.value = ''
@@ -106,7 +105,7 @@ const handleCreateWorkflow = async () => {
     
     // Open workflow builder
     openWorkflowBuilder()
-  } catch (error) {
+  } catch {
     // Error handling is done in the composable
   }
 }
@@ -126,13 +125,14 @@ const handleUpdateWorkflow = async () => {
   }
 
   try {
-    await updateWorkflow({
+    const updated = await updateWorkflow({
       name: editWorkflowName.value.trim(),
       description: editWorkflowDescription.value.trim() || undefined
     })
+    if (!updated) return
     
     showEditForm.value = false
-  } catch (error) {
+  } catch {
     // Error handling is done in the composable
   }
 }
@@ -147,14 +147,10 @@ const handleDeleteWorkflow = async () => {
   if (confirm('确定要删除此工作流吗？此操作无法撤销。')) {
     try {
       await deleteWorkflow()
-    } catch (error) {
+    } catch {
       // Error handling is done in the composable
     }
   }
-}
-
-const toggleFullscreen = () => {
-  emit('toggle-fullscreen', true)
 }
 
 const openWorkflowBuilder = () => {
@@ -165,14 +161,15 @@ const openWorkflowBuilder = () => {
   showWorkflowBuilder.value = true
 }
 
-const closeWorkflowBuilder = () => {
+const closeWorkflowBuilder = async () => {
   showWorkflowBuilder.value = false
+  await fetchWorkflow()
 }
 
-const handleWorkflowSave = () => {
+const handleWorkflowSave = async () => {
   // Refresh workflow data after saving
-  fetchWorkflow()
   showWorkflowBuilder.value = false
+  await fetchWorkflow()
 }
 
 const cancelCreateForm = () => {
@@ -225,7 +222,7 @@ onMounted(() => {
         <p class="no-workflow-description">
           创建工作流后，您可以使用可视化拖拽画布自由编排多轮对话节点与自动化逻辑。
         </p>
-        <button class="create-workflow-button" @click="showCreateForm = true; showEditForm = false">
+        <button class="create-workflow-button" :disabled="workflowLoading" @click="showCreateForm = true; showEditForm = false">
           + 创建工作流
         </button>
       </div>
@@ -363,15 +360,15 @@ onMounted(() => {
           </div>
 
           <div class="workflow-actions">
-            <button class="action-button primary" @click="openWorkflowBuilder">
+            <button class="action-button primary" :disabled="workflowLoading" @click="openWorkflowBuilder">
               ⛶ 进入画布编排
             </button>
 
-            <button class="action-button secondary" @click="handleEditWorkflow">
+            <button class="action-button secondary" :disabled="workflowLoading" @click="handleEditWorkflow">
               ✎ 修改信息
             </button>
 
-            <button class="action-button danger" @click="handleDeleteWorkflow">
+            <button class="action-button danger" :disabled="workflowLoading" @click="handleDeleteWorkflow">
               删除
             </button>
           </div>
@@ -862,4 +859,4 @@ onMounted(() => {
     flex-wrap: wrap;
   }
 }
-</style> 
+</style>

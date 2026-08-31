@@ -28,6 +28,7 @@ import TicketFilterBar from '@/components/tickets/TicketFilterBar.vue'
 import TicketEmptyState from '@/components/tickets/TicketEmptyState.vue'
 import TicketCreateModal from '@/components/tickets/TicketCreateModal.vue'
 import { permissionChecks } from '@/utils/permissions'
+import type { TicketListFilters } from '@/types/ticket'
 
 const router = useRouter()
 const {
@@ -82,11 +83,18 @@ const statChips = computed(() => [
   },
 ])
 
-const timeAgo = (iso?: string | null) =>
-  iso ? formatDistanceToNow(new Date(iso), { addSuffix: false }) : ''
+const timeAgo = (iso?: string | null) => {
+  if (!iso) return ''
+  const date = new Date(iso)
+  return Number.isNaN(date.getTime()) ? '' : formatDistanceToNow(date, { addSuffix: false })
+}
 
 function openTicket(id: string) {
   router.push(`/tickets/${id}`)
+}
+
+function updateFilters(next: TicketListFilters) {
+  Object.assign(filters, next)
 }
 </script>
 
@@ -123,7 +131,7 @@ function openTicket(id: string) {
         </div>
       </div>
 
-      <TicketFilterBar :filters="filters" />
+      <TicketFilterBar :filters="filters" @update:filters="updateFilters" />
 
       <div class="ticket-table">
         <div class="table-scroll">

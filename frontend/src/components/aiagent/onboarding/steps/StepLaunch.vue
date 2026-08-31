@@ -18,6 +18,7 @@ limitations under the License.
 import { computed } from 'vue'
 import { toast } from 'vue-sonner'
 import { buildWidgetEmbed } from '@/utils/widgetEmbed'
+import { copyTextToClipboard } from '@/utils/clipboard'
 
 const props = defineProps<{
   widgetId: string | null
@@ -35,8 +36,11 @@ const widgetSnippet = computed(() =>
 
 const copy = async (text: string, label: string) => {
   try {
-    await navigator.clipboard.writeText(text)
-    toast.success(`${label}已复制到剪贴板！`, { duration: 3000 })
+    if (await copyTextToClipboard(text)) {
+      toast.success(`${label}已复制到剪贴板！`, { duration: 3000 })
+    } else {
+      toast.error('复制到剪贴板失败，请手动选择并复制')
+    }
   } catch (err) {
     console.error('Failed to copy:', err)
     toast.error('复制到剪贴板失败')

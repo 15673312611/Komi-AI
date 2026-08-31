@@ -99,7 +99,9 @@ export function ticketInitials(name?: string | null): string {
 
 export function formatSlaCountdown(slaDueAt?: string | null, resolvedAt?: string | null): ChipMeta {
   if (resolvedAt || !slaDueAt) return { label: '—', color: 'var(--faint)' }
-  const remainingMs = new Date(slaDueAt).getTime() - Date.now()
+  const dueAt = new Date(slaDueAt).getTime()
+  if (Number.isNaN(dueAt)) return { label: '—', color: 'var(--faint)' }
+  const remainingMs = dueAt - Date.now()
   if (remainingMs <= 0) return { label: '已超时违约', color: 'var(--c-danger)' }
   const minutes = Math.floor(remainingMs / 60000)
   const label =

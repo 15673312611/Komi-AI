@@ -69,6 +69,9 @@ const {
   isSaving,
   selectedIds,
   selectionActive,
+  bulkBusy,
+  jobActionBusy,
+  isJobActive,
   toggleSelect,
   setSelected,
   clearSelection,
@@ -119,12 +122,14 @@ const tab = ref<'faqs' | 'settings'>('faqs')
 // Import modal state.
 const importOpen = ref(false)
 const importSubmitting = ref(false)
+const generateCheckBusy = ref(false)
 
 // Knowledge-source picker (shown when there are multiple sources).
 const sourcePickerOpen = ref(false)
 const generating = ref(false)
 
 async function onPickSources(knowledgeIds: number[]) {
+  if (generating.value || jobActionBusy.value || isJobActive.value) return
   generating.value = true
   try {
     // Keep the picker open if the job didn't start (409/budget) — the error
@@ -136,6 +141,7 @@ async function onPickSources(knowledgeIds: number[]) {
 }
 
 async function onImportSubmit(url: string, mode: FaqImportMode, preserveUrls: boolean) {
+  if (importSubmitting.value) return
   importSubmitting.value = true
   try {
     const ok = await submitImport(url, mode, preserveUrls)
@@ -146,6 +152,7 @@ async function onImportSubmit(url: string, mode: FaqImportMode, preserveUrls: bo
 }
 
 async function onPdfImportSubmit(file: File) {
+  if (importSubmitting.value) return
   importSubmitting.value = true
   try {
     const ok = await submitPdfImport(file)
@@ -180,46 +187,52 @@ function askDelete(faq: FaqItem) {
 }
 
 async function askGenerate() {
-  await fetchEstimate(true) // full estimate incl. page counts for the dialog
-  const e = estimate.value
-  if (!e) {
-    // Estimate unavailable (e.g. plan check failed) — let the backend decide.
-    await startGeneration()
-    return
-  }
-  if (e.total_sources === 0) {
-    toast.error('当前知识库为空，无法生成 FAQ。请先在知识库中添加知识源。')
-    return
-  }
-  // Multiple sources → let the user pick which to generate from.
-  if (e.sources.length > 1) {
-    sourcePickerOpen.value = true
-    return
-  }
-  if (e.new_sources === 0) {
-    toast.info('所有知识源均已生成过 FAQ — 暂无新增知识。')
-    return
-  }
-  const sources = `${e.new_sources} 个新增知识源`
-  const pages = e.pages ? ` (约 ${e.pages} 个页面)` : ''
-  let message = `确认从 ${sources}${pages} 自动生成 FAQ 问答？`
-  let disabledReason: string | undefined
-  if (e.metered) {
-    message += ` 预计消耗约 ${e.estimated_calls} 点消息额度。`
-    if (e.remaining_credits !== null && e.estimated_calls > e.remaining_credits) {
-      disabledReason = `当前周期仅剩 ${e.remaining_credits} 点额度 — 请升级套餐或配置自有大模型 API Key。`
-    }
-  }
-  confirmState.value = {
-    title: 'AI 自动生成 FAQ',
-    message,
-    actionLabel: '立即生成',
-    busyLabel: '正在启动…',
-    intent: 'primary',
-    disabledReason,
-    action: async () => {
+  if (generateCheckBusy.value || jobActionBusy.value || isJobActive.value) return
+  generateCheckBusy.value = true
+  try {
+    await fetchEstimate(true) // full estimate incl. page counts for the dialog
+    const e = estimate.value
+    if (!e) {
+      // Estimate unavailable (e.g. plan check failed) — let the backend decide.
       await startGeneration()
-    },
+      return
+    }
+    if (e.total_sources === 0) {
+      toast.error('当前知识库为空，无法生成 FAQ。请先在知识库中添加知识源。')
+      return
+    }
+    // Multiple sources → let the user pick which to generate from.
+    if (e.sources.length > 1) {
+      sourcePickerOpen.value = true
+      return
+    }
+    if (e.new_sources === 0) {
+      toast.info('所有知识源均已生成过 FAQ — 暂无新增知识。')
+      return
+    }
+    const sources = `${e.new_sources} 个新增知识源`
+    const pages = e.pages ? ` (约 ${e.pages} 个页面)` : ''
+    let message = `确认从 ${sources}${pages} 自动生成 FAQ 问答？`
+    let disabledReason: string | undefined
+    if (e.metered) {
+      message += ` 预计消耗约 ${e.estimated_calls} 点消息额度。`
+      if (e.remaining_credits !== null && e.estimated_calls > e.remaining_credits) {
+        disabledReason = `当前周期仅剩 ${e.remaining_credits} 点额度 — 请升级套餐或配置自有大模型 API Key。`
+      }
+    }
+    confirmState.value = {
+      title: 'AI 自动生成 FAQ',
+      message,
+      actionLabel: '立即生成',
+      busyLabel: '正在启动…',
+      intent: 'primary',
+      disabledReason,
+      action: async () => {
+        await startGeneration()
+      },
+    }
+  } finally {
+    generateCheckBusy.value = false
   }
 }
 
@@ -311,6 +324,7 @@ onUnmounted(stopPolling)
           :faq-count="faqs.length"
           :published-count="publishedCount"
           :new-source-count="estimate?.new_sources ?? null"
+          :disabled="generateCheckBusy || jobActionBusy || isJobActive"
           @generate="askGenerate"
           @import="importOpen = true"
           @add="startAdd"
@@ -320,6 +334,7 @@ onUnmounted(stopPolling)
           v-if="phase === 'empty' && !isNewFaq"
           :source-count="sourceCount"
           :page-count="pageCount"
+          :disabled="generateCheckBusy || jobActionBusy || isJobActive"
           @generate="askGenerate"
           @import="importOpen = true"
           @add="startAdd"
@@ -465,10 +480,10 @@ onUnmounted(stopPolling)
 
     <div v-if="selectionActive" class="bulkbar" role="toolbar" aria-label="批量操作">
       <span class="bulkbar__count">已选中 {{ selectedIds.size }} 项</span>
-      <button class="bulkbar__btn" type="button" @click="bulkSetStatus('published')">批量发布</button>
-      <button class="bulkbar__btn" type="button" @click="bulkSetStatus('draft')">下线为草稿</button>
-      <button class="bulkbar__btn bulkbar__btn--danger" type="button" @click="askBulkDelete">批量删除</button>
-      <button class="bulkbar__clear" type="button" aria-label="取消选择" @click="clearSelection">✕</button>
+      <button class="bulkbar__btn" type="button" :disabled="bulkBusy" @click="bulkSetStatus('published')">批量发布</button>
+      <button class="bulkbar__btn" type="button" :disabled="bulkBusy" @click="bulkSetStatus('draft')">下线为草稿</button>
+      <button class="bulkbar__btn bulkbar__btn--danger" type="button" :disabled="bulkBusy" @click="askBulkDelete">批量删除</button>
+      <button class="bulkbar__clear" type="button" aria-label="取消选择" :disabled="bulkBusy" @click="clearSelection">✕</button>
     </div>
 
     <div v-if="confirmState" class="confirm" role="dialog" aria-modal="true">

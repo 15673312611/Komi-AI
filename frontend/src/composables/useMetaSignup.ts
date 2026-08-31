@@ -85,6 +85,7 @@ export function useMetaSignup({ channel, existingAccount, onConnected }: MetaSig
   const connectingPage = ref(false)
 
   const copy = SIGNUP_COPY[channel]
+  let disposed = false
 
   const handleSignupMessage = (event: MessageEvent) => {
     const session = parseSignupMessage(event)
@@ -92,9 +93,10 @@ export function useMetaSignup({ channel, existingAccount, onConnected }: MetaSig
   }
 
   onMounted(async () => {
-    if (existingAccount) return
+    if (existingAccount || disposed) return
     try {
       const config = await channelsService.getEmbeddedSignupConfig(channel)
+      if (disposed) return
       if (!config.enabled || !config.app_id) return
       // The Facebook logins are driven by a Login-for-Business configuration;
       // Instagram Login has none, so requiring one here would hide its button.
@@ -103,14 +105,15 @@ export function useMetaSignup({ channel, existingAccount, onConnected }: MetaSig
       configId.value = config.config_id ?? ''
       appId.value = config.app_id
       graphVersion.value = config.graph_version
-      signupEnabled.value = true
       // WhatsApp uses the JS SDK (Embedded Signup, which also reports its
       // result out of band via postMessage). The other two drive their own
       // OAuth popup, so they need neither the SDK nor the message listener.
       if (channel === 'whatsapp') {
         await loadMetaSdk(config.app_id, config.graph_version)
+        if (disposed) return
         window.addEventListener('message', handleSignupMessage)
       }
+      if (!disposed) signupEnabled.value = true
     } catch (error) {
       // Falling back to the manual form is a working path, not an error worth
       // interrupting the user for.
@@ -118,9 +121,13 @@ export function useMetaSignup({ channel, existingAccount, onConnected }: MetaSig
     }
   })
 
-  onBeforeUnmount(() => window.removeEventListener('message', handleSignupMessage))
+  onBeforeUnmount(() => {
+    disposed = true
+    window.removeEventListener('message', handleSignupMessage)
+  })
 
   const finishWhatsAppSignup = async (code: string) => {
+    if (disposed) return
     const session = signupSession.value
     if (!session) {
       // Signed in, but Meta never reported which number was set up, so there
@@ -135,15 +142,18 @@ export function useMetaSignup({ channel, existingAccount, onConnected }: MetaSig
       waba_id: session.waba_id,
       phone_number_id: session.phone_number_id,
     })
+    if (disposed) return
     onConnected(account)
     toast.success(`Connected ${account.display_name || 'WhatsApp'}`)
   }
 
   const connectPickedPage = async (pageId: string) => {
+    if (disposed || !signupToken.value) return
     const account = await channelsService.connectMessengerSignup({
       signup_token: signupToken.value,
       page_id: pageId,
     })
+    if (disposed) return
     onConnected(account)
     toast.success(`Connected ${account.display_name || 'Messenger'}`)
   }
@@ -161,6 +171,7 @@ export function useMetaSignup({ channel, existingAccount, onConnected }: MetaSig
 
   /** The picker's choice — its own loading state, since the login popup is long gone. */
   const onPageSelected = async (pageId: string) => {
+    if (connectingPage.value || !signupToken.value) return
     try {
       connectingPage.value = true
       await connectPickedPage(pageId)
@@ -173,6 +184,7 @@ export function useMetaSignup({ channel, existingAccount, onConnected }: MetaSig
 
   // WhatsApp: the JS SDK's login callback.
   const completeWhatsAppSignup = async (response: { authResponse?: { code?: string } }) => {
+    if (disposed) return
     const code = response.authResponse?.code
     if (!code) {
       // The popup was dismissed — not an error worth a toast.
@@ -190,10 +202,12 @@ export function useMetaSignup({ channel, existingAccount, onConnected }: MetaSig
 
   /** Shared shape of the two popup logins: run it, connect, surface failures. */
   const runPopupConnect = async (connect: (redirectUri: string) => Promise<void>) => {
+    if (disposed || signingUp.value) return
     signingUp.value = true
     const redirectUri = window.location.origin + META_OAUTH_CALLBACK_PATH
     try {
       await connect(redirectUri)
+      if (disposed) return
     } catch (error: any) {
       // The user closing the popup is not an error worth a toast.
       if (error?.message !== 'cancelled') {
@@ -224,14 +238,17 @@ export function useMetaSignup({ channel, existingAccount, onConnected }: MetaSig
   })
 
   const startSignup = () => {
-    if (signingUp.value) return
+    if (disposed || signingUp.value) return
 
     // Both popups must open synchronously in the click handler or the browser
     // blocks them.
     if (channel === 'messenger') { void startMessengerLogin(); return }
     if (channel === 'instagram') { void startInstagramLogin(); return }
 
-    if (!window.FB) return
+    if (!window.FB) {
+      toast.error('Meta SDK 尚未就绪，请稍后重试')
+      return
+    }
     signupSession.value = null
     signingUp.value = true
     // The SDK type-checks its callback and rejects an AsyncFunction outright

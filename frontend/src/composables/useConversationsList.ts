@@ -45,6 +45,12 @@ export function useConversationsList(props: {
   const currentUserId = userService.getUserId()
   const unreadMessages = reactive<Record<string, number>>({})
   const processedMessages = new Set<string>()
+  let detailRequestVersion = 0
+
+  const safeIsoTimestamp = (value: unknown): string => {
+    const date = new Date(typeof value === 'string' || typeof value === 'number' ? value : NaN)
+    return Number.isNaN(date.getTime()) ? new Date().toISOString() : date.toISOString()
+  }
 
   const messageKey = (data: SocketMessage) => String(
     data.message_id ||
@@ -64,7 +70,7 @@ export function useConversationsList(props: {
   }
 
   const normalizeMessage = (data: SocketMessage): Message => {
-    const createdAt = new Date(data.created_at).toISOString()
+    const createdAt = safeIsoTimestamp(data.created_at)
     const messageType = data.message_type || (data.type === 'agent_message' ? 'agent' : data.type || 'bot')
     const attributes = { ...(data.attributes || {}) }
     const clientMessageId = data.client_message_id || attributes.client_message_id
@@ -72,7 +78,7 @@ export function useConversationsList(props: {
     const normalized: Message = {
       id: data.message_id,
       client_message_id: clientMessageId,
-      message: data.message || '',
+      message: typeof data.message === 'string' ? data.message : '',
       message_type: messageType,
       created_at: createdAt,
       session_id: data.session_id,
@@ -104,7 +110,7 @@ export function useConversationsList(props: {
   }
 
   const handleChatReply = (data: SocketMessage) => {
-    if (!data?.session_id || !data.created_at) return
+    if (!data || typeof data.session_id !== 'string' || !data.session_id || !data.created_at) return
     const key = messageKey(data)
     if (!rememberMessage(key)) return
     const incoming = normalizeMessage(data)
@@ -130,7 +136,7 @@ export function useConversationsList(props: {
   }
 
   const handleRoomEvent = (data: RoomEvent) => {
-    if (data?.type !== 'conversation_updated' || !data.chat || !data.session_id) return
+    if (data?.type !== 'conversation_updated' || !data.chat || typeof data.session_id !== 'string' || !data.session_id) return
     if (selectedId.value === data.session_id) selectedChat.value = data.chat
     emit('chatUpdated', data.chat)
   }
@@ -152,10 +158,13 @@ export function useConversationsList(props: {
 
   const loadChatDetail = async (sessionId: string, force = false) => {
     if (!force && selectedChat.value?.session_id === sessionId) return
+    const requestVersion = ++detailRequestVersion
     try {
       chatLoading.value = true
       selectedId.value = sessionId
+      if (selectedChat.value?.session_id !== sessionId) selectedChat.value = null
       const detail = await chatService.getChatDetail(sessionId)
+      if (requestVersion !== detailRequestVersion || selectedId.value !== sessionId) return
       selectedChat.value = detail
       if (unreadMessages[sessionId]) {
         delete unreadMessages[sessionId]
@@ -164,14 +173,16 @@ export function useConversationsList(props: {
     } catch (err) {
       console.error('Failed to load chat:', err)
     } finally {
-      chatLoading.value = false
+      if (requestVersion === detailRequestVersion) chatLoading.value = false
     }
   }
 
   watch(() => props.conversations, (items) => {
     if (!items.length && selectedId.value) {
+      detailRequestVersion++
       selectedId.value = null
       selectedChat.value = null
+      chatLoading.value = false
     }
   }, { immediate: true })
 
@@ -179,7 +190,12 @@ export function useConversationsList(props: {
     if (!Array.isArray(props.conversations)) return []
     return props.conversations.map(conv => ({
       ...conv,
-      timeAgo: formatDistanceToNow(new Date(conv.updated_at), { addSuffix: true }),
+      timeAgo: (() => {
+        const updatedAt = new Date(conv.updated_at)
+        return Number.isNaN(updatedAt.getTime())
+          ? '—'
+          : formatDistanceToNow(updatedAt, { addSuffix: true })
+      })(),
       message_type: conv.attributes?.message_type || 'text',
       shopify_output: conv.attributes?.shopify_output,
     }))
@@ -193,6 +209,7 @@ export function useConversationsList(props: {
     if (userId) socketService.emit('join_room', { session_id: `user_${userId}` })
   })
   onBeforeUnmount(() => {
+    detailRequestVersion++
     const userId = userService.getUserId()
     if (userId) socketService.emit('leave_room', { session_id: `user_${userId}` })
     cleanupSocketListeners()

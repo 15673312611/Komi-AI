@@ -25,6 +25,7 @@ import { toast } from 'vue-sonner'
 
 const props = defineProps<{
   user?: User | null
+  submitting?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -170,6 +171,7 @@ const handleSubmit = () => {
         placeholder="输入坐席真实姓名或客服昵称"
         required
         class="form-input"
+        :disabled="props.submitting"
       />
     </div>
 
@@ -182,6 +184,7 @@ const handleSubmit = () => {
         placeholder="agent@company.com"
         required
         class="form-input"
+        :disabled="props.submitting"
       />
     </div>
 
@@ -192,7 +195,7 @@ const handleSubmit = () => {
         v-model="selectedRole"
         required
         class="form-input"
-        :disabled="loadingRoles"
+        :disabled="loadingRoles || props.submitting"
       >
         <option value="" disabled>请选择角色</option>
         <option 
@@ -209,14 +212,14 @@ const handleSubmit = () => {
     <div v-if="scopeApplies" class="form-group">
       <label>会话查看与接管权限范围</label>
       <label class="checkbox-label">
-        <input type="checkbox" v-model="seeAllAiChats" />
+        <input type="checkbox" v-model="seeAllAiChats" :disabled="props.submitting" />
         <span>
           所有 AI 队列会话
           <small>查看与接管 AI 正在接待且尚未分配给坐席的会话。</small>
         </span>
       </label>
       <label class="checkbox-label">
-        <input type="checkbox" v-model="seeAllOrgChats" />
+        <input type="checkbox" v-model="seeAllOrgChats" :disabled="props.submitting" />
         <span>
           组织内所有人工会话
           <small>包括其他坐席正在跟进的会话（适用于主管巡检或代班协助）。</small>
@@ -235,6 +238,7 @@ const handleSubmit = () => {
           class="form-input"
           autocomplete="new-password"
           placeholder="请输入至少8位安全密码"
+          :disabled="props.submitting"
           @input="handlePasswordInput(password)"
         />
         <PasswordStrengthMeter v-if="passwordTouched" :strength="passwordStrength" />
@@ -250,6 +254,7 @@ const handleSubmit = () => {
           class="form-input"
           autocomplete="new-password"
           placeholder="再次输入以确认"
+          :disabled="props.submitting"
           @input="handleConfirmPasswordInput"
           :class="{ 'error': error && error.includes('不一致') }"
         />
@@ -261,17 +266,18 @@ const handleSubmit = () => {
         <input
           type="checkbox"
           v-model="isActive"
+          :disabled="props.submitting"
         />
         账号处于启用状态 (Active)
       </label>
     </div>
 
     <div class="form-actions">
-      <button type="button" class="btn btn-secondary" @click="emit('cancel')">
+      <button type="button" class="btn btn-secondary" @click="emit('cancel')" :disabled="props.submitting">
         取消
       </button>
-      <button type="submit" class="btn btn-primary">
-        {{ props.user ? '保存修改' : '确认添加' }}
+      <button type="submit" class="btn btn-primary" :disabled="props.submitting">
+        {{ props.submitting ? '正在保存...' : (props.user ? '保存修改' : '确认添加') }}
       </button>
     </div>
   </form>
@@ -368,4 +374,4 @@ select.form-input:disabled {
   background-color: var(--background-mute);
   cursor: not-allowed;
 }
-</style> 
+</style>

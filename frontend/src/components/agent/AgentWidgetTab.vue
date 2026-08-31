@@ -19,6 +19,7 @@ import { computed } from 'vue'
 import { toast } from 'vue-sonner'
 import type { Agent } from '@/types/agent'
 import { buildWidgetEmbed } from '@/utils/widgetEmbed'
+import { copyTextToClipboard } from '@/utils/clipboard'
 
 interface Widget {
   id: string;
@@ -96,14 +97,12 @@ ChatterMate.on('ready', () => { /* widget loaded */ });
 // Or with no JavaScript at all:
 <button data-chattermate-open>Chat with us</button>`
 
-const copyText = (text: string) => {
-  if (!navigator.clipboard) {
-    toast.error('剪贴板不可用 — 请手动复制')
-    return
+const copyText = async (text: string) => {
+  if (await copyTextToClipboard(text)) {
+    toast.success('已复制到剪贴板')
+  } else {
+    toast.error('复制失败 — 请手动复制')
   }
-  navigator.clipboard.writeText(text)
-    .then(() => toast.success('已复制到剪贴板'))
-    .catch(() => toast.error('复制失败 — 请手动复制'))
 }
 
 // Generate iframe URL
@@ -645,4 +644,4 @@ const { data } = await response.json();
     height: 350px;
   }
 }
-</style> 
+</style>

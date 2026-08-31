@@ -22,6 +22,8 @@ import { useAgentStorage } from '@/utils/storage'
 export function useAgentEdit(agent: Agent) {
   const agentStorage = useAgentStorage()
   const isLoading = ref(false)
+  const isGenerating = ref(false)
+  const isSaving = ref(false)
   const error = ref<string | null>(null)
 
   // Basic state
@@ -42,7 +44,9 @@ export function useAgentEdit(agent: Agent) {
   
   // Generate instructions with AI
   const generateInstructions = async (prompt: string): Promise<string[]> => {
+    if (isGenerating.value || isSaving.value) return []
     try {
+      isGenerating.value = true
       isLoading.value = true
       error.value = null
       
@@ -57,13 +61,16 @@ export function useAgentEdit(agent: Agent) {
       console.error('Generate instructions error:', err)
       return []
     } finally {
+      isGenerating.value = false
       isLoading.value = false
     }
   }
 
   // Save handler
   const handleSave = async () => {
+    if (isSaving.value || isGenerating.value) return null
     try {
+      isSaving.value = true
       isLoading.value = true
       error.value = null
 
@@ -82,6 +89,7 @@ export function useAgentEdit(agent: Agent) {
       console.error('Save error:', err)
       throw err
     } finally {
+      isSaving.value = false
       isLoading.value = false
     }
   }
@@ -91,6 +99,8 @@ export function useAgentEdit(agent: Agent) {
     isActive,
     instructions,
     isLoading,
+    isGenerating,
+    isSaving,
     error,
     addInstruction,
     removeInstruction,

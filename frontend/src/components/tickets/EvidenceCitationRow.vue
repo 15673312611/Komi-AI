@@ -18,17 +18,19 @@ limitations under the License.
 import { ref } from 'vue'
 import { toast } from 'vue-sonner'
 import type { InvestigationEvent } from '@/types/ticket'
+import { copyTextToClipboard } from '@/utils/clipboard'
 
 const props = defineProps<{ event: InvestigationEvent }>()
 
 const isExpanded = ref(false)
 
-function copyQuery() {
+async function copyQuery() {
   if (!props.event.tool_input) return
-  navigator.clipboard
-    .writeText(props.event.tool_input)
-    .then(() => toast.success('查询语句已复制到剪贴板'))
-    .catch(() => {})
+  if (await copyTextToClipboard(props.event.tool_input)) {
+    toast.success('查询语句已复制到剪贴板')
+  } else {
+    toast.error('复制失败，请手动选择并复制')
+  }
 }
 
 function formatTime(iso?: string | null): string {

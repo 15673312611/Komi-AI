@@ -34,6 +34,7 @@ export function useAgentCreate() {
 
   const createAgent = async () => {
     if (!validateForm()) return null
+    if (isCreating.value) return null
     
     try {
       isCreating.value = true
@@ -63,4 +64,4 @@ export function useAgentCreate() {
     error,
     createAgent
   }
-} 
+}

@@ -51,15 +51,15 @@ const {
 
 // Wrap create/delete so the parent view can refresh counts after a change
 const createRoleAndNotify = async (data: Partial<Role>) => {
-  await handleCreateRole(data)
-  if (!showCreateModal.value) {
+  const created = await handleCreateRole(data)
+  if (created) {
     emit('changed')
   }
 }
 
 const deleteRoleAndNotify = async () => {
-  await confirmDeleteRole()
-  if (!showDeleteModal.value) {
+  const deleted = await confirmDeleteRole()
+  if (deleted) {
     emit('changed')
   }
 }
@@ -238,6 +238,7 @@ onMounted(() => {
         <template #content>
           <RoleForm
             :role="selectedRole"
+            :submitting="loading"
             @submit="(data) => showCreateModal ? createRoleAndNotify(data) : handleUpdateRole(data)"
             @cancel="showCreateModal ? (showCreateModal = false) : (showEditModal = false)"
           />
@@ -727,4 +728,4 @@ onMounted(() => {
     margin-bottom: var(--space-lg);
   }
 }
-</style> 
+</style>

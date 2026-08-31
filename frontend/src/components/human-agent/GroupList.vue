@@ -52,13 +52,13 @@ const {
 
 // Wrap create/delete to emit `changed` for the parent view's counters.
 const onCreateGroup = async (groupData: Partial<UserGroup>) => {
-  await handleCreateGroup(groupData)
-  emit('changed')
+  const created = await handleCreateGroup(groupData)
+  if (created) emit('changed')
 }
 
 const onDeleteConfirm = async () => {
-  await handleDeleteConfirm()
-  emit('changed')
+  const deleted = await handleDeleteConfirm()
+  if (deleted) emit('changed')
 }
 
 // Filter cards by group name (case-insensitive).
@@ -168,6 +168,7 @@ onMounted(fetchGroups)
       <template #title>新建业务分组</template>
       <template #content>
         <GroupForm
+          :submitting="loading"
           @submit="onCreateGroup"
           @cancel="showCreateModal = false"
         />
@@ -180,6 +181,7 @@ onMounted(fetchGroups)
       <template #content>
         <GroupForm
           :group="selectedGroup"
+          :submitting="loading"
           @submit="handleUpdateGroup"
           @cancel="showEditModal = false"
         />
@@ -220,8 +222,8 @@ onMounted(fetchGroups)
             <button class="btn btn-secondary" @click="showDeleteModal = false">
               取消
             </button>
-            <button class="btn btn-danger" @click="onDeleteConfirm">
-              确认删除
+              <button class="btn btn-danger" @click="onDeleteConfirm" :disabled="loading">
+                {{ loading ? '正在删除...' : '确认删除' }}
             </button>
           </div>
         </div>

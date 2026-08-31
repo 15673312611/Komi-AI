@@ -226,6 +226,28 @@ describe('useConversationChat sendAndResolve', () => {
     wrapper.unmount()
   })
 
+  it('ignores a duplicate takeover while the first request is pending', async () => {
+    let resolveTakeover: (value: ChatDetail) => void = () => undefined
+    takeoverChat.mockImplementation(() => new Promise(resolve => { resolveTakeover = resolve }))
+    const state: { current?: ReturnType<typeof useConversationChat> } = {}
+    const Harness = defineComponent({
+      setup: () => {
+        state.current = useConversationChat(makeChat(), (() => undefined) as any)
+        return () => null
+      },
+    })
+    const wrapper = mount(Harness)
+    const chat = state.current!
+
+    const first = chat.handleTakeover()
+    await expect(chat.handleTakeover()).resolves.toBe(false)
+    expect(takeoverChat).toHaveBeenCalledOnce()
+
+    resolveTakeover({ ...makeChat(), user_id: 'agent-user-1' })
+    await first
+    wrapper.unmount()
+  })
+
   it('publishes snapshots through the chat-updated event consumed by the workspace', () => {
     const emitted: Array<[string, unknown]> = []
     const state: { current?: ReturnType<typeof useConversationChat> } = {}

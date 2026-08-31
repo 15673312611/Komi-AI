@@ -15,6 +15,8 @@ limitations under the License.
 */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { defineComponent } from 'vue'
+import { mount } from '@vue/test-utils'
 import { useNotificationSettings } from '@/composables/useNotificationSettings'
 import { notificationService } from '@/services/notification'
 
@@ -33,6 +35,17 @@ const defaults = {
   notify_chat_assigned: true,
 }
 
+const mountSettings = () => {
+  const state: { current?: ReturnType<typeof useNotificationSettings> } = {}
+  const Harness = defineComponent({
+    setup: () => {
+      state.current = useNotificationSettings()
+      return () => null
+    },
+  })
+  return { wrapper: mount(Harness), state: state.current! }
+}
+
 describe('useNotificationSettings', () => {
   beforeEach(() => {
     vi.mocked(notificationService.getSettings).mockResolvedValue({ ...defaults })
@@ -40,11 +53,13 @@ describe('useNotificationSettings', () => {
   })
 
   it('loads the current preferences', async () => {
-    const { settings, isLoading, load } = useNotificationSettings()
+    const { wrapper, state } = mountSettings()
+    const { settings, isLoading, load } = state
     await load()
 
     expect(isLoading.value).toBe(false)
     expect(settings.value).toEqual(defaults)
+    wrapper.unmount()
   })
 
   it('applies a toggle optimistically and keeps the server response', async () => {
@@ -53,21 +68,25 @@ describe('useNotificationSettings', () => {
       notify_new_chat: true,
     })
 
-    const { settings, load, save } = useNotificationSettings()
+    const { wrapper, state } = mountSettings()
+    const { settings, load, save } = state
     await load()
     await save({ notify_new_chat: true })
 
     expect(notificationService.updateSettings).toHaveBeenCalledWith({ notify_new_chat: true })
     expect(settings.value?.notify_new_chat).toBe(true)
+    wrapper.unmount()
   })
 
   it('rolls the toggle back when the save fails', async () => {
     vi.mocked(notificationService.updateSettings).mockRejectedValue(new Error('nope'))
 
-    const { settings, load, save } = useNotificationSettings()
+    const { wrapper, state } = mountSettings()
+    const { settings, load, save } = state
     await load()
     await save({ notify_chat_transfer: false })
 
     expect(settings.value).toEqual(defaults)
+    wrapper.unmount()
   })
 })

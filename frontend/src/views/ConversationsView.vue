@@ -17,6 +17,7 @@ import { socketService } from '@/services/socket'
 import { userService } from '@/services/user'
 import { agentService } from '@/services/agent'
 import { aiService } from '@/services/ai'
+import { listTeammates, type Teammate } from '@/services/users'
 import type { FilterValues } from '@/components/conversations/ConversationFilters.vue'
 import type { Conversation, ChatDetail } from '@/types/chat'
 import { toast } from 'vue-sonner'
@@ -42,6 +43,8 @@ const composerDraft = ref('')
 const unreadCounts = ref<Record<string, number>>({})
 const processedReplyKeys = new Set<string>()
 let conversationsRequest = 0
+let loadMoreRequest = 0
+let loadMoreInFlight = 0
 let chatDetailRequest = 0
 let unreadCountsRequest = 0
 let unreadCountsVersion = 0
@@ -149,6 +152,11 @@ const addToast = (msg: string, type: 'success' | 'info' | 'error' = 'info') => {
 
 const loadConversations = async () => {
   const request = ++conversationsRequest
+  // A full refresh replaces the list, so any pending page append is stale.
+  // Keep its in-flight counter until the request settles so the loading state
+  // cannot be cleared while another append request is still running.
+  ++loadMoreRequest
+  loadingMoreConversations.value = loadMoreInFlight > 0
   loading.value = true
   error.value = ''
   try {
@@ -170,21 +178,23 @@ const loadConversations = async () => {
 const loadMoreConversations = async () => {
   if (loading.value || loadingMoreConversations.value || !hasMoreConversations.value) return
   const skip = conversations.value.length
-  const request = ++conversationsRequest
+  const request = ++loadMoreRequest
+  loadMoreInFlight += 1
   loadingMoreConversations.value = true
   try {
     const loaded = await chatService.getRecentChats(chatListParams({ skip, limit: CONVERSATIONS_PAGE_SIZE }))
-    if (request !== conversationsRequest) return
+    if (request !== loadMoreRequest) return
     const existingBySession = new Map(conversations.value.map(item => [item.session_id, item]))
     for (const conversation of loaded) existingBySession.set(conversation.session_id, conversation)
     conversations.value = [...existingBySession.values()]
     hasMoreConversations.value = loaded.length === CONVERSATIONS_PAGE_SIZE
     void loadUnreadCounts()
   } catch (err: any) {
-    if (request !== conversationsRequest) return
+    if (request !== loadMoreRequest) return
     addToast(err?.response?.data?.detail || '加载更多会话失败，请稍后重试', 'error')
   } finally {
-    if (request === conversationsRequest) loadingMoreConversations.value = false
+    loadMoreInFlight = Math.max(0, loadMoreInFlight - 1)
+    if (loadMoreInFlight === 0) loadingMoreConversations.value = false
   }
 }
 
@@ -232,6 +242,7 @@ const loadChatDetail = async (sessionId: string) => {
 }
 
 const handleSelectSession = (sessionId: string) => {
+  if (!sessionId) return
   if (activeSessionId.value === sessionId && currentChatDetail.value?.session_id === sessionId) return
   activeSessionId.value = sessionId
   composerDraft.value = ''
@@ -253,7 +264,7 @@ const handleOpenTracking = (order: any) => {
 }
 
 const handleTransfer = async (targetUserId: string, note: string) => {
-  if (!activeSessionId.value) return
+  if (!activeSessionId.value || transferLoading.value) return
   transferLoading.value = true
   try {
     const updated = await chatService.reassignChat(activeSessionId.value, targetUserId, note)
@@ -499,8 +510,13 @@ onBeforeUnmount(() => {
 })
 watch(() => route.query.session, value => {
   const id = typeof value === 'string' ? value : null
-  if (id && id !== activeSessionId.value) {
-    activeSessionId.value = id
+  if (id === activeSessionId.value) return
+  chatDetailRequest += 1
+  activeSessionId.value = id
+  currentChatDetail.value = null
+  if (id) {
+    clearUnread(id)
+    void loadChatDetail(id)
   }
 })
 watch(activeSessionId, () => {

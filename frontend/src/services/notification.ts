@@ -35,7 +35,7 @@ export interface NotificationSettings {
 export const notificationService = {
   async getNotifications(skip = 0, limit = 50): Promise<Notification[]> {
     const response = await api.get(`/notifications?skip=${skip}&limit=${limit}`)
-    return response.data
+    return Array.isArray(response.data) ? response.data : []
   },
 
   async markAsRead(notificationId: number): Promise<void> {
@@ -57,7 +57,7 @@ export const notificationService = {
 
   async getUnreadCount(): Promise<number> {
     const response = await api.get('/notifications/unread-count')
-    return response.data.count
+    return typeof response.data?.count === 'number' ? response.data.count : 0
   },
 
   async getSettings(): Promise<NotificationSettings> {

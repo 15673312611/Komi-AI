@@ -51,7 +51,7 @@ export interface TeamOverview {
 
 export async function listUsers(): Promise<User[]> {
   const response = await api.get('users')
-  return response.data
+  return Array.isArray(response.data) ? response.data : []
 }
 
 /** A colleague as the inbox needs them, from GET /users/teammates. */
@@ -73,7 +73,7 @@ export interface Teammate {
  */
 export async function listTeammates(): Promise<Teammate[]> {
   const response = await api.get('users/teammates')
-  return response.data
+  return Array.isArray(response.data) ? response.data : []
 }
 
 /**

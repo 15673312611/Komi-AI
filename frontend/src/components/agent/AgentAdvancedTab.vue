@@ -40,10 +40,15 @@ const {
   isLoading,
   error,
   hasUnsavedChanges,
+  isRateLimitValid,
   toggleRateLimiting,
   updateLocalValue,
   saveRateLimitSettings
 } = useAgentAdvanced(agentRef)
+
+// All advanced settings update the same agent record. Serialize them so a
+// slower response cannot overwrite a newer setting in the local view.
+const settingsBusy = ref(false)
 
 // Handle successful updates
 const handleUpdate = (updatedAgent: Agent) => {
@@ -52,11 +57,15 @@ const handleUpdate = (updatedAgent: Agent) => {
 
 // Handle toggle rate limiting
 const handleToggleRateLimiting = async () => {
+  if (settingsBusy.value || isLoading.value) return
+  settingsBusy.value = true
   try {
     const updatedAgent = await toggleRateLimiting()
-    handleUpdate(updatedAgent)
-  } catch (err) {
+    if (updatedAgent) handleUpdate(updatedAgent)
+  } catch {
     // Error is handled in the composable
+  } finally {
+    settingsBusy.value = false
   }
 }
 
@@ -70,11 +79,15 @@ const handleValueChange = (type: 'overallLimitPerIp' | 'requestsPerSec', event: 
 
 // Handle save settings
 const handleSaveSettings = async () => {
+  if (settingsBusy.value || isLoading.value) return
+  settingsBusy.value = true
   try {
     const updatedAgent = await saveRateLimitSettings()
-    handleUpdate(updatedAgent)
-  } catch (err) {
+    if (updatedAgent) handleUpdate(updatedAgent)
+  } catch {
     // Error is handled in the composable
+  } finally {
+    settingsBusy.value = false
   }
 }
 
@@ -85,10 +98,13 @@ const handleCancel = () => {
     overallLimitPerIp: String(agentRef.value.overall_limit_per_ip || 100),
     requestsPerSec: String(agentRef.value.requests_per_sec || 1)
   }
+  hasUnsavedChanges.value = false
 }
 
 // Handle attachments setting toggle
 const updateAttachmentsSetting = async (enabled: boolean) => {
+  if (settingsBusy.value || isLoading.value) return
+  settingsBusy.value = true
   try {
     // Call API to save the setting
     const updatedAgent = await agentService.updateAgent(agentRef.value.id, {
@@ -96,7 +112,7 @@ const updateAttachmentsSetting = async (enabled: boolean) => {
     })
     
     // Update local reference
-    agentRef.value.allow_attachments = updatedAgent.allow_attachments
+    agentRef.value = { ...agentRef.value, ...updatedAgent }
     
     // Emit update to parent
     emit('update', updatedAgent)
@@ -110,6 +126,8 @@ const updateAttachmentsSetting = async (enabled: boolean) => {
     toast.error('更新附件传输配置失败', {
       duration: 2000
     })
+  } finally {
+    settingsBusy.value = false
   }
 }
 
@@ -131,6 +149,7 @@ const isCategorySelected = (category: string): boolean => {
 
 // Toggle a file type category
 const toggleFileTypeCategory = async (category: string) => {
+  if (settingsBusy.value || isLoading.value) return
   try {
     let currentTypes = agentRef.value.allowed_attachment_types || []
     
@@ -155,22 +174,27 @@ const toggleFileTypeCategory = async (category: string) => {
     // If all categories selected, set to null (allow all)
     const finalTypes = newTypes.length === fileTypeCategories.length ? null : newTypes
     
+    settingsBusy.value = true
     const updatedAgent = await agentService.updateAgent(agentRef.value.id, {
       allowed_attachment_types: finalTypes
     })
     
-    agentRef.value.allowed_attachment_types = updatedAgent.allowed_attachment_types
+    agentRef.value = { ...agentRef.value, ...updatedAgent }
     emit('update', updatedAgent)
     
     toast.success('已更新允许上传的文件类型', { duration: 2000 })
   } catch (err) {
     console.error('Failed to update allowed file types:', err)
     toast.error('更新允许的文件类型失败', { duration: 2000 })
+  } finally {
+    settingsBusy.value = false
   }
 }
 
 // Handle token authentication setting toggle
 const updateTokenAuthSetting = async (enabled: boolean) => {
+  if (settingsBusy.value || isLoading.value) return
+  settingsBusy.value = true
   try {
     // Call API to save the setting
     const updatedAgent = await agentService.updateAgent(agentRef.value.id, {
@@ -178,7 +202,7 @@ const updateTokenAuthSetting = async (enabled: boolean) => {
     })
     
     // Update local reference
-    agentRef.value.require_token_auth = updatedAgent.require_token_auth
+    agentRef.value = { ...agentRef.value, ...updatedAgent }
     
     // Emit update to parent
     emit('update', updatedAgent)
@@ -192,6 +216,8 @@ const updateTokenAuthSetting = async (enabled: boolean) => {
     toast.error('更新令牌认证设置失败', {
       duration: 2000
     })
+  } finally {
+    settingsBusy.value = false
   }
 }
 </script>
@@ -230,7 +256,7 @@ const updateTokenAuthSetting = async (enabled: boolean) => {
               type="checkbox"
               :checked="localSettings.enableRateLimiting"
               @change="handleToggleRateLimiting"
-              :disabled="isLoading"
+               :disabled="isLoading || settingsBusy"
             >
             <span class="slider" :class="{ 'enabled': localSettings.enableRateLimiting }"></span>
           </label>
@@ -248,7 +274,7 @@ const updateTokenAuthSetting = async (enabled: boolean) => {
                 max="1000"
                 step="10"
                 class="num-input"
-                :disabled="isLoading"
+                 :disabled="isLoading || settingsBusy"
               >
             </div>
             <div class="num-field">
@@ -261,7 +287,7 @@ const updateTokenAuthSetting = async (enabled: boolean) => {
                 max="10"
                 step="1"
                 class="num-input"
-                :disabled="isLoading"
+                 :disabled="isLoading || settingsBusy"
               >
             </div>
           </div>
@@ -285,9 +311,9 @@ const updateTokenAuthSetting = async (enabled: boolean) => {
           <label class="switch">
             <input
               type="checkbox"
-              v-model="agentRef.require_token_auth"
-              @change="(e) => updateTokenAuthSetting((e.target as HTMLInputElement).checked)"
-              :disabled="isLoading"
+               :checked="agentRef.require_token_auth"
+               @change="(e) => updateTokenAuthSetting((e.target as HTMLInputElement).checked)"
+               :disabled="isLoading || settingsBusy"
             >
             <span class="slider" :class="{ 'enabled': agentRef.require_token_auth }"></span>
           </label>
@@ -331,7 +357,7 @@ const updateTokenAuthSetting = async (enabled: boolean) => {
               type="checkbox"
               :checked="agentRef.allow_attachments"
               @change="(e) => updateAttachmentsSetting((e.target as HTMLInputElement).checked)"
-              :disabled="isLoading"
+               :disabled="isLoading || settingsBusy"
             >
             <span class="slider" :class="{ 'enabled': agentRef.allow_attachments }"></span>
           </label>
@@ -345,6 +371,7 @@ const updateTokenAuthSetting = async (enabled: boolean) => {
               class="file-type-chip"
               :class="{ 'selected': isCategorySelected(category.value) }"
               @click="toggleFileTypeCategory(category.value)"
+              :disabled="isLoading || settingsBusy"
             >
               <svg v-if="isCategorySelected(category.value)" width="14" height="14" viewBox="0 0 24 24" fill="none">
                 <path d="M5 13L9 17L19 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -369,7 +396,7 @@ const updateTokenAuthSetting = async (enabled: boolean) => {
         class="btn-ghost"
         type="button"
         @click="handleCancel"
-        :disabled="isLoading || !hasUnsavedChanges"
+         :disabled="isLoading || settingsBusy || !hasUnsavedChanges"
       >
         取消
       </button>
@@ -377,7 +404,7 @@ const updateTokenAuthSetting = async (enabled: boolean) => {
         class="btn-primary"
         type="button"
         @click="handleSaveSettings"
-        :disabled="isLoading || !hasUnsavedChanges"
+         :disabled="isLoading || settingsBusy || !hasUnsavedChanges || !isRateLimitValid"
       >
         保存修改
       </button>
@@ -747,4 +774,4 @@ input:checked + .slider:before {
     gap: var(--space-md);
   }
 }
-</style> 
+</style>

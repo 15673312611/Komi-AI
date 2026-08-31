@@ -19,6 +19,7 @@ import { ref } from 'vue'
 import { ClipboardIcon, CheckIcon } from '@heroicons/vue/24/outline'
 import Modal from '@/components/common/Modal.vue'
 import { toast } from 'vue-sonner'
+import { copyTextToClipboard } from '@/utils/clipboard'
 
 const props = defineProps<{
   apiKey: string
@@ -32,7 +33,13 @@ const copied = ref(false)
 
 const copyToClipboard = async () => {
   try {
-    await navigator.clipboard.writeText(props.apiKey)
+    if (!(await copyTextToClipboard(props.apiKey))) {
+      toast.error('复制失败', {
+        description: '请手动选中文本复制',
+        duration: 2000
+      })
+      return
+    }
     copied.value = true
     toast.success('复制成功！', {
       description: 'API 密钥已复制到剪贴板',

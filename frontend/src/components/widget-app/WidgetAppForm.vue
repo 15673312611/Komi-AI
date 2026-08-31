@@ -20,6 +20,7 @@ import type { WidgetApp, WidgetAppCreate } from '@/types/widget-app'
 
 const props = defineProps<{
   app?: WidgetApp | null
+  submitting?: boolean
 }>()
 
 // Always emit WidgetAppCreate since the form requires name
@@ -34,6 +35,7 @@ const description = ref(props.app?.description || '')
 const error = ref('')
 
 const handleSubmit = () => {
+  if (props.submitting) return
   error.value = ''
 
   if (!name.value.trim()) {
@@ -91,8 +93,8 @@ const handleSubmit = () => {
       <button type="button" class="btn btn-secondary" @click="emit('cancel')">
         取消
       </button>
-      <button type="submit" class="btn btn-primary">
-        {{ app ? '更新应用' : '立即创建' }}
+      <button type="submit" class="btn btn-primary" :disabled="props.submitting">
+        {{ props.submitting ? '正在保存...' : (app ? '更新应用' : '立即创建') }}
       </button>
     </div>
   </form>
@@ -200,5 +202,10 @@ const handleSubmit = () => {
 
 .btn-secondary:hover {
   background: var(--o10);
+}
+
+.btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 </style>

@@ -35,19 +35,30 @@ export function useJiraIntegration(agentId: string) {
   const selectedIssueType = ref<string>('')
   const loadingProjects = ref(false)
   const loadingIssueTypes = ref(false)
+  const jiraActionLoading = ref(false)
+  let statusRequestVersion = 0
+  let projectsRequestVersion = 0
+  let issueTypesRequestVersion = 0
+  let configRequestVersion = 0
+  let selectionVersion = 0
 
   /**
    * Check if Jira is connected
    */
   const checkJiraStatus = async () => {
+    const requestVersion = ++statusRequestVersion
     try {
       jiraLoading.value = true
       const status = await checkJiraConnection()
+      if (requestVersion !== statusRequestVersion) return
       jiraConnected.value = status.connected
       
       // If Jira is connected, fetch projects
       if (jiraConnected.value && createTicketEnabled.value) {
         await fetchJiraProjects()
+      } else if (!jiraConnected.value) {
+        jiraProjects.value = []
+        jiraIssueTypes.value = []
       }
     } catch (error) {
       console.error('Failed to check Jira status:', error)
@@ -61,11 +72,13 @@ export function useJiraIntegration(agentId: string) {
    */
   const fetchJiraProjects = async () => {
     if (!jiraConnected.value) return
-    
+    const requestVersion = ++projectsRequestVersion
     try {
       loadingProjects.value = true
       const projects = await getJiraProjects()
-      jiraProjects.value = projects
+      if (requestVersion === projectsRequestVersion) {
+        jiraProjects.value = Array.isArray(projects) ? projects : []
+      }
     } catch (error) {
       console.error('Failed to fetch Jira projects:', error)
       toast.error('Failed to load Jira projects')
@@ -78,20 +91,24 @@ export function useJiraIntegration(agentId: string) {
    * Fetch Jira issue types for a project
    */
   const fetchJiraIssueTypes = async (projectKey: string) => {
+    const requestVersion = ++issueTypesRequestVersion
     if (!projectKey) {
       jiraIssueTypes.value = []
+      loadingIssueTypes.value = false
       return
     }
     
     try {
       loadingIssueTypes.value = true
       const issueTypes = await getJiraIssueTypes(projectKey)
-      jiraIssueTypes.value = issueTypes
+      if (requestVersion === issueTypesRequestVersion) {
+        jiraIssueTypes.value = Array.isArray(issueTypes) ? issueTypes : []
+      }
     } catch (error) {
       console.error('Failed to fetch Jira issue types:', error)
       toast.error('Failed to load Jira issue types')
     } finally {
-      loadingIssueTypes.value = false
+      if (requestVersion === issueTypesRequestVersion) loadingIssueTypes.value = false
     }
   }
 
@@ -99,6 +116,7 @@ export function useJiraIntegration(agentId: string) {
    * Toggle Jira ticket creation
    */
   const toggleCreateTicket = async () => {
+    if (jiraActionLoading.value) return false
     // If enabling and Jira is not connected, show error
     if (!createTicketEnabled.value && !jiraConnected.value) {
       toast.error('Cannot enable ticket creation: Jira is not connected', {
@@ -108,6 +126,8 @@ export function useJiraIntegration(agentId: string) {
       return
     }
     
+    const previousValue = createTicketEnabled.value
+    jiraActionLoading.value = true
     try {
       // Toggle the create ticket setting
       const newValue = !createTicketEnabled.value
@@ -117,7 +137,7 @@ export function useJiraIntegration(agentId: string) {
         await saveAgentJiraConfig(agentId, { enabled: false })
         createTicketEnabled.value = false
         toast.success('Ticket creation disabled')
-        return
+        return true
       }
       
       // If enabling but no project/issue type selected yet, just update the UI state
@@ -128,7 +148,7 @@ export function useJiraIntegration(agentId: string) {
         if (jiraProjects.value.length === 0) {
           await fetchJiraProjects()
         }
-        return
+        return true
       }
       
       // If enabling and project/issue type are selected, save the config
@@ -140,9 +160,14 @@ export function useJiraIntegration(agentId: string) {
       
       createTicketEnabled.value = true
       toast.success('Ticket creation enabled')
+      return true
     } catch (error) {
+      createTicketEnabled.value = previousValue
       console.error('Failed to toggle ticket creation:', error)
       toast.error('Failed to update ticket creation setting')
+      return false
+    } finally {
+      jiraActionLoading.value = false
     }
   }
 
@@ -150,6 +175,7 @@ export function useJiraIntegration(agentId: string) {
    * Save Jira configuration
    */
   const saveJiraConfig = async (projectKey?: string, issueTypeId?: string) => {
+    if (jiraActionLoading.value) return false
     // Use provided values or fall back to the state values
     const projectToUse = projectKey || selectedProject.value
     const issueTypeToUse = issueTypeId || selectedIssueType.value
@@ -159,6 +185,7 @@ export function useJiraIntegration(agentId: string) {
       return
     }
     
+    jiraActionLoading.value = true
     try {
       await saveAgentJiraConfig(agentId, {
         enabled: true,
@@ -169,11 +196,16 @@ export function useJiraIntegration(agentId: string) {
       // Update the local state to match what was saved
       selectedProject.value = projectToUse
       selectedIssueType.value = issueTypeToUse
+      createTicketEnabled.value = true
       
       toast.success('Jira configuration saved')
+      return true
     } catch (error) {
       console.error('Failed to save Jira config:', error)
       toast.error('Failed to save Jira configuration')
+      return false
+    } finally {
+      jiraActionLoading.value = false
     }
   }
 
@@ -181,8 +213,11 @@ export function useJiraIntegration(agentId: string) {
    * Fetch agent's Jira configuration
    */
   const fetchAgentJiraConfig = async () => {
+    const requestVersion = ++configRequestVersion
+    const selectionAtStart = selectionVersion
     try {
       const config = await getAgentJiraConfig(agentId)
+      if (requestVersion !== configRequestVersion || selectionAtStart !== selectionVersion) return
       createTicketEnabled.value = config.enabled
       selectedProject.value = config.projectKey || ''
       selectedIssueType.value = config.issueTypeId || ''
@@ -191,6 +226,7 @@ export function useJiraIntegration(agentId: string) {
       if (config.enabled && config.projectKey) {
         // First check if Jira is connected
         const status = await checkJiraConnection()
+        if (requestVersion !== configRequestVersion || selectionAtStart !== selectionVersion) return
         jiraConnected.value = status.connected
         
         if (jiraConnected.value) {
@@ -198,7 +234,8 @@ export function useJiraIntegration(agentId: string) {
           loadingProjects.value = true
           try {
             const projects = await getJiraProjects()
-            jiraProjects.value = projects
+            if (requestVersion !== configRequestVersion || selectionAtStart !== selectionVersion) return
+            jiraProjects.value = Array.isArray(projects) ? projects : []
             
             // If project is selected, fetch issue types
             if (selectedProject.value) {
@@ -221,6 +258,7 @@ export function useJiraIntegration(agentId: string) {
    * Handle project change
    */
   const handleProjectChange = async (projectKey: string) => {
+    selectionVersion++
     if (projectKey !== selectedProject.value) {
       selectedProject.value = projectKey
       selectedIssueType.value = '' // Reset issue type when project changes
@@ -232,6 +270,7 @@ export function useJiraIntegration(agentId: string) {
    * Handle issue type change
    */
   const handleIssueTypeChange = (issueTypeId: string) => {
+    selectionVersion++
     selectedIssueType.value = issueTypeId
   }
 
@@ -246,6 +285,7 @@ export function useJiraIntegration(agentId: string) {
     selectedIssueType,
     loadingProjects,
     loadingIssueTypes,
+    jiraActionLoading,
     
     // Methods
     checkJiraStatus,
@@ -257,4 +297,4 @@ export function useJiraIntegration(agentId: string) {
     handleProjectChange,
     handleIssueTypeChange
   }
-} 
+}

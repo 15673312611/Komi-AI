@@ -102,18 +102,14 @@ const channelsService = {
   /** All connected messaging channel accounts for the organization */
   async listAccounts(): Promise<ChannelAccount[]> {
     const response = await api.get('/channels/accounts')
-    return response.data
+    return Array.isArray(response?.data) ? response.data : []
   },
 
   async listActiveWhatsAppAccounts(): Promise<ChannelAccount[]> {
-    try {
-      const accounts = await this.listAccounts()
-      return accounts.filter(
-        (account) => account.channel_type === 'whatsapp' && account.is_active,
-      )
-    } catch {
-      return []
-    }
+    const accounts = await this.listAccounts()
+    return accounts.filter(
+      (account) => account.channel_type === 'whatsapp' && account.is_active,
+    )
   },
 
   /** Connect a Telegram bot by token */
@@ -252,7 +248,7 @@ const channelsService = {
 
   async listSmsProviders(): Promise<SmsProviderInfo[]> {
     const response = await api.get('/channels/sms/providers')
-    return response.data
+    return Array.isArray(response?.data) ? response.data : []
   },
 
   async connectSms(payload: {

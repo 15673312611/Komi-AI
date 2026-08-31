@@ -66,9 +66,9 @@ describe('HumanAgentView', () => {
     const tabButtons = wrapper.findAll('.tab-pill')
     expect(tabButtons).toHaveLength(3)
     // Labels may include an optional count badge, so match on the label text.
-    expect(tabButtons[0].text()).toContain('People')
-    expect(tabButtons[1].text()).toContain('Teams')
-    expect(tabButtons[2].text()).toContain('Roles')
+    expect(tabButtons[0].text()).toContain('坐席成员')
+    expect(tabButtons[1].text()).toContain('业务分组')
+    expect(tabButtons[2].text()).toContain('权限角色')
   })
 
   it('shows UserList component by default', () => {
@@ -121,4 +121,4 @@ describe('HumanAgentView', () => {
     const dashboardLayout = wrapper.findComponent({ name: 'DashboardLayout' })
     expect(dashboardLayout.exists()).toBe(true)
   })
-}) 
+})

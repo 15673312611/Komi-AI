@@ -35,6 +35,7 @@ const emit = defineEmits<{
 const url = ref('')
 const mode = ref<FaqImportMode>('qa')
 const pdfFile = ref<File | null>(null)
+const MAX_PDF_BYTES = 25 * 1024 * 1024
 // Article mode only: keep every imported article at the URL it already has.
 const preserveUrls = ref(true)
 
@@ -77,8 +78,25 @@ watch(mode, () => {
 const canSubmit = computed(() => {
   if (props.submitting) return false
   if (mode.value === 'pdf') return pdfFile.value !== null
-  return url.value.trim().length > 0
+  return normalizedUrl.value !== null
 })
+
+function normalizeImportUrl(value: string): string | null {
+  const trimmed = value.trim()
+  if (!trimmed) return null
+  const candidate = /^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed)
+    ? trimmed
+    : `https://${trimmed.replace(/^\/+/, '')}`
+  try {
+    const parsed = new URL(candidate)
+    if (!/^https?:$/.test(parsed.protocol) || !parsed.hostname) return null
+    return candidate
+  } catch {
+    return null
+  }
+}
+
+const normalizedUrl = computed(() => normalizeImportUrl(url.value))
 
 const hint = computed(() => {
   if (mode.value === 'articles')
@@ -98,8 +116,19 @@ const fileSize = computed(() => {
 const dragOver = ref(false)
 
 function setPdf(file: File | null | undefined) {
-  if (file && file.type === 'application/pdf') pdfFile.value = file
-  else if (file) toast.error('请选择 PDF 格式的文件')
+  if (!file) return
+  const isPdf = file.type.toLowerCase() === 'application/pdf' || /\.pdf$/i.test(file.name)
+  if (!isPdf) {
+    pdfFile.value = null
+    toast.error('请选择 PDF 格式的文件')
+    return
+  }
+  if (file.size > MAX_PDF_BYTES) {
+    pdfFile.value = null
+    toast.error('PDF 文件不能超过 25 MB')
+    return
+  }
+  pdfFile.value = file
 }
 
 function onPdfChange(event: Event) {
@@ -117,8 +146,11 @@ function submit() {
     if (pdfFile.value) emit('submit-pdf', pdfFile.value)
     return
   }
-  const cleaned = url.value.trim().replace(/^https?:\/\//i, '')
-  emit('submit', `https://${cleaned}`, mode.value, mode.value === 'articles' && preserveUrls.value)
+  if (!normalizedUrl.value) {
+    toast.error('请输入有效的 HTTP(S) 地址')
+    return
+  }
+  emit('submit', normalizedUrl.value, mode.value, mode.value === 'articles' && preserveUrls.value)
 }
 </script>
 

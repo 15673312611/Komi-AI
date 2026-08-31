@@ -28,6 +28,8 @@ export function useRoles() {
   const showDeleteModal = ref(false)
   const selectedRole = ref<Role | null>(null)
   const deleteError = ref('')
+  const actionBusy = ref<string | null>(null)
+  let rolesRequestVersion = 0
 
   const openCreateModal = () => {
     selectedRole.value = null
@@ -35,21 +37,30 @@ export function useRoles() {
   }
 
   const fetchRoles = async () => {
+    const requestVersion = ++rolesRequestVersion
     try {
       loading.value = true
-      roles.value = await listRoles()
+      error.value = ''
+      const result = await listRoles()
+      if (requestVersion !== rolesRequestVersion) return false
+      roles.value = result
+      return true
     } catch (err) {
+      if (requestVersion !== rolesRequestVersion) return false
       console.error('Failed to load roles:', err)
       error.value = 'Failed to load roles'
+      return false
     } finally {
-      loading.value = false
+      if (requestVersion === rolesRequestVersion) loading.value = false
     }
   }
 
   const handleCreateRole = async (roleData: Partial<Role>) => {
+    if (actionBusy.value) return false
     try {
-      console.log('Creating role:', roleData)
+      actionBusy.value = 'create'
       loading.value = true
+      error.value = ''
       const newRole = await createRole(roleData)
       roles.value.unshift(newRole)
       showCreateModal.value = false
@@ -57,14 +68,17 @@ export function useRoles() {
         duration: 4000,
         closeButton: true
       })
+      return true
     } catch (err) {
       console.error('Error creating role:', err)
       toast.error('Failed to create role', {
         duration: 4000,
         closeButton: true
       })
+      return false
     } finally {
       loading.value = false
+      actionBusy.value = null
     }
   }
 
@@ -75,11 +89,14 @@ export function useRoles() {
   }
 
   const handleUpdateRole = async (roleData: Partial<Role>) => {
-    if (!selectedRole.value) return
+    if (!selectedRole.value || actionBusy.value) return false
+    const roleId = selectedRole.value.id
+    actionBusy.value = 'update'
 
     try {
       loading.value = true
-      const updatedRole = await updateRole(selectedRole.value.id, roleData)
+      error.value = ''
+      const updatedRole = await updateRole(roleId, roleData)
       const index = roles.value.findIndex(r => r.id === updatedRole.id)
       if (index !== -1) {
         roles.value[index] = updatedRole
@@ -89,14 +106,17 @@ export function useRoles() {
         duration: 4000,
         closeButton: true
       })
+      return true
     } catch (err) {
       console.error('Error updating role:', err)
       toast.error('Failed to update role', {
         duration: 4000,
         closeButton: true
       })
+      return false
     } finally {
       loading.value = false
+      actionBusy.value = null
     }
   }
 
@@ -107,23 +127,28 @@ export function useRoles() {
   }
 
   const confirmDeleteRole = async () => {
-    if (!selectedRole.value) return
+    if (!selectedRole.value || actionBusy.value) return false
+    const roleId = selectedRole.value.id
+    actionBusy.value = 'delete'
 
     try {
       loading.value = true
       deleteError.value = ''
-      await deleteRole(selectedRole.value.id)
-      roles.value = roles.value.filter(r => r.id !== selectedRole.value?.id)
+      await deleteRole(roleId)
+      roles.value = roles.value.filter(r => r.id !== roleId)
       showDeleteModal.value = false
       toast.success('Role deleted successfully', {
         duration: 4000,
         closeButton: true
       })
+      return true
     } catch (err: any) {
       console.error('Error deleting role:', err)
       deleteError.value = err.response?.data?.detail || 'Failed to delete role'
+      return false
     } finally {
       loading.value = false
+      actionBusy.value = null
     }
   }
 
@@ -136,6 +161,7 @@ export function useRoles() {
     showEditModal,
     showDeleteModal,
     selectedRole,
+    actionBusy,
     fetchRoles,
     openCreateModal,
     handleCreateRole,
@@ -144,4 +170,4 @@ export function useRoles() {
     handleDeleteRole,
     confirmDeleteRole
   }
-} 
+}

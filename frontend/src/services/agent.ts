@@ -27,7 +27,7 @@ export const agentService = {
    */
   async getAgentRoster(): Promise<Array<{ id: string; name: string; display_name: string | null }>> {
     const response = await api.get('/agent/roster')
-    return response.data
+    return Array.isArray(response?.data) ? response.data : []
   },
 
   async getOrganizationAgents(): Promise<Agent[]> {
@@ -37,9 +37,10 @@ export const agentService = {
     
     const endpoint = hasShopParam ? '/agent/list/shopify' : '/agent/list'
     const response = await api.get(endpoint)
+    const agents = Array.isArray(response?.data) ? response.data : []
     // Store agents in local storage
-    agentStorage.setAgents(response.data)
-    return response.data
+    agentStorage.setAgents(agents)
+    return agents
   },
 
   async createAgent(data: {

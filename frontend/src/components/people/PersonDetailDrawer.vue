@@ -138,7 +138,12 @@ const whatsappAccounts = ref<ChannelAccount[]>([])
 const showNewConversation = ref(false)
 
 async function loadWhatsAppAccounts() {
-  whatsappAccounts.value = await channelsService.listActiveWhatsAppAccounts()
+  try {
+    whatsappAccounts.value = await channelsService.listActiveWhatsAppAccounts()
+  } catch (error) {
+    console.error('Failed to load WhatsApp accounts:', error)
+    whatsappAccounts.value = []
+  }
 }
 
 const whatsappDisabledReason = computed(() => {

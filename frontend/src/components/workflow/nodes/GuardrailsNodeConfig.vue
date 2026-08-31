@@ -16,6 +16,8 @@ limitations under the License.
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import { toast } from 'vue-sonner'
+import { copyTextToClipboard } from '@/utils/clipboard'
 
 interface GuardrailsNodeData {
   enabled_guardrails: string[]
@@ -89,8 +91,11 @@ const getVariableSyntax = (fieldName: string) => {
 const copyVariableToClipboard = async (variable: Variable) => {
   const syntax = getVariableSyntax(variable.fieldName)
   try {
-    await navigator.clipboard.writeText(syntax)
-    // Could add a toast notification here if needed
+    if (await copyTextToClipboard(syntax)) {
+      toast.success('变量已复制到剪贴板')
+    } else {
+      toast.error('复制失败，请手动选择并复制')
+    }
   } catch (err) {
     console.error('Failed to copy variable:', err)
   }

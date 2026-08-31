@@ -90,12 +90,19 @@ const handleContinue = async () => {
   }
 
   advancing.value = true
+  let completed = true
   try {
-    if (urls.value.length) await handleUrlUpload()
-    if (files.value.length) await handleFileUpload()
+    if (urls.value.length) {
+      await handleUrlUpload()
+      completed = !uploadError.value
+    }
+    if (completed && files.value.length) {
+      await handleFileUpload()
+      completed = !uploadError.value
+    }
   } finally {
     advancing.value = false
-    emit('next')
+    if (completed) emit('next')
   }
 }
 

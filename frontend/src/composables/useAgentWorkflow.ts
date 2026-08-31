@@ -21,21 +21,31 @@ import type { WorkflowResponse, WorkflowCreate } from '@/types/workflow'
 
 export function useAgentWorkflow(agentId: string) {
   const workflow = ref<WorkflowResponse | null>(null)
-  const workflowLoading = ref(false)
+  const workflowFetchLoading = ref(false)
+  const workflowMutationLoading = ref(false)
+  const workflowLoading = computed(
+    () => workflowFetchLoading.value || workflowMutationLoading.value,
+  )
   const workflowError = ref('')
   const createWorkflowLoading = ref(false)
+  let workflowRequestVersion = 0
+  let fetchRequestVersion = 0
 
   const hasWorkflow = computed(() => workflow.value !== null)
 
   const fetchWorkflow = async () => {
+    const requestVersion = ++workflowRequestVersion
+    const fetchVersion = ++fetchRequestVersion
     try {
-      workflowLoading.value = true
+      workflowFetchLoading.value = true
       workflowError.value = ''
-      workflow.value = await workflowService.getWorkflowByAgent(agentId)
+      const nextWorkflow = await workflowService.getWorkflowByAgent(agentId)
+      if (requestVersion === workflowRequestVersion) workflow.value = nextWorkflow
     } catch (error: any) {
       console.error('Error fetching workflow:', error)
-      
+
       // Don't show error toast for 404 - it means agent doesn't have a workflow yet (normal state)
+      if (requestVersion !== workflowRequestVersion) return
       if (error.response?.status !== 404) {
         workflowError.value = error.response?.data?.detail || '获取工作流失败'
         toast.error('获取工作流失败', {
@@ -49,12 +59,15 @@ export function useAgentWorkflow(agentId: string) {
         workflowError.value = ''
       }
     } finally {
-      workflowLoading.value = false
+      if (fetchVersion === fetchRequestVersion) workflowFetchLoading.value = false
     }
   }
 
   const createWorkflow = async (data: Omit<WorkflowCreate, 'agent_id'>) => {
+    if (workflowMutationLoading.value || workflowFetchLoading.value) return null
+    const requestVersion = ++workflowRequestVersion
     try {
+      workflowMutationLoading.value = true
       createWorkflowLoading.value = true
       workflowError.value = ''
       
@@ -64,7 +77,7 @@ export function useAgentWorkflow(agentId: string) {
       }
       
       const newWorkflow = await workflowService.createWorkflow(workflowData)
-      workflow.value = newWorkflow
+      if (requestVersion === workflowRequestVersion) workflow.value = newWorkflow
       
       toast.success('工作流创建成功', {
         duration: 4000,
@@ -74,13 +87,16 @@ export function useAgentWorkflow(agentId: string) {
       return newWorkflow
     } catch (error: any) {
       console.error('Error creating workflow:', error)
-      workflowError.value = error.response?.data?.detail || '创建工作流失败'
-      toast.error('创建工作流失败', {
-        duration: 4000,
-        closeButton: true
-      })
+      if (requestVersion === workflowRequestVersion) {
+        workflowError.value = error.response?.data?.detail || '创建工作流失败'
+        toast.error('创建工作流失败', {
+          duration: 4000,
+          closeButton: true
+        })
+      }
       throw error
     } finally {
+      workflowMutationLoading.value = false
       createWorkflowLoading.value = false
     }
   }
@@ -89,15 +105,21 @@ export function useAgentWorkflow(agentId: string) {
     workflowIdOrData: string | Partial<WorkflowCreate>,
     maybeData?: Partial<WorkflowCreate>
   ) => {
+    if (workflowMutationLoading.value || workflowFetchLoading.value) return null
+    const targetId = typeof workflowIdOrData === 'string' ? workflowIdOrData : (workflow.value?.id || '')
+    const targetData = typeof workflowIdOrData === 'string' ? (maybeData || {}) : workflowIdOrData
+    if (!targetId) {
+      workflowError.value = '未找到可更新的工作流'
+      toast.error('未找到可更新的工作流', { duration: 4000, closeButton: true })
+      return null
+    }
+    const requestVersion = ++workflowRequestVersion
     try {
-      workflowLoading.value = true
+      workflowMutationLoading.value = true
       workflowError.value = ''
-      
-      const targetId = typeof workflowIdOrData === 'string' ? workflowIdOrData : (workflow.value?.id || '')
-      const targetData = typeof workflowIdOrData === 'string' ? (maybeData || {}) : workflowIdOrData
-      
+
       const updatedWorkflow = await workflowService.updateWorkflow(targetId, targetData)
-      workflow.value = updatedWorkflow
+      if (requestVersion === workflowRequestVersion) workflow.value = updatedWorkflow
       
       toast.success('工作流更新成功', {
         duration: 4000,
@@ -107,25 +129,33 @@ export function useAgentWorkflow(agentId: string) {
       return updatedWorkflow
     } catch (error: any) {
       console.error('Error updating workflow:', error)
-      workflowError.value = error.response?.data?.detail || '更新工作流失败'
-      toast.error('更新工作流失败', {
-        duration: 4000,
-        closeButton: true
-      })
+      if (requestVersion === workflowRequestVersion) {
+        workflowError.value = error.response?.data?.detail || '更新工作流失败'
+        toast.error('更新工作流失败', {
+          duration: 4000,
+          closeButton: true
+        })
+      }
       throw error
     } finally {
-      workflowLoading.value = false
+      workflowMutationLoading.value = false
     }
   }
 
   const deleteWorkflow = async (workflowId?: string) => {
+    if (workflowMutationLoading.value || workflowFetchLoading.value) return false
+    const targetId = workflowId || workflow.value?.id || ''
+    if (!targetId) {
+      workflowError.value = '未找到可删除的工作流'
+      toast.error('未找到可删除的工作流', { duration: 4000, closeButton: true })
+      return false
+    }
+    const requestVersion = ++workflowRequestVersion
     try {
-      workflowLoading.value = true
+      workflowMutationLoading.value = true
       workflowError.value = ''
-      
-      const targetId = workflowId || workflow.value?.id || ''
       await workflowService.deleteWorkflow(targetId)
-      workflow.value = null
+      if (requestVersion === workflowRequestVersion) workflow.value = null
       
       toast.success('工作流已成功删除', {
         duration: 4000,
@@ -133,14 +163,16 @@ export function useAgentWorkflow(agentId: string) {
       })
     } catch (error: any) {
       console.error('Error deleting workflow:', error)
-      workflowError.value = error.response?.data?.detail || '删除工作流失败'
-      toast.error('删除工作流失败', {
-        duration: 4000,
-        closeButton: true
-      })
+      if (requestVersion === workflowRequestVersion) {
+        workflowError.value = error.response?.data?.detail || '删除工作流失败'
+        toast.error('删除工作流失败', {
+          duration: 4000,
+          closeButton: true
+        })
+      }
       throw error
     } finally {
-      workflowLoading.value = false
+      workflowMutationLoading.value = false
     }
   }
 

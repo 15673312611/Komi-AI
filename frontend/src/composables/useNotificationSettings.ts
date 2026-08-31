@@ -23,16 +23,23 @@ export function useNotificationSettings() {
   const isLoading = ref(true)
   const isSaving = ref(false)
   const error = ref<string | null>(null)
+  let loadVersion = 0
+  let mutationVersion = 0
 
   async function load() {
+    const version = ++loadVersion
+    const mutationAtStart = mutationVersion
     isLoading.value = true
     try {
-      settings.value = await notificationService.getSettings()
+      const next = await notificationService.getSettings()
+      if (version !== loadVersion || mutationAtStart !== mutationVersion) return
+      settings.value = next
       error.value = null
     } catch (e: any) {
+      if (version !== loadVersion || mutationAtStart !== mutationVersion) return
       error.value = e?.message || 'Failed to load notification settings'
     } finally {
-      isLoading.value = false
+      if (version === loadVersion) isLoading.value = false
     }
   }
 
@@ -40,16 +47,21 @@ export function useNotificationSettings() {
   // so a slow round-trip never makes the switch feel unresponsive.
   async function save(patch: Partial<NotificationSettings>) {
     if (!settings.value || isSaving.value) return
+    const mutation = ++mutationVersion
     isSaving.value = true
     const previous = { ...settings.value }
     Object.assign(settings.value, patch)
     try {
-      settings.value = await notificationService.updateSettings(patch)
+      const next = await notificationService.updateSettings(patch)
+      if (mutation === mutationVersion) {
+        settings.value = next
+        error.value = null
+      }
     } catch (e: any) {
-      settings.value = previous
+      if (mutation === mutationVersion) settings.value = previous
       toast.error(e?.message || 'Failed to save notification settings')
     } finally {
-      isSaving.value = false
+      if (mutation === mutationVersion) isSaving.value = false
     }
   }
 

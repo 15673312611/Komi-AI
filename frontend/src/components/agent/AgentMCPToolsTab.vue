@@ -29,6 +29,7 @@ const {
   isLoading,
   isLoadingAvailable,
   error,
+  actionBusy,
   showCreateModal,
   showLinkModal,
   showDeleteConfirm,
@@ -90,11 +91,13 @@ const handleAddHeader = () => {
 }
 
 const openCreateModal = () => {
+  if (actionBusy.value || isLoading.value) return
   resetCreateForm()
   showCreateModal.value = true
 }
 
 const openLinkModal = () => {
+  if (actionBusy.value || isLoading.value || isLoadingAvailable.value) return
   fetchAvailableMCPTools()
   showLinkModal.value = true
 }
@@ -123,7 +126,7 @@ onMounted(() => {
         </p>
       </div>
       <div class="header-actions">
-        <button class="action-button" @click="openCreateModal">
+        <button class="action-button" @click="openCreateModal" :disabled="!!actionBusy || isLoading">
           <svg class="button-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <circle cx="12" cy="12" r="10"/>
             <line x1="12" y1="8" x2="12" y2="16"/>
@@ -131,7 +134,7 @@ onMounted(() => {
           </svg>
           新建工具
         </button>
-        <button class="action-button secondary" @click="openLinkModal">
+        <button class="action-button secondary" @click="openLinkModal" :disabled="!!actionBusy || isLoading || isLoadingAvailable">
           <svg class="button-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
             <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
@@ -196,13 +199,13 @@ onMounted(() => {
               </span>
               <button
                 class="test-button"
-                :disabled="testingToolId !== null"
+                :disabled="testingToolId !== null || !!actionBusy"
                 @click="testMCPTool(tool.id)"
                 title="连接服务端并列出其可用函数工具"
               >
                 {{ testingToolId === tool.id ? '正在检测…' : '测试连通' }}
               </button>
-              <button class="remove-button" @click="confirmDelete(tool.id)" title="移除此工具">
+              <button class="remove-button" @click="confirmDelete(tool.id)" title="移除此工具" :disabled="!!actionBusy || testingToolId !== null">
                 移除
               </button>
             </div>
@@ -439,14 +442,14 @@ onMounted(() => {
         </div>
 
         <div class="modal-footer">
-          <button type="button" class="secondary-button" @click="showCreateModal = false">
+          <button type="button" class="secondary-button" @click="showCreateModal = false" :disabled="!!actionBusy">
             取消
           </button>
           <button 
             type="button" 
             class="primary-button" 
             @click="handleCreateTool"
-            :disabled="!createForm.name.trim()"
+            :disabled="!createForm.name.trim() || !!actionBusy"
           >
             创建工具
           </button>
@@ -498,6 +501,7 @@ onMounted(() => {
                   v-if="!isToolLinked(tool.id)"
                   class="link-button"
                   @click="linkMCPTool(tool.id)"
+                  :disabled="!!actionBusy"
                 >
                   <svg class="button-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
@@ -509,6 +513,7 @@ onMounted(() => {
                   v-else
                   class="unlink-button"
                   @click="unlinkMCPTool(tool.id)"
+                  :disabled="!!actionBusy"
                 >
                   <svg class="button-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M18 6L6 18"/>
@@ -536,11 +541,11 @@ onMounted(() => {
         </div>
         
         <div class="modal-footer">
-          <button type="button" class="secondary-button" @click="cancelDelete">
+          <button type="button" class="secondary-button" @click="cancelDelete" :disabled="!!actionBusy">
             取消
           </button>
-          <button type="button" class="danger-button" @click="deleteMCPTool">
-            确认移除
+          <button type="button" class="danger-button" @click="deleteMCPTool" :disabled="!!actionBusy">
+            {{ actionBusy ? '正在移除…' : '确认移除' }}
           </button>
         </div>
       </div>

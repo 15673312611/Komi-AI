@@ -21,6 +21,7 @@ import { listPermissions, type Permission } from '@/services/roles'
 
 const props = defineProps<{
   role?: Role | null
+  submitting?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -39,7 +40,8 @@ const error = ref('')
 watch(() => props.role, (newRole) => {
   name.value = newRole?.name || ''
   description.value = newRole?.description || ''
-  selectedPermissions.value = newRole?.permissions || []
+  // Keep edits isolated from the list item until the API confirms them.
+  selectedPermissions.value = [...(newRole?.permissions || [])]
 }, { immediate: true })
 
 const fetchPermissions = async () => {
@@ -55,14 +57,20 @@ const fetchPermissions = async () => {
 }
 
 const handleSubmit = () => {
+  if (props.submitting || loading.value) return
+  const trimmedName = name.value.trim()
+  if (!trimmedName) {
+    error.value = '角色名称不能为空'
+    return
+  }
   if (!selectedPermissions.value.length) {
     error.value = '请至少勾选一项权限'
     return
   }
 
   emit('submit', {
-    name: name.value,
-    description: description.value,
+    name: trimmedName,
+    description: description.value.trim() || undefined,
     is_default: false,
     permissions: selectedPermissions.value
   })
@@ -73,6 +81,17 @@ const handleSubmit = () => {
     description.value = ''
     selectedPermissions.value = []
     error.value = ''
+  }
+}
+
+const togglePermission = (permission: Permission, checked: boolean) => {
+  if (props.submitting || loading.value) return
+  if (checked) {
+    if (!selectedPermissions.value.some(item => item.id === permission.id)) {
+      selectedPermissions.value = [...selectedPermissions.value, permission]
+    }
+  } else {
+    selectedPermissions.value = selectedPermissions.value.filter(item => item.id !== permission.id)
   }
 }
 
@@ -120,13 +139,8 @@ onMounted(fetchPermissions)
           <input
             type="checkbox"
             :checked="selectedPermissions.map(p => p.id).includes(permission.id)"
-            @change="($event) => {
-              if (($event.target as HTMLInputElement).checked) {
-                selectedPermissions.push(permission)
-              } else {
-                selectedPermissions = selectedPermissions.filter(p => p.id !== permission.id)
-              }
-            }"
+            :disabled="loading || submitting"
+            @change="togglePermission(permission, ($event.target as HTMLInputElement).checked)"
           />
           <div class="permission-info">
             <span class="permission-name">{{ permission.name }}</span>
@@ -142,8 +156,8 @@ onMounted(fetchPermissions)
       <button type="button" class="btn btn-secondary" @click="emit('cancel')">
         取消
       </button>
-      <button type="submit" class="btn btn-primary">
-        {{ props.role ? '保存修改' : '确认创建' }}
+      <button type="submit" class="btn btn-primary" :disabled="loading || submitting">
+        {{ loading ? '正在加载权限...' : submitting ? '正在保存...' : (props.role ? '保存修改' : '确认创建') }}
       </button>
     </div>
   </form>
@@ -286,6 +300,11 @@ textarea.form-input {
   background: var(--o10);
 }
 
+.btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .error-message {
   color: var(--error-color);
   margin-bottom: var(--space-md);
@@ -297,4 +316,4 @@ textarea.form-input {
   padding: var(--space-lg);
   color: var(--muted);
 }
-</style> 
+</style>

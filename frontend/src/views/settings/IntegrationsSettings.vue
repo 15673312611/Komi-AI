@@ -56,10 +56,13 @@ interface ShopifyShop {
 const shopifyConnected = ref(false)
 const shopifyShopDomain = ref('')
 const shopifyLoading = ref(true)
+const shopifyLoadError = ref<string | null>(null)
 
 // Messaging channel state (Telegram + Meta channels share one accounts list)
 const channelAccounts = ref<ChannelAccount[]>([])
 const channelsLoading = ref(true)
+const channelsLoadError = ref<string | null>(null)
+let channelsRequestVersion = 0
 const showTelegramModal = ref(false)
 // Which Meta connect modal is open (null = none)
 const metaModalChannel = ref<'whatsapp' | 'messenger' | 'instagram' | null>(null)
@@ -78,6 +81,9 @@ const CRM_PROVIDERS: CrmProvider[] = ['hubspot', 'pipedrive']
 // CRM lead-push connections
 const crmConnections = ref<CrmConnection[]>([])
 const crmLoading = ref(true)
+const crmLoadError = ref<string | null>(null)
+const crmActionProvider = ref<CrmProvider | null>(null)
+let crmRequestVersion = 0
 // 403 from the connections endpoint = plan doesn't include crm_sync
 const crmUpgradeMessage = ref<string | null>(null)
 
@@ -85,18 +91,25 @@ const crmFor = (provider: CrmProvider) =>
   crmConnections.value.find(c => c.provider === provider) ?? null
 
 const fetchCrmConnections = async () => {
+  const requestVersion = ++crmRequestVersion
   try {
     crmLoading.value = true
-    crmConnections.value = await crmService.listConnections()
+    crmLoadError.value = null
     crmUpgradeMessage.value = null
+    crmConnections.value = []
+    const connections = await crmService.listConnections()
+    if (requestVersion !== crmRequestVersion) return
+    crmConnections.value = connections
   } catch (error: any) {
+    if (requestVersion !== crmRequestVersion) return
     if (error?.response?.status === 403) {
       crmUpgradeMessage.value = error.response?.data?.detail || 'CRM sync is not available in your current plan.'
     } else {
       console.error('Error loading CRM connections:', error)
+      crmLoadError.value = 'CRM 连接列表加载失败，请重试'
     }
   } finally {
-    crmLoading.value = false
+    if (requestVersion === crmRequestVersion) crmLoading.value = false
   }
 }
 
@@ -109,6 +122,8 @@ const connectCrm = (provider: CrmProvider) => {
 }
 
 const testCrm = async (provider: CrmProvider) => {
+  if (crmLoading.value || crmActionProvider.value) return
+  crmActionProvider.value = provider
   try {
     const result = await crmService.testConnection(provider)
     if (result.ok) {
@@ -118,19 +133,22 @@ const testCrm = async (provider: CrmProvider) => {
     }
   } catch (error: any) {
     toast.error(error?.response?.data?.detail || `${provider} connection check failed`)
+  } finally {
+    if (crmActionProvider.value === provider) crmActionProvider.value = null
   }
 }
 
 const handleDisconnectCrm = async (provider: CrmProvider) => {
+  if (crmLoading.value || crmActionProvider.value) return
+  crmActionProvider.value = provider
   try {
-    crmLoading.value = true
     await crmService.disconnect(provider)
     crmConnections.value = crmConnections.value.filter(c => c.provider !== provider)
     toast.success(`${provider === 'hubspot' ? 'HubSpot' : 'Pipedrive'} disconnected successfully`)
   } catch (error: any) {
     toast.error(error?.response?.data?.detail || `Error disconnecting ${provider}`)
   } finally {
-    crmLoading.value = false
+    if (crmActionProvider.value === provider) crmActionProvider.value = null
     showDisconnectConfirm.value = false
     disconnectingIntegration.value = null
   }
@@ -180,13 +198,20 @@ const accountsFor = (channelType: string) =>
 const telegramAccounts = computed(() => accountsFor('telegram'))
 
 const fetchChannelAccounts = async () => {
+  const requestVersion = ++channelsRequestVersion
   try {
     channelsLoading.value = true
-    channelAccounts.value = await channelsService.listAccounts()
+    channelsLoadError.value = null
+    channelAccounts.value = []
+    const accounts = await channelsService.listAccounts()
+    if (requestVersion !== channelsRequestVersion) return
+    channelAccounts.value = accounts
   } catch (error) {
+    if (requestVersion !== channelsRequestVersion) return
     console.error('Error loading channel accounts:', error)
+    channelsLoadError.value = '渠道账号列表加载失败，请重试'
   } finally {
-    channelsLoading.value = false
+    if (requestVersion === channelsRequestVersion) channelsLoading.value = false
   }
 }
 
@@ -202,9 +227,16 @@ const onChannelConnected = async () => {
 
 // Shared disconnect for messaging channels; Telegram also removes its webhook
 const disconnectChannelAccounts = async (channelType: string, label: string) => {
+  if (channelsLoading.value) return
+  const accounts = accountsFor(channelType)
+  if (!accounts.length) {
+    showDisconnectConfirm.value = false
+    disconnectingIntegration.value = null
+    return
+  }
   try {
     channelsLoading.value = true
-    for (const account of accountsFor(channelType)) {
+    for (const account of accounts) {
       if (channelType === 'telegram') {
         await channelsService.disconnectTelegram(account.id)
       } else if (channelType === 'slack') {
@@ -222,6 +254,9 @@ const disconnectChannelAccounts = async (channelType: string, label: string) => 
     channelAccounts.value = channelAccounts.value.filter(a => a.channel_type !== channelType)
     toast.success(`${label} 已成功断开连接`)
   } catch (error: any) {
+    // A batch can partially succeed. Re-read the server state before rendering
+    // the next action so the card cannot claim every account is still active.
+    await fetchChannelAccounts()
     toast.error(error?.response?.data?.detail || `断开 ${label} 连接失败`)
   } finally {
     channelsLoading.value = false
@@ -247,6 +282,7 @@ const router = useRouter()
 const jiraConnected = ref(false)
 const jiraSiteUrl = ref('')
 const isLoading = ref(true)
+const jiraLoadError = ref<string | null>(null)
 const showDisconnectConfirm = ref(false)
 const disconnectingIntegration = ref<string | null>(null)
 // OAuth connect error, tagged with the integration it belongs to so the banner
@@ -257,12 +293,14 @@ const connectionError = ref<{ integration: string; message: string } | null>(nul
 const fetchJiraStatus = async () => {
   try {
     isLoading.value = true
+    jiraLoadError.value = null
     const data = await checkJiraConnection()
     jiraConnected.value = data.connected
     jiraSiteUrl.value = data.site_url || ''
   } catch (error) {
     console.error('Error checking Jira connection:', error)
     jiraConnected.value = false
+    jiraLoadError.value = 'Jira 连接状态加载失败，请重试'
   } finally {
     isLoading.value = false
   }
@@ -321,12 +359,14 @@ const handleDisconnectJira = async () => {
 const fetchShopifyStatus = async () => {
   try {
     shopifyLoading.value = true
+    shopifyLoadError.value = null
     const data = await checkShopifyConnection()
     shopifyConnected.value = data.connected
     shopifyShopDomain.value = data.shop_domain || ''
   } catch (error) {
     console.error('Error checking Shopify connection:', error)
     shopifyConnected.value = false
+    shopifyLoadError.value = 'Shopify 连接状态加载失败，请重试'
   } finally {
     shopifyLoading.value = false
   }
@@ -387,6 +427,9 @@ interface IntegrationCard {
   color?: string;
   /** Inline warning under the description (expired connection, sync failures). */
   warning?: string;
+  /** Data-fetch failure. Do not present a failed status as "not connected". */
+  loadError?: string | null;
+  retryAction?: () => void;
   connectAction?: () => void;
   disconnectAction?: () => void;
   /** An extra action on the connected card, alongside Manage/Disconnect. */
@@ -406,6 +449,8 @@ const availableIntegrations = computed<IntegrationCard[]>(() => [
     connected: jiraConnected.value,
     siteUrl: jiraSiteUrl.value,
     isLoading: isLoading.value,
+    loadError: jiraLoadError.value,
+    retryAction: fetchJiraStatus,
     connectAction: connectJira,
     disconnectAction: handleDisconnectJira
   },
@@ -419,6 +464,8 @@ const availableIntegrations = computed<IntegrationCard[]>(() => [
     connected: shopifyConnected.value,
     shopDomain: shopifyShopDomain.value,
     isLoading: shopifyLoading.value,
+    loadError: shopifyLoadError.value,
+    retryAction: fetchShopifyStatus,
     disconnectAction: handleDisconnectShopify
   },
   {
@@ -431,6 +478,8 @@ const availableIntegrations = computed<IntegrationCard[]>(() => [
     connected: accountsFor('slack').length > 0,
     teamName: accountsFor('slack').map(a => a.display_name).filter(Boolean).join(', '),
     isLoading: channelsLoading.value,
+    loadError: channelsLoadError.value,
+    retryAction: fetchChannelAccounts,
     connectAction: connectSlack,
     disconnectAction: handleDisconnectSlack
   },
@@ -444,6 +493,8 @@ const availableIntegrations = computed<IntegrationCard[]>(() => [
     connected: telegramAccounts.value.length > 0,
     teamName: telegramAccounts.value.map(a => a.display_name).filter(Boolean).join(', '),
     isLoading: channelsLoading.value,
+    loadError: channelsLoadError.value,
+    retryAction: fetchChannelAccounts,
     connectAction: () => { showTelegramModal.value = true },
     disconnectAction: handleDisconnectTelegram
   },
@@ -470,6 +521,8 @@ const availableIntegrations = computed<IntegrationCard[]>(() => [
       connected: accounts.length > 0,
       teamName: accounts.map(a => a.display_name).filter(Boolean).join(', '),
       isLoading: channelsLoading.value,
+      loadError: channelsLoadError.value,
+      retryAction: fetchChannelAccounts,
       connectAction: () => { metaModalChannel.value = channel },
       disconnectAction: meta.disconnect,
       // Templates are WhatsApp-only — the other Meta channels have no equivalent.
@@ -506,7 +559,18 @@ const availableIntegrations = computed<IntegrationCard[]>(() => [
       teamName: displayName,
       isLoading: channelsLoading.value,
       connectAction: () => { credentialModalAccount.value = null; credentialModalChannel.value = channel },
-      disconnectAction: meta.disconnect
+      disconnectAction: meta.disconnect,
+      loadError: channelsLoadError.value,
+      retryAction: fetchChannelAccounts,
+      ...(channel === 'email' && accounts.length > 0
+        ? {
+            extraActionLabel: '新增邮箱',
+            extraAction: () => {
+              credentialModalAccount.value = null
+              credentialModalChannel.value = 'email'
+            }
+          }
+        : {})
     }
   }),
   ...CRM_PROVIDERS.map(provider => {
@@ -527,7 +591,9 @@ const availableIntegrations = computed<IntegrationCard[]>(() => [
       connected: connection?.status === 'active',
       teamName: connection?.display_name || undefined,
       warning: crmCardWarning(connection),
-      isLoading: crmLoading.value,
+      isLoading: crmLoading.value || crmActionProvider.value === provider,
+      loadError: crmLoadError.value,
+      retryAction: fetchCrmConnections,
       connectAction: () => connectCrm(provider),
       disconnectAction: () => handleDisconnectCrm(provider)
     }
@@ -737,6 +803,13 @@ watch(() => route.query, () => {
               已连接
             </span>
             <span
+              v-else-if="integration.loadError"
+              class="status-badge not-connected"
+            >
+              <span class="status-dot"></span>
+              加载失败
+            </span>
+            <span
               v-else-if="!integration.comingSoon"
               class="status-badge not-connected"
             >
@@ -753,20 +826,25 @@ watch(() => route.query, () => {
 
           <p class="integration-desc">{{ integration.description }}</p>
 
-          <div v-if="integration.connected && integration.siteUrl" class="integration-meta">
+          <div v-if="integration.loadError" class="integration-meta load-error">
+            <span class="meta-error">{{ integration.loadError }}</span>
+            <button class="retry-link" type="button" @click="integration.retryAction?.()">重试</button>
+          </div>
+
+          <div v-if="!integration.loadError && integration.connected && integration.siteUrl" class="integration-meta">
             <a :href="integration.siteUrl" target="_blank" class="meta-link">↗ 访问 {{ integration.name }} 站点</a>
           </div>
-          <div v-else-if="integration.connected && integration.shopDomain" class="integration-meta">
+          <div v-else-if="!integration.loadError && integration.connected && integration.shopDomain" class="integration-meta">
             <span class="meta-text">{{ integration.shopDomain }}</span>
             <a :href="`https://${integration.shopDomain}/admin`" target="_blank" class="meta-link">↗ 打开 Shopify 管理后台</a>
           </div>
-          <div v-else-if="integration.connected && integration.teamName" class="integration-meta">
+          <div v-else-if="!integration.loadError && integration.connected && integration.teamName" class="integration-meta">
             <span class="meta-text">{{ integration.teamName }}</span>
           </div>
-          <div v-else-if="!integration.connected && connectionError && connectionError.integration === integration.id" class="integration-meta">
+          <div v-else-if="!integration.loadError && !integration.connected && connectionError && connectionError.integration === integration.id" class="integration-meta">
             <span class="meta-error">⚠️ {{ connectionError.message }}</span>
           </div>
-          <div v-if="integration.warning" class="integration-meta">
+          <div v-if="!integration.loadError && integration.warning" class="integration-meta">
             <span class="meta-error">⚠️ {{ integration.warning }}</span>
           </div>
 
@@ -778,6 +856,15 @@ watch(() => route.query, () => {
           >
             <span class="loading-spinner"></span>
             正在加载…
+          </button>
+
+          <button
+            v-else-if="integration.loadError"
+            class="int-btn int-btn-connect"
+            type="button"
+            @click="integration.retryAction?.()"
+          >
+            重新加载
           </button>
 
           <!-- Connected: Manage + Disconnect -->
@@ -954,9 +1041,9 @@ watch(() => route.query, () => {
           v-if="disconnectingIntegration === 'hubspot' || disconnectingIntegration === 'pipedrive'"
           class="btn-disconnect"
           @click="handleDisconnectCrm(disconnectingIntegration as CrmProvider)"
-          :disabled="crmLoading"
+          :disabled="crmLoading || crmActionProvider === (disconnectingIntegration as CrmProvider)"
         >
-          <span v-if="crmLoading" class="loading-spinner"></span>
+          <span v-if="crmLoading || crmActionProvider === (disconnectingIntegration as CrmProvider)" class="loading-spinner"></span>
           <span v-else>断开 {{ disconnectingIntegration === 'hubspot' ? 'HubSpot' : 'Pipedrive' }} 连接</span>
         </button>
       </div>
@@ -990,6 +1077,7 @@ watch(() => route.query, () => {
   <!-- Credential Connect Modal (Email / SMS / LINE) -->
   <ChannelConnectModal
     v-if="credentialModalChannel"
+    :key="credentialModalChannel + ':' + (credentialModalAccount?.id || 'new')"
     :channel="credentialModalChannel"
     :existing-account="credentialModalAccount"
     @close="credentialModalChannel = null; credentialModalAccount = null"
@@ -1636,4 +1724,4 @@ watch(() => route.query, () => {
   color: var(--error-color);
   margin-top: var(--space-xs);
 }
-</style> 
+</style>

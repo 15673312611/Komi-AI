@@ -15,9 +15,9 @@ limitations under the License.
 -->
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import { toast } from 'vue-sonner'
-import type { HelpCenterSettings, HelpCenterSettingsUpdate } from '@/types/faq'
+import type { HelpCenterHeaderLink, HelpCenterSettings, HelpCenterSettingsUpdate } from '@/types/faq'
 import type { SaveState } from '@/composables/useHelpCenterSettings'
 import HelpCenterLogoField from './HelpCenterLogoField.vue'
 import HelpCenterPreview from './HelpCenterPreview.vue'
@@ -36,21 +36,33 @@ const emit = defineEmits<{
   'remove-favicon': []
 }>()
 
+const cloneSettings = (value: HelpCenterSettings): HelpCenterSettings => ({
+  ...value,
+  brand_color: value.brand_color || '#4338CA',
+  header_links: Array.isArray(value.header_links)
+    ? value.header_links.map((link) => ({ ...link }))
+    : [],
+})
+
+const settingsDraft = reactive<HelpCenterSettings>(cloneSettings(props.settings))
+const hexDraft = ref(settingsDraft.brand_color)
+watch(() => props.settings, (value) => {
+  Object.assign(settingsDraft, cloneSettings(value))
+  hexDraft.value = settingsDraft.brand_color
+}, { deep: true })
+
 const BRAND_SWATCHES = ['#4338CA', '#0E8C8C', '#CF5B38', '#6D5BD0', '#1F8A5B', '#2A6FDB']
 
 // Custom brand color: native picker + hex field, both saving immediately.
 const isPreset = computed(() =>
-  BRAND_SWATCHES.some((c) => c.toLowerCase() === (props.settings.brand_color || '').toLowerCase()),
+  BRAND_SWATCHES.some((c) => c.toLowerCase() === (settingsDraft.brand_color || '').toLowerCase()),
 )
-
-const hexDraft = ref(props.settings.brand_color)
-watch(() => props.settings.brand_color, (v) => { hexDraft.value = v })
 
 // The native <input type=color> only accepts #rrggbb — expand 3-digit and drop
 // alpha from 8-digit so opening the picker starts on the real color, never
 // silently resetting to black.
 const pickerValue = computed(() => {
-  const body = (props.settings.brand_color || '').replace(/^#/, '')
+  const body = (settingsDraft.brand_color || '').replace(/^#/, '')
   if (body.length === 3) return `#${[...body].map((c) => c + c).join('')}`
   if (body.length >= 6) return `#${body.slice(0, 6)}`
   return '#000000'
@@ -63,7 +75,16 @@ function saveColor(value: string) {
 }
 
 function onPicker(event: Event) {
-  saveColor((event.target as HTMLInputElement).value.toUpperCase())
+  const value = (event.target as HTMLInputElement).value.toUpperCase()
+  settingsDraft.brand_color = value
+  hexDraft.value = value
+  saveColor(value)
+}
+
+function selectBrandColor(value: string) {
+  settingsDraft.brand_color = value
+  hexDraft.value = value
+  saveColor(value)
 }
 
 function commitHex() {
@@ -77,6 +98,7 @@ function commitHex() {
   }
   const hex = `#${body.toUpperCase()}`
   hexDraft.value = hex
+  settingsDraft.brand_color = hex
   saveColor(hex)
 }
 
@@ -87,21 +109,33 @@ const saveStateLabel = computed(() => {
   return ''
 })
 
-/** Text fields: mutate in place for instant feedback, emit for debounced save. */
+/** Text fields stay local for instant feedback and emit for debounced save. */
 function onText(field: 'cta_text' | 'cta_url', event: Event) {
   const value = (event.target as HTMLInputElement).value
-  props.settings[field] = value
+  settingsDraft[field] = value
   emit('update', { [field]: value })
 }
 
-// Header link rows are mutated in place — the settings engine deep-watches
-// header_links and debounce-saves.
+function emitHeaderLinks() {
+  emit('update', { header_links: settingsDraft.header_links.map((link) => ({ ...link })) })
+}
+
+function onHeaderLinkText(index: number, field: keyof HelpCenterHeaderLink, event: Event) {
+  const link = settingsDraft.header_links[index]
+  if (!link) return
+  link[field] = (event.target as HTMLInputElement).value
+  emitHeaderLinks()
+}
+
 function addLink() {
-  props.settings.header_links.push({ label: '导航链接', url: '' })
+  settingsDraft.header_links.push({ label: '导航链接', url: '' })
+  emitHeaderLinks()
 }
 
 function removeLink(index: number) {
-  props.settings.header_links.splice(index, 1)
+  if (index < 0 || index >= settingsDraft.header_links.length) return
+  settingsDraft.header_links.splice(index, 1)
+  emitHeaderLinks()
 }
 </script>
 
@@ -119,7 +153,7 @@ function removeLink(index: number) {
         <div>
           <label class="mono-label">品牌 LOGO</label>
           <HelpCenterLogoField
-            :image-url="settings.logo_url"
+            :image-url="settingsDraft.logo_url"
             kind="logo"
             @upload="$emit('upload-logo', $event)"
             @remove="$emit('remove-logo')"
@@ -129,7 +163,7 @@ function removeLink(index: number) {
         <div>
           <label class="mono-label">网页标签图标 FAVICON</label>
           <HelpCenterLogoField
-            :image-url="settings.favicon_url"
+            :image-url="settingsDraft.favicon_url"
             kind="favicon"
             :max-bytes="1048576"
             :output-max="128"
@@ -146,18 +180,18 @@ function removeLink(index: number) {
               v-for="color in BRAND_SWATCHES"
               :key="color"
               class="swatch"
-              :class="{ 'swatch--selected': settings.brand_color.toLowerCase() === color.toLowerCase() }"
-              :style="{ background: color, boxShadow: settings.brand_color.toLowerCase() === color.toLowerCase() ? `0 0 0 2px ${color}` : 'none' }"
+              :class="{ 'swatch--selected': (settingsDraft.brand_color || '').toLowerCase() === color.toLowerCase() }"
+              :style="{ background: color, boxShadow: (settingsDraft.brand_color || '').toLowerCase() === color.toLowerCase() ? `0 0 0 2px ${color}` : 'none' }"
               type="button"
               :title="color"
-              @click="$emit('save-now', { brand_color: color })"
+              @click="selectBrandColor(color)"
             ></button>
 
             <!-- Custom color: swatch opens the OS picker; shows current color when off-preset. -->
             <label
               class="swatch swatch--custom"
               :class="{ 'swatch--selected': !isPreset }"
-              :style="!isPreset ? { background: settings.brand_color, boxShadow: `0 0 0 2px ${settings.brand_color}` } : {}"
+              :style="!isPreset ? { background: settingsDraft.brand_color, boxShadow: `0 0 0 2px ${settingsDraft.brand_color}` } : {}"
               title="自定义颜色"
             >
               <input type="color" class="swatch__picker" :value="pickerValue" @change="onPicker" />
@@ -186,11 +220,11 @@ function removeLink(index: number) {
           <label class="mono-label">顶部导航链接</label>
           <p class="hint hint--tight">展示在帮助中心顶部的快捷外链 — 可链接回您的官方网站或产品。</p>
           <div class="link-rows">
-            <div v-for="(link, index) in settings.header_links" :key="index" class="link-row">
-              <input v-model="link.label" class="text-input text-input--label" type="text" placeholder="链接名称" />
+            <div v-for="(link, index) in settingsDraft.header_links" :key="index" class="link-row">
+              <input :value="link.label" class="text-input text-input--label" type="text" placeholder="链接名称" @input="onHeaderLinkText(index, 'label', $event)" />
               <div class="url-input">
                 <span class="url-input__prefix">https://</span>
-                <input v-model="link.url" type="text" placeholder="yoursite.com" />
+                <input :value="link.url" type="text" placeholder="yoursite.com" @input="onHeaderLinkText(index, 'url', $event)" />
               </div>
               <button class="remove-btn" type="button" title="删除链接" @click="removeLink(index)">
                 <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
@@ -207,15 +241,15 @@ function removeLink(index: number) {
           <div class="row-head">
             <label class="mono-label mono-label--inline">右上角行动按钮 (CTA)</label>
             <label class="switch switch--sm">
-              <input type="checkbox" :checked="settings.cta_enabled" @change="$emit('save-now', { cta_enabled: ($event.target as HTMLInputElement).checked })" />
+              <input type="checkbox" :checked="settingsDraft.cta_enabled" @change="settingsDraft.cta_enabled = ($event.target as HTMLInputElement).checked; emit('save-now', { cta_enabled: settingsDraft.cta_enabled })" />
               <span class="switch__track"><span class="switch__knob"></span></span>
             </label>
           </div>
-          <div class="link-row" :class="{ 'link-row--off': !settings.cta_enabled }">
-            <input class="text-input text-input--label" type="text" placeholder="按钮文案" :disabled="!settings.cta_enabled" :value="settings.cta_text || ''" @input="onText('cta_text', $event)" />
+          <div class="link-row" :class="{ 'link-row--off': !settingsDraft.cta_enabled }">
+            <input class="text-input text-input--label" type="text" placeholder="按钮文案" :disabled="!settingsDraft.cta_enabled" :value="settingsDraft.cta_text || ''" @input="onText('cta_text', $event)" />
             <div class="url-input">
               <span class="url-input__prefix">https://</span>
-              <input type="text" placeholder="app.yoursite.com" :disabled="!settings.cta_enabled" :value="settings.cta_url || ''" @input="onText('cta_url', $event)" />
+              <input type="text" placeholder="app.yoursite.com" :disabled="!settingsDraft.cta_enabled" :value="settingsDraft.cta_url || ''" @input="onText('cta_url', $event)" />
             </div>
           </div>
         </div>
@@ -224,10 +258,10 @@ function removeLink(index: number) {
       <!-- live preview -->
       <div class="preview-col">
         <label class="mono-label">前台实时预览</label>
-        <HelpCenterPreview :settings="settings" />
+        <HelpCenterPreview :settings="settingsDraft" />
         <p class="preview-note">
           更改将实时同步生效至您已公开的帮助中心页面：
-          <span class="preview-note__url">{{ settings.live_url }}</span>。
+          <span class="preview-note__url">{{ settingsDraft.live_url }}</span>。
         </p>
       </div>
     </div>

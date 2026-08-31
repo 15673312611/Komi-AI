@@ -205,6 +205,7 @@ onUnmounted(() => {
         @update:query="ex.query.value = $event"
         @toggle="ex.toggleSource"
         @select="(source, pageId) => ex.selectPage(source, pageId)"
+        @retry="(source) => ex.loadSourceContent(source.id, true)"
         @delete-source="askDeleteSource"
         @add-page="ex.startAddPage"
       />

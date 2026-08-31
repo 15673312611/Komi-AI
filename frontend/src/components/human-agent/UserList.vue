@@ -16,7 +16,7 @@ limitations under the License.
 
 <script setup lang="ts">
 import { onMounted, ref, computed } from 'vue'
-import type { User } from '@/types/user'
+import type { ChatScopeFields, User } from '@/types/user'
 import { Menu, MenuButton, MenuItems, MenuItem } from '@headlessui/vue'
 import { EllipsisVerticalIcon } from '@heroicons/vue/24/outline'
 import { useUsers } from '@/composables/useUsers'
@@ -324,21 +324,31 @@ const onResetPasswordRow = (row: AgentRow) => {
 
 // Wrap the CRUD handlers so the parent gets notified to reload counts.
 const handleCreateUserAndNotify = async (
-  userData: Partial<User> & { password?: string },
-) => {
-  await handleCreateUser(userData)
-  if (!error.value) {
-    emit('changed')
-    await loadOverview()
-  }
+  userData: Partial<User> & ChatScopeFields & { password?: string },
+): Promise<boolean> => {
+  const succeeded = await handleCreateUser(userData)
+  if (!succeeded) return false
+  emit('changed')
+  await loadOverview()
+  return true
 }
 
-const confirmDeleteUserAndNotify = async () => {
-  await confirmDeleteUser()
-  if (!error.value) {
-    emit('changed')
-    await loadOverview()
-  }
+const handleUpdateUserAndNotify = async (
+  userData: Partial<User> & ChatScopeFields & { password?: string },
+): Promise<boolean> => {
+  const succeeded = await handleUpdateUser(userData)
+  if (!succeeded) return false
+  emit('changed')
+  await loadOverview()
+  return true
+}
+
+const confirmDeleteUserAndNotify = async (): Promise<boolean> => {
+  const succeeded = await confirmDeleteUser()
+  if (!succeeded) return false
+  emit('changed')
+  await loadOverview()
+  return true
 }
 
 onMounted(async () => {
@@ -495,7 +505,8 @@ onMounted(async () => {
       <template #content>
         <UserForm 
           :user="selectedUser"
-          @submit="handleUpdateUser"
+          :submitting="loading"
+          @submit="handleUpdateUserAndNotify"
           @cancel="showEditModal = false"
         />
       </template>
@@ -541,6 +552,7 @@ onMounted(async () => {
       <template #title>添加新坐席成员</template>
       <template #content>
         <UserForm
+          :submitting="loading"
           @submit="handleCreateUserAndNotify"
           @cancel="showCreateModal = false"
         />

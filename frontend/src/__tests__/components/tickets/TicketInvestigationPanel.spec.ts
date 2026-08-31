@@ -50,7 +50,7 @@ describe('TicketInvestigationPanel connector warning', () => {
     })
     const warning = wrapper.find('.connector-warning')
     expect(warning.exists()).toBe(true)
-    expect(warning.text()).toContain('0 of 1 configured connector')
+    expect(warning.text()).toContain('本次仅加载了 0/1 个配置的连接器')
     expect(warning.text()).toContain('Elasticsearch')
     expect(warning.text()).toContain('npx')
   })

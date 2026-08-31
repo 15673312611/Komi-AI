@@ -133,6 +133,7 @@ limitations under the License.
     <div v-if="activeTab === 'overview'">
       <div v-if="error" class="error-state">
         {{ error }}
+        <button type="button" class="retry-button" @click="fetchAnalytics">重试</button>
       </div>
 
       <div v-else-if="isLoading" class="loading-state">
@@ -203,7 +204,7 @@ limitations under the License.
             <div v-if="!hasData(analyticsData?.conversations)" class="no-data">
               暂无对话数据
             </div>
-            <apexchart
+            <VueApexCharts
               v-else
               type="area"
               height="300"
@@ -219,7 +220,7 @@ limitations under the License.
             <div v-if="!hasData(analyticsData?.aiClosures) && !hasData(analyticsData?.transfers)" class="no-data">
               暂无结单/转接数据
             </div>
-            <apexchart
+            <VueApexCharts
               v-else
               type="area"
               height="300"
@@ -241,7 +242,7 @@ limitations under the License.
             <div v-if="!hasData(analyticsData?.ratings)" class="no-data">
               暂无评分数据
             </div>
-            <apexchart
+            <VueApexCharts
               v-else
               type="line"
               height="300"
@@ -324,11 +325,11 @@ const activeTab = ref('overview')
 const isLoading = ref(true)
 const error = ref<string | null>(null)
 const analyticsData = ref<AnalyticsData | null>(null)
+let analyticsRequestVersion = 0
 
 // Subscription and analytics feature checking
 const subscriptionStorage = useSubscriptionStorage()
 const { hasEnterpriseModule } = useEnterpriseFeatures()
-const currentSubscription = computed(() => subscriptionStorage.getCurrentSubscription())
 const isSubscriptionActive = computed(() => subscriptionStorage.isSubscriptionActive())
 
 // Check if analytics feature is available
@@ -344,14 +345,6 @@ const isAnalyticsLocked = computed(() => {
   }
   return !hasAnalyticsFeature.value || !isSubscriptionActive.value
 })
-
-// Upgrade modal state
-const showUpgradeModal = ref(false)
-
-// Modal functions
-const closeUpgradeModal = () => {
-  showUpgradeModal.value = false
-}
 
 const handleUpgrade = () => {
   // Only redirect to subscription page if enterprise module exists
@@ -373,10 +366,12 @@ const hasData = (metric: AnalyticsMetric | RatingMetrics | undefined): boolean =
 
 const getChartData = (metric: AnalyticsMetric | undefined) => {
   if (!metric?.data || !metric?.labels) return []
-  return metric.data.map((value, index) => ({
-    x: new Date(metric.labels[index]).getTime(),
-    y: value
-  }))
+  return metric.data.reduce<Array<{ x: number; y: number }>>((points, value, index) => {
+    const x = new Date(metric.labels[index]).getTime()
+    const y = Number(value)
+    if (Number.isFinite(x) && Number.isFinite(y)) points.push({ x, y })
+    return points
+  }, [])
 }
 
 const getChartOptions = (name: string, color: string) => ({
@@ -513,9 +508,13 @@ const getComparisonChartOptions = () => ({
 })
 
 const fetchAnalytics = async () => {
+  const requestVersion = ++analyticsRequestVersion
   // Don't fetch if analytics is locked
   if (isAnalyticsLocked.value) {
-    isLoading.value = false
+    if (requestVersion === analyticsRequestVersion) {
+      isLoading.value = false
+      analyticsData.value = null
+    }
     return
   }
 
@@ -525,17 +524,23 @@ const fetchAnalytics = async () => {
     const response = await api.get('/analytics', {
       params: { time_range: timeRange.value }
     })
-    analyticsData.value = response.data
+    if (requestVersion === analyticsRequestVersion) {
+      analyticsData.value = response?.data && typeof response.data === 'object' ? response.data : null
+    }
   } catch (err: any) {
-    error.value = err.response?.data?.detail || 'Failed to fetch analytics data'
+    if (requestVersion === analyticsRequestVersion) {
+      error.value = err.response?.data?.detail || 'Failed to fetch analytics data'
+    }
   } finally {
-    isLoading.value = false
+    if (requestVersion === analyticsRequestVersion) isLoading.value = false
   }
 }
 
 const handleTimeRangeChange = (range: string) => {
+  if (!['24h', '7d', '30d', '90d'].includes(range)) return
+  if (range === timeRange.value) return
   timeRange.value = range
-  fetchAnalytics()
+  void fetchAnalytics()
 }
 
 fetchAnalytics()
@@ -1007,4 +1012,4 @@ fetchAnalytics()
     margin-bottom: var(--space-lg);
   }
 }
-</style> 
+</style>

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { ShopifyOrder } from '@/services/chat'
+import { copyTextToClipboard } from '@/utils/clipboard'
 
 const props = defineProps<{
   show: boolean
@@ -20,13 +21,12 @@ const hasData = computed(() => fulfillments.value.length > 0 && (trackingNumbers
 
 const copy = async (value: string, label: string) => {
   if (!value) return
-  if (!navigator.clipboard) {
-    emit('action-toast', '无法访问剪贴板，请手动复制', 'error')
-    return
-  }
   try {
-    await navigator.clipboard.writeText(value)
-    emit('action-toast', label, 'success')
+    if (await copyTextToClipboard(value)) {
+      emit('action-toast', label, 'success')
+    } else {
+      emit('action-toast', '复制失败，请手动复制', 'error')
+    }
   } catch {
     emit('action-toast', '复制失败，请手动复制', 'error')
   }

@@ -35,6 +35,7 @@ export function useKnowledgeManagement(agentId: string, organizationId: string) 
   const selectedKnowledge = ref<number | null>(null)
   const knowledgeContent = ref<KnowledgeContent | null>(null)
   const isLoadingContent = ref(false)
+  const contentError = ref<string | null>(null)
   const isEditingContent = ref(false)
   const editedContent = ref('')
   const isSavingContent = ref(false)
@@ -61,6 +62,7 @@ export function useKnowledgeManagement(agentId: string, organizationId: string) 
   // Delete state
   const showDeleteConfirm = ref(false)
   const knowledgeToDelete = ref<number | null>(null)
+  const isDeleting = ref(false)
 
   // Add new state for URL form errors
   const urlFormError = ref<string | null>(null)
@@ -68,17 +70,27 @@ export function useKnowledgeManagement(agentId: string, organizationId: string) 
   // Add upload error state
   const uploadError = ref<string | null>(null)
 
+  let knowledgeRequestVersion = 0
+  let queueRequestVersion = 0
+  let orgRequestVersion = 0
+  let contentRequestVersion = 0
+  const queueDeleteIds = new Set<number>()
+  const knowledgeLinkIds = new Set<number>()
+
 
 
   // Fetch knowledge data
   const fetchKnowledge = async () => {
+    const requestVersion = ++knowledgeRequestVersion
+    const orgRequest = ++orgRequestVersion
     try {
       isLoading.value = true
       isLoadingOrg.value = true
       error.value = null
 
-      // Fetch agent knowledge, org knowledge, and queue items in parallel
-      const [agentResponse, orgResponse, queueResponse] = await Promise.all([
+      // Fetch the agent and organization lists independently so one failed
+      // endpoint cannot discard a successful response from the other.
+      const [agentResult, orgResult] = await Promise.allSettled([
         knowledgeService.getKnowledgeByAgent(agentId, currentPage.value, pageSize.value),
         knowledgeService.getKnowledgeByOrganization(
           organizationId,
@@ -88,46 +100,70 @@ export function useKnowledgeManagement(agentId: string, organizationId: string) 
         fetchQueueItems(),
       ])
 
-      // Default to empty: a partial response used to leave these undefined,
-      // and every later .some()/.length on them threw.
-      knowledgeItems.value = agentResponse?.knowledge || []
-      totalPages.value = agentResponse?.pagination?.total_pages || 0
+      if (requestVersion === knowledgeRequestVersion) {
+        if (agentResult.status === 'fulfilled') {
+          const agentResponse = agentResult.value
+          // Default to empty: a partial response used to leave these
+          // undefined, and every later .some()/.length on them threw.
+          knowledgeItems.value = Array.isArray(agentResponse?.knowledge)
+            ? agentResponse.knowledge
+            : []
+          totalPages.value = agentResponse?.pagination?.total_pages || 0
+        } else {
+          error.value = 'Failed to load agent knowledge sources'
+          console.error(agentResult.reason)
+        }
+      }
 
-      // Update org knowledge
-      orgKnowledgeItems.value = orgResponse?.knowledge || []
-      orgTotalPages.value = orgResponse?.pagination?.total_pages || 0
-    } catch (err) {
-      error.value = 'Failed to load knowledge sources'
-      console.error(err)
+      if (orgRequest === orgRequestVersion) {
+        if (orgResult.status === 'fulfilled') {
+          const orgResponse = orgResult.value
+          orgKnowledgeItems.value = Array.isArray(orgResponse?.knowledge)
+            ? orgResponse.knowledge
+            : []
+          orgTotalPages.value = orgResponse?.pagination?.total_pages || 0
+        } else {
+          console.error(orgResult.reason)
+        }
+      }
     } finally {
-      isLoading.value = false
-      isLoadingOrg.value = false
+      if (requestVersion === knowledgeRequestVersion) {
+        isLoading.value = false
+      }
+      if (orgRequest === orgRequestVersion) isLoadingOrg.value = false
     }
   }
 
   // Fetch queue items
   const fetchQueueItems = async () => {
+    const requestVersion = ++queueRequestVersion
     try {
       isLoadingQueue.value = true
       const response = await knowledgeService.getAgentQueueItems(agentId)
-      queueItems.value = response.queue_items || []
+      if (requestVersion === queueRequestVersion) {
+        queueItems.value = Array.isArray(response?.queue_items) ? response.queue_items : []
+      }
       return response
     } catch (err) {
       console.error('Failed to load queue items:', err)
-      queueItems.value = []
+      if (requestVersion === queueRequestVersion) queueItems.value = []
       return { queue_items: [] }
     } finally {
-      isLoadingQueue.value = false
+      if (requestVersion === queueRequestVersion) isLoadingQueue.value = false
     }
   }
 
   const deleteQueueItem = async (queueId: number) => {
+    if (queueDeleteIds.has(queueId)) return
+    queueDeleteIds.add(queueId)
     try {
       await knowledgeService.deleteQueueItem(queueId)
       await fetchQueueItems() // Refresh queue
     } catch (err) {
       console.error('Failed to delete queue item:', err)
       error.value = 'Failed to delete queue item'
+    } finally {
+      queueDeleteIds.delete(queueId)
     }
   }
 
@@ -135,14 +171,18 @@ export function useKnowledgeManagement(agentId: string, organizationId: string) 
 
   // Pagination handler
   const handlePageChange = (page: number) => {
-    currentPage.value = page
-    fetchKnowledge()
+    const nextPage = Math.max(1, totalPages.value ? Math.min(page, totalPages.value) : page)
+    if (nextPage === currentPage.value) return
+    currentPage.value = nextPage
+    void fetchKnowledge()
   }
 
   // Date formatting
   const formatDate = (dateString: string | null): string => {
     if (!dateString) return 'N/A'
-    return new Date(dateString).toLocaleDateString('en-US', {
+    const date = new Date(dateString)
+    if (Number.isNaN(date.getTime())) return 'N/A'
+    return date.toLocaleDateString('en-US', {
       year: 'numeric',
       month: 'short',
       day: 'numeric',
@@ -192,13 +232,25 @@ export function useKnowledgeManagement(agentId: string, organizationId: string) 
 
   const handleFileSelect = (event: Event) => {
     const input = event.target as HTMLInputElement
-    if (input.files) {
-      files.value = Array.from(input.files)
+    const selectedFiles = Array.from(input.files || [])
+    // Allow selecting the same file again after a rejected attempt.
+    input.value = ''
+    const invalidFiles = selectedFiles.filter(
+      (file) => file.type.toLowerCase() !== 'application/pdf' && !/\.pdf$/i.test(file.name),
+    )
+    if (invalidFiles.length) {
+      // Reject the whole selection instead of silently dropping one file and
+      // uploading the rest without the user noticing.
+      files.value = []
+      uploadError.value = 'Only PDF files can be uploaded'
+      return
     }
+    files.value = selectedFiles
+    uploadError.value = null
   }
 
   const handleFileUpload = async () => {
-    if (!files.value.length) return
+    if (!files.value.length || isUploading.value) return
 
     try {
       isUploading.value = true
@@ -268,11 +320,12 @@ export function useKnowledgeManagement(agentId: string, organizationId: string) 
   }
 
   const removeUrl = (index: number) => {
+    if (index < 0 || index >= urls.value.length) return
     urls.value.splice(index, 1)
   }
 
   const handleUrlUpload = async () => {
-    if (!urls.value.length) return
+    if (!urls.value.length || isUploading.value) return
 
     try {
       isUploading.value = true
@@ -301,6 +354,7 @@ export function useKnowledgeManagement(agentId: string, organizationId: string) 
   }
 
   const fetchOrgKnowledge = async () => {
+    const requestVersion = ++orgRequestVersion
     try {
       isLoadingOrg.value = true
       const response = await knowledgeService.getKnowledgeByOrganization(
@@ -308,35 +362,46 @@ export function useKnowledgeManagement(agentId: string, organizationId: string) 
         orgCurrentPage.value,
         pageSize.value,
       )
-      orgKnowledgeItems.value = response.knowledge
-      orgTotalPages.value = response.pagination.total_pages
+      if (requestVersion !== orgRequestVersion) return
+      orgKnowledgeItems.value = Array.isArray(response?.knowledge) ? response.knowledge : []
+      orgTotalPages.value = response?.pagination?.total_pages || 0
     } catch (err) {
       console.error(err)
     } finally {
-      isLoadingOrg.value = false
+      if (requestVersion === orgRequestVersion) isLoadingOrg.value = false
     }
   }
 
   const handleOrgPageChange = (page: number) => {
-    orgCurrentPage.value = page
-    fetchOrgKnowledge()
+    const nextPage = Math.max(1, orgTotalPages.value ? Math.min(page, orgTotalPages.value) : page)
+    if (nextPage === orgCurrentPage.value) return
+    orgCurrentPage.value = nextPage
+    void fetchOrgKnowledge()
   }
 
   const linkKnowledge = async (knowledgeId: number) => {
+    if (knowledgeLinkIds.has(knowledgeId)) return
+    knowledgeLinkIds.add(knowledgeId)
     try {
       await knowledgeService.linkToAgent(knowledgeId, agentId)
       await fetchKnowledge() // Refresh agent knowledge
     } catch (error) {
       console.error('Error linking knowledge:', error)
+    } finally {
+      knowledgeLinkIds.delete(knowledgeId)
     }
   }
 
   const unlinkKnowledge = async (knowledgeId: number) => {
+    if (knowledgeLinkIds.has(knowledgeId)) return
+    knowledgeLinkIds.add(knowledgeId)
     try {
       await knowledgeService.unlinkFromAgent(knowledgeId, agentId)
       await fetchKnowledge() // Refresh agent knowledge
     } catch (error) {
       console.error('Error unlinking knowledge:', error)
+    } finally {
+      knowledgeLinkIds.delete(knowledgeId)
     }
   }
 
@@ -347,16 +412,20 @@ export function useKnowledgeManagement(agentId: string, organizationId: string) 
   }
 
   const handleDelete = async () => {
-    if (!knowledgeToDelete.value) return
+    if (knowledgeToDelete.value === null || isDeleting.value) return
+    const knowledgeId = knowledgeToDelete.value
+    isDeleting.value = true
 
     try {
-      await knowledgeService.deleteKnowledge(knowledgeToDelete.value)
+      await knowledgeService.deleteKnowledge(knowledgeId)
       await fetchKnowledge() // Refresh the list
       showDeleteConfirm.value = false
       knowledgeToDelete.value = null
     } catch (err) {
       console.error('Error deleting knowledge:', err)
       error.value = 'Failed to delete knowledge source'
+    } finally {
+      isDeleting.value = false
     }
   }
 
@@ -367,21 +436,27 @@ export function useKnowledgeManagement(agentId: string, organizationId: string) 
 
   // Content management methods
   const viewKnowledgeContent = async (knowledgeId: number) => {
+    const requestVersion = ++contentRequestVersion
     try {
       selectedKnowledge.value = knowledgeId
       isLoadingContent.value = true
+      contentError.value = null
       showContentModal.value = true
       
       const response = await knowledgeService.getKnowledgeContent(knowledgeId)
-      knowledgeContent.value = response
+      if (requestVersion !== contentRequestVersion || selectedKnowledge.value !== knowledgeId) return
+      knowledgeContent.value = { ...response, chunks: response?.chunks || [] }
       
       // Do not combine chunks - keep them separate for individual editing
       editedContent.value = ''
     } catch (err) {
       console.error('Error loading knowledge content:', err)
-      error.value = 'Failed to load knowledge content'
+      if (requestVersion === contentRequestVersion) {
+        knowledgeContent.value = null
+        contentError.value = 'Failed to load knowledge content'
+      }
     } finally {
-      isLoadingContent.value = false
+      if (requestVersion === contentRequestVersion) isLoadingContent.value = false
     }
   }
 
@@ -393,29 +468,35 @@ export function useKnowledgeManagement(agentId: string, organizationId: string) 
     isEditingContent.value = false
   }
 
-  const saveChunkContent = async (chunkId: string, content: string) => {
-    if (!selectedKnowledge.value) return
+  const saveChunkContent = async (chunkId: string, content: string): Promise<boolean> => {
+    const knowledgeId = selectedKnowledge.value
+    if (knowledgeId === null || !content.trim() || isSavingContent.value) return false
 
     try {
       isSavingContent.value = true
-      await knowledgeService.updateChunkContent(selectedKnowledge.value, chunkId, content)
+      await knowledgeService.updateChunkContent(knowledgeId, chunkId, content)
       
       successMessage.value = 'Chunk updated successfully'
       
       // Reload the content to show updated chunk
-      await viewKnowledgeContent(selectedKnowledge.value)
+      if (selectedKnowledge.value === knowledgeId) await viewKnowledgeContent(knowledgeId)
+      return true
     } catch (err: any) {
       console.error('Error saving chunk content:', err)
       error.value = err.message || 'Failed to save chunk content'
+      return false
     } finally {
       isSavingContent.value = false
     }
   }
 
   const closeContentModal = () => {
+    contentRequestVersion += 1
     showContentModal.value = false
+    isLoadingContent.value = false
     selectedKnowledge.value = null
     knowledgeContent.value = null
+    contentError.value = null
     isEditingContent.value = false
     editedContent.value = ''
   }
@@ -444,6 +525,7 @@ export function useKnowledgeManagement(agentId: string, organizationId: string) 
     isLoadingOrg,
     showDeleteConfirm,
     knowledgeToDelete,
+    isDeleting,
     urlFormError,
     uploadError,
     queueItems,
@@ -451,6 +533,7 @@ export function useKnowledgeManagement(agentId: string, organizationId: string) 
     selectedKnowledge,
     knowledgeContent,
     isLoadingContent,
+    contentError,
     isEditingContent,
     editedContent,
     isSavingContent,

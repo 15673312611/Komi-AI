@@ -33,6 +33,7 @@ import { useEnterpriseFeatures } from '@/composables/useEnterpriseFeatures'
 import { buildWidgetEmbed } from '@/utils/widgetEmbed'
 import { useOnboardingState } from '@/composables/useOnboardingState'
 import { userService } from '@/services/user'
+import { copyTextToClipboard } from '@/utils/clipboard'
 
 const agentStorage = useAgentStorage()
 const subscriptionStorage = useSubscriptionStorage()
@@ -57,6 +58,7 @@ const toggleMenu = (agentId: string) => {
 const closeMenu = () => { openMenuId.value = null }
 
 const toggleAgentActive = async (agent: Agent) => {
+    if (togglingActiveId.value) return
     closeMenu()
     togglingActiveId.value = agent.id
     try {
@@ -75,8 +77,11 @@ const toggleAgentActive = async (agent: Agent) => {
 const copyAgentId = async (agent: Agent) => {
     closeMenu()
     try {
-        await navigator.clipboard.writeText(agent.id)
-        toast.success('智能体 ID 已复制到剪贴板')
+        if (await copyTextToClipboard(agent.id)) {
+            toast.success('智能体 ID 已复制到剪贴板')
+        } else {
+            toast.error('复制智能体 ID 失败，请手动选择并复制')
+        }
     } catch (err) {
         console.error('Failed to copy agent ID:', err)
         toast.error('复制智能体 ID 失败')
@@ -154,6 +159,7 @@ const loadWidgetsForAgents = async () => {
 }
 
 const copyWidgetCode = async (agent: Agent) => {
+    if (widgetLoadingMap.value[agent.id]) return
     const widget = widgetMap.value[agent.id]
     if (!widget) {
         try {
@@ -178,8 +184,11 @@ const copyWidgetCode = async (agent: Agent) => {
 const copyWidgetCodeToClipboard = async (widget: Widget, requireTokenAuth?: boolean) => {
     const code = buildWidgetEmbed(widget.id, requireTokenAuth)
     try {
-        await navigator.clipboard.writeText(code)
-        toast.success('挂件代码已复制到剪贴板！', { duration: 3000 })
+        if (await copyTextToClipboard(code)) {
+            toast.success('挂件代码已复制到剪贴板！', { duration: 3000 })
+        } else {
+            toast.error('复制挂件代码失败，请手动选择并复制')
+        }
     } catch (error) {
         console.error('Failed to copy widget code:', error)
         toast.error('复制挂件代码失败')

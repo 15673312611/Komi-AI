@@ -95,7 +95,10 @@ vi.mock('@/services/users', () => ({
 // Create router instance
 const router = createRouter({
   history: createWebHistory(),
-  routes: [{ path: '/', component: { template: '<div>Home</div>' } }]
+  routes: [
+    { path: '/', component: { template: '<div>Home</div>' } },
+    { path: '/new-route', component: { template: '<div>New route</div>' } },
+  ]
 })
 
 describe('DashboardLayout', () => {
@@ -212,4 +215,4 @@ describe('DashboardLayout', () => {
     // Skip this test since we don't want to modify the component
     expect(true).toBe(true)
   })
-}) 
+})

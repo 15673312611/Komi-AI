@@ -66,6 +66,13 @@ export const authService = {
   async logout(): Promise<void> {
     try {
       await api.post('/users/logout')
+    } catch (err) {
+      const axiosError = err as AxiosError<ErrorResponse>
+      throw new Error(axiosError.response?.data?.detail || 'Logout failed')
+    } finally {
+      // A failed/replayed logout request must not leave a usable local session
+      // behind. The server can expire its session independently; the browser
+      // still needs to forget its cached identity in every case.
       userService.clearCurrentUser()
       localStorage.removeItem('access_token')
       localStorage.removeItem('agents')
@@ -73,9 +80,6 @@ export const authService = {
       localStorage.removeItem('exploreView_customization')
       localStorage.removeItem('exploreView_selectedColor')
       localStorage.removeItem('exploreView_url')
-    } catch (err) {
-      const axiosError = err as AxiosError<ErrorResponse>
-      throw new Error(axiosError.response?.data?.detail || 'Logout failed')
     }
   },
 }

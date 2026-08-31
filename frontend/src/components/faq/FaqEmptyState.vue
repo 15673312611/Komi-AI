@@ -20,6 +20,7 @@ import FaqOrb from './FaqOrb.vue'
 defineProps<{
   sourceCount: number
   pageCount: number
+  disabled?: boolean
 }>()
 
 defineEmits<{
@@ -41,11 +42,11 @@ defineEmits<{
       关联读取 {{ sourceCount }} 个知识源 · {{ pageCount }} 个知识页面
     </div>
     <div class="empty-state__actions">
-      <button class="btn btn--primary" type="button" @click="$emit('generate')">
+      <button class="btn btn--primary" type="button" :disabled="disabled" @click="$emit('generate')">
         <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3v4M3 5h4M6 17v4M4 19h4M13 3l2.5 6.5L22 12l-6.5 2.5L13 21l-2.5-6.5L4 12l6.5-2.5z" /></svg>
         从知识库一键生成
       </button>
-      <button class="btn btn--ghost" type="button" @click="$emit('import')">导入已有 FAQ</button>
+      <button class="btn btn--ghost" type="button" :disabled="disabled" @click="$emit('import')">导入已有 FAQ</button>
       <button class="btn btn--text" type="button" @click="$emit('add')">手动录入问答</button>
     </div>
   </div>
@@ -131,6 +132,11 @@ defineEmits<{
 
 .btn--primary:hover {
   filter: brightness(1.1);
+}
+
+.btn:disabled {
+  opacity: 0.6;
+  cursor: default;
 }
 
 .btn--ghost {

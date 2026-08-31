@@ -177,7 +177,7 @@ function answerPreview(md: string): string {
           class="pill"
           :class="faq.status === 'published' ? 'pill--published' : 'pill--draft'"
           type="button"
-          :disabled="locked"
+          :disabled="locked || saving"
           @click="$emit('toggle-status')"
         >
           <span class="pill__dot"></span>

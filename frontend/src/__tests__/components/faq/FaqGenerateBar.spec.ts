@@ -33,23 +33,23 @@ const createWrapper = (props = {}) =>
 describe('FaqGenerateBar', () => {
   it('shows knowledge base counts and Generate when idle', () => {
     const wrapper = createWrapper()
-    expect(wrapper.find('.generate-bar__title').text()).toBe('Generate FAQs')
-    expect(wrapper.find('.generate-bar__sub').text()).toContain('Reading from 5 sources · 9 pages')
-    expect(wrapper.find('.btn--generate').text()).toContain('Generate')
+    expect(wrapper.find('.generate-bar__title').text()).toBe('AI 智能生成 FAQ')
+    expect(wrapper.find('.generate-bar__sub').text()).toContain('关联读取 5 个知识源 · 9 个页面')
+    expect(wrapper.find('.btn--generate').text()).toContain('立即生成')
     expect(wrapper.find('.btn--generate').attributes('disabled')).toBeUndefined()
   })
 
   it('shows FAQ counts and Regenerate when ready', () => {
     const wrapper = createWrapper({ phase: 'ready' })
-    expect(wrapper.find('.generate-bar__title').text()).toBe('FAQs ready to publish')
-    expect(wrapper.find('.generate-bar__sub').text()).toContain('12 FAQs · 7 published')
-    expect(wrapper.find('.btn--generate').text()).toContain('Regenerate')
+    expect(wrapper.find('.generate-bar__title').text()).toBe('FAQ 问答已就绪')
+    expect(wrapper.find('.generate-bar__sub').text()).toContain('12 条问答 · 7 条已发布')
+    expect(wrapper.find('.btn--generate').text()).toContain('重新生成')
   })
 
   it('disables the generate button while generating', () => {
     const wrapper = createWrapper({ phase: 'generating' })
-    expect(wrapper.find('.generate-bar__title').text()).toBe('Generating FAQs…')
-    expect(wrapper.find('.btn--generate').text()).toContain('Generating…')
+    expect(wrapper.find('.generate-bar__title').text()).toBe('正在生成 FAQ 问答…')
+    expect(wrapper.find('.btn--generate').text()).toContain('正在生成…')
     expect(wrapper.find('.btn--generate').attributes('disabled')).toBeDefined()
   })
 

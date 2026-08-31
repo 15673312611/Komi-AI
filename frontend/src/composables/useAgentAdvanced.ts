@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import type { Ref } from 'vue'
 import type { Agent, AgentUpdate } from '@/types/agent'
 import { agentService } from '@/services/agent'
@@ -30,9 +30,19 @@ export function useAgentAdvanced(agent: Ref<Agent>) {
     overallLimitPerIp: String(agent.value.overall_limit_per_ip || 100),
     requestsPerSec: String(agent.value.requests_per_sec || 1)
   })
+
+  const isRateLimitValid = computed(() => {
+    const overallLimit = Number.parseInt(localSettings.value.overallLimitPerIp, 10)
+    const requestsPerSec = Number.parseInt(localSettings.value.requestsPerSec, 10)
+    return Number.isInteger(overallLimit) && overallLimit >= 10 && overallLimit <= 1000 &&
+      Number.isInteger(requestsPerSec) && requestsPerSec >= 1 && requestsPerSec <= 10
+  })
   
   // Watch for changes in the agent object to update local state
   watch(() => agent.value, (newAgent) => {
+    // An update from another card must not discard values the user is still
+    // editing in the rate-limit form.
+    if (hasUnsavedChanges.value || isLoading.value) return
     localSettings.value = {
       enableRateLimiting: newAgent.enable_rate_limiting || false,
       overallLimitPerIp: String(newAgent.overall_limit_per_ip || 100),
@@ -56,6 +66,7 @@ export function useAgentAdvanced(agent: Ref<Agent>) {
   
   // Toggle rate limiting with API call
   const toggleRateLimiting = async () => {
+    if (isLoading.value) return null
     try {
       isLoading.value = true
       error.value = null
@@ -75,8 +86,8 @@ export function useAgentAdvanced(agent: Ref<Agent>) {
       agent.value = { ...agent.value, ...updatedAgent }
       localSettings.value = {
         enableRateLimiting: updatedAgent.enable_rate_limiting,
-        overallLimitPerIp: String(updatedAgent.overall_limit_per_ip),
-        requestsPerSec: String(updatedAgent.requests_per_sec)
+        overallLimitPerIp: String(updatedAgent.overall_limit_per_ip ?? 100),
+        requestsPerSec: String(updatedAgent.requests_per_sec ?? 1)
       }
       hasUnsavedChanges.value = false
       
@@ -92,12 +103,19 @@ export function useAgentAdvanced(agent: Ref<Agent>) {
   
   // Update local rate limit values
   const updateLocalValue = (type: 'overallLimitPerIp' | 'requestsPerSec', value: string) => {
-    if (type === 'requestsPerSec') {
-      // Ensure whole numbers for requests per second
-      const numValue = parseInt(value)
-      if (numValue < 1) value = '1'
-      else if (numValue > 10) value = '10'
-      else value = String(numValue)
+    // Keep the input editable while rejecting non-numeric values. The save
+    // button is disabled until both fields are within the API's bounds.
+    if (value.trim() === '') {
+      value = ''
+    } else {
+      const numValue = Number.parseInt(value, 10)
+      if (!Number.isFinite(numValue)) {
+        value = ''
+      } else if (type === 'requestsPerSec') {
+        value = String(Math.min(10, Math.max(1, numValue)))
+      } else {
+        value = String(Math.min(1000, Math.max(10, numValue)))
+      }
     }
     
     localSettings.value = {
@@ -109,13 +127,17 @@ export function useAgentAdvanced(agent: Ref<Agent>) {
   
   // Save rate limit settings
   const saveRateLimitSettings = async () => {
+    if (isLoading.value || !isRateLimitValid.value) {
+      if (!isRateLimitValid.value) error.value = '请输入有效的频率限制数值'
+      return null
+    }
     try {
       isLoading.value = true
       error.value = null
       
       const updatedData: AgentUpdate = {
-        overall_limit_per_ip: parseInt(localSettings.value.overallLimitPerIp),
-        requests_per_sec: parseInt(localSettings.value.requestsPerSec)
+        overall_limit_per_ip: Number.parseInt(localSettings.value.overallLimitPerIp, 10),
+        requests_per_sec: Number.parseInt(localSettings.value.requestsPerSec, 10)
       }
       
       const updatedAgent = await agentService.updateAgent(agent.value.id, updatedData)
@@ -124,8 +146,8 @@ export function useAgentAdvanced(agent: Ref<Agent>) {
       agent.value = { ...agent.value, ...updatedAgent }
       localSettings.value = {
         ...localSettings.value,
-        overallLimitPerIp: String(updatedAgent.overall_limit_per_ip),
-        requestsPerSec: String(updatedAgent.requests_per_sec)
+        overallLimitPerIp: String(updatedAgent.overall_limit_per_ip ?? 100),
+        requestsPerSec: String(updatedAgent.requests_per_sec ?? 1)
       }
       hasUnsavedChanges.value = false
       
@@ -141,6 +163,7 @@ export function useAgentAdvanced(agent: Ref<Agent>) {
   
   return {
     localSettings,
+    isRateLimitValid,
     isLoading,
     error,
     hasUnsavedChanges,
@@ -151,4 +174,4 @@ export function useAgentAdvanced(agent: Ref<Agent>) {
     updateLocalValue,
     saveRateLimitSettings
   }
-} 
+}

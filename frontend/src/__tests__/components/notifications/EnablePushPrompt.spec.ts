@@ -53,7 +53,7 @@ describe('EnablePushPrompt', () => {
     setNotificationPermission('default')
     const wrapper = await mountPrompt()
     expect(wrapper.find('.push-prompt').exists()).toBe(true)
-    expect(wrapper.text()).toContain('Enable notifications')
+    expect(wrapper.text()).toContain('开启桌面通知')
   })
 
   it('stays hidden when permission is already granted', async () => {
@@ -95,7 +95,7 @@ describe('EnablePushPrompt', () => {
     setNotificationPermission(null)
     vi.stubGlobal('navigator', { userAgent: 'iPhone Safari' })
     const wrapper = await mountPrompt()
-    expect(wrapper.text()).toContain('Add ChatterMate to your Home Screen')
+    expect(wrapper.text()).toContain('将 ChatterMate 添加到主屏幕')
     expect(wrapper.find('.primary-btn').exists()).toBe(false)
   })
 })

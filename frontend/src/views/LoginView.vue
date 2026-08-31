@@ -75,13 +75,19 @@ const goBackToEmailStep = forgotPassword?.goBackToEmailStep ?? (() => {})
 const getInitialRoute = () => resolveLandingRoute()
 
 const handleLogin = async () => {
+    if (isLoading.value) return
+
     try {
         isLoading.value = true
         error.value = ''
 
         await authService.login(email.value, password.value)
 
-        trackLogin('email')
+        // Analytics is optional; a failed dynamic import must not turn a
+        // successful login into an unhandled rejection.
+        void trackLogin('email').catch((trackingError) => {
+            console.warn('Login analytics unavailable:', trackingError)
+        })
 
         // Check if this is Shopify flow (new managed installation)
         const urlParams = new URLSearchParams(window.location.search)
@@ -206,7 +212,8 @@ const handleLogin = async () => {
     } catch (err) {
         console.log(err)
         const axiosError = err as AxiosError<ErrorResponse>
-        error.value = axiosError.response?.data?.detail || 'Login failed'
+        error.value = axiosError.response?.data?.detail
+            || (err instanceof Error ? err.message : 'Login failed')
         console.error('Login error:', err)
     } finally {
         isLoading.value = false

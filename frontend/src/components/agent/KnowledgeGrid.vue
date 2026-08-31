@@ -27,11 +27,6 @@ const props = defineProps<{
     organizationId?: string
 }>()
 
-const componentData = {
-    DeleteIcon,
-    EditIcon
-}
-
 const {
     knowledgeItems,
     currentPage,
@@ -53,8 +48,6 @@ const {
     handlePageChange,
     formatDate,
 
-    getFirstCreated,
-    isValidUrl,
     triggerFileInput,
     handleFileSelect,
     handleFileUpload,
@@ -73,20 +66,17 @@ const {
     confirmDelete,
     handleDelete,
     cancelDelete,
+    isDeleting,
     urlFormError,
     uploadError,
     queueItems,
-    isLoadingQueue,
     selectedKnowledge,
     knowledgeContent,
     isLoadingContent,
-    isEditingContent,
-    editedContent,
+    contentError,
     isSavingContent,
     showContentModal,
     viewKnowledgeContent,
-    enableContentEditing,
-    cancelContentEditing,
     saveChunkContent,
     closeContentModal,
 } = useKnowledgeManagement(props.agentId || '', props.organizationId || '')
@@ -174,10 +164,12 @@ const editSubpage = (subpageId: string) => {
 
 const saveEditedSubpage = async () => {
     if (editingSubpageId.value) {
-        await saveChunkContent(editingSubpageId.value, editingSubpageContent.value)
-        showEditSubpageModal.value = false
-        editingSubpageId.value = null
-        editingSubpageContent.value = ''
+        const saved = await saveChunkContent(editingSubpageId.value, editingSubpageContent.value)
+        if (saved) {
+            showEditSubpageModal.value = false
+            editingSubpageId.value = null
+            editingSubpageContent.value = ''
+        }
     }
 }
 
@@ -504,13 +496,15 @@ const closeKnowledgeModal = () => {
             <div class="modal-content confirm-modal">
                 <div class="modal-header">
                     <h3>确认删除</h3>
-                    <button class="close-button" @click="cancelDelete">×</button>
+                    <button class="close-button" :disabled="isDeleting" @click="cancelDelete">×</button>
                 </div>
                 <div class="confirm-content">
                     <p>确定要删除此知识源吗？删除后智能体将不再引用该内容，此操作无法撤销。</p>
                     <div class="confirm-actions">
-                        <button class="cancel-button" @click="cancelDelete">取消</button>
-                        <button class="delete-button" @click="handleDelete">确认删除</button>
+                        <button class="cancel-button" :disabled="isDeleting" @click="cancelDelete">取消</button>
+                        <button class="delete-button" :disabled="isDeleting" @click="handleDelete">
+                            {{ isDeleting ? '正在删除…' : '确认删除' }}
+                        </button>
                     </div>
                 </div>
             </div>
@@ -526,6 +520,13 @@ const closeKnowledgeModal = () => {
 
                 <div v-if="isLoadingContent" class="loading-state">
                     正在加载切片内容…
+                </div>
+
+                <div v-else-if="contentError" class="content-error-state">
+                    <p>{{ contentError }}</p>
+                    <button class="retry-button" type="button" @click="selectedKnowledge && viewKnowledgeContent(selectedKnowledge)">
+                        重试
+                    </button>
                 </div>
 
                 <div v-else-if="knowledgeContent" class="content-body">
@@ -550,7 +551,7 @@ const closeKnowledgeModal = () => {
                                 </tr>
                             </thead>
                             <tbody>
-                                <tr v-for="(subpage, index) in knowledgeContent.chunks" :key="subpage.id"
+                                <tr v-for="subpage in knowledgeContent.chunks" :key="subpage.id"
                                     class="subpage-row" :data-subpage-id="subpage.id">
                                     <td class="cell-url">
                                         <a v-if="subpage.metadata && subpage.metadata.url" :href="subpage.metadata.url"

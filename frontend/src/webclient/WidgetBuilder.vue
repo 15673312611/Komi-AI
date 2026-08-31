@@ -66,7 +66,6 @@ const {
     hasStartedChat,
     connectionStatus,
     sendMessage: socketSendMessage,
-    sendFileAttachments,
     endChat: socketEndChat,
     loadChatHistory,
     connect,
@@ -94,6 +93,8 @@ const { displayText, isStreaming } = useTypewriter(messages, () => nextTick(() =
 useUnreadBadge(messages)
 
 const newMessage = ref('')
+const isSendingMessage = ref(false)
+let lastSendAt = 0
 const isExpanded = ref(true)
 const emailInput = ref('')
 const hasConversationToken = ref(false)
@@ -362,6 +363,8 @@ const {
     handleDragLeave,
     handlePaste,
     uploadFiles,
+    clearAttachments,
+    isUploading,
     removeAttachment,
     openPreview,
     closePreview,
@@ -382,19 +385,22 @@ const isMessageInputEnabled = computed(() => {
     // If we already have a conversation started, allow input
     if (hasStartedChat.value && hasConversationToken.value) {
 
-        return connectionStatus.value === 'connected' && !loading.value
+        return connectionStatus.value === 'connected' && !loading.value && !isSendingMessage.value && !isUploading.value
     }
 
     // When email collection is off (Ask AI, or collect_email disabled), don't require email
     if (!shouldCollectEmail.value) {
 
-        return connectionStatus.value === 'connected' && !loading.value
+        return connectionStatus.value === 'connected' && !loading.value && !isSendingMessage.value && !isUploading.value
     }
 
 
 
-    return (isValidEmail(emailInput.value.trim()) &&
-           connectionStatus.value === 'connected' && !loading.value)  || window.__INITIAL_DATA__?.workflow
+    const isReady = connectionStatus.value === 'connected'
+        && !loading.value
+        && !isSendingMessage.value
+        && !isUploading.value
+    return isReady && (isValidEmail(emailInput.value.trim()) || Boolean(window.__INITIAL_DATA__?.workflow))
 })
 
 const placeholderText = computed(() => {
@@ -403,48 +409,45 @@ const placeholderText = computed(() => {
 
 // Update the sendMessage function
 const sendMessage = async () => {
+    const now = Date.now()
+    if (isSendingMessage.value || now - lastSendAt < 250 || !isMessageInputEnabled.value) return
     if (!newMessage.value.trim() && uploadedAttachments.value.length === 0) return
+    lastSendAt = now
+    isSendingMessage.value = true
 
-    // If first message, fetch customization with email first
-    if (!hasStartedChat.value && emailInput.value) {
-        await checkAuthorization()
-    }
-
-    // Prepare files for upload (convert to format expected by backend)
-    const files = uploadedAttachments.value.map(file => ({
-        content: file.content,  // base64 content
-        filename: file.filename,
-        content_type: file.type,
-        size: file.size
-    }))
-
-    // Send message with files in a single emit
-    await socketSendMessage(newMessage.value, emailInput.value, files)
-
-    // Clean up temporary object URLs
-    uploadedAttachments.value.forEach(file => {
-        if (file.url && file.url.startsWith('blob:')) {
-            URL.revokeObjectURL(file.url)
+    try {
+        // If first message, fetch customization with email first
+        if (!hasStartedChat.value && emailInput.value) {
+            const authorized = await checkAuthorization()
+            if (!authorized) return
         }
-        if (file.file_url && file.file_url.startsWith('blob:')) {
-            URL.revokeObjectURL(file.file_url)
-        }
-    })
 
-    newMessage.value = ''
-    uploadedAttachments.value = []
+        // Prepare files for upload (convert to format expected by backend)
+        const files = uploadedAttachments.value.map(file => ({
+            content: file.content,  // base64 content
+            filename: file.filename,
+            content_type: file.type,
+            size: file.size
+        }))
 
-    // Also clear the actual DOM input field to ensure it's visually cleared
-    const inputField = document.querySelector('input[placeholder*="Type a message"]') as HTMLInputElement
-    if (inputField) {
-        inputField.value = ''
+        // Send message with files in a single emit
+        const sent = await socketSendMessage(newMessage.value, emailInput.value, files)
+        if (!sent) return
+
+        clearAttachments()
+        newMessage.value = ''
+
+        // Also clear the actual DOM input field to ensure it's visually cleared
+        const inputField = document.querySelector('input[placeholder*="Type a message"]') as HTMLInputElement
+        if (inputField) inputField.value = ''
+
+        // Re-setup native event listeners after message is sent
+        setTimeout(() => setupNativeEventListeners(), 500)
+    } catch (error) {
+        console.error('Failed to send message:', error)
+    } finally {
+        isSendingMessage.value = false
     }
-
-    // Re-setup native event listeners after message is sent
-    // The DOM might have changed, so we need to reattach listeners
-    setTimeout(() => {
-        setupNativeEventListeners()
-    }, 500)
 }
 
 // Send a predefined quick-action: reuse the normal send path with the label text.
@@ -655,9 +658,15 @@ watch(() => messages.value, (newMessages) => {
 
 // Add reconnect handler
 const handleReconnect = async () => {
-    const connected = await reconnect()
-    if (connected) {
-        await checkAuthorization()
+    if (isReconnecting.value) return
+    isReconnecting.value = true
+    try {
+        const connected = await reconnect()
+        if (connected) await checkAuthorization()
+    } catch (error) {
+        console.error('Failed to reconnect:', error)
+    } finally {
+        isReconnecting.value = false
     }
 }
 
@@ -669,6 +678,7 @@ const ratingFeedback = ref('')
 // Add these refs for star rating
 const hoverRating = ref(0)
 const isSubmittingRating = ref(false)
+const isReconnecting = ref(false)
 
 // Form handling refs
 const formData = ref<Record<string, any>>({})
@@ -791,16 +801,22 @@ const handleStarClick = async (rating: number) => {
 }
 
 const handleSubmitRating = async (sessionId: string, rating: number, feedback: string | null = null) => {
+    if (isSubmittingRating.value || !Number.isInteger(rating) || rating < 1 || rating > 5) return
     try {
         isSubmittingRating.value = true
-        await socketSubmitRating(rating, feedback)
+        const submitted = await socketSubmitRating(rating, feedback)
+        if (!submitted) return
 
         // Instead of removing the rating message, mark it as submitted
-        const lastMessage = messages.value.find(msg => msg.message_type === 'rating')
-        if (lastMessage) {
-            lastMessage.isSubmitted = true
-            lastMessage.finalRating = rating
-            lastMessage.finalFeedback = feedback
+        const ratingMessage = messages.value.find(msg =>
+            msg.message_type === 'rating'
+            && (!sessionId || msg.session_id === sessionId)
+            && !msg.isSubmitted
+        )
+        if (ratingMessage) {
+            ratingMessage.isSubmitted = true
+            ratingMessage.finalRating = rating
+            ratingMessage.finalFeedback = feedback
         }
     } catch (error) {
         console.error('Failed to submit rating:', error)
@@ -840,6 +856,12 @@ const handleAddToCartFromCarousel = (product) => {
 const validateForm = (formConfig: any): boolean => {
     const errors: Record<string, string> = {}
 
+    if (!formConfig || !Array.isArray(formConfig.fields)) {
+        formErrors.value = {}
+        console.error('Cannot submit form without a valid field configuration')
+        return false
+    }
+
     for (const field of formConfig.fields) {
         const value = formData.value[field.name]
         const error = validateFormField(field, value)
@@ -873,7 +895,8 @@ const handleFormSubmit = async (formConfig: any) => {
     try {
 
         isSubmittingForm.value = true
-        await submitForm(formData.value)
+        const submitted = await submitForm(formData.value)
+        if (!submitted) return
 
 
         // Remove the form message from messages array
@@ -1025,7 +1048,8 @@ const submitFullScreenForm = async () => {
         }
 
         // Submit form data through the workflow
-        await submitForm(formData.value)
+        const submitted = await submitForm(formData.value)
+        if (!submitted) return
 
         // Hide full screen form after successful submission
         showFullScreenForm.value = false
@@ -1116,7 +1140,6 @@ const removeUrls = (text) => {
 
 
 // File upload functionality (remaining local state)
-const isUploading = ref(false)
 const dragOver = ref(false)
 
 const maxFiles = 3
@@ -1135,7 +1158,11 @@ const canUploadMore = computed(() => {
   // 1. allow_attachments setting is enabled
   // 2. Chat has been handed over to a human agent (no need to wait for agent message)
   // 3. Haven't reached max file limit
-  return allowAttachments.value && isHandedOverToHuman.value && uploadedAttachments.value.length < maxFiles
+    return allowAttachments.value
+        && isHandedOverToHuman.value
+        && !isUploading.value
+        && !isSendingMessage.value
+        && uploadedAttachments.value.length < maxFiles
 })
 
 
@@ -1145,9 +1172,11 @@ const canUploadMore = computed(() => {
 // Handle landing page proceed action
 const handleLandingPageProceed = async () => {
     try {
-        showLandingPage.value = false
-        landingPageData.value = null
-        await proceedWorkflow()
+        const proceeded = await proceedWorkflow()
+        if (proceeded) {
+            showLandingPage.value = false
+            landingPageData.value = null
+        }
     } catch (error) {
         console.error('Failed to proceed workflow:', error)
     }
@@ -1156,7 +1185,7 @@ const handleLandingPageProceed = async () => {
 // Handle user input submission
 const handleUserInputSubmit = async (message: any) => {
     try {
-        if (!message.userInputValue || !message.userInputValue.trim()) {
+        if (!message || message.isSubmitted || typeof message.userInputValue !== 'string' || !message.userInputValue.trim()) {
             return
         }
 
@@ -1167,7 +1196,11 @@ const handleUserInputSubmit = async (message: any) => {
         message.submittedValue = userInput
 
         // Send the user input as a regular message to continue the workflow
-        await socketSendMessage(userInput, emailInput.value)
+        const sent = await socketSendMessage(userInput, emailInput.value)
+        if (!sent) {
+            message.isSubmitted = false
+            message.submittedValue = null
+        }
 
     } catch (error) {
         console.error('Failed to submit user input:', error)
@@ -1221,7 +1254,7 @@ const initializeWidget = async () => {
 // which would race that gap and be dropped.
 // (The handler bodies run on later macrotasks, so refs declared further down —
 // parentDisplay — are initialized by the time they're touched.)
-window.addEventListener('message', (event) => {
+const handleParentMessage = (event: MessageEvent) => {
     // Only the embedding page (the loader, or the dashboard preview) may drive the
     // widget; hostile sibling frames can reach this window via top.frames[i].
     if (event.source !== window.parent) return
@@ -1231,7 +1264,8 @@ window.addEventListener('message', (event) => {
     }
     if (event.data.type === 'TOKEN_RECEIVED') {
         // Parent confirmed token storage
-        localStorage.setItem(TOKEN_KEY, event.data.token)
+        const receivedToken = sanitizeToken(event.data.token)
+        if (receivedToken) localStorage.setItem(TOKEN_KEY, receivedToken)
     }
     if (event.data.type === 'WIDGET_VISIBILITY') {
         // The loader reports open/closed. Without this the Ask AI palette would
@@ -1259,7 +1293,8 @@ window.addEventListener('message', (event) => {
             input?.focus()
         })
     }
-})
+}
+window.addEventListener('message', handleParentMessage)
 
 // Setup event listeners and callbacks
 const setupEventListeners = () => {
@@ -1382,7 +1417,7 @@ const handleStartNewChat = async () => {
         await socketEndChat()
         humanAgent.value = {}
         newMessage.value = ''
-        uploadedAttachments.value = []
+        clearAttachments()
         await initializeWidget()
     } catch (error) {
         console.error('Failed to start a new chat:', error)
@@ -1393,14 +1428,22 @@ const handleStartNewChat = async () => {
 
 // Handle starting a new conversation
 const handleStartNewConversation = async () => {
-    shouldShowNewConversationOption.value = false
-    messages.value = [] // Clear messages
-    // Drop any human agent from the previous conversation. humanAgent is only ever
-    // set (on takeover, and from loaded history), never cleared, so without this the
-    // fresh AI-handled chat would keep the old agent's name in the header, keep
-    // attachments enabled, and hide the AI disclaimer while the AI is answering.
-    humanAgent.value = {}
-    await startNewConversationWorkflow()
+    if (startingNewChat.value) return
+    startingNewChat.value = true
+    try {
+        messages.value = [] // Clear messages
+        // Drop any human agent from the previous conversation. humanAgent is only ever
+        // set (on takeover, and from loaded history), never cleared, so without this the
+        // fresh AI-handled chat would keep the old agent's name in the header, keep
+        // attachments enabled, and hide the AI disclaimer while the AI is answering.
+        humanAgent.value = {}
+        clearAttachments()
+        await startNewConversationWorkflow()
+    } catch (error) {
+        console.error('Failed to start a new conversation:', error)
+    } finally {
+        startingNewChat.value = false
+    }
 }
 
 onMounted(async () => {
@@ -1434,11 +1477,7 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
-    window.removeEventListener('message', (event) => {
-        if (event.data.type === 'SCROLL_TO_BOTTOM') {
-            scrollToBottom()
-        }
-    })
+    window.removeEventListener('message', handleParentMessage)
 
     // Remove header menu click listener
     document.removeEventListener('click', closeHeaderMenu)
@@ -1454,6 +1493,7 @@ onUnmounted(() => {
         clearTimeout(setupDOMObserver.timeoutId)
         setupDOMObserver.timeoutId = null
     }
+    disarmNewChat()
 
     // Clean up native event listeners
     cleanupNativeEventListeners()
@@ -1584,7 +1624,11 @@ const submitEmailGate = async () => {
     submittingEmail.value = true
     try {
         // Submit the email to the backend (associates it + (re)connects the socket).
-        await checkAuthorization()
+        const authorized = await checkAuthorization()
+        if (!authorized) {
+            emailGateError.value = '无法连接聊天服务，请稍后重试。'
+            return
+        }
         emailCollected.value = true
     } catch {
         emailGateError.value = 'Something went wrong. Please try again.'
@@ -1812,8 +1856,8 @@ const askAiHotkey = computed(() => parentDisplay.value?.hotkey !== false)
             </div>
             <div v-else-if="connectionStatus === 'failed'" class="failed-message">
                 Connection failed.
-                <button @click="handleReconnect" class="reconnect-button">
-                    Click here to reconnect
+                <button @click="handleReconnect" class="reconnect-button" :disabled="isReconnecting">
+                    {{ isReconnecting ? 'Reconnecting...' : 'Click here to reconnect' }}
                 </button>
             </div>
         </div>

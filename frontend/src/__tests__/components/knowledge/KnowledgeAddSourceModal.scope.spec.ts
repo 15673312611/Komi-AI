@@ -35,21 +35,21 @@ describe('KnowledgeAddSourceModal crawl scope', () => {
     // "Pages under / " is not a section — it is the whole site, which the next
     // option already covers.
     const wrapper = await mountModal('https://paywithatoa.co.uk')
-    expect(scopeTitles(wrapper)).toEqual(['This page only', 'This site', 'Whole domain'])
-    expect(scopeOption(wrapper, 'This site')!.text()).toContain('Every page on paywithatoa.co.uk.')
+    expect(scopeTitles(wrapper)).toEqual(['仅抓取此单页', '当前子域整站', '主域名全站及子域'])
+    expect(scopeOption(wrapper, '当前子域整站')!.text()).toContain('抓取 paywithatoa.co.uk 下的所有页面。')
   })
 
   it('names the section when the URL has a path', async () => {
     const wrapper = await mountModal('https://help.example.com/hc/en')
-    expect(scopeTitles(wrapper)).toContain('This section')
-    expect(scopeOption(wrapper, 'This section')!.text()).toContain(
-      'Only pages under /hc/en/ on help.example.com.',
+    expect(scopeTitles(wrapper)).toContain('当前栏目/路径')
+    expect(scopeOption(wrapper, '当前栏目/路径')!.text()).toContain(
+      '仅抓取 help.example.com 域名下以 /hc/en/ 开头的所有子页面。',
     )
   })
 
   it('falls back to this-site when the section option disappears', async () => {
     const wrapper = await mountModal('https://help.example.com/hc/en')
-    await scopeOption(wrapper, 'This section')!.trigger('click')
+    await scopeOption(wrapper, '当前栏目/路径')!.trigger('click')
 
     await wrapper.find('#kb-add-url').setValue('https://help.example.com')
     await wrapper.find('button.btn--primary').trigger('click')
@@ -63,7 +63,7 @@ describe('KnowledgeAddSourceModal crawl scope', () => {
 
   it('submits the selected scope', async () => {
     const wrapper = await mountModal('https://help.example.com/hc/en')
-    await scopeOption(wrapper, 'This section')!.trigger('click')
+    await scopeOption(wrapper, '当前栏目/路径')!.trigger('click')
     await wrapper.find('button.btn--primary').trigger('click')
 
     expect(wrapper.emitted('submit')![0][0]).toMatchObject({ scope: 'path' })

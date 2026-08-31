@@ -18,6 +18,7 @@ limitations under the License.
   <div class="customer-analytics-container">
     <div v-if="error" class="error-state">
       {{ error }}
+      <button type="button" class="retry-button" @click="fetchCustomerData()">重试</button>
     </div>
 
     <div v-else-if="isLoading" class="loading-state">
@@ -252,7 +253,7 @@ interface CustomerData {
   email: string
   full_name: string | null
   total_chats: number
-  last_interaction: string
+  last_interaction: string | null
   avg_rating: number
   rating_count: number
   feedback?: CustomerFeedback[]
@@ -283,10 +284,12 @@ const selectedCustomer = ref<CustomerData | null>(null)
 // Pagination
 const currentPage = ref(1)
 const itemsPerPage = ref(10)
+let listRequestVersion = 0
+let detailRequestVersion = 0
 
 const totalPages = computed(() => {
   if (!customerData.value?.pagination) return 1
-  return customerData.value.pagination.total_pages
+  return Math.max(1, customerData.value.pagination.total_pages)
 })
 
 // Use the customers directly from the API response
@@ -295,13 +298,45 @@ const paginatedCustomers = computed(() => {
   return customerData.value.customers
 })
 
-const formatDate = (dateString: string): string => {
+const formatDate = (dateString: string | null | undefined): string => {
   if (!dateString) return 'N/A'
   const date = new Date(dateString)
-  return date.toLocaleString()
+  return Number.isNaN(date.getTime()) ? 'N/A' : date.toLocaleString()
+}
+
+const toFiniteNumber = (value: unknown, fallback = 0): number => {
+  const number = Number(value)
+  return Number.isFinite(number) ? number : fallback
+}
+
+const normalizeCustomer = (raw: any, index: number): CustomerData => ({
+  id: String(raw?.id ?? index),
+  email: typeof raw?.email === 'string' ? raw.email : '',
+  full_name: typeof raw?.full_name === 'string' ? raw.full_name : null,
+  total_chats: toFiniteNumber(raw?.total_chats),
+  last_interaction: typeof raw?.last_interaction === 'string' ? raw.last_interaction : null,
+  avg_rating: toFiniteNumber(raw?.avg_rating),
+  rating_count: toFiniteNumber(raw?.rating_count),
+})
+
+const normalizeCustomerData = (raw: any, requestedPage: number): CustomerAnalyticsData => {
+  const pagination = raw?.pagination || {}
+  const pageSize = Math.max(1, toFiniteNumber(pagination.page_size, itemsPerPage.value))
+  const totalCount = Math.max(0, toFiniteNumber(pagination.total_count))
+  const totalPages = Math.max(1, toFiniteNumber(
+    pagination.total_pages,
+    Math.ceil(totalCount / pageSize),
+  ))
+  const page = Math.min(Math.max(1, toFiniteNumber(pagination.page, requestedPage)), totalPages)
+  return {
+    customers: Array.isArray(raw?.customers) ? raw.customers.map(normalizeCustomer) : [],
+    time_range: typeof raw?.time_range === 'string' ? raw.time_range : props.timeRange,
+    pagination: { page, page_size: pageSize, total_count: totalCount, total_pages: totalPages },
+  }
 }
 
 const fetchCustomerData = async (page = currentPage.value) => {
+  const version = ++listRequestVersion
   try {
     isLoading.value = true
     error.value = null
@@ -312,39 +347,58 @@ const fetchCustomerData = async (page = currentPage.value) => {
         page_size: itemsPerPage.value
       }
     })
-    customerData.value = response.data
-    currentPage.value = response.data.pagination.page
+    if (version === listRequestVersion) {
+      const data = normalizeCustomerData(response?.data, page)
+      customerData.value = data
+      currentPage.value = data.pagination.page
+    }
   } catch (err: any) {
-    error.value = err.response?.data?.detail || 'Failed to fetch customer analytics data'
+    if (version === listRequestVersion) {
+      error.value = err.response?.data?.detail || 'Failed to fetch customer analytics data'
+    }
   } finally {
-    isLoading.value = false
+    if (version === listRequestVersion) isLoading.value = false
   }
 }
 
 const showCustomerDetails = async (customer: CustomerData) => {
+  const version = ++detailRequestVersion
+  selectedCustomer.value = null
   try {
     const response = await api.get(`/analytics/customer-details/${customer.id}`, {
       params: { time_range: props.timeRange }
     })
-    selectedCustomer.value = {
-      ...customer,
-      feedback: response.data.feedback
+    if (version === detailRequestVersion) {
+      selectedCustomer.value = {
+        ...customer,
+        feedback: Array.isArray(response?.data?.feedback)
+          ? response.data.feedback.map((item: any) => ({
+              rating: toFiniteNumber(item?.rating),
+              feedback: typeof item?.feedback === 'string' ? item.feedback : null,
+              created_at: typeof item?.created_at === 'string' ? item.created_at : '',
+              agent_name: typeof item?.agent_name === 'string' ? item.agent_name : null,
+            }))
+          : [],
+      }
     }
   } catch (err: any) {
-    error.value = err.response?.data?.detail || 'Failed to fetch customer details'
+    if (version === detailRequestVersion) {
+      error.value = err.response?.data?.detail || 'Failed to fetch customer details'
+    }
   }
 }
 
 // Handle page changes
 const goToPage = (page: number) => {
-  if (page < 1 || page > totalPages.value) return
-  fetchCustomerData(page)
+  const nextPage = Math.trunc(page)
+  if (!Number.isFinite(nextPage) || nextPage < 1 || nextPage > totalPages.value || nextPage === currentPage.value) return
+  void fetchCustomerData(nextPage)
 }
 
 // Watch for time range changes from parent
-watch(() => props.timeRange, (newRange) => {
+watch(() => props.timeRange, () => {
   // Reset to page 1 when time range changes
-  fetchCustomerData(1)
+  void fetchCustomerData(1)
 })
 
 const handlePageInputChange = (event: Event) => {
@@ -364,12 +418,12 @@ const handlePageSizeChange = (event: Event) => {
   if (newSize !== itemsPerPage.value) {
     itemsPerPage.value = newSize
     // Reset to page 1 when changing page size
-    fetchCustomerData(1)
+    void fetchCustomerData(1)
   }
 }
 
 onMounted(() => {
-  fetchCustomerData()
+  void fetchCustomerData()
 })
 </script>
 
@@ -886,4 +940,4 @@ onMounted(() => {
   color: var(--text-muted);
   font-size: var(--text-md);
 }
-</style> 
+</style>

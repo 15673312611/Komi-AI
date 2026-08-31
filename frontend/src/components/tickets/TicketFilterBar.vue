@@ -19,7 +19,14 @@ import { onMounted } from 'vue'
 import type { TicketListFilters } from '@/types/ticket'
 import { useUsers } from '@/composables/useUsers'
 
-defineProps<{ filters: TicketListFilters }>()
+const props = defineProps<{ filters: TicketListFilters }>()
+const emit = defineEmits<{
+  (e: 'update:filters', filters: TicketListFilters): void
+}>()
+
+const updateFilter = <K extends keyof TicketListFilters>(key: K, value: TicketListFilters[K]) => {
+  emit('update:filters', { ...props.filters, [key]: value })
+}
 
 const STATUS_PILLS = [
   { value: 'all', label: '全部状态' },
@@ -51,13 +58,13 @@ onMounted(() => {
         :key="pill.value"
         class="pill"
         :class="{ active: filters.status === pill.value }"
-        @click="filters.status = pill.value"
+        @click="updateFilter('status', pill.value)"
       >
         {{ pill.label }}
       </button>
     </div>
 
-    <select v-model="filters.priority" class="filter-select">
+    <select :value="filters.priority" class="filter-select" @change="updateFilter('priority', ($event.target as HTMLSelectElement).value)">
       <option value="all">优先级 · 全部</option>
       <option value="urgent">紧急</option>
       <option value="high">高</option>
@@ -65,7 +72,7 @@ onMounted(() => {
       <option value="low">低</option>
     </select>
 
-    <select v-model="filters.assignee" class="filter-select">
+    <select :value="filters.assignee" class="filter-select" @change="updateFilter('assignee', ($event.target as HTMLSelectElement).value)">
       <option value="all">处理人 · 全部</option>
       <option value="unassigned">未分配 / AI 智能体</option>
       <option v-for="user in users" :key="user.id" :value="user.id">
@@ -79,7 +86,7 @@ onMounted(() => {
         :key="pill.value"
         class="pill with-dot"
         :class="{ active: filters.ai === pill.value }"
-        @click="filters.ai = pill.value"
+        @click="updateFilter('ai', pill.value)"
       >
         <span class="dot" :style="{ background: pill.color }"></span>{{ pill.label }}
       </button>
@@ -87,10 +94,10 @@ onMounted(() => {
 
     <div class="search-wrap">
       <span class="search-glyph"></span>
-      <input v-model="filters.search" class="search-input" placeholder="搜索工单标题、编号或描述..." />
+      <input :value="filters.search" class="search-input" placeholder="搜索工单标题、编号或描述..." @input="updateFilter('search', ($event.target as HTMLInputElement).value)" />
     </div>
 
-    <select v-model="filters.sort" class="filter-select">
+    <select :value="filters.sort" class="filter-select" @change="updateFilter('sort', ($event.target as HTMLSelectElement).value)">
       <option value="updated">排序 · 最近更新</option>
       <option value="created">最新创建</option>
       <option value="priority">优先级最高</option>

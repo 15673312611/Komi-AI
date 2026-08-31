@@ -20,6 +20,8 @@ import { toast } from 'vue-sonner'
 import channelsService, { type ChannelAccount, type SmsProviderInfo } from '@/services/channels'
 import { agentService } from '@/services/agent'
 import type { Agent } from '@/types/agent'
+import { copyTextToClipboard } from '@/utils/clipboard'
+import { validateEmail } from '@/utils/validators'
 
 const props = defineProps<{
   channel: 'email' | 'sms' | 'line' | 'slack'
@@ -106,6 +108,8 @@ const isManage = computed(() => !!props.existingAccount)
 // SMS providers (dynamic credential fields per provider)
 const smsProviders = ref<SmsProviderInfo[]>([])
 const selectedProvider = ref('twilio')
+const providersLoading = ref(false)
+const providersError = ref('')
 
 // The credential fields to render: dynamic for SMS, static otherwise
 const activeFields = computed(() => {
@@ -123,22 +127,71 @@ const activeFields = computed(() => {
 const agents = ref<Agent[]>([])
 const selectedAgentId = ref('')
 const savingAgent = ref(false)
+const agentsLoading = ref(false)
 
-onMounted(async () => {
+const loadSmsProviders = async () => {
+  providersLoading.value = true
+  providersError.value = ''
   try {
-    if (props.channel === 'sms') {
-      smsProviders.value = await channelsService.listSmsProviders()
+    smsProviders.value = await channelsService.listSmsProviders()
+    if (smsProviders.value.length && !smsProviders.value.some(p => p.name === selectedProvider.value)) {
+      selectedProvider.value = smsProviders.value[0].name
     }
+  } catch (error) {
+    console.error('Error loading SMS providers:', error)
+    providersError.value = '短信服务商列表加载失败，请重试'
+  } finally {
+    providersLoading.value = false
+  }
+}
+
+const loadAgents = async () => {
+  agentsLoading.value = true
+  try {
     agents.value = await agentService.getOrganizationAgents()
-    // Default the agent selector to the account's current agent, else the first
     selectedAgentId.value = String(
       props.existingAccount?.agent_id || agents.value[0]?.id || '')
   } catch (error) {
-    console.error('Error loading modal data:', error)
+    console.error('Error loading agents:', error)
+  } finally {
+    agentsLoading.value = false
   }
+}
+
+onMounted(async () => {
+  await Promise.all([
+    props.channel === 'sms' ? loadSmsProviders() : Promise.resolve(),
+    loadAgents(),
+  ])
 })
 
+const validateCredentials = (): boolean => {
+  if (props.channel === 'sms' && (providersLoading.value || providersError.value || !smsProviders.value.length)) {
+    toast.error(providersError.value || '短信服务商列表尚未加载完成')
+    return false
+  }
+  if (props.channel === 'email') {
+    if (!validateEmail(values.value.inbound_address?.trim() || '')) {
+      toast.error('请输入有效的客服接收邮箱地址')
+      return false
+    }
+    if (values.value.from_email?.trim() && !validateEmail(values.value.from_email.trim())) {
+      toast.error('请输入有效的发件人邮箱地址')
+      return false
+    }
+    if (values.value.smtp_port?.trim()) {
+      const port = Number(values.value.smtp_port)
+      if (!Number.isInteger(port) || port < 1 || port > 65535) {
+        toast.error('SMTP 端口必须是 1-65535 之间的整数')
+        return false
+      }
+    }
+  }
+  return true
+}
+
 const connect = async () => {
+  if (connecting.value || !validateCredentials()) return
   const missing = activeFields.value.filter(f => !(f as any).optional && !values.value[f.key]?.trim())
   if (missing.length > 0) {
     toast.error(`请填写必要项：${missing.map(f => f.label).join(', ')}`)
@@ -150,9 +203,6 @@ const connect = async () => {
       Object.entries(values.value).map(([k, v]) => [k, v.trim()]))
     account.value = await form.value.connect(trimmed)
     toast.success(`已成功连接 ${account.value.display_name || form.value.title.replace('连接 ', '')}`)
-    if (props.channel === 'email' || !account.value.webhook_url) {
-      emit('connected', account.value)
-    }
   } catch (error: any) {
     toast.error(error?.response?.data?.detail || `连接 ${props.channel} 失败`)
   } finally {
@@ -160,10 +210,32 @@ const connect = async () => {
   }
 }
 
+const saveAgent = async () => {
+  if (!account.value || !selectedAgentId.value || savingAgent.value || agentsLoading.value) return
+  try {
+    savingAgent.value = true
+    const updated = await channelsService.setAccountAgent(account.value.id, selectedAgentId.value)
+    toast.success('已指定接待智能体 — 该渠道已正式上线！')
+    emit('connected', updated)
+  } catch (error: any) {
+    toast.error(error?.response?.data?.detail || '指定接待智能体失败')
+  } finally {
+    savingAgent.value = false
+  }
+}
+
 const copyWebhookUrl = async () => {
   if (!account.value?.webhook_url) return
-  await navigator.clipboard.writeText(account.value.webhook_url)
-  toast.success('Webhook 回调地址已复制到剪贴板')
+  try {
+    if (await copyTextToClipboard(account.value.webhook_url)) {
+      toast.success('Webhook 回调地址已复制到剪贴板')
+    } else {
+      toast.error('复制失败，请手动选择并复制地址')
+    }
+  } catch (error) {
+    console.error('Failed to copy webhook URL:', error)
+    toast.error('复制失败，请手动选择并复制地址')
+  }
 }
 </script>
 
@@ -184,9 +256,14 @@ const copyWebhookUrl = async () => {
         <!-- SMS provider picker -->
         <div v-if="channel === 'sms'" class="cc-field">
           <label class="cc-label" for="cc-provider">短信服务商 (SMS Provider)</label>
-          <select id="cc-provider" v-model="selectedProvider" class="cc-input">
+          <select id="cc-provider" v-model="selectedProvider" class="cc-input" :disabled="providersLoading || connecting">
             <option v-for="p in smsProviders" :key="p.name" :value="p.name">{{ p.label }}</option>
           </select>
+          <div v-if="providersLoading" class="cc-hint">正在加载短信服务商列表…</div>
+          <div v-else-if="providersError" class="cc-error">
+            {{ providersError }}
+            <button type="button" class="cc-retry" @click="loadSmsProviders">重试</button>
+          </div>
         </div>
 
         <div v-for="field in activeFields" :key="field.key" class="cc-field">
@@ -203,13 +280,13 @@ const copyWebhookUrl = async () => {
         </div>
         <div class="cc-actions">
           <button class="cc-btn cc-btn-secondary" @click="emit('close')">取消</button>
-          <button class="cc-btn cc-btn-primary" :disabled="connecting" @click="connect">
+          <button class="cc-btn cc-btn-primary" :disabled="connecting || providersLoading || !!providersError" @click="connect">
             {{ connecting ? '正在连接…' : '立即连接' }}
           </button>
         </div>
       </div>
 
-      <!-- Step 2: webhook URL (if applicable) -->
+      <!-- Step 2: webhook URL and agent routing -->
       <div v-else class="cc-modal-body">
         <p class="cc-intro">
           <strong>{{ account.display_name }}</strong> 已成功连接。
@@ -221,11 +298,27 @@ const copyWebhookUrl = async () => {
             <button class="cc-btn cc-btn-secondary" @click="copyWebhookUrl">复制</button>
           </div>
         </div>
+        <div class="cc-field">
+          <label class="cc-label" for="cc-agent">接待 AI 智能体</label>
+          <select id="cc-agent" v-model="selectedAgentId" class="cc-input" :disabled="agentsLoading || savingAgent">
+            <option v-if="agentsLoading" value="">正在加载智能体…</option>
+            <option value="">稍后指定</option>
+            <option v-for="agent in agents" :key="String(agent.id)" :value="String(agent.id)">
+              {{ agent.display_name || agent.name }}
+            </option>
+          </select>
+        </div>
         <div class="cc-actions">
           <button v-if="isManage && channel !== 'slack'" class="cc-btn cc-btn-secondary" @click="account = null">
             重新配置凭证
           </button>
-          <button class="cc-btn cc-btn-primary" @click="emit('connected', account)">完成</button>
+          <button
+            class="cc-btn cc-btn-primary"
+            :disabled="savingAgent || agentsLoading"
+            @click="selectedAgentId ? saveAgent() : emit('connected', account)"
+          >
+            {{ savingAgent ? '正在保存…' : selectedAgentId ? '保存并完成' : '完成' }}
+          </button>
         </div>
       </div>
     </div>

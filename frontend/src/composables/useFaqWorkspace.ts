@@ -37,6 +37,8 @@ export function useFaqWorkspace(organizationId: () => string | undefined) {
   const pageCount = ref(0)
   const isLoading = ref(false)
   const loadedOnce = ref(false)
+  const bulkBusy = ref(false)
+  const jobActionBusy = ref(false)
 
   // Multi-select state for bulk publish/unpublish/delete.
   const selectedIds = ref<Set<string>>(new Set())
@@ -65,26 +67,38 @@ export function useFaqWorkspace(organizationId: () => string | undefined) {
   async function bulkSetStatus(status: FaqStatus): Promise<void> {
     const ids = [...selectedIds.value]
     if (!ids.length) return
+    if (bulkBusy.value) return
+    const idsSet = new Set(ids)
+    bulkBusy.value = true
     try {
       const updated = await faqService.setStatus(ids, status)
-      faqs.value = faqs.value.map((f) => (selectedIds.value.has(f.id) ? { ...f, status } : f))
-      clearSelection()
+      faqs.value = faqs.value.map((f) => (idsSet.has(f.id) ? { ...f, status } : f))
+      const remainingSelection = new Set(selectedIds.value)
+      idsSet.forEach((id) => remainingSelection.delete(id))
+      selectedIds.value = remainingSelection
       toast.success(`${updated} FAQ${updated === 1 ? '' : 's'} ${status === 'published' ? 'published' : 'moved to draft'}`)
     } catch (error: any) {
       toast.error(error.message)
       // A batch may have partially applied server-side (>200 selection splits
       // into requests) — refetch so the list matches the backend.
       await refresh()
+    } finally {
+      bulkBusy.value = false
     }
   }
 
   async function bulkDelete(): Promise<void> {
     const ids = [...selectedIds.value]
     if (!ids.length) return
+    if (bulkBusy.value) return
+    const idsSet = new Set(ids)
+    bulkBusy.value = true
     try {
       const deleted = await faqService.bulkDelete(ids)
-      faqs.value = faqs.value.filter((f) => !selectedIds.value.has(f.id))
-      clearSelection()
+      faqs.value = faqs.value.filter((f) => !idsSet.has(f.id))
+      const remainingSelection = new Set(selectedIds.value)
+      idsSet.forEach((id) => remainingSelection.delete(id))
+      selectedIds.value = remainingSelection
       toast.success(`${deleted} FAQ${deleted === 1 ? '' : 's'} deleted`)
       // Deleting a source's FAQs makes it eligible for generation again — the
       // Generate button's new-source count must not stay stale/disabled.
@@ -92,6 +106,8 @@ export function useFaqWorkspace(organizationId: () => string | undefined) {
     } catch (error: any) {
       toast.error(error.message)
       await refresh() // partial batch may have deleted server-side; resync
+    } finally {
+      bulkBusy.value = false
     }
   }
 
@@ -110,9 +126,19 @@ export function useFaqWorkspace(organizationId: () => string | undefined) {
   const draftMetaTitle = ref('')
   const draftMetaDescription = ref('')
   const isSaving = ref(false)
+  const pendingStatusIds = new Set<string>()
+  const pendingDeleteIds = new Set<string>()
 
   let pollTimer: ReturnType<typeof setInterval> | null = null
+  let pollInFlight = false
   let lastPollAt = 0
+  let refreshRequestVersion = 0
+  let faqsRequestVersion = 0
+  let jobRequestVersion = 0
+  let jobStateVersion = 0
+  let settingsRequestVersion = 0
+  let countsRequestVersion = 0
+  let estimateRequestVersion = 0
 
   const isJobActive = computed(
     () => job.value?.status === 'pending' || job.value?.status === 'processing',
@@ -205,44 +231,59 @@ export function useFaqWorkspace(organizationId: () => string | undefined) {
   const MAX_FAQ_PAGES = 10
 
   async function fetchFaqs(): Promise<void> {
+    const requestVersion = ++faqsRequestVersion
     const all: FaqItem[] = []
     let page = 1
     for (;;) {
       const response = await faqService.getFaqs({ page })
-      all.push(...response.faqs)
-      if (page >= response.pagination.total_pages || page >= MAX_FAQ_PAGES) break
+      const pageFaqs = Array.isArray(response?.faqs) ? response.faqs : []
+      all.push(...pageFaqs)
+      const totalPages = response?.pagination?.total_pages || 0
+      if (page >= totalPages || page >= MAX_FAQ_PAGES) break
       page += 1
     }
+    if (requestVersion !== faqsRequestVersion) return
     faqs.value = all
   }
 
   async function fetchJob(): Promise<void> {
-    job.value = await faqService.getJob(true)
+    const requestVersion = ++jobRequestVersion
+    const stateVersion = jobStateVersion
+    const nextJob = await faqService.getJob(true)
+    if (requestVersion === jobRequestVersion && stateVersion === jobStateVersion) {
+      job.value = nextJob
+    }
   }
 
   async function fetchSettings(): Promise<void> {
-    settings.value = await faqService.getSettings()
+    const requestVersion = ++settingsRequestVersion
+    const nextSettings = await faqService.getSettings()
+    if (requestVersion === settingsRequestVersion) settings.value = nextSettings
   }
 
   async function fetchEstimate(includePages = false): Promise<void> {
+    const requestVersion = ++estimateRequestVersion
     // Background fetches (page load, deletes, job completion) skip the
     // per-source page scan — the button label only needs new_sources. The
     // confirm dialog passes includePages=true for the full call estimate.
     // Non-fatal: locked plans 403 here; the generate button then just says
     // "Generate" without the new-source count.
     try {
-      estimate.value = await faqService.getGenerateEstimate(includePages)
+      const nextEstimate = await faqService.getGenerateEstimate(includePages)
+      if (requestVersion === estimateRequestVersion) estimate.value = nextEstimate
     } catch {
-      estimate.value = null
+      if (requestVersion === estimateRequestVersion) estimate.value = null
     }
   }
 
   async function fetchCounts(): Promise<void> {
+    const requestVersion = ++countsRequestVersion
     const orgId = organizationId()
     if (!orgId) return
     const response = await knowledgeService.getKnowledgeByOrganization(orgId, 1, 100)
-    const items = response.knowledge || []
-    sourceCount.value = response.pagination?.total ?? response.pagination?.total_count ?? items.length
+    if (requestVersion !== countsRequestVersion) return
+    const items = Array.isArray(response?.knowledge) ? response.knowledge : []
+    sourceCount.value = response?.pagination?.total ?? response?.pagination?.total_count ?? items.length
     pageCount.value = items.reduce(
       (sum: number, item: { pages?: unknown[] }) => sum + (item.pages?.length || 1),
       0,
@@ -250,24 +291,27 @@ export function useFaqWorkspace(organizationId: () => string | undefined) {
   }
 
   async function refresh(): Promise<void> {
+    const requestVersion = ++refreshRequestVersion
     isLoading.value = true
     clearSelection()
     try {
       await Promise.all([fetchFaqs(), fetchJob(), fetchSettings(), fetchCounts(), fetchEstimate()])
-      loadedOnce.value = true
+      if (requestVersion === refreshRequestVersion) loadedOnce.value = true
     } catch (error: any) {
-      toast.error(error.message)
+      if (requestVersion === refreshRequestVersion) toast.error(error.message)
     } finally {
-      isLoading.value = false
+      if (requestVersion === refreshRequestVersion) isLoading.value = false
     }
   }
 
   async function pollTick(): Promise<void> {
+    if (pollInFlight) return
     const interval = isJobActive.value ? ACTIVE_POLL_MS : IDLE_POLL_MS
     if (!isJobActive.value && !domainPending.value) return
     const now = Date.now()
     if (now - lastPollAt < interval - 100) return
     lastPollAt = now
+    pollInFlight = true
     try {
       if (isJobActive.value) {
         const wasActive = job.value?.id
@@ -291,6 +335,8 @@ export function useFaqWorkspace(organizationId: () => string | undefined) {
       }
     } catch {
       // Transient polling errors are silent; the next tick retries.
+    } finally {
+      pollInFlight = false
     }
   }
 
@@ -306,14 +352,30 @@ export function useFaqWorkspace(organizationId: () => string | undefined) {
     }
   }
 
-  async function startGeneration(knowledgeIds?: number[]): Promise<boolean> {
+  async function startJob(action: () => Promise<FaqGenerationJob>, successMessage?: string): Promise<boolean> {
+    if (jobActionBusy.value || isJobActive.value) return false
+    const actionVersion = ++jobStateVersion
+    jobActionBusy.value = true
     try {
-      job.value = await faqService.startGeneration(knowledgeIds)
+      const nextJob = await action()
+      if (actionVersion !== jobStateVersion) return false
+      // Invalidate polls started while the create request was in flight before
+      // publishing the new job, so an older server snapshot cannot overwrite it.
+      ++jobStateVersion
+      job.value = nextJob
+      if (successMessage) toast.success(successMessage)
       return true
     } catch (error: any) {
       toast.error(error.message)
       return false
+    } finally {
+      if (actionVersion === jobStateVersion) ++jobStateVersion
+      jobActionBusy.value = false
     }
+  }
+
+  async function startGeneration(knowledgeIds?: number[]): Promise<boolean> {
+    return startJob(() => faqService.startGeneration(knowledgeIds))
   }
 
   async function submitImport(
@@ -321,36 +383,34 @@ export function useFaqWorkspace(organizationId: () => string | undefined) {
     mode: FaqImportMode = 'qa',
     preserveUrls = false,
   ): Promise<boolean> {
-    try {
-      job.value = await faqService.importFaq(url, mode, preserveUrls)
-      toast.success('Import started — drafts will appear when it finishes')
-      return true
-    } catch (error: any) {
-      toast.error(error.message)
-      return false
-    }
+    if (!url.trim()) return false
+    return startJob(
+      () => faqService.importFaq(url, mode, preserveUrls),
+      'Import started — drafts will appear when it finishes',
+    )
   }
 
   async function submitPdfImport(file: File): Promise<boolean> {
-    try {
-      job.value = await faqService.importPdf(file)
-      toast.success('Import started — drafts will appear when it finishes')
-      return true
-    } catch (error: any) {
-      toast.error(error.message)
-      return false
-    }
+    if (!file) return false
+    return startJob(
+      () => faqService.importPdf(file),
+      'Import started — drafts will appear when it finishes',
+    )
   }
 
   async function togglePublish(faq: FaqItem): Promise<void> {
+    if (bulkBusy.value || pendingStatusIds.has(faq.id)) return
     const nextStatus = faq.status === 'published' ? 'draft' : 'published'
     const previous = faq.status
+    pendingStatusIds.add(faq.id)
     faq.status = nextStatus // optimistic
     try {
       await faqService.setStatus([faq.id], nextStatus)
     } catch (error: any) {
       faq.status = previous
       toast.error(error.message)
+    } finally {
+      pendingStatusIds.delete(faq.id)
     }
   }
 
@@ -389,6 +449,7 @@ export function useFaqWorkspace(organizationId: () => string | undefined) {
   }
 
   async function saveEdit(): Promise<void> {
+    if (isSaving.value) return
     const question = draftQuestion.value.trim()
     const answer = draftAnswer.value.trim()
     if (!question || !answer) {
@@ -427,14 +488,21 @@ export function useFaqWorkspace(organizationId: () => string | undefined) {
   }
 
   async function deleteFaq(faq: FaqItem): Promise<void> {
+    if (bulkBusy.value || pendingDeleteIds.has(faq.id)) return
+    pendingDeleteIds.add(faq.id)
     try {
       await faqService.deleteFaq(faq.id)
       faqs.value = faqs.value.filter((f) => f.id !== faq.id)
+      const nextSelected = new Set(selectedIds.value)
+      nextSelected.delete(faq.id)
+      selectedIds.value = nextSelected
       if (editingId.value === faq.id) cancelEdit()
       // Keep the Generate button's new-source count fresh (see bulkDelete).
       void fetchEstimate()
     } catch (error: any) {
       toast.error(error.message)
+    } finally {
+      pendingDeleteIds.delete(faq.id)
     }
   }
 
@@ -447,6 +515,8 @@ export function useFaqWorkspace(organizationId: () => string | undefined) {
     sourceCount,
     pageCount,
     isLoading,
+    bulkBusy,
+    jobActionBusy,
     phase,
     barPhase,
     publishedCount,

@@ -22,6 +22,10 @@ vi.mock('@/services/user', () => ({
   userService: { getUserId: () => 'agent-1' },
 }))
 
+vi.mock('@/services/store', () => ({
+  default: { getStores: vi.fn().mockResolvedValue([]) },
+}))
+
 describe('ConversationsList', () => {
   afterEach(() => document.body.replaceChildren())
 

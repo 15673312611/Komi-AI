@@ -53,12 +53,6 @@ export function useTicketsWorkspace() {
     ...pickFiltersFromQuery(route.query),
   })
 
-  const phase = computed(() => {
-    if (isLoading.value && tickets.value.length === 0) return 'loading'
-    if (tickets.value.length === 0) return 'empty'
-    return 'populated'
-  })
-
   const hasActiveFilters = computed(() =>
     Object.keys(DEFAULT_FILTERS).some(
       (key) => filters[key as keyof TicketListFilters] !== DEFAULT_FILTERS[key as keyof TicketListFilters],
@@ -103,25 +97,44 @@ export function useTicketsWorkspace() {
     )
   })
 
+  const phase = computed(() => {
+    if (isLoading.value && visibleTickets.value.length === 0) return 'loading'
+    if (visibleTickets.value.length === 0) return 'empty'
+    return 'populated'
+  })
+
+  let refreshRequest = 0
   async function refresh(silent = false) {
+    const request = ++refreshRequest
     if (!silent) isLoading.value = true
     try {
-      const [listResponse, statsResponse] = await Promise.all([
+      const [listResult, statsResult] = await Promise.allSettled([
         ticketService.listTickets(buildParams()),
         ticketService.getStats(),
       ])
-      tickets.value = listResponse.tickets
-      pagination.value = listResponse.pagination
-      stats.value = statsResponse
+      if (request !== refreshRequest) return
+      if (listResult.status === 'rejected') throw listResult.reason
+
+      const listResponse = listResult.value
+      tickets.value = Array.isArray(listResponse.tickets) ? listResponse.tickets : []
+      pagination.value = listResponse.pagination ?? null
+      if (statsResult.status === 'fulfilled') {
+        stats.value = statsResult.value
+      } else {
+        // Statistics are auxiliary. Keep the ticket workspace usable when a
+        // separate aggregate endpoint is temporarily unavailable.
+        console.error('Failed to load ticket statistics:', statsResult.reason)
+        stats.value = null
+      }
       error.value = null
       planGated.value = false
     } catch (e: any) {
-      if (!silent) {
+      if (request === refreshRequest && !silent) {
         planGated.value = /plan/i.test(e?.message || '')
         error.value = e?.message || 'Failed to load tickets'
       }
     } finally {
-      isLoading.value = false
+      if (request === refreshRequest) isLoading.value = false
     }
   }
 
@@ -135,7 +148,9 @@ export function useTicketsWorkspace() {
   watch(
     () => ({ ...filters }),
     (next, prev) => {
-      router.replace({ query: filtersToQuery() })
+      void router.replace({ query: filtersToQuery() }).catch((navigationError) => {
+        console.debug('Failed to sync ticket filters to URL:', navigationError)
+      })
       if (next.search !== prev?.search) {
         if (searchTimer) clearTimeout(searchTimer)
         searchTimer = setTimeout(() => {
@@ -158,6 +173,7 @@ export function useTicketsWorkspace() {
     refreshTimer = setInterval(() => refresh(true), LIST_REFRESH_MS)
   })
   onBeforeUnmount(() => {
+    refreshRequest += 1
     if (refreshTimer) clearInterval(refreshTimer)
     if (searchTimer) clearTimeout(searchTimer)
   })

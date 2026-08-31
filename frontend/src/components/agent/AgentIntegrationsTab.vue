@@ -75,6 +75,10 @@ const props = defineProps({
     type: Boolean,
     required: true
   },
+  jiraActionLoading: {
+    type: Boolean,
+    default: false
+  },
   // Native AI ticketing (per-agent toggle)
   ticketingEnabled: {
     type: Boolean,
@@ -103,10 +107,10 @@ const props = defineProps({
 // Local state for Shopify connection
 const shopifyConnected = ref(false)
 const shopifyShopDomain = ref('')
-const shopifyLoading = ref(true)
+const shopifyConnectionLoading = ref(true)
 const localShopifyEnabled = ref(props.shopifyIntegrationEnabled)
 const shopifyToggleInProgress = ref(false)
-const shopifyError = ref('')
+const shopifyConnectionError = ref('')
 
 // Local state for messaging-channel routing (Telegram, WhatsApp, Messenger, Instagram)
 const MESSAGING_CHANNELS = ['telegram', 'whatsapp', 'messenger', 'instagram', 'slack', 'email', 'sms', 'line']
@@ -174,13 +178,13 @@ watch(() => props.selectedIssueType, (newValue) => {
 watch(() => props.shopifyIntegrationEnabled, (newValue) => {
   localShopifyEnabled.value = newValue
   // Reset error when parent updates the enabled state successfully
-  shopifyError.value = ''
+  shopifyConnectionError.value = ''
 })
 
 // Update error state when parent passes error
 watch(() => props.shopifyError, (newValue) => {
   if (newValue) {
-    shopifyError.value = newValue
+    shopifyConnectionError.value = newValue
     // Revert the toggle if there's an error
     localShopifyEnabled.value = props.shopifyIntegrationEnabled
   }
@@ -214,16 +218,13 @@ const toggleCreateTicket = () => {
   emit('toggle-create-ticket')
 }
 
-const toggleShopifyIntegration = () => {
-  // Store the previous value in case we need to revert
-  
-  // Show loading state
+const toggleShopifyIntegration = (event: Event) => {
+  // v-model has already applied the checkbox value. Toggling it again here
+  // would send the parent the opposite state and make a click appear to do
+  // nothing when the server echoes the value back.
+  const checked = (event.target as HTMLInputElement | null)?.checked
+  if (typeof checked === 'boolean') localShopifyEnabled.value = checked
   shopifyToggleInProgress.value = true
-  
-  // Update the local state optimistically
-  localShopifyEnabled.value = !localShopifyEnabled.value
-  
-  // Emit the event for parent to handle
   emit('toggle-shopify-integration')
   
   // The parent component should call an API method and handle errors
@@ -258,7 +259,7 @@ const saveJiraConfig = () => {
 // Fetch Shopify connection status
 const fetchShopifyStatus = async () => {
   try {
-    shopifyLoading.value = true
+    shopifyConnectionLoading.value = true
     const data = await checkShopifyConnection()
     shopifyConnected.value = data.connected
     shopifyShopDomain.value = data.shop_domain || ''
@@ -267,7 +268,7 @@ const fetchShopifyStatus = async () => {
     console.error('Error checking Shopify connection:', error)
     shopifyConnected.value = false
   } finally {
-    shopifyLoading.value = false
+    shopifyConnectionLoading.value = false
   }
 }
 
@@ -358,6 +359,7 @@ onMounted(async () => {
               <input type="checkbox" 
                 :checked="createTicketEnabled"
                 @change="toggleCreateTicket"
+                :disabled="jiraActionLoading || jiraLoading"
               >
               <span class="slider"></span>
             </label>
@@ -390,7 +392,7 @@ onMounted(async () => {
                 id="jira-project" 
                 v-model="localSelectedProject"
                 @change="handleProjectChange"
-                :disabled="loadingProjects"
+                :disabled="loadingProjects || jiraActionLoading"
               >
                 <option value="">选择目标 Jira 项目</option>
                 <option 
@@ -411,7 +413,7 @@ onMounted(async () => {
                 id="issue-type" 
                 v-model="localSelectedIssueType"
                 @change="handleIssueTypeChange"
-                :disabled="!localSelectedProject || loadingIssueTypes"
+                :disabled="!localSelectedProject || loadingIssueTypes || jiraActionLoading"
               >
                 <option value="">选择工单类型</option>
                 <option 
@@ -427,7 +429,7 @@ onMounted(async () => {
             <button 
               class="save-config-btn"
               @click="saveJiraConfig"
-              :disabled="!localSelectedProject || !localSelectedIssueType"
+              :disabled="!localSelectedProject || !localSelectedIssueType || jiraActionLoading"
             >
               保存配置
             </button>
@@ -473,7 +475,7 @@ onMounted(async () => {
                 <input type="checkbox" 
                   v-model="localShopifyEnabled"
                   @change="toggleShopifyIntegration"
-                  :disabled="shopifyLoading || props.shopifyLoading || shopifyToggleInProgress"
+                  :disabled="shopifyConnectionLoading || props.shopifyLoading || shopifyToggleInProgress"
                 >
                 <span class="slider" :class="{ 'in-progress': shopifyToggleInProgress }"></span>
               </label>
@@ -482,7 +484,7 @@ onMounted(async () => {
           <p class="helper-text">为该智能客服开启店铺实时库存、订单查询及商品卡片推送功能</p>
           
           <!-- Shopify Connection Status -->
-          <div v-if="shopifyLoading" class="jira-status loading">
+          <div v-if="shopifyConnectionLoading" class="jira-status loading">
             正在检测 Shopify 店铺状态...
           </div>
           <div v-else-if="!shopifyConnected" class="jira-status not-connected">
@@ -498,9 +500,9 @@ onMounted(async () => {
           </div>
         </div>
         <!-- Add error message display -->
-        <div v-if="shopifyConnected && shopifyError" class="shopify-error">
+        <div v-if="shopifyConnected && shopifyConnectionError" class="shopify-error">
           <span class="error-icon">❌</span>
-          {{ shopifyError }}
+          {{ shopifyConnectionError }}
         </div>
       </div>
 
@@ -1225,4 +1227,4 @@ input:checked + .slider:before {
   opacity: 0.7;
   cursor: not-allowed;
 }
-</style> 
+</style>

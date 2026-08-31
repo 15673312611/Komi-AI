@@ -8,6 +8,7 @@ import { computed, ref, watch } from 'vue'
 import { chatService, type ShopifyOrder, type ShopifyShippingAddress } from '@/services/chat'
 import { connectToShopify } from '@/services/shopify'
 import { permissionChecks } from '@/utils/permissions'
+import { copyTextToClipboard } from '@/utils/clipboard'
 
 const props = withDefaults(defineProps<{
   sessionId?: string
@@ -108,14 +109,14 @@ const loadOrders = async (cursor?: string) => {
   try {
     const result = await chatService.getShopifyOrders(sessionId, cursor)
     if (!isCurrentRequest()) return
-    const incoming = result.orders || []
+    const incoming = Array.isArray(result?.orders) ? result.orders : []
     orders.value = cursor ? [...orders.value, ...incoming.filter(item => !orders.value.some(existing => existing.id === item.id))] : incoming
     if (!orders.value.some(item => String(item.id) === selectedOrderId.value)) selectedOrderId.value = String(orders.value[0]?.id || '')
     orderCount.value = orders.value.length
-    hasNextPage.value = Boolean(result.has_next_page)
-    nextCursor.value = result.end_cursor || undefined
-    writeOrdersEnabled.value = Boolean(result.write_orders_enabled)
-    shopDomain.value = result.shop_domain || ''
+    hasNextPage.value = Boolean(result?.has_next_page)
+    nextCursor.value = result?.end_cursor || undefined
+    writeOrdersEnabled.value = Boolean(result?.write_orders_enabled)
+    shopDomain.value = result?.shop_domain || ''
   } catch {
     if (isCurrentRequest() && !cursor) clearOrderState()
   } finally {
@@ -134,13 +135,12 @@ watch(() => props.sessionId, () => {
 
 const copyText = async (text: string, label: string) => {
   if (!text) return
-  if (!navigator.clipboard) {
-    emit('action-toast', '无法访问剪贴板，请手动复制', 'error')
-    return
-  }
   try {
-    await navigator.clipboard.writeText(text)
-    emit('action-toast', label, 'success')
+    if (await copyTextToClipboard(text)) {
+      emit('action-toast', label, 'success')
+    } else {
+      emit('action-toast', '无法访问剪贴板，请手动复制', 'error')
+    }
   } catch {
     emit('action-toast', '复制失败，请手动复制', 'error')
   }
@@ -231,7 +231,7 @@ const submitAction = async () => {
   const sessionId = props.sessionId
   const selected = actionOrder.value
   const action = activeAction.value
-  if (!sessionId || !selected || !action || !canPerformOrderWrites.value) return
+  if (!sessionId || !selected || !action || actionLoading.value || !canPerformOrderWrites.value) return
   const orderId = String(selected.id)
   const address = { ...addressDraft.value }
   const idempotencyKeyForAction = actionIdempotencyKey.value || idempotencyKey()
@@ -244,7 +244,7 @@ const submitAction = async () => {
     if (action === 'refund') {
       const result = await chatService.refundShopifyOrder(sessionId, orderId, { confirmed: true, idempotency_key: idempotencyKeyForAction })
       if (!isCurrentContext()) return
-      emit('action-toast', `已完成退款${result.amount ? `：${result.currency || ''} ${result.amount}` : ''}`, 'success')
+      emit('action-toast', `已完成退款${result?.amount ? `：${result.currency || ''} ${result.amount}` : ''}`, 'success')
     } else if (action === 'address') {
       await chatService.updateShopifyShippingAddress(sessionId, orderId, {
         ...address,

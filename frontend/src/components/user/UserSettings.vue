@@ -15,7 +15,7 @@ limitations under the License.
 -->
 
 <script setup lang="ts">
-import { ref, onMounted, inject, computed, watch } from 'vue'
+import { ref, onMounted, onBeforeUnmount, inject, computed, watch } from 'vue'
 import { useAuth } from '@/composables/useAuth'
 import { userService } from '@/services/user'
 import { meetsPasswordPolicy, validatePassword, type PasswordStrength } from '@/utils/validators'
@@ -70,7 +70,8 @@ const formData = ref({
 // Define the fileInput ref with proper typing
 const fileInput = ref<HTMLInputElement | null>(null)
 
-const loading = ref(false)
+const avatarUploading = ref(false)
+const profileSaving = ref(false)
 const message = ref('')
 const error = ref('')
 
@@ -142,6 +143,7 @@ const handlePasswordInput = (password: string) => {
 }
 
 const handleFileSelect = (event: Event) => {
+  if (avatarUploading.value) return
   const input = event.target as HTMLInputElement
   if (!input.files?.length) return
   
@@ -159,12 +161,20 @@ const handleFileSelect = (event: Event) => {
   // Clear any previous error messages
   error.value = ''
   
+  if (profilePicPreview.value) {
+    URL.revokeObjectURL(profilePicPreview.value)
+  }
+
   // Set the file and create preview
   profilePicFile.value = file
   profilePicPreview.value = URL.createObjectURL(file)
 }
 
 const resetFileInput = () => {
+  if (profilePicPreview.value) {
+    URL.revokeObjectURL(profilePicPreview.value)
+  }
+
   // Clear preview and file
   profilePicFile.value = null
   profilePicPreview.value = ''
@@ -176,9 +186,9 @@ const resetFileInput = () => {
 }
 
 const uploadProfilePic = async () => {
-  if (!profilePicFile.value) return
+  if (!profilePicFile.value || avatarUploading.value) return
   
-  loading.value = true
+  avatarUploading.value = true
   error.value = ''
   message.value = ''
   
@@ -205,7 +215,7 @@ const uploadProfilePic = async () => {
   } catch (err: any) {
     error.value = err.message || '上传头像失败'
   } finally {
-    loading.value = false
+    avatarUploading.value = false
   }
 }
 
@@ -215,7 +225,8 @@ const updateProfile = async () => {
     return
   }
 
-  loading.value = true
+  if (profileSaving.value) return
+  profileSaving.value = true
   error.value = ''
   message.value = ''
 
@@ -223,12 +234,14 @@ const updateProfile = async () => {
     // Create update data only with changed fields
     const updateData: Record<string, string> = {}
     
-    if (formData.value.full_name !== user.value?.full_name) {
-      updateData.full_name = formData.value.full_name
-    }
-    
     if (formData.value.email !== user.value?.email) {
       updateData.email = formData.value.email
+    }
+
+    if (formData.value.full_name !== user.value?.full_name) {
+      const fullName = formData.value.full_name.trim()
+      if (!fullName) throw new Error('真实姓名不能为空')
+      updateData.full_name = fullName
     }
     
     if (formData.value.new_password) {
@@ -243,6 +256,8 @@ const updateProfile = async () => {
       }
       updateData.password = formData.value.new_password
       updateData.current_password = formData.value.current_password
+    } else if (formData.value.current_password || formData.value.confirm_password) {
+      throw new Error('请输入新密码')
     }
 
     if (Object.keys(updateData).length === 0) {
@@ -262,7 +277,7 @@ const updateProfile = async () => {
   } catch (err: any) {
     error.value = err.message || '更新个人资料失败'
   } finally {
-    loading.value = false
+    profileSaving.value = false
   }
 }
 
@@ -275,10 +290,15 @@ watch(profilePicFile, (newFile) => {
 })
 
 const handleProfilePicClick = () => {
+  if (avatarUploading.value) return
   if (fileInput.value) {
     fileInput.value.click()
   }
 }
+
+onBeforeUnmount(() => {
+  if (profilePicPreview.value) URL.revokeObjectURL(profilePicPreview.value)
+})
 </script>
 
 <template>
@@ -323,9 +343,9 @@ const handleProfilePicClick = () => {
               type="button"
               class="upload-button"
               @click="handleProfilePicClick"
-              :disabled="loading"
+              :disabled="avatarUploading"
             >
-              {{ loading ? '上传中…' : '更换头像' }}
+              {{ avatarUploading ? '上传中…' : '更换头像' }}
             </button>
           </div>
         </div>
@@ -406,8 +426,8 @@ const handleProfilePicClick = () => {
         <span class="save-bar-text">您有未保存的修改</span>
         <div class="save-bar-actions">
           <button type="button" class="discard-button" @click="discardChanges">放弃修改</button>
-          <button type="submit" class="submit-button" :disabled="loading">
-            {{ loading ? '正在保存…' : '保存修改' }}
+          <button type="submit" class="submit-button" :disabled="profileSaving">
+            {{ profileSaving ? '正在保存…' : '保存修改' }}
           </button>
         </div>
       </div>
@@ -928,4 +948,4 @@ input:checked + .slider:before {
   }
 }
 
-</style> 
+</style>

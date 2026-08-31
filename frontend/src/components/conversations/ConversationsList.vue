@@ -73,7 +73,7 @@ interface InboxConversation {
 }
 
 const currentUserId = userService.getUserId()
-const conversations = ref<InboxConversation[]>([])
+const inboxConversations = ref<InboxConversation[]>([])
 const statusFor = (conv: Conversation): InboxStatus => {
   if (conv.status === 'closed') return 'closed'
   if (conv.user_id && String(conv.user_id) === String(currentUserId)) return 'mine'
@@ -110,7 +110,7 @@ const normalizeConversations = (items: Conversation[]) => items.map(conv => {
   }
 })
 watch(() => [props.conversations, props.unreadCounts] as const, ([items]) => {
-  conversations.value = normalizeConversations(items || [])
+  inboxConversations.value = normalizeConversations(items || [])
 }, { immediate: true, deep: true })
 
 const dbStores = ref<Store[]>([])
@@ -127,19 +127,19 @@ const stores = computed(() => {
   dbStores.value.forEach(s => {
     if (s.name) storeNames.add(s.name)
   })
-  conversations.value.forEach(conv => {
+  inboxConversations.value.forEach(conv => {
     if (conv.storeName && conv.storeName !== '未关联店铺') {
       storeNames.add(conv.storeName)
     }
   })
 
   return [
-    { id: 'all', name: '所有关联店铺', iconClass: 'fa-solid fa-store', badge: String(conversations.value.length), color: 'text-emerald-400 bg-emerald-500/15 border border-emerald-500/20' },
+    { id: 'all', name: '所有关联店铺', iconClass: 'fa-solid fa-store', badge: String(inboxConversations.value.length), color: 'text-emerald-400 bg-emerald-500/15 border border-emerald-500/20' },
     ...[...storeNames].map(name => ({
       id: name,
       name,
       iconClass: 'fa-solid fa-store',
-      badge: String(conversations.value.filter(conv => conv.storeId === name || conv.storeName === name).length),
+      badge: String(inboxConversations.value.filter(conv => conv.storeId === name || conv.storeName === name).length),
       color: 'text-slate-300 bg-slate-500/10 border border-slate-500/20',
     })),
   ]
@@ -151,11 +151,11 @@ const selectedStoreObj = computed(() => {
 watch(stores, value => {
   if (!value.some(store => store.id === currentStoreFilter.value)) currentStoreFilter.value = 'all'
 })
-const countBy = (status?: string) => status ? conversations.value.filter(c => c.status === status).length : conversations.value.length
-const openCount = computed(() => conversations.value.filter(conv => conv.status !== 'closed').length)
+const countBy = (status?: string) => status ? inboxConversations.value.filter(c => c.status === status).length : inboxConversations.value.length
+const openCount = computed(() => inboxConversations.value.filter(conv => conv.status !== 'closed').length)
 
 const filteredConversations = computed(() => {
-  return conversations.value.filter((conv) => {
+  return inboxConversations.value.filter((conv) => {
     if (currentFilterTab.value === 'ai' && conv.status !== 'ai') return false
     if (currentFilterTab.value === 'mine' && conv.status !== 'mine') return false
     if (currentFilterTab.value === 'queue' && conv.status !== 'queue') return false
@@ -178,7 +178,7 @@ const selectStatus = (status: 'all' | 'ai' | 'mine' | 'queue' | 'closed') => { c
 
 const selectSession = (id: string) => {
   activeId.value = id
-  const target = conversations.value.find((c) => c.id === id)
+  const target = inboxConversations.value.find((c) => c.id === id)
   if (target) target.unreadCount = 0
   emit('clear-unread', id)
   emit('select-session', id)
@@ -198,13 +198,17 @@ const openNewWhatsApp = async () => {
   if (loadingWhatsAppAccounts.value) return
   loadingWhatsAppAccounts.value = true
   try {
-    whatsappAccounts.value = await channelsService.listActiveWhatsAppAccounts()
+    const accounts = await channelsService.listActiveWhatsAppAccounts()
+    whatsappAccounts.value = Array.isArray(accounts) ? accounts : []
+    if (!whatsappAccounts.value.length) {
+      emit('action-toast', '尚未配置可用的 WhatsApp 发送账号，请先完成渠道集成。', 'error')
+      return
+    }
+    showNewWhatsApp.value = true
+  } catch (err: any) {
+    emit('action-toast', err?.response?.data?.detail || '无法加载 WhatsApp 发送账号，请稍后重试。', 'error')
   } finally {
     loadingWhatsAppAccounts.value = false
-    // Wait until the account list is known. NewWhatsAppConversation uses the
-    // first account as its initial template source, so mounting it with an
-    // empty list would leave the template picker permanently unbound.
-    showNewWhatsApp.value = true
   }
 }
 

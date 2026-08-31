@@ -25,34 +25,48 @@ export function useTicketingSettings() {
   const isSaving = ref(false)
   const error = ref<string | null>(null)
   const planGated = ref(false)
+  let loadVersion = 0
+  let mutationVersion = 0
 
   async function load() {
+    const version = ++loadVersion
+    const mutationAtStart = mutationVersion
     isLoading.value = true
     try {
-      settings.value = await ticketService.getSettings()
+      const next = await ticketService.getSettings()
+      if (version !== loadVersion || mutationAtStart !== mutationVersion) return
+      settings.value = next
       error.value = null
       planGated.value = false
     } catch (e: any) {
+      if (version !== loadVersion) return
       planGated.value = /plan/i.test(e?.message || '')
       error.value = e?.message || 'Failed to load ticketing settings'
     } finally {
-      isLoading.value = false
+      if (version === loadVersion) isLoading.value = false
     }
   }
 
   async function save(patch: Partial<TicketSettings>) {
     if (!settings.value || isSaving.value) return
+    const mutation = ++mutationVersion
     isSaving.value = true
     const previous = { ...settings.value }
     Object.assign(settings.value, patch)
     try {
-      settings.value = await ticketService.updateSettings(patch)
-      toast.success('Ticketing settings saved')
+      const next = await ticketService.updateSettings(patch)
+      if (mutation === mutationVersion) {
+        settings.value = next
+        error.value = null
+        toast.success('Ticketing settings saved')
+      }
     } catch (e: any) {
-      settings.value = previous
-      toast.error(e?.message || 'Failed to save ticketing settings')
+      if (mutation === mutationVersion) {
+        settings.value = previous
+        toast.error(e?.message || 'Failed to save ticketing settings')
+      }
     } finally {
-      isSaving.value = false
+      if (mutation === mutationVersion) isSaving.value = false
     }
   }
 

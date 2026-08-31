@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-import { ref } from 'vue'
+import { ref, onUnmounted } from 'vue'
 import type { AgentWithCustomization, AgentUpdate } from '@/types/agent'
 import { agentService } from '@/services/agent'
 import { widgetService } from '@/services/widget'
@@ -26,6 +26,7 @@ import { agentStorage } from '@/utils/storage'
 import { useJiraIntegration } from './useJiraIntegration'
 import { useEnterpriseFeatures } from '@/composables/useEnterpriseFeatures'
 import { buildWidgetEmbed } from '@/utils/widgetEmbed'
+import { copyTextToClipboard } from '@/utils/clipboard'
 
 const { hasEnterpriseModule, loadModule, moduleImports } = useEnterpriseFeatures()
 
@@ -56,6 +57,7 @@ export function useAgentDetail(agentData: { value: AgentWithCustomization }, emi
   const userGroups = ref<UserGroup[]>([])
   const selectedGroupIds = ref<string[]>([])
   const loadingGroups = ref(false)
+  const updatingGroups = ref(false)
 
   // Initialize Jira integration
   const jiraIntegration = useJiraIntegration(agentData.value.id)
@@ -76,6 +78,12 @@ export function useAgentDetail(agentData: { value: AgentWithCustomization }, emi
 
   const MAX_FILE_SIZE = 5 * 1024 * 1024 // 5MB
   const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp']
+
+  const revokeCropperImage = () => {
+    if (!cropperImage.value) return
+    URL.revokeObjectURL(cropperImage.value)
+    cropperImage.value = ''
+  }
 
   const triggerFileUpload = () => {
     fileInput.value?.click()
@@ -98,6 +106,7 @@ export function useAgentDetail(agentData: { value: AgentWithCustomization }, emi
     }
 
     // Show cropper
+    revokeCropperImage()
     cropperImage.value = URL.createObjectURL(file)
     showCropper.value = true
   }
@@ -131,7 +140,7 @@ export function useAgentDetail(agentData: { value: AgentWithCustomization }, emi
       }
 
       showCropper.value = false
-      cropperImage.value = ''
+      revokeCropperImage()
     } catch (error) {
       console.error('Failed to upload photo:', error)
       toast.error('上传头像图片失败')
@@ -142,21 +151,24 @@ export function useAgentDetail(agentData: { value: AgentWithCustomization }, emi
 
   const cancelCrop = () => {
     showCropper.value = false
-    cropperImage.value = ''
+    revokeCropperImage()
   }
 
   // Apply a bundled preset avatar (fetched into a File) via the photo endpoint
-  const applyPresetAvatar = async (url: string) => {
+  const applyPresetAvatar = async (url: string): Promise<boolean> => {
     try {
       isUploading.value = true
       const res = await fetch(url)
+      if (!res.ok) throw new Error(`Failed to fetch preset avatar: ${res.status}`)
       const blob = await res.blob()
       const file = new File([blob], 'profile.png', { type: blob.type || 'image/png' })
       const updatedCustomization = await agentService.uploadAgentPhoto(agentData.value.id, file)
       agentData.value.customization = updatedCustomization
+      return true
     } catch (error) {
       console.error('Failed to apply preset avatar:', error)
       toast.error('设置头像失败')
+      return false
     } finally {
       isUploading.value = false
     }
@@ -191,22 +203,23 @@ export function useAgentDetail(agentData: { value: AgentWithCustomization }, emi
     }
   }
 
-  const copyWidgetCode = (requireTokenAuth?: boolean) => {
+  const copyWidgetCode = async (requireTokenAuth?: boolean) => {
     if (!widget.value) return
 
     // Single source of truth for the embed snippet (see buildWidgetEmbed) so the
     // copied code never drifts from the AI Agents list or the on-screen preview.
     const code = buildWidgetEmbed(widget.value.id, requireTokenAuth)
 
-    navigator.clipboard.writeText(code)
-      .then(() => {
-        toast.success(requireTokenAuth 
-          ? '安全令牌认证挂件代码已复制到剪贴板！' 
-          : '挂件嵌入代码已复制到剪贴板！', 
-          { duration: 3000 }
-        )
-      })
-      .catch(err => console.error('Failed to copy:', err))
+    const copied = await copyTextToClipboard(code)
+    if (copied) {
+      toast.success(requireTokenAuth
+        ? '安全令牌认证挂件代码已复制到剪贴板！'
+        : '挂件嵌入代码已复制到剪贴板！',
+        { duration: 3000 }
+      )
+    } else {
+      toast.error('复制失败，请手动选择并复制代码')
+    }
   }
 
   const toggleAskForRating = async () => {
@@ -279,19 +292,28 @@ export function useAgentDetail(agentData: { value: AgentWithCustomization }, emi
   }
 
   const updateAgentGroups = async (groupIds: string[]) => {
+    if (updatingGroups.value) return false
     try {
+      updatingGroups.value = true
       const updatedAgent = await agentService.updateAgentGroups(agentData.value.id, groupIds)
       agentData.value = {
         ...agentData.value,
         groups: updatedAgent.groups
       }
+      selectedGroupIds.value = [...groupIds]
       agentStorage.updateAgent(updatedAgent)
       toast.success('转接客服分组已更新')
+      return true
     } catch (error) {
       console.error('Failed to update agent groups:', error)
       toast.error('更新转接客服分组失败')
+      return false
+    } finally {
+      updatingGroups.value = false
     }
   }
+
+  onUnmounted(revokeCropperImage)
 
   return {
     fileInput,
@@ -323,4 +345,4 @@ export function useAgentDetail(agentData: { value: AgentWithCustomization }, emi
     // Shopify integration - spread all properties and methods from shopifyIntegration
     ...shopifyIntegration
   }
-} 
+}

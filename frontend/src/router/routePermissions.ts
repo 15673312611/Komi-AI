@@ -43,7 +43,10 @@ export const ROUTE_PERMISSIONS: Record<string, readonly string[]> = {
   '/tickets/:id': TICKET_PERMISSIONS,
   '/settings/ticketing': ['manage_organization'],
   '/conversations': CHAT_VIEW_PERMISSIONS,
-  '/stores': CHAT_VIEW_PERMISSIONS,
+  // Store Management can create, edit, disable and delete tenant-wide
+  // integrations, so it belongs to organization administration rather than
+  // inbox access.
+  '/stores': ORGANIZATION_PERMISSIONS,
   '/people': PEOPLE_PERMISSIONS,
   '/human-agents': ['manage_users'],
   '/settings/organization': ORGANIZATION_PERMISSIONS,

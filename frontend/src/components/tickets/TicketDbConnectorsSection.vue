@@ -23,6 +23,8 @@ import type { DbConnector, DbConnectorTable } from '@/types/ticket'
 const connectors = ref<DbConnector[]>([])
 const isLoading = ref(true)
 const loadError = ref<string | null>(null)
+const connectorActionId = ref<string | null>(null)
+let connectorsRequestVersion = 0
 
 const showForm = ref(false)
 // When set, the picker edits this saved connector instead of the draft form.
@@ -110,6 +112,7 @@ function resetPicker() {
 }
 
 function openCreateForm() {
+  if (connectorActionId.value || isDiscovering.value || isSaving.value) return
   editingConnector.value = null
   Object.assign(form, {
     name: '', engine: 'postgresql', host: '', port: 5432,
@@ -122,36 +125,87 @@ function openCreateForm() {
 }
 
 async function fetchConnectors() {
+  const requestVersion = ++connectorsRequestVersion
   isLoading.value = true
   try {
-    connectors.value = await dbConnectorService.list()
+    loadError.value = null
+    const result = await dbConnectorService.list()
+    if (requestVersion !== connectorsRequestVersion) return
+    connectors.value = result
     loadError.value = null
   } catch (err: any) {
+    if (requestVersion !== connectorsRequestVersion) return
     loadError.value = err.response?.data?.detail || 'Failed to load database connectors'
   } finally {
-    isLoading.value = false
+    if (requestVersion === connectorsRequestVersion) isLoading.value = false
   }
 }
 
+function validateDraft(): boolean {
+  const required: Array<[string, string]> = [
+    ['连接名称', form.name],
+    ['主机地址', form.host],
+    ['数据库名', form.database],
+    ['用户名', form.username],
+    ['数据库密码', form.password],
+  ]
+  const missing = required.find(([, value]) => !value.trim())
+  if (missing) {
+    toast.error(`${missing[0]}不能为空`)
+    return false
+  }
+  if (!Number.isInteger(form.port) || form.port < 1 || form.port > 65535) {
+    toast.error('数据库端口必须是 1-65535 之间的整数')
+    return false
+  }
+  if (!Number.isInteger(form.max_rows) || form.max_rows < 1 || form.max_rows > 1000) {
+    toast.error('单次查询最大行数必须是 1-1000 之间的整数')
+    return false
+  }
+  if (form.ssh_enabled) {
+    if (!form.ssh_host.trim() || !form.ssh_username.trim()) {
+      toast.error('启用 SSH 隧道时必须填写堡垒机主机和用户名')
+      return false
+    }
+    if (!Number.isInteger(form.ssh_port) || form.ssh_port < 1 || form.ssh_port > 65535) {
+      toast.error('SSH 端口必须是 1-65535 之间的整数')
+      return false
+    }
+    if (form.ssh_auth === 'password' && !form.ssh_password.trim()) {
+      toast.error('密码认证需要填写 SSH 登录密码')
+      return false
+    }
+    if (form.ssh_auth === 'key' && !form.ssh_private_key.trim()) {
+      toast.error('私钥认证需要填写 SSH 私钥文本')
+      return false
+    }
+  }
+  return true
+}
+
 async function discover() {
+  if (isDiscovering.value || isSaving.value) return
+  if (!editingConnector.value && !validateDraft()) return
   isDiscovering.value = true
   discoverError.value = null
+  discoveredTables.value = null
   try {
     const result = editingConnector.value
       ? await dbConnectorService.test(editingConnector.value.id)
       : await dbConnectorService.discover({
-          name: form.name, engine: form.engine, host: form.host, port: form.port,
-          database: form.database, username: form.username, password: form.password,
+          name: form.name.trim(), engine: form.engine, host: form.host.trim(), port: form.port,
+          database: form.database.trim(), username: form.username.trim(), password: form.password,
           ...sshPayload(),
         })
     if (!result.ok) {
       discoverError.value = result.error || 'Connection failed'
       discoveredTables.value = null
     } else {
-      discoveredTables.value = result.tables
-      toast.success(`Connected — ${result.tables.length} tables discovered`)
+      discoveredTables.value = result.tables || []
+      toast.success(`Connected — ${discoveredTables.value.length} tables discovered`)
     }
   } catch (err: any) {
+    discoveredTables.value = null
     discoverError.value = err.response?.data?.detail || 'Connection failed'
   } finally {
     isDiscovering.value = false
@@ -179,26 +233,36 @@ function toggleMask(columnName: string, masked: boolean) {
 }
 
 async function saveConnector() {
+  if (isSaving.value || isDiscovering.value || connectorActionId.value) return
+  if (!Number.isInteger(form.max_rows) || form.max_rows < 1 || form.max_rows > 1000) {
+    toast.error('单次查询最大行数必须是 1-1000 之间的整数')
+    return
+  }
   if (!selectedTables.value.size) {
     toast.error('Select at least one table — nothing is queryable otherwise')
     return
   }
+  if (!editingConnector.value && !validateDraft()) return
   isSaving.value = true
   try {
+    const editingId = editingConnector.value?.id
+    const allowed = new Set(selectedTables.value)
     const policy = {
       allowed_tables: [...selectedTables.value],
       masked_columns: [...maskedColumns.value],
-      row_scope: rowScope.value,
+      row_scope: Object.fromEntries(
+        Object.entries(rowScope.value).filter(([table]) => allowed.has(table)),
+      ),
       row_scope_key: rowScopeKey.value,
       max_rows: form.max_rows,
     }
-    if (editingConnector.value) {
-      await dbConnectorService.update(editingConnector.value.id, policy)
+    if (editingId) {
+      await dbConnectorService.update(editingId, policy)
       toast.success('已成功更新数据库连接器')
     } else {
       await dbConnectorService.create({
-        name: form.name, engine: form.engine, host: form.host, port: form.port,
-        database: form.database, username: form.username, password: form.password,
+        name: form.name.trim(), engine: form.engine, host: form.host.trim(), port: form.port,
+        database: form.database.trim(), username: form.username.trim(), password: form.password,
         enabled: true, ...sshPayload(), ...policy,
       })
       toast.success('已成功创建数据库连接器')
@@ -215,6 +279,7 @@ async function saveConnector() {
 }
 
 async function editTables(connector: DbConnector) {
+  if (connectorActionId.value || isDiscovering.value || isSaving.value) return
   editingConnector.value = connector
   form.max_rows = connector.max_rows
   resetPicker()
@@ -227,23 +292,38 @@ async function editTables(connector: DbConnector) {
 }
 
 async function toggleEnabled(connector: DbConnector, enabled: boolean) {
+  if (connectorActionId.value || isDiscovering.value || isSaving.value) return
+  connectorActionId.value = connector.id
   try {
     await dbConnectorService.update(connector.id, { enabled })
     await fetchConnectors()
   } catch (err: any) {
     toast.error(err.response?.data?.detail || '更新数据库连接器状态失败')
+  } finally {
+    connectorActionId.value = null
   }
 }
 
 async function removeConnector(connector: DbConnector) {
   if (!confirm(`确认删除连接器 "${connector.name}"？删除后 AI 将无法再查询该数据库。`)) return
+  if (connectorActionId.value || isDiscovering.value || isSaving.value) return
+  connectorActionId.value = connector.id
   try {
     await dbConnectorService.remove(connector.id)
     await fetchConnectors()
     toast.success('连接器已删除')
   } catch (err: any) {
     toast.error(err.response?.data?.detail || '删除连接器失败')
+  } finally {
+    connectorActionId.value = null
   }
+}
+
+function closeForm() {
+  if (isSaving.value || isDiscovering.value) return
+  showForm.value = false
+  editingConnector.value = null
+  resetPicker()
 }
 
 onMounted(fetchConnectors)
@@ -252,7 +332,10 @@ onMounted(fetchConnectors)
 <template>
   <div class="db-connectors">
     <div v-if="isLoading" class="state-note">正在加载数据库连接器…</div>
-    <div v-else-if="loadError" class="state-note">{{ loadError }}</div>
+    <div v-else-if="loadError" class="state-note">
+      <span>{{ loadError }}</span>
+      <button class="small-btn" type="button" @click="fetchConnectors" :disabled="isLoading">重试</button>
+    </div>
 
     <template v-else>
       <div v-if="connectors.length" class="connector-list">
@@ -277,19 +360,20 @@ onMounted(fetchConnectors)
             </div>
           </div>
           <label class="enable-toggle">
-            <input
-              type="checkbox"
-              :checked="connector.enabled"
-              @change="toggleEnabled(connector, ($event.target as HTMLInputElement).checked)"
-            />
+              <input
+                type="checkbox"
+                :checked="connector.enabled"
+                @change="toggleEnabled(connector, ($event.target as HTMLInputElement).checked)"
+                :disabled="!!connectorActionId || isDiscovering || isSaving"
+              />
             已启用
           </label>
-          <button class="small-btn" @click="editTables(connector)">配置数据表权限</button>
-          <button class="small-btn danger" @click="removeConnector(connector)">删除</button>
+          <button class="small-btn" @click="editTables(connector)" :disabled="!!connectorActionId || isDiscovering || isSaving">配置数据表权限</button>
+          <button class="small-btn danger" @click="removeConnector(connector)" :disabled="!!connectorActionId || isDiscovering || isSaving">删除</button>
         </div>
       </div>
 
-      <button v-if="!showForm" class="add-connector" @click="openCreateForm">
+      <button v-if="!showForm" class="add-connector" @click="openCreateForm" :disabled="!!connectorActionId || isDiscovering || isSaving">
         ＋ 连接业务数据库
       </button>
 
@@ -500,11 +584,11 @@ onMounted(fetchConnectors)
         </div>
 
         <div class="form-actions">
-          <button class="cancel-btn" @click="showForm = false; editingConnector = null">取消</button>
+          <button class="cancel-btn" type="button" @click="closeForm" :disabled="isDiscovering || isSaving">取消</button>
           <button
             v-if="discoveredTables"
             class="save-btn"
-            :disabled="isSaving"
+            :disabled="isSaving || isDiscovering"
             @click="saveConnector"
           >
             {{ isSaving ? '正在保存…' : editingConnector ? '保存权限更改' : '确认添加并保存' }}

@@ -14,13 +14,16 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-import { ref, onMounted } from 'vue'
+import { computed, ref, onMounted } from 'vue'
 import { aiService, type AIConfig, type AITestResult } from '@/services/ai'
 import type { AIProvider } from '@/types/ai'
 
 export function useAISetup() {
   const isLoading = ref(false)
-  const error = ref<string>('')
+  const operationError = ref('')
+  const providerError = ref('')
+  const configError = ref('')
+  const error = computed(() => operationError.value || providerError.value || configError.value)
   const setupConfig = ref<{
     provider: string
     model: string
@@ -41,23 +44,51 @@ export function useAISetup() {
   // of truth. Values are normalized to lowercase to match the save/load flow, which
   // upper-cases on save and lower-cases the stored model_type on load.
   const providers = ref<AIProvider[]>([])
+  let providerRequest = 0
+  let configRequest = 0
+  let saveInFlight = false
+
+  const apiErrorMessage = (err: unknown, fallback: string): string => {
+    const detail = (err as { response?: { data?: { detail?: unknown } } }).response?.data?.detail
+    if (typeof detail === 'string' && detail) return detail
+    if (detail && typeof detail === 'object') {
+      const details = (detail as { details?: unknown }).details
+      const message = (detail as { error?: unknown }).error
+      if (typeof details === 'string' && details) return details
+      if (typeof message === 'string' && message) return message
+    }
+    if (err instanceof Error && err.message) return err.message
+    return fallback
+  }
 
   const loadProviders = async () => {
+    const request = ++providerRequest
     try {
       const fetched = await aiService.getProviders()
-      providers.value = fetched.map((p) => ({ ...p, value: p.value.toLowerCase() }))
+      if (request !== providerRequest) return
+      if (!Array.isArray(fetched)) throw new Error('Provider catalog is invalid')
+      providers.value = fetched
+        .filter((p) => p && typeof p.value === 'string')
+        .map((p) => ({ ...p, value: p.value.toLowerCase() }))
+      providerError.value = ''
     } catch (err: unknown) {
-      const apiError = (err as { response?: { data?: { detail?: { details?: string; error?: string } } } }).response?.data?.detail;
-      error.value = apiError?.details || apiError?.error || 'Failed to load providers'
+      if (request === providerRequest) {
+        providerError.value = apiErrorMessage(err, 'Failed to load providers')
+      }
     }
   }
 
   const loadExistingConfig = async () => {
+    const request = ++configRequest
     try {
       isLoading.value = true
-      error.value = ''
+      configError.value = ''
       const config = await aiService.getOrganizationConfig()
-      const rawSettings = (config as any).settings || {}
+      if (request !== configRequest) return
+      if (!config || typeof config.model_type !== 'string' || typeof config.model_name !== 'string') {
+        throw new Error('AI configuration is invalid')
+      }
+      const rawSettings = config.settings && typeof config.settings === 'object' ? config.settings : {}
       setupConfig.value = {
         provider: config.model_type.toLowerCase(),
         model: config.model_name,
@@ -67,26 +98,35 @@ export function useAISetup() {
       hasExistingConfig.value = true
       hasConfiguredKey.value = !!config.has_api_key
       configuredKeyMasked.value = config.api_key_masked || (config.has_api_key ? '••••••••(已配置有效密钥)' : '')
+      configError.value = ''
     } catch (err: unknown) {
-      const response = (err as { response?: { status?: number; data?: { detail?: { details?: string; error?: string } } } }).response;
-      if (response?.status !== 404 && response?.data?.detail?.error !== 'AI configuration not found') {
-        error.value = response?.data?.detail?.details || response?.data?.detail?.error || 'Failed to load configuration'
+      if (request !== configRequest) return
+      const response = (err as { response?: { status?: number; data?: { detail?: unknown } } }).response
+      const detail = response?.data?.detail
+      const isMissing = response?.status === 404
+        || (detail && typeof detail === 'object' && (detail as { error?: unknown }).error === 'AI configuration not found')
+      if (!isMissing) {
+        configError.value = apiErrorMessage(err, 'Failed to load configuration')
+      } else {
+        configError.value = ''
       }
       hasExistingConfig.value = false
       hasConfiguredKey.value = false
       configuredKeyMasked.value = ''
     } finally {
-      isLoading.value = false
+      if (request === configRequest) isLoading.value = false
     }
   }
 
   const saveAISetup = async (): Promise<boolean> => {
+    if (saveInFlight || isLoading.value) return false
+    saveInFlight = true
     try {
-      error.value = ''
+      operationError.value = ''
       isLoading.value = true
 
       if (hasExistingConfig.value) {
-        return await updateAISetup()
+        return await performUpdateAISetup()
       }
 
       const payload: AIConfig = {
@@ -101,18 +141,31 @@ export function useAISetup() {
       hasConfiguredKey.value = !!payload.api_key
       return true
     } catch (err: unknown) {
-      const apiError = (err as { response?: { data?: { detail?: { details?: string; error?: string } } } }).response?.data?.detail;
-      error.value = apiError?.details || apiError?.error || 'Setup failed. Please try again.'
+      operationError.value = apiErrorMessage(err, 'Setup failed. Please try again.')
       return false
     } finally {
       isLoading.value = false
+      saveInFlight = false
     }
   }
 
   const updateAISetup = async (): Promise<boolean> => {
+    if (saveInFlight || isLoading.value) return false
+    saveInFlight = true
     try {
-      error.value = ''
+      operationError.value = ''
       isLoading.value = true
+      return await performUpdateAISetup()
+    } catch (err: unknown) {
+      operationError.value = apiErrorMessage(err, 'Update failed. Please try again.')
+      return false
+    } finally {
+      isLoading.value = false
+      saveInFlight = false
+    }
+  }
+
+  const performUpdateAISetup = async (): Promise<boolean> => {
       const payload: AIConfig = {
         model_type: setupConfig.value.provider.toUpperCase(),
         model_name: setupConfig.value.model,
@@ -128,13 +181,6 @@ export function useAISetup() {
         configuredKeyMasked.value = '••••••••(已更新并加密)'
       }
       return true
-    } catch (err: unknown) {
-      const apiError = (err as { response?: { data?: { detail?: { details?: string; error?: string } } } }).response?.data?.detail;
-      error.value = apiError?.details || apiError?.error || 'Update failed. Please try again.'
-      return false
-    } finally {
-      isLoading.value = false
-    }
   }
 
   const testAISetup = async (): Promise<AITestResult> => {

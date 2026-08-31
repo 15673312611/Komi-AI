@@ -37,6 +37,12 @@ const chooseMode = (wrapper: ReturnType<typeof createWrapper>, mode: string) =>
   wrapper.find(`input[value="${mode}"]`).setValue(true)
 
 describe('FaqImportModal', () => {
+  const fileWithSize = (name: string, type: string, size: number) => {
+    const file = new File(['pdf'], name, { type })
+    Object.defineProperty(file, 'size', { value: size })
+    return file
+  }
+
   it('offers the preserve-URLs option only for an article migration', async () => {
     const wrapper = createWrapper()
     // Q&A and PDF modes extract answers from one document — there are no
@@ -93,5 +99,43 @@ describe('FaqImportModal', () => {
     await chooseMode(wrapper, 'articles')
 
     expect((wrapper.find('.preserve__box').element as HTMLInputElement).checked).toBe(true)
+  })
+
+  it('accepts a dragged PDF when the browser leaves the MIME type blank', async () => {
+    const wrapper = createWrapper()
+    await chooseMode(wrapper, 'pdf')
+    const input = wrapper.find('#faq-import-pdf')
+    Object.defineProperty(input.element, 'files', {
+      configurable: true,
+      value: [fileWithSize('guide.PDF', '', 100)],
+    })
+    await input.trigger('change')
+
+    expect((wrapper.find('.btn-import').element as HTMLButtonElement).disabled).toBe(false)
+    await wrapper.find('.btn-import').trigger('click')
+    expect(wrapper.emitted('submit-pdf')?.[0]?.[0]).toMatchObject({ name: 'guide.PDF' })
+  })
+
+  it('rejects a PDF larger than the advertised 25 MB limit', async () => {
+    const wrapper = createWrapper()
+    await chooseMode(wrapper, 'pdf')
+    const input = wrapper.find('#faq-import-pdf')
+    Object.defineProperty(input.element, 'files', {
+      configurable: true,
+      value: [fileWithSize('large.pdf', 'application/pdf', 25 * 1024 * 1024 + 1)],
+    })
+    await input.trigger('change')
+
+    expect((wrapper.find('.btn-import').element as HTMLButtonElement).disabled).toBe(true)
+    expect(wrapper.emitted('submit-pdf')).toBeUndefined()
+  })
+
+  it('does not enable import for a non-HTTP URL', async () => {
+    const wrapper = createWrapper()
+    await wrapper.find('#faq-import-url').setValue('ftp://support.acme.com/faq')
+
+    expect((wrapper.find('.btn-import').element as HTMLButtonElement).disabled).toBe(true)
+    await wrapper.find('.btn-import').trigger('click')
+    expect(wrapper.emitted('submit')).toBeUndefined()
   })
 })

@@ -15,7 +15,7 @@ limitations under the License.
 -->
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, watch, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import { notificationService, type Notification } from '@/services/notification'
 import { getNotificationIcon } from './notificationIcons'
@@ -35,29 +35,61 @@ const emit = defineEmits<{
 const notifications = ref<Notification[]>([])
 const isLoading = ref(false)
 const error = ref('')
+const actionBusy = ref(new Set<number>())
+const isMarkingAll = ref(false)
+const isClearingAll = ref(false)
+let fetchVersion = 0
+
+const invalidatePendingFetches = () => {
+    fetchVersion += 1
+    // A superseded request must not leave the drawer stuck in its loading
+    // state while a mutation updates the already-visible rows.
+    isLoading.value = false
+}
+
+const setActionBusy = (id: number, busy: boolean) => {
+    const next = new Set(actionBusy.value)
+    if (busy) next.add(id)
+    else next.delete(id)
+    actionBusy.value = next
+}
 
 const fetchNotifications = async () => {
+    const version = ++fetchVersion
     try {
         isLoading.value = true
-        notifications.value = await notificationService.getNotifications()
+        const next = await notificationService.getNotifications()
+        if (version !== fetchVersion) return
+        notifications.value = Array.isArray(next) ? next : []
+        error.value = ''
     } catch (err) {
+        if (version !== fetchVersion) return
         error.value = '加载通知列表失败'
         console.error('Error fetching notifications:', err)
     } finally {
-        isLoading.value = false
+        if (version === fetchVersion) isLoading.value = false
     }
 }
 
-const markAsRead = async (id: number) => {
+const markAsRead = async (id: number): Promise<boolean> => {
+    if (actionBusy.value.has(id)) return false
+    invalidatePendingFetches()
+    setActionBusy(id, true)
     try {
         await notificationService.markAsRead(id)
         const notification = notifications.value.find(n => n.id === id)
-        if (notification) {
+        if (notification && !notification.is_read) {
             notification.is_read = true
             emit('notification-read')
         }
+        error.value = ''
+        return true
     } catch (err) {
         console.error('Error marking notification as read:', err)
+        error.value = '标记通知为已读失败'
+        return false
+    } finally {
+        setActionBusy(id, false)
     }
 }
 
@@ -71,12 +103,14 @@ const sessionIdOf = (notification: Notification): string | undefined => {
 
 const handleNotificationClick = async (notification: Notification) => {
     if (!notification.is_read) {
-        await markAsRead(notification.id)
+        if (!(await markAsRead(notification.id))) return
     }
     const sessionId = sessionIdOf(notification)
     if (sessionId) {
         emit('close')
-        router.push(conversationSessionUrl(sessionId))
+        void router.push(conversationSessionUrl(sessionId)).catch((navigationError) => {
+            console.debug('Failed to open notification conversation:', navigationError)
+        })
     }
 }
 
@@ -89,50 +123,74 @@ const filteredNotifications = computed(() =>
 )
 
 const hasUnread = computed(() => notifications.value.some(n => !n.is_read))
+const hasActionBusy = computed(() => actionBusy.value.size > 0)
 
 // One request that clears everything, not one per loaded row. The list is a
 // 50-row page, so looping it could never clear a badge showing 99+ however many
 // times you tapped.
 const markAllRead = async () => {
+    if (isMarkingAll.value || isClearingAll.value || hasActionBusy.value || !hasUnread.value) return
+    invalidatePendingFetches()
+    isMarkingAll.value = true
     try {
         await notificationService.markAllAsRead()
         notifications.value.forEach(n => { n.is_read = true })
+        error.value = ''
         emit('notification-read')
     } catch (err) {
         console.error('Error marking all notifications as read:', err)
         error.value = '无法全部标为已读'
+    } finally {
+        isMarkingAll.value = false
     }
 }
 
 const deleteNotification = async (id: number) => {
-    const previous = notifications.value
+    if (isMarkingAll.value || isClearingAll.value || hasActionBusy.value) return
+    const index = notifications.value.findIndex(n => n.id === id)
+    if (index < 0) return
+    const removed = notifications.value[index]
+    invalidatePendingFetches()
+    setActionBusy(id, true)
     // Optimistic: the row disappears on tap, and comes back if the call fails.
-    notifications.value = notifications.value.filter(n => n.id !== id)
+    notifications.value.splice(index, 1)
     try {
         await notificationService.deleteNotification(id)
+        error.value = ''
         emit('notification-read')
     } catch (err) {
         console.error('Error deleting notification:', err)
-        notifications.value = previous
+        if (!notifications.value.some(n => n.id === id)) {
+            notifications.value.splice(Math.min(index, notifications.value.length), 0, removed)
+        }
         error.value = '删除该通知失败'
+    } finally {
+        setActionBusy(id, false)
     }
 }
 
 const clearAll = async () => {
+    if (isMarkingAll.value || isClearingAll.value || hasActionBusy.value || !notifications.value.length) return
     const previous = notifications.value
+    invalidatePendingFetches()
+    isClearingAll.value = true
     notifications.value = []
     try {
         await notificationService.clearAll()
+        error.value = ''
         emit('notification-read')
     } catch (err) {
         console.error('Error clearing notifications:', err)
         notifications.value = previous
         error.value = '清空通知失败'
+    } finally {
+        isClearingAll.value = false
     }
 }
 
 const formatTime = (timestamp: string): string => {
     const date = new Date(timestamp)
+    if (!Number.isFinite(date.getTime())) return '时间未知'
     const now = new Date()
     const diff = now.getTime() - date.getTime()
 
@@ -157,7 +215,17 @@ const formatTime = (timestamp: string): string => {
     return date.toLocaleDateString()
 }
 
-onMounted(fetchNotifications)
+const notificationType = (notification: Notification): string =>
+    typeof notification.type === 'string' ? notification.type.toLowerCase() : ''
+
+// Refresh when the drawer is opened so a long-lived dashboard does not show a
+// stale snapshot. The version guard prevents an older response from replacing
+// a newer one when opening and refreshing happen close together.
+watch(() => props.isOpen, () => { void fetchNotifications() }, { immediate: true })
+
+onBeforeUnmount(() => {
+    fetchVersion += 1
+})
 </script>
 
 <template>
@@ -186,8 +254,8 @@ onMounted(fetchNotifications)
                 <button class="filter-tab" :class="{ active: activeFilter === 'unread' }" @click="activeFilter = 'unread'">未读</button>
             </div>
             <div class="filter-actions">
-                <button class="mark-all" :disabled="!hasUnread" @click="markAllRead">全部已读</button>
-                <button class="mark-all" :disabled="!notifications.length" @click="clearAll">清空全部</button>
+                <button class="mark-all" :disabled="isLoading || isMarkingAll || isClearingAll || hasActionBusy || !hasUnread" @click="markAllRead">全部已读</button>
+                <button class="mark-all" :disabled="isLoading || isMarkingAll || isClearingAll || hasActionBusy || !notifications.length" @click="clearAll">清空全部</button>
             </div>
         </div>
 
@@ -210,8 +278,8 @@ onMounted(fetchNotifications)
                     :class="{ unread: !notification.is_read, linkable: sessionIdOf(notification) }"
                     @click="handleNotificationClick(notification)">
                     <span class="notification-icon-wrap">
-                        <img v-if="getNotificationIcon(notification.type.toLowerCase())"
-                            :src="getNotificationIcon(notification.type.toLowerCase())" class="notification-type-icon"
+                        <img v-if="getNotificationIcon(notificationType(notification))"
+                            :src="getNotificationIcon(notificationType(notification))" class="notification-type-icon"
                             :alt="notification.type" />
                     </span>
                     <div class="notification-body">
@@ -227,6 +295,7 @@ onMounted(fetchNotifications)
                         class="delete-notification"
                         :aria-label="`删除通知: ${notification.title}`"
                         title="删除通知"
+                        :disabled="isLoading || isMarkingAll || isClearingAll || actionBusy.has(notification.id)"
                         @click.stop="deleteNotification(notification.id)"
                     >&times;</button>
                 </div>

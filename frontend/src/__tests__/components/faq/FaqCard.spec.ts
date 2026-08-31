@@ -60,19 +60,19 @@ describe('FaqCard display mode', () => {
     expect(wrapper.find('.faq-card__source').text()).toContain('Billing & refunds policy')
   })
 
-  it('falls back to Generated when there is no source label', () => {
+  it('falls back to an AI-generated label when there is no source label', () => {
     const wrapper = createWrapper({ faq: { ...faq, source_label: null } })
-    expect(wrapper.find('.faq-card__source').text()).toContain('Generated')
+    expect(wrapper.find('.faq-card__source').text()).toContain('AI 自动生成')
   })
 
   it('shows the publish pill state', () => {
     const published = createWrapper()
     expect(published.find('.pill').classes()).toContain('pill--published')
-    expect(published.find('.pill').text()).toContain('Published')
+    expect(published.find('.pill').text()).toContain('已发布')
 
     const draft = createWrapper({ faq: { ...faq, status: 'draft' } })
     expect(draft.find('.pill').classes()).toContain('pill--draft')
-    expect(draft.find('.pill').text()).toContain('Draft')
+    expect(draft.find('.pill').text()).toContain('草稿')
   })
 
   it('emits toggle-status when the pill is clicked', async () => {
@@ -107,12 +107,12 @@ describe('FaqCard edit mode', () => {
     expect((wrapper.find('.edit-question').element as HTMLInputElement).value).toBe('Draft question?')
     // The answer is edited through the MarkdownEditor component.
     expect(wrapper.findComponent(MarkdownEditor).props('modelValue')).toBe('Draft answer.')
-    expect(wrapper.find('.edit-label').text()).toBe('EDITING')
+    expect(wrapper.find('.edit-label').text()).toBe('编辑中')
   })
 
   it('labels a new FAQ', () => {
     const wrapper = createWrapper({ editing: true, isNew: true })
-    expect(wrapper.find('.edit-label').text()).toBe('NEW FAQ')
+    expect(wrapper.find('.edit-label').text()).toBe('新建 FAQ 问答')
   })
 
   it('emits draft updates on input', async () => {
@@ -151,6 +151,6 @@ describe('FaqCard edit mode', () => {
   it('disables Save while saving', () => {
     const wrapper = createWrapper({ editing: true, saving: true })
     expect(wrapper.find('.btn-save').attributes('disabled')).toBeDefined()
-    expect(wrapper.find('.btn-save').text()).toBe('Saving…')
+    expect(wrapper.find('.btn-save').text()).toBe('正在保存…')
   })
 })

@@ -23,7 +23,7 @@ export const mcpService = {
     const response = await api.get('/mcp-tools', {
       params: { enabled_only: enabledOnly }
     })
-    return response.data
+    return Array.isArray(response.data) ? response.data : []
   },
 
   async getMCPTool(toolId: number): Promise<MCPTool> {
@@ -47,7 +47,11 @@ export const mcpService = {
 
   async testMCPTool(toolId: number): Promise<MCPToolTestResult> {
     const response = await api.post(`/mcp-tools/${toolId}/test`)
-    return response.data
+    return {
+      success: Boolean(response.data?.success),
+      functions: Array.isArray(response.data?.functions) ? response.data.functions : [],
+      error: typeof response.data?.error === 'string' ? response.data.error : null,
+    }
   },
 
   // Agent-MCP Tool associations
@@ -67,4 +71,4 @@ export const mcpService = {
   async removeMCPToolFromAgent(mcpToolId: number, agentId: string): Promise<void> {
     await api.delete(`/mcp-tools/agent-association/${mcpToolId}/${agentId}`)
   }
-} 
+}

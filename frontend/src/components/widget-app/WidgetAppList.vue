@@ -32,6 +32,7 @@ const {
   apps,
   loading,
   error,
+  actionBusy,
   showCreateModal,
   showEditModal,
   showDeleteModal,
@@ -92,7 +93,9 @@ onMounted(async () => {
 })
 
 const formatDate = (dateString: string) => {
-  return new Date(dateString).toLocaleDateString('en-US', {
+  const date = new Date(dateString)
+  if (Number.isNaN(date.getTime())) return '日期未知'
+  return date.toLocaleDateString('en-US', {
     year: 'numeric',
     month: 'short',
     day: 'numeric',
@@ -192,7 +195,7 @@ const formatDate = (dateString: string) => {
             <span v-if="hasAnyApps" class="subtitle-count">共 {{ apps.length }} 个应用</span>
           </p>
         </div>
-        <button v-if="hasAnyApps" class="btn btn-primary" @click="showCreateModal = true">
+        <button v-if="hasAnyApps" class="btn btn-primary" @click="showCreateModal = true" :disabled="!!actionBusy">
           <PlusIcon class="icon" />
           + 创建挂件应用
         </button>
@@ -273,6 +276,7 @@ const formatDate = (dateString: string) => {
             class="action-btn"
             title="编辑应用"
             @click="handleEditApp(app)"
+            :disabled="!!actionBusy"
           >
             <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
           </button>
@@ -280,6 +284,7 @@ const formatDate = (dateString: string) => {
             class="action-btn"
             title="重新生成密钥"
             @click="handleRegenerateKey(app)"
+            :disabled="!!actionBusy"
           >
             <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg>
           </button>
@@ -287,6 +292,7 @@ const formatDate = (dateString: string) => {
             class="action-btn action-btn-danger"
             title="删除吊销"
             @click="handleDeleteApp(app)"
+            :disabled="!!actionBusy"
           >
             <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2"/><path d="M6 6l1 14a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-14"/></svg>
           </button>
@@ -307,6 +313,7 @@ const formatDate = (dateString: string) => {
       <template #title>创建挂件应用凭证</template>
       <template #content>
         <WidgetAppForm
+          :submitting="actionBusy === 'create'"
           @submit="handleCreateApp"
           @cancel="showCreateModal = false"
         />
@@ -319,6 +326,7 @@ const formatDate = (dateString: string) => {
       <template #content>
         <WidgetAppForm
           :app="selectedApp"
+          :submitting="actionBusy === 'update'"
           @submit="handleUpdateApp"
           @cancel="showEditModal = false"
         />
@@ -333,8 +341,8 @@ const formatDate = (dateString: string) => {
           <p>确定要删除挂件应用 <strong>{{ selectedApp.name }}</strong> 吗？</p>
           <p class="warning">此操作将导致该应用的 API Key 立即失效，已嵌入该密钥的网站挂件将无法继续连接。</p>
           <div class="modal-actions">
-            <button class="btn btn-danger" @click="confirmDeleteApp">
-              确认删除
+            <button class="btn btn-danger" @click="confirmDeleteApp" :disabled="actionBusy === 'delete'">
+              {{ actionBusy === 'delete' ? '正在删除...' : '确认删除' }}
             </button>
             <button class="btn btn-secondary" @click="showDeleteModal = false">
               取消

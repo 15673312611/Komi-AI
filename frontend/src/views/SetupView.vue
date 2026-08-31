@@ -21,7 +21,7 @@ import type { OrganizationCreate } from '@/types/organization'
 import { createOrganization, getSetupStatus } from '@/services/organization'
 import { userService } from '@/services/user'
 import { validatePassword, validateDomain, validateEmail, validateName, validateOrgName, type PasswordStrength } from '@/utils/validators'
-// @ts-ignore
+// @ts-expect-error timezone-select-js does not ship TypeScript declarations.
 import { listTz, clientTz } from 'timezone-select-js'
 import type { BusinessHoursDict } from '@/types/organization'
 
@@ -39,11 +39,11 @@ onMounted(async () => {
         if (userService.isAuthenticated()) {
             
             if (isSetupComplete) {
-                router.push('/ai-agents')
+                await router.push('/ai-agents')
             }
         }
         else if (isSetupComplete){
-            router.push('/login') 
+            await router.push('/login')
         }   
         
     } catch (e) {
@@ -175,7 +175,7 @@ const handleSubmit = async () => {
 
     try {
         await createOrganization(orgData.value)
-        router.push('/ai-agents')
+        await router.push('/ai-agents')
     } catch (e) {
         error.value = e instanceof Error ? e.message : 'Failed to create organization'
     } finally {

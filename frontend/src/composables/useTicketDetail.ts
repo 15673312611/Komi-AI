@@ -38,9 +38,15 @@ export function useTicketDetail(ticketId: Ref<string>) {
   const isLoading = ref(true)
   const error = ref<string | null>(null)
   const isSavingComment = ref(false)
+  const isSavingCustomer = ref(false)
   // Covers both customer-summary actions: they write the same field, and
   // sending twice delivers the message to the customer twice.
   const isRcaBusy = ref(false)
+  const isActionBusy = ref(false)
+  const isPatching = ref(false)
+  let refreshRequestVersion = 0
+  let disposed = false
+  let patchQueue: Promise<unknown> = Promise.resolve()
 
   const ticket = computed<Ticket | null>(() => detail.value?.ticket ?? null)
   const activities = computed<TicketActivity[]>(() => detail.value?.activities ?? [])
@@ -49,36 +55,57 @@ export function useTicketDetail(ticketId: Ref<string>) {
   )
 
   async function refresh(silent = false) {
-    if (!ticketId.value) return
+    const id = ticketId.value
+    if (!id) {
+      refreshRequestVersion += 1
+      detail.value = null
+      investigation.value = null
+      isLoading.value = false
+      return
+    }
+    const requestVersion = ++refreshRequestVersion
     if (!silent) isLoading.value = true
     try {
       // The glass box loads alongside the ticket; its failure (e.g. plan
       // gate) must never take the whole page down.
       const [detailData, investigationData] = await Promise.all([
-        ticketService.getTicket(ticketId.value),
-        ticketService.getInvestigation(ticketId.value).catch(() => null),
+        ticketService.getTicket(id),
+        ticketService.getInvestigation(id).catch(() => null),
       ])
+      if (requestVersion !== refreshRequestVersion || id !== ticketId.value || disposed) return
       detail.value = detailData
       investigation.value = investigationData
       error.value = null
     } catch (e: any) {
-      if (!silent) error.value = e?.message || 'Failed to load the ticket'
+      if (requestVersion === refreshRequestVersion && id === ticketId.value && !disposed && !silent) {
+        error.value = e?.message || 'Failed to load the ticket'
+      }
     } finally {
-      isLoading.value = false
+      if (requestVersion === refreshRequestVersion && id === ticketId.value && !disposed) {
+        isLoading.value = false
+      }
     }
   }
 
-  async function patch(patchPayload: TicketUpdatePayload, failureMessage: string) {
-    if (!detail.value) return
-    const previous = { ...detail.value.ticket }
-    Object.assign(detail.value.ticket, patchPayload)
-    try {
-      await ticketService.updateTicket(previous.id, patchPayload)
-      await refresh(true)
-    } catch (e: any) {
-      detail.value.ticket = previous
-      toast.error(e?.message || failureMessage)
-    }
+  function patch(patchPayload: TicketUpdatePayload, failureMessage: string): Promise<boolean> {
+    if (isPatching.value) return Promise.resolve(false)
+    isPatching.value = true
+    const operation = patchQueue.then(async () => {
+      if (!detail.value) return false
+      const previous = { ...detail.value.ticket }
+      Object.assign(detail.value.ticket, patchPayload)
+      try {
+        await ticketService.updateTicket(previous.id, patchPayload)
+        await refresh(true)
+        return true
+      } catch (e: any) {
+        if (detail.value?.ticket.id === previous.id) detail.value.ticket = previous
+        toast.error(e?.message || failureMessage)
+        return false
+      }
+    })
+    patchQueue = operation.catch(() => undefined)
+    return operation.finally(() => { isPatching.value = false })
   }
 
   const setStatus = (status: TicketStatus) => patch({ status }, 'Failed to change the status')
@@ -90,56 +117,76 @@ export function useTicketDetail(ticketId: Ref<string>) {
   const setAssignee = (assignee_user_id: string | null) =>
     patch({ assignee_user_id }, 'Failed to assign the ticket')
 
-  async function setCustomer(email: string, name?: string) {
-    if (!detail.value || !email.trim()) return
+  async function setCustomer(email: string, name?: string): Promise<boolean> {
+    if (!detail.value || !email.trim() || isSavingCustomer.value) return false
+    const ticketId = detail.value.ticket.id
+    isSavingCustomer.value = true
     try {
-      await ticketService.updateTicket(detail.value.ticket.id, {
+      await ticketService.updateTicket(ticketId, {
         customer_email: email.trim(),
         customer_name: name?.trim() || undefined,
       })
       await refresh(true)
       toast.success('Customer linked')
+      return true
     } catch (e: any) {
       toast.error(e?.message || 'Failed to link the customer')
+      return false
+    } finally {
+      isSavingCustomer.value = false
     }
   }
 
-  async function addComment(body: string, isInternal = true) {
-    if (!detail.value || !body.trim()) return
+  async function addComment(body: string, isInternal = true): Promise<boolean> {
+    if (!detail.value || !body.trim() || isSavingComment.value) return false
+    const ticketId = detail.value.ticket.id
     isSavingComment.value = true
     try {
-      await ticketService.addComment(detail.value.ticket.id, body.trim(), isInternal)
+      await ticketService.addComment(ticketId, body.trim(), isInternal)
       await refresh(true)
+      return true
     } catch (e: any) {
       toast.error(e?.message || 'Failed to post the comment')
+      return false
     } finally {
       isSavingComment.value = false
     }
   }
 
   async function resolve(payload: { outcome?: string; resolution_summary?: string; customer_message?: string }) {
-    if (!detail.value) return
+    if (!detail.value || isActionBusy.value) return false
+    isActionBusy.value = true
     try {
       await ticketService.resolveTicket(detail.value.ticket.id, payload)
       await refresh(true)
       toast.success('Ticket resolved — customer notified')
+      return true
     } catch (e: any) {
       toast.error(e?.message || 'Failed to resolve the ticket')
+      return false
+    } finally {
+      isActionBusy.value = false
     }
   }
 
   async function reopen(reason?: string) {
-    if (!detail.value) return
+    if (!detail.value || isActionBusy.value) return false
+    isActionBusy.value = true
     try {
       await ticketService.reopenTicket(detail.value.ticket.id, reason)
       await refresh(true)
+      return true
     } catch (e: any) {
       toast.error(e?.message || 'Failed to reopen the ticket')
+      return false
+    } finally {
+      isActionBusy.value = false
     }
   }
 
   async function investigate(contextNote?: string) {
-    if (!detail.value) return
+    if (!detail.value || isActionBusy.value) return false
+    isActionBusy.value = true
     try {
       await ticketService.investigate(detail.value.ticket.id, {
         run_type: 'investigation',
@@ -147,8 +194,12 @@ export function useTicketDetail(ticketId: Ref<string>) {
       })
       await refresh(true)
       toast.success('AI investigation queued')
+      return true
     } catch (e: any) {
       toast.error(e?.message || 'Failed to start the AI run')
+      return false
+    } finally {
+      isActionBusy.value = false
     }
   }
 
@@ -193,24 +244,34 @@ export function useTicketDetail(ticketId: Ref<string>) {
   }
 
   async function approveProposal() {
-    if (!detail.value) return
+    if (!detail.value || isActionBusy.value) return false
+    isActionBusy.value = true
     try {
       await ticketService.approveProposal(detail.value.ticket.id)
       await refresh(true)
       toast.success('Proposal approved — ticket resolved, customer notified')
+      return true
     } catch (e: any) {
       toast.error(e?.message || 'Failed to approve the proposal')
+      return false
+    } finally {
+      isActionBusy.value = false
     }
   }
 
   async function rejectProposal(reason?: string, reinvestigate = false) {
-    if (!detail.value) return
+    if (!detail.value || isActionBusy.value) return false
+    isActionBusy.value = true
     try {
       await ticketService.rejectProposal(detail.value.ticket.id, reason, reinvestigate)
       await refresh(true)
       toast.success(reinvestigate ? 'Rejected — a refined investigation is queued' : 'Proposal rejected')
+      return true
     } catch (e: any) {
       toast.error(e?.message || 'Failed to reject the proposal')
+      return false
+    } finally {
+      isActionBusy.value = false
     }
   }
 
@@ -219,10 +280,16 @@ export function useTicketDetail(ticketId: Ref<string>) {
   })
 
   let pollTimer: ReturnType<typeof setTimeout> | null = null
+  let pollGeneration = 0
   function scheduleNextPoll() {
+    if (disposed) return
+    const generation = ++pollGeneration
+    if (pollTimer) clearTimeout(pollTimer)
     pollTimer = setTimeout(async () => {
+      pollTimer = null
+      if (disposed || generation !== pollGeneration) return
       await refresh(true)
-      scheduleNextPoll()
+      if (!disposed && generation === pollGeneration) scheduleNextPoll()
     }, hasActiveRun.value ? ACTIVE_POLL_MS : IDLE_POLL_MS)
   }
 
@@ -231,9 +298,19 @@ export function useTicketDetail(ticketId: Ref<string>) {
     scheduleNextPoll()
   })
   onBeforeUnmount(() => {
+    disposed = true
+    refreshRequestVersion += 1
+    pollGeneration += 1
     if (pollTimer) clearTimeout(pollTimer)
   })
-  watch(ticketId, () => refresh())
+  watch(ticketId, () => {
+    pollGeneration += 1
+    if (pollTimer) {
+      clearTimeout(pollTimer)
+      pollTimer = null
+    }
+    void refresh().then(() => scheduleNextPoll())
+  })
 
   return {
     detail,
@@ -243,7 +320,10 @@ export function useTicketDetail(ticketId: Ref<string>) {
     hasActiveRun,
     isLoading,
     isSavingComment,
+    isSavingCustomer,
     isRcaBusy,
+    isActionBusy,
+    isPatching,
     error,
     refresh,
     setStatus,

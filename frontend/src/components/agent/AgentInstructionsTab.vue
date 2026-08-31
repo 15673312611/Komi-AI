@@ -78,6 +78,10 @@ const props = defineProps({
   agent: {
     type: Object as () => any,
     required: true
+  },
+  saving: {
+    type: Boolean,
+    default: false
   }
 })
 
@@ -738,8 +742,8 @@ const handleSave = () => {
 
     <!-- Save Button -->
     <div v-if="isEditing" class="save-section">
-      <button class="save-button" @click="handleSave">
-        保存人设配置
+      <button class="save-button" @click="handleSave" :disabled="saving">
+        {{ saving ? '正在保存…' : '保存人设配置' }}
       </button>
     </div>
 
@@ -1447,4 +1451,4 @@ input:checked + .slider:before {
   color: var(--text-color);
   border-color: var(--text-muted);
 }
-</style> 
+</style>

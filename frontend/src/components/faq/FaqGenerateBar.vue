@@ -81,7 +81,7 @@ const generateTitle = computed(() =>
       </div>
     </div>
     <div class="generate-bar__actions">
-      <button class="btn btn--ghost" type="button" @click="$emit('import')">
+      <button class="btn btn--ghost" type="button" :disabled="props.disabled" @click="$emit('import')">
         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12" /><path d="M8 11l4 4 4-4" /><path d="M5 21h14" /></svg>
         导入 FAQ
       </button>
@@ -160,6 +160,11 @@ const generateTitle = computed(() =>
 
 .btn--ghost:hover {
   background: var(--o08);
+}
+
+.btn--ghost:disabled {
+  opacity: 0.6;
+  cursor: default;
 }
 
 .btn--generate {

@@ -39,8 +39,11 @@ function submit() {
   customerVisible.value = false
 }
 
-const timeAgo = (iso?: string | null) =>
-  iso ? formatDistanceToNow(new Date(iso), { addSuffix: true }) : ''
+const timeAgo = (iso?: string | null) => {
+  if (!iso) return ''
+  const date = new Date(iso)
+  return Number.isNaN(date.getTime()) ? '' : formatDistanceToNow(date, { addSuffix: true })
+}
 
 function actorName(activity: TicketActivity): string {
   if (activity.actor_name) return activity.actor_name

@@ -93,6 +93,10 @@ export function useKnowledgeExplorer(
   const isDeleting = ref(false)
 
   let pollTimer: ReturnType<typeof setInterval> | null = null
+  let pollInFlight = false
+  let sourceRequestVersion = 0
+  let queueRequestVersion = 0
+  let orgSourcesRequestVersion = 0
   // Source names that were crawling on the previous poll tick, so we can force a
   // final content refresh once a crawl finishes.
   let crawlingNames = new Set<string>()
@@ -127,15 +131,19 @@ export function useKnowledgeExplorer(
   // `background` refetches (from the crawl poll) skip the loading flag so any
   // bound spinner doesn't flicker every tick.
   const fetchSources = async (background = false) => {
+    const requestVersion = ++sourceRequestVersion
     if (!background) isLoading.value = true
-    error.value = null
+    if (!background) error.value = null
     try {
       const response =
         mode === 'agent' && agentId
           ? await knowledgeService.getKnowledgeByAgent(agentId, 1, 100)
           : await knowledgeService.getKnowledgeByOrganization(organizationId, 1, 100)
 
-      const items: KnowledgeItem[] = response.knowledge || []
+      const items: KnowledgeItem[] = Array.isArray(response?.knowledge)
+        ? response.knowledge
+        : []
+      if (requestVersion !== sourceRequestVersion) return
       // Preserve expand/loaded state across refreshes so a running crawl poll
       // does not collapse the tree or drop already-fetched content.
       const previous = new Map(sources.value.map((s) => [s.id, s]))
@@ -150,19 +158,24 @@ export function useKnowledgeExplorer(
       })
     } catch (err) {
       console.error('Failed to load knowledge sources:', err)
-      error.value = 'Failed to load knowledge sources'
+      if (requestVersion === sourceRequestVersion && !background) {
+        error.value = 'Failed to load knowledge sources'
+      }
     } finally {
-      if (!background) isLoading.value = false
+      if (requestVersion === sourceRequestVersion && !background) isLoading.value = false
     }
   }
 
   const fetchQueue = async () => {
+    const requestVersion = ++queueRequestVersion
     try {
       const response =
         mode === 'agent' && agentId
           ? await knowledgeService.getAgentQueueItems(agentId)
           : await knowledgeService.getOrgQueueItems(organizationId)
-      queueItems.value = response.queue_items || []
+      if (requestVersion === queueRequestVersion) {
+        queueItems.value = Array.isArray(response?.queue_items) ? response.queue_items : []
+      }
     } catch (err) {
       console.error('Failed to load knowledge queue:', err)
     }
@@ -241,7 +254,10 @@ export function useKnowledgeExplorer(
       const live = findSource(sourceId)
       if (live) {
         live.contentError = 'Failed to load pages'
-        live.pages = []
+        // Keep the cache empty so the user can retry without collapsing the
+        // source first. An empty page list means a successful source with no
+        // extracted pages, not a failed request.
+        live.pages = null
       }
     } finally {
       const live = findSource(sourceId)
@@ -344,6 +360,7 @@ export function useKnowledgeExplorer(
   }
 
   const addNewPage = async (source: ExplorerSource) => {
+    if (isSaving.value) return
     const title = draftTitle.value.trim()
     const content = draftContent.value.trim()
     if (!title) {
@@ -375,6 +392,7 @@ export function useKnowledgeExplorer(
   }
 
   const savePage = async () => {
+    if (isSaving.value) return
     const source = selectedSource.value
     if (!source) return
     if (isAddingPage.value) return addNewPage(source)
@@ -403,7 +421,7 @@ export function useKnowledgeExplorer(
   const deletePage = async () => {
     const source = selectedSource.value
     const page = selectedPage.value
-    if (!source || !page) return
+    if (!source || !page || isDeleting.value) return
     isDeleting.value = true
     error.value = null
     try {
@@ -419,6 +437,7 @@ export function useKnowledgeExplorer(
   }
 
   const deleteSource = async (source: ExplorerSource) => {
+    if (isDeleting.value) return
     isDeleting.value = true
     error.value = null
     try {
@@ -455,16 +474,20 @@ export function useKnowledgeExplorer(
   const linkedSourceIds = computed(() => new Set(sources.value.map((s) => s.id)))
 
   const loadOrgSources = async () => {
+    const requestVersion = ++orgSourcesRequestVersion
     isLoadingOrgSources.value = true
     orgSourcesError.value = null
     try {
       const response = await knowledgeService.getKnowledgeByOrganization(organizationId, 1, 100)
-      orgSources.value = response.knowledge || []
+      if (requestVersion !== orgSourcesRequestVersion) return
+      orgSources.value = Array.isArray(response?.knowledge) ? response.knowledge : []
     } catch (err) {
       console.error('Failed to load organization knowledge:', err)
-      orgSourcesError.value = 'Failed to load your organization’s knowledge'
+      if (requestVersion === orgSourcesRequestVersion) {
+        orgSourcesError.value = 'Failed to load your organization’s knowledge'
+      }
     } finally {
-      isLoadingOrgSources.value = false
+      if (requestVersion === orgSourcesRequestVersion) isLoadingOrgSources.value = false
     }
   }
 
@@ -587,25 +610,31 @@ export function useKnowledgeExplorer(
   const startPolling = () => {
     if (pollTimer) return
     pollTimer = setInterval(async () => {
-      await fetchQueue()
-      const active = activeCrawlNames()
-      const currentIds = queueIds()
-      // Reconcile when a crawl is in flight OR the queue changed since the last
-      // tick (an item was added or finished/removed) — the latter catches a
-      // crawl that completed within a single poll window.
-      if (active.size || setsDiffer(currentIds, lastQueueIds)) {
-        await fetchSources(true)
-        // Force-refresh the content of any expanded source that is (or just was)
-        // crawling, so newly-extracted pages appear without a manual re-expand.
-        const touched = new Set<string>([...active, ...crawlingNames])
-        for (const source of sources.value) {
-          if (source.expanded && touched.has(source.name)) {
-            await loadSourceContent(source.id, true)
+      if (pollInFlight) return
+      pollInFlight = true
+      try {
+        await fetchQueue()
+        const active = activeCrawlNames()
+        const currentIds = queueIds()
+        // Reconcile when a crawl is in flight OR the queue changed since the last
+        // tick (an item was added or finished/removed) — the latter catches a
+        // crawl that completed within a single poll window.
+        if (active.size || setsDiffer(currentIds, lastQueueIds)) {
+          await fetchSources(true)
+          // Force-refresh the content of any expanded source that is (or just was)
+          // crawling, so newly-extracted pages appear without a manual re-expand.
+          const touched = new Set<string>([...active, ...crawlingNames])
+          for (const source of sources.value) {
+            if (source.expanded && touched.has(source.name)) {
+              await loadSourceContent(source.id, true)
+            }
           }
         }
+        crawlingNames = active
+        lastQueueIds = currentIds
+      } finally {
+        pollInFlight = false
       }
-      crawlingNames = active
-      lastQueueIds = currentIds
     }, POLL_INTERVAL_MS)
   }
 
@@ -650,6 +679,7 @@ export function useKnowledgeExplorer(
     fetchQueue,
     refresh,
     toggleSource,
+    loadSourceContent,
     selectPage,
     startEdit,
     startAddPage,

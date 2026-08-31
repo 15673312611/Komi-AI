@@ -18,6 +18,7 @@ limitations under the License.
   <div class="sentiment-analytics-container">
     <div v-if="error" class="error-state">
       {{ error }}
+      <button type="button" class="retry-button" @click="fetchSentimentData">重试</button>
     </div>
 
     <div v-else-if="isLoading" class="loading-state">
@@ -239,6 +240,8 @@ const sentimentData = ref<SentimentData | null>(null)
 
 const selectedSession = ref<SessionDetail | null>(null)
 const detailLoading = ref(false)
+let requestVersion = 0
+let detailRequestVersion = 0
 
 // Theme-ish colors for the three sentiment classes
 const COLOR_POSITIVE = '#16a34a'
@@ -261,7 +264,7 @@ const distributionOptions = computed(() => ({
   labels: ['积极正面', '中性平和', '消极负面'],
   colors: [COLOR_POSITIVE, COLOR_NEUTRAL, COLOR_NEGATIVE],
   legend: { position: 'bottom' },
-  dataLabels: { enabled: true, formatter: (val: number) => `${val.toFixed(0)}%` },
+  dataLabels: { enabled: true, formatter: (val: number) => `${Number(val).toFixed(0)}%` },
   stroke: { width: 0 },
   plotOptions: {
     pie: {
@@ -280,10 +283,12 @@ const trendSeries = computed(() => {
   if (!t?.data) return []
   return [{
     name: '平均情绪得分',
-    data: t.data.map((value, index) => ({
-      x: new Date(t.labels[index]).getTime(),
-      y: value
-    }))
+    data: t.data.reduce<Array<{ x: number; y: number }>>((points, value, index) => {
+      const x = new Date(t.labels[index]).getTime()
+      const y = Number(value)
+      if (Number.isFinite(x) && Number.isFinite(y)) points.push({ x, y })
+      return points
+    }, [])
   }]
 })
 
@@ -325,25 +330,90 @@ const shortId = (id: string): string => id.slice(0, 8)
 
 const formatDate = (dateString: string): string => {
   if (!dateString) return 'N/A'
-  return new Date(dateString).toLocaleString()
+  const date = new Date(dateString)
+  return Number.isNaN(date.getTime()) ? 'N/A' : date.toLocaleString()
 }
 
+const toFiniteNumber = (value: unknown, fallback = 0): number => {
+  const number = Number(value)
+  return Number.isFinite(number) ? number : fallback
+}
+
+const normalizeSentimentData = (raw: any): SentimentData => {
+  const distribution = raw?.distribution || {}
+  const trend = raw?.trend || {}
+  return {
+    distribution: {
+      positive: Math.max(0, toFiniteNumber(distribution.positive)),
+      neutral: Math.max(0, toFiniteNumber(distribution.neutral)),
+      negative: Math.max(0, toFiniteNumber(distribution.negative)),
+    },
+    total_analyzed: Math.max(0, toFiniteNumber(raw?.total_analyzed)),
+    avg_score: toFiniteNumber(raw?.avg_score),
+    score_change: toFiniteNumber(raw?.score_change),
+    score_trend: raw?.score_trend === 'up' ? 'up' : 'down',
+    trend: {
+      data: Array.isArray(trend.data) ? trend.data.map((value: unknown) => toFiniteNumber(value)) : [],
+      labels: Array.isArray(trend.labels) ? trend.labels.map((value: unknown) => String(value ?? '')) : [],
+      message_counts: Array.isArray(trend.message_counts)
+        ? trend.message_counts.map((value: unknown) => toFiniteNumber(value))
+        : [],
+    },
+    negative_sessions: Array.isArray(raw?.negative_sessions)
+      ? raw.negative_sessions.map((session: any) => ({
+          session_id: String(session?.session_id ?? ''),
+          sentiment_label: typeof session?.sentiment_label === 'string' ? session.sentiment_label : 'neutral',
+          sentiment_score: session?.sentiment_score === null || session?.sentiment_score === undefined
+            ? null
+            : toFiniteNumber(session.sentiment_score),
+          status: typeof session?.status === 'string' ? session.status : '',
+        }))
+      : [],
+    time_range: typeof raw?.time_range === 'string' ? raw.time_range : props.timeRange,
+  }
+}
+
+const normalizeSessionDetail = (raw: any, sessionId: string): SessionDetail => ({
+  session_id: typeof raw?.session_id === 'string' ? raw.session_id : sessionId,
+  overall_sentiment: {
+    label: typeof raw?.overall_sentiment?.label === 'string' ? raw.overall_sentiment.label : null,
+    score: raw?.overall_sentiment?.score === null || raw?.overall_sentiment?.score === undefined
+      ? null
+      : toFiniteNumber(raw.overall_sentiment.score),
+  },
+  messages: Array.isArray(raw?.messages)
+    ? raw.messages.map((message: any, index: number) => ({
+        id: toFiniteNumber(message?.id, index),
+        message: typeof message?.message === 'string' ? message.message : null,
+        sentiment_label: typeof message?.sentiment_label === 'string' ? message.sentiment_label : 'neutral',
+        sentiment_score: message?.sentiment_score === null || message?.sentiment_score === undefined
+          ? null
+          : toFiniteNumber(message.sentiment_score),
+        created_at: typeof message?.created_at === 'string' ? message.created_at : '',
+      }))
+    : [],
+})
+
 const fetchSentimentData = async () => {
+  const version = ++requestVersion
   try {
     isLoading.value = true
     error.value = null
     const response = await api.get('/analytics/sentiment', {
       params: { time_range: props.timeRange }
     })
-    sentimentData.value = response.data
+    if (version === requestVersion) sentimentData.value = normalizeSentimentData(response?.data)
   } catch (err: any) {
-    error.value = err.response?.data?.detail || 'Failed to fetch sentiment analytics data'
+    if (version === requestVersion) {
+      error.value = err.response?.data?.detail || 'Failed to fetch sentiment analytics data'
+    }
   } finally {
-    isLoading.value = false
+    if (version === requestVersion) isLoading.value = false
   }
 }
 
 const showSessionDetails = async (sessionId: string) => {
+  const version = ++detailRequestVersion
   try {
     detailLoading.value = true
     selectedSession.value = {
@@ -352,21 +422,25 @@ const showSessionDetails = async (sessionId: string) => {
       messages: []
     }
     const response = await api.get(`/analytics/session-sentiment/${sessionId}`)
-    selectedSession.value = response.data
+    if (version === detailRequestVersion) {
+      selectedSession.value = normalizeSessionDetail(response?.data, sessionId)
+    }
   } catch (err: any) {
-    error.value = err.response?.data?.detail || 'Failed to fetch session sentiment'
-    selectedSession.value = null
+    if (version === detailRequestVersion) {
+      error.value = err.response?.data?.detail || 'Failed to fetch session sentiment'
+      selectedSession.value = null
+    }
   } finally {
-    detailLoading.value = false
+    if (version === detailRequestVersion) detailLoading.value = false
   }
 }
 
 watch(() => props.timeRange, () => {
-  fetchSentimentData()
+  void fetchSentimentData()
 })
 
 onMounted(() => {
-  fetchSentimentData()
+  void fetchSentimentData()
 })
 </script>
 

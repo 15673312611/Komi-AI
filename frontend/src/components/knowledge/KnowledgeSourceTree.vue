@@ -43,6 +43,7 @@ const emit = defineEmits<{
   (e: 'update:query', value: string): void
   (e: 'toggle', source: ExplorerSource): void
   (e: 'select', source: ExplorerSource, pageId: string): void
+  (e: 'retry', source: ExplorerSource): void
   (e: 'delete-source', source: ExplorerSource): void
   (e: 'add-page', source: ExplorerSource): void
 }>()
@@ -162,7 +163,10 @@ const MAX_AVATARS = 3
 
         <div v-if="source.expanded && !source.queued" class="src__pages">
           <div v-if="source.loadingContent" class="src__hint">正在加载知识页面…</div>
-          <div v-else-if="source.contentError" class="src__hint src__hint--error">{{ source.contentError }}</div>
+          <div v-else-if="source.contentError" class="src__hint src__hint--error">
+            <span>{{ source.contentError }}</span>
+            <button type="button" class="src__retry" @click.stop="emit('retry', source)">重试</button>
+          </div>
           <template v-else>
             <button
               v-for="row in (rowsBySource.get(source.id) || [])"
@@ -479,7 +483,22 @@ const MAX_AVATARS = 3
   color: var(--muted2);
 }
 
-.src__hint--error { color: var(--c-coral); }
+.src__hint--error {
+  color: var(--c-coral);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.src__retry {
+  border: 1px solid var(--coral-border);
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font-size: 11px;
+  padding: 3px 7px;
+}
 
 .src__error {
   margin: 2px 10px 6px 44px;

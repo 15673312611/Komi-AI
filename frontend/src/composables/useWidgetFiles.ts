@@ -169,6 +169,25 @@ export function useWidgetFiles(token: Ref<string | null>, fileInputRef: Ref<HTML
     file_url?: string
     size?: number
   } | null>(null)
+  const isUploading = ref(false)
+  let previewClearTimer: ReturnType<typeof setTimeout> | null = null
+
+  const revokeAttachmentUrls = (file: { url?: string; file_url?: string }) => {
+    for (const url of [file.url, file.file_url]) {
+      if (url?.startsWith('blob:')) URL.revokeObjectURL(url)
+    }
+  }
+
+  const clearAttachments = () => {
+    if (previewClearTimer) {
+      clearTimeout(previewClearTimer)
+      previewClearTimer = null
+    }
+    uploadedAttachments.value.forEach(revokeAttachmentUrls)
+    uploadedAttachments.value = []
+    previewModal.value = false
+    previewFile.value = null
+  }
 
   // Format file size for display
   const formatFileSize = (bytes: number): string => {
@@ -249,7 +268,7 @@ export function useWidgetFiles(token: Ref<string | null>, fileInputRef: Ref<HTML
   }
 
   // Compress image if it's too large
-  const compressImage = async (file: File, maxSizeKB: number = 500): Promise<{blob: Blob, base64: string}> => {
+  const compressImage = async (file: File, maxSizeKB: number = 500, outputType = file.type): Promise<{blob: Blob, base64: string}> => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader()
       reader.onload = (e) => {
@@ -306,7 +325,7 @@ export function useWidgetFiles(token: Ref<string | null>, fileInputRef: Ref<HTML
                 }
                 reader.readAsDataURL(blob)
               }
-            }, file.type === 'image/png' ? 'image/png' : 'image/jpeg', quality)
+            }, outputType === 'image/png' ? 'image/png' : 'image/jpeg', quality)
           }
           
           tryCompress()
@@ -319,28 +338,47 @@ export function useWidgetFiles(token: Ref<string | null>, fileInputRef: Ref<HTML
     })
   }
 
+  const readFileAsBase64 = (file: File): Promise<string> => new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => {
+      const result = typeof reader.result === 'string' ? reader.result : ''
+      const commaIndex = result.indexOf(',')
+      if (commaIndex === -1 || !result.slice(commaIndex + 1)) {
+        reject(new Error('Failed to read file contents'))
+        return
+      }
+      resolve(result.slice(commaIndex + 1))
+    }
+    reader.onerror = () => reject(new Error('Failed to read file'))
+    reader.readAsDataURL(file)
+  })
+
   // Upload files (convert to base64 and store locally)
   const uploadFiles = async (files: File[]) => {
+    if (isUploading.value || files.length === 0) return
+    isUploading.value = true
+
     const MAX_FILES = 3 // Maximum 3 files per message
     const MAX_FILE_SIZE = 5 * 1024 * 1024 // 5MB for images
     const MAX_DOCUMENT_SIZE = 10 * 1024 * 1024 // 10MB for documents
     const TARGET_SIZE_KB = 500 // Target 500KB after compression
     
-    // Check if adding these files would exceed the limit
-    if (uploadedAttachments.value.length >= MAX_FILES) {
-      alert(`Maximum ${MAX_FILES} files allowed per message`)
-      return
-    }
-    
-    const remainingSlots = MAX_FILES - uploadedAttachments.value.length
-    const filesToUpload = files.slice(0, remainingSlots)
-    
-    if (files.length > remainingSlots) {
-      alert(`Only ${remainingSlots} more file(s) can be uploaded. Maximum ${MAX_FILES} files per message.`)
-    }
-    
-    for (const file of filesToUpload) {
-      try {
+    try {
+      // Check if adding these files would exceed the limit
+      if (uploadedAttachments.value.length >= MAX_FILES) {
+        alert(`Maximum ${MAX_FILES} files allowed per message`)
+        return
+      }
+
+      const remainingSlots = MAX_FILES - uploadedAttachments.value.length
+      const filesToUpload = files.slice(0, remainingSlots)
+
+      if (files.length > remainingSlots) {
+        alert(`Only ${remainingSlots} more file(s) can be uploaded. Maximum ${MAX_FILES} files per message.`)
+      }
+
+      for (const file of filesToUpload) {
+        try {
         // Check if file with same name already exists
         const isDuplicate = uploadedAttachments.value.some(att => att.filename === file.name)
         if (isDuplicate) {
@@ -349,7 +387,26 @@ export function useWidgetFiles(token: Ref<string | null>, fileInputRef: Ref<HTML
           continue
         }
         
-        const isImage = file.type.startsWith('image/')
+        const extension = file.name.toLowerCase().substring(file.name.lastIndexOf('.'))
+        const mimeType = file.type || EXTENSION_TO_MIME[extension] || ''
+        if (!ALLOWED_FILE_TYPES.has(mimeType)) {
+          alert(`File "${file.name}" has an unsupported file type`)
+          continue
+        }
+
+        const extensionValidation = validateExtension(file.name, mimeType)
+        if (!extensionValidation.valid) {
+          alert(extensionValidation.error || `File "${file.name}" has an invalid extension`)
+          continue
+        }
+
+        const magicValidation = await validateMagicBytes(file)
+        if (!magicValidation.valid) {
+          alert(magicValidation.error || `File "${file.name}" has invalid contents`)
+          continue
+        }
+
+        const isImage = mimeType.startsWith('image/')
         const maxSize = isImage ? MAX_FILE_SIZE : MAX_DOCUMENT_SIZE
         
         // Validate file size before upload
@@ -360,10 +417,13 @@ export function useWidgetFiles(token: Ref<string | null>, fileInputRef: Ref<HTML
           continue
         }
         
-        if (isImage) {
+        // Canvas compression converts GIF/WebP to JPEG in most browsers. Keep
+        // those formats intact so filename, content type, and bytes agree.
+        const canCompress = mimeType === 'image/jpeg' || mimeType === 'image/jpg' || mimeType === 'image/png'
+        if (isImage && canCompress) {
           // Compress image before upload
           try {
-            const { blob, base64 } = await compressImage(file, TARGET_SIZE_KB)
+            const { blob, base64 } = await compressImage(file, TARGET_SIZE_KB, mimeType)
             const compressedSize = blob.size
             
             console.log(`Compressed ${file.name}: ${(file.size / 1024).toFixed(2)}KB → ${(compressedSize / 1024).toFixed(2)}KB`)
@@ -371,7 +431,7 @@ export function useWidgetFiles(token: Ref<string | null>, fileInputRef: Ref<HTML
             uploadedAttachments.value.push({
               content: base64,
               filename: file.name,
-              type: file.type,
+              type: mimeType,
               size: compressedSize,
               url: URL.createObjectURL(blob),
               file_url: URL.createObjectURL(blob)
@@ -379,43 +439,34 @@ export function useWidgetFiles(token: Ref<string | null>, fileInputRef: Ref<HTML
           } catch (error) {
             console.error('Image compression failed, uploading original:', error)
             // Fallback to original file if compression fails
-            const reader = new FileReader()
-            reader.onload = (e) => {
-              const base64Content = e.target?.result as string
-              const base64Data = base64Content.split(',')[1]
-              
-              uploadedAttachments.value.push({
-                content: base64Data,
-                filename: file.name,
-                type: file.type,
-                size: file.size,
-                url: URL.createObjectURL(file),
-                file_url: URL.createObjectURL(file)
-              })
-            }
-            reader.readAsDataURL(file)
-          }
-        } else {
-          // For non-images, read as-is
-          const reader = new FileReader()
-          reader.onload = (e) => {
-            const base64Content = e.target?.result as string
-            const base64Data = base64Content.split(',')[1]
-            
+            const base64Data = await readFileAsBase64(file)
             uploadedAttachments.value.push({
               content: base64Data,
               filename: file.name,
-              type: file.type || 'application/octet-stream',
+              type: mimeType,
               size: file.size,
-              url: '',
-              file_url: ''
+              url: URL.createObjectURL(file),
+              file_url: URL.createObjectURL(file)
             })
           }
-          reader.readAsDataURL(file)
+        } else {
+          // For non-images, read as-is
+          const base64Data = await readFileAsBase64(file)
+          uploadedAttachments.value.push({
+            content: base64Data,
+            filename: file.name,
+            type: mimeType,
+            size: file.size,
+            url: '',
+            file_url: ''
+          })
         }
-      } catch (error) {
-        console.error('File upload error:', error)
+        } catch (error) {
+          console.error('File upload error:', error)
+        }
       }
+    } finally {
+      isUploading.value = false
     }
   }
 
@@ -426,20 +477,22 @@ export function useWidgetFiles(token: Ref<string | null>, fileInputRef: Ref<HTML
     
     // Call delete API to remove file from storage
     try {
-      // Extract the file path from the URL
+      // Local files are only previews until the message is sent; they do not
+      // have a server-side object to delete yet.
       let filePath = file.url
+      if (!filePath || filePath.startsWith('blob:')) filePath = ''
       
       // Remove /uploads/ prefix if present
-      if (filePath.startsWith('/uploads/')) {
+      if (filePath && filePath.startsWith('/uploads/')) {
         filePath = filePath.substring(9)
-      } else if (filePath.startsWith('/')) {
+      } else if (filePath && filePath.startsWith('/')) {
         filePath = filePath.substring(1)
       }
       
       // For absolute S3/CDN URLs, reduce to the object key (the URL path).
       // Parsing the URL avoids matching a host substring, which is unreliable
       // and flagged by static analysis (js/incomplete-url-substring-sanitization).
-      if (isAbsoluteUrl(filePath)) {
+      if (filePath && isAbsoluteUrl(filePath)) {
         try {
           filePath = new URL(filePath).pathname.replace(/^\/+/, '')
         } catch {
@@ -447,37 +500,38 @@ export function useWidgetFiles(token: Ref<string | null>, fileInputRef: Ref<HTML
         }
       }
       
-      const headers: Record<string, string> = {}
-      if (token.value) {
-        headers['Authorization'] = `Bearer ${token.value}`
-      }
-      
-      // API_URL already ends in /api/v1 — do not repeat it here.
-      const response = await fetch(`${widgetEnv.API_URL}/files/upload/${filePath}`, {
-        method: 'DELETE',
-        headers: headers
-      })
-      
-      if (!response.ok) {
-        const errorData = await response.json()
-        console.error('Failed to delete file:', errorData.detail)
-        // Optionally, show an error message to the user
-      } else {
-        console.log('File deleted successfully from backend.')
+      if (filePath) {
+        const headers: Record<string, string> = {}
+        if (token.value) {
+          headers['Authorization'] = `Bearer ${token.value}`
+        }
+
+        // API_URL already ends in /api/v1 — do not repeat it here.
+        const response = await fetch(`${widgetEnv.API_URL}/files/upload/${filePath}`, {
+          method: 'DELETE',
+          headers: headers
+        })
+
+        if (!response.ok) {
+          console.error('Failed to delete file:', response.status)
+        }
       }
     } catch (error) {
       console.error('Error calling delete API:', error)
     }
     
     // Revoke blob URLs to free memory
-    if (file.url && file.url.startsWith('blob:')) {
-      URL.revokeObjectURL(file.url)
+    revokeAttachmentUrls(file)
+
+    if (previewFile.value === file) {
+      previewModal.value = false
+      previewFile.value = null
     }
-    if (file.file_url && file.file_url.startsWith('blob:')) {
-      URL.revokeObjectURL(file.file_url)
-    }
-    
-    uploadedAttachments.value.splice(index, 1)
+
+    // Another removal can finish first, so remove by object identity instead
+    // of the stale array index captured before the async delete request.
+    const currentIndex = uploadedAttachments.value.indexOf(file)
+    if (currentIndex !== -1) uploadedAttachments.value.splice(currentIndex, 1)
   }
 
   // Open file preview modal
@@ -488,6 +542,10 @@ export function useWidgetFiles(token: Ref<string | null>, fileInputRef: Ref<HTML
     file_url?: string
     size?: number
   }) => {
+    if (previewClearTimer) {
+      clearTimeout(previewClearTimer)
+      previewClearTimer = null
+    }
     previewFile.value = file
     previewModal.value = true
   }
@@ -496,8 +554,10 @@ export function useWidgetFiles(token: Ref<string | null>, fileInputRef: Ref<HTML
   const closePreview = () => {
     previewModal.value = false
     // Don't clear previewFile immediately to allow smooth transition
-    setTimeout(() => {
+    if (previewClearTimer) clearTimeout(previewClearTimer)
+    previewClearTimer = setTimeout(() => {
       previewFile.value = null
+      previewClearTimer = null
     }, 300)
   }
 
@@ -513,6 +573,7 @@ export function useWidgetFiles(token: Ref<string | null>, fileInputRef: Ref<HTML
 
   return {
     uploadedAttachments,
+    isUploading,
     previewModal,
     previewFile,
     formatFileSize,
@@ -525,6 +586,7 @@ export function useWidgetFiles(token: Ref<string | null>, fileInputRef: Ref<HTML
     handleDragLeave,
     handlePaste,
     uploadFiles,
+    clearAttachments,
     removeAttachment,
     openPreview,
     closePreview,

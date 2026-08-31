@@ -16,7 +16,7 @@ limitations under the License.
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, VueWrapper } from '@vue/test-utils'
-import { createRouter, createWebHistory } from 'vue-router'
+import { createRouter, createMemoryHistory } from 'vue-router'
 import { createPinia, setActivePinia } from 'pinia'
 import SetupView from '../../views/SetupView.vue'
 import { nextTick } from 'vue'
@@ -64,9 +64,10 @@ describe('SetupView', () => {
 
     // Create router instance
     router = createRouter({
-      history: createWebHistory(),
+      history: createMemoryHistory(),
       routes: [
         { path: '/', name: 'home', component: { template: '<div>Home</div>' } },
+        { path: '/login', name: 'login', component: { template: '<div>Login</div>' } },
         { path: '/ai-agents', name: 'ai-agents', component: { template: '<div>AI Agents</div>' } }
       ]
     })
@@ -90,7 +91,7 @@ describe('SetupView', () => {
 
   it('renders properly', () => {
     expect(wrapper.find('.setup').exists()).toBe(true)
-    expect(wrapper.find('h1').text()).toBe('Welcome to ChatterMate')
+    expect(wrapper.find('h1').text()).toBe('欢迎使用 ChatterMate')
   })
 
   it('checks for existing organization on mount', async () => {
@@ -132,7 +133,7 @@ describe('SetupView', () => {
     // Test invalid name
     await orgNameInput.setValue('a')
     await orgNameInput.trigger('input')
-    expect(wrapper.find('.error-hint').text()).toContain('Organization name must be')
+    expect(wrapper.find('.error-hint').text()).toContain('组织名称长度须在 2-100 个字符之间')
     
     // Test valid name
     await orgNameInput.setValue('Valid Organization')
@@ -146,7 +147,7 @@ describe('SetupView', () => {
     // Test invalid domain
     await domainInput.setValue('invalid')
     await domainInput.trigger('input')
-    expect(wrapper.find('.error-hint').text()).toContain('Please enter a valid domain')
+    expect(wrapper.find('.error-hint').text()).toContain('请输入有效的企业主域名')
     
     // Test valid domain
     await domainInput.setValue('example.com')
@@ -160,7 +161,7 @@ describe('SetupView', () => {
     // Test invalid email
     await emailInput.setValue('invalid-email')
     await emailInput.trigger('input')
-    expect(wrapper.find('.error-hint').text()).toContain('Please enter a valid email address')
+    expect(wrapper.find('.error-hint').text()).toContain('请输入有效的电子邮箱地址')
     
     // Test valid email
     await emailInput.setValue('admin@example.com')
@@ -288,4 +289,4 @@ describe('SetupView', () => {
     
     expect(wrapper.find('button[type="submit"]').classes()).toContain('loading')
   })
-}) 
+})

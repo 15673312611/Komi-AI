@@ -18,6 +18,7 @@ limitations under the License.
   <div class="agent-performance-container">
     <div v-if="error" class="error-state">
       {{ error }}
+      <button type="button" class="retry-button" @click="fetchPerformanceData">重试</button>
     </div>
 
     <div v-else-if="isLoading" class="loading-state">
@@ -140,42 +141,64 @@ const props = defineProps<{
   timeRange: string
 }>()
 
-const emit = defineEmits<{
-  (e: 'time-range-change', range: string): void
-}>()
-
 const isLoading = ref(true)
 const error = ref<string | null>(null)
 const activeTab = ref('bot')
 const performanceData = ref<PerformanceData | null>(null)
+let requestVersion = 0
+
+const toFiniteNumber = (value: unknown, fallback = 0): number => {
+  const number = Number(value)
+  return Number.isFinite(number) ? number : fallback
+}
+
+const normalizeAgent = (raw: any, index: number): AgentData => ({
+  id: String(raw?.id ?? index),
+  name: typeof raw?.name === 'string' && raw.name.trim() ? raw.name : 'Unknown User',
+  total_chats: toFiniteNumber(raw?.total_chats),
+  closed_chats: toFiniteNumber(raw?.closed_chats),
+  avg_rating: toFiniteNumber(raw?.avg_rating),
+  rating_count: toFiniteNumber(raw?.rating_count),
+})
 
 const calculateClosureRate = (closed: number, total: number): string => {
-  if (!total) return '0.0'
-  return ((closed / total) * 100).toFixed(1)
+  const safeTotal = toFiniteNumber(total)
+  if (safeTotal <= 0) return '0.0'
+  return ((toFiniteNumber(closed) / safeTotal) * 100).toFixed(1)
 }
 
 const fetchPerformanceData = async () => {
+  const version = ++requestVersion
   try {
     isLoading.value = true
     error.value = null
     const response = await api.get('/analytics/agent-performance', {
       params: { time_range: props.timeRange }
     })
-    performanceData.value = response.data
+    if (version === requestVersion) {
+      const data = response?.data || {}
+      performanceData.value = {
+        bot_agents: Array.isArray(data.bot_agents) ? data.bot_agents.map(normalizeAgent) : [],
+        human_agents: Array.isArray(data.human_agents) ? data.human_agents.map(normalizeAgent) : [],
+        time_range: typeof data.time_range === 'string' ? data.time_range : props.timeRange,
+      }
+    }
   } catch (err: any) {
-    error.value = err.response?.data?.detail || 'Failed to fetch agent performance data'
+    if (version === requestVersion) {
+      error.value = err.response?.data?.detail || 'Failed to fetch agent performance data'
+    }
   } finally {
-    isLoading.value = false
+    if (version === requestVersion) isLoading.value = false
   }
 }
 
 // Watch for time range changes from parent
-watch(() => props.timeRange, (newRange) => {
-  fetchPerformanceData()
+watch(() => props.timeRange, () => {
+  void fetchPerformanceData()
 })
 
 onMounted(() => {
-  fetchPerformanceData()
+  void fetchPerformanceData()
 })
 </script>
 
@@ -300,4 +323,4 @@ onMounted(() => {
   color: var(--text-muted);
   font-size: var(--text-md);
 }
-</style> 
+</style>

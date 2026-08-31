@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-import { ref, type Ref } from 'vue'
+import { type Ref } from 'vue'
 import type { Node, Edge } from '@vue-flow/core'
 import { toast } from 'vue-sonner'
 import { workflowNodeService } from '@/services/workflowNode'
@@ -222,7 +222,7 @@ export function useWorkflowManagement(options: WorkflowManagementOptions) {
   }
 
   // Save workflow
-  const saveWorkflow = async () => {
+  const saveWorkflow = async (): Promise<boolean> => {
     const nodes = getNodes()
     const edges = getEdges()
     
@@ -233,7 +233,7 @@ export function useWorkflowManagement(options: WorkflowManagementOptions) {
         closeButton: true,
         position: 'top-center'
       })
-      return
+      return false
     }
     
     // Check for at least one connection if multiple nodes exist
@@ -243,7 +243,7 @@ export function useWorkflowManagement(options: WorkflowManagementOptions) {
         closeButton: true,
         position: 'top-center'
       })
-      return
+      return false
     }
     
     // For single node workflows, ensure it's a valid starting node type
@@ -256,7 +256,7 @@ export function useWorkflowManagement(options: WorkflowManagementOptions) {
           closeButton: true,
           position: 'top-center'
         })
-        return
+        return false
       }
     }
     
@@ -281,7 +281,7 @@ export function useWorkflowManagement(options: WorkflowManagementOptions) {
           closeButton: true,
           position: 'top-center'
         })
-        return
+        return false
       }
     }
     
@@ -294,7 +294,7 @@ export function useWorkflowManagement(options: WorkflowManagementOptions) {
         closeButton: true,
         position: 'top-center'
       })
-      return
+      return false
     }
 
     try {
@@ -319,11 +319,13 @@ export function useWorkflowManagement(options: WorkflowManagementOptions) {
       toast.success('Workflow saved successfully', {
         position: 'top-center'
       })
+      return true
     } catch (error) {
       console.error('Error saving workflow:', error)
       toast.error('Failed to save workflow', {
         position: 'top-center'
       })
+      return false
     } finally {
       loading.value = false
     }
@@ -399,7 +401,8 @@ export function useWorkflowManagement(options: WorkflowManagementOptions) {
       }
       
       // First save the workflow to ensure all changes are persisted
-      await saveWorkflow()
+      const saved = await saveWorkflow()
+      if (!saved) return
       
       // Then publish it
       const updatedWorkflow = await workflowService.publishWorkflow(workflowId)
@@ -566,4 +569,4 @@ export function useWorkflowManagement(options: WorkflowManagementOptions) {
     mapNodeTypeToFrontend,
     mapNodeTypeToBackend
   }
-} 
+}

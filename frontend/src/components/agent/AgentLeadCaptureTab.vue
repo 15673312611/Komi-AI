@@ -56,6 +56,7 @@ function isStandardEnabled(key: string) {
   return fields.value.some(f => f.standard && f.key === key && f.enabled)
 }
 function toggleStandard(key: string) {
+  if (saving.value) return
   const existing = fields.value.find(f => f.standard && f.key === key)
   if (existing) existing.enabled = !existing.enabled
   else fields.value.push({ key, standard: true, enabled: true, required: key === 'email' })
@@ -66,7 +67,7 @@ function isRequired(key: string) {
 // Toggle a field's "required" flag. Email is always required (the minimum needed
 // to record a lead) and cannot be made optional.
 function toggleRequired(key: string) {
-  if (key === 'email') return
+  if (saving.value || key === 'email') return
   const f = fields.value.find(x => x.key === key)
   if (f) f.required = !f.required
 }
@@ -74,6 +75,7 @@ const customFields = computed(() => fields.value.filter(f => !f.standard))
 const newFieldLabel = ref('')
 const newFieldOptions = ref('')
 function addCustomField() {
+  if (saving.value) return
   const label = newFieldLabel.value.trim()
   if (!label) { toast.error('请输入自定义字段名称'); return }
   // Slug from the label; fall back to an index when the label has no a–z0–9 chars
@@ -93,6 +95,7 @@ function addCustomField() {
   newFieldLabel.value = ''; newFieldOptions.value = ''
 }
 function removeCustomField(key: string) {
+  if (saving.value) return
   const i = fields.value.findIndex(f => f.key === key && !f.standard)
   if (i >= 0) fields.value.splice(i, 1)
 }
@@ -123,7 +126,7 @@ async function load() {
     enabled.value = !!cfg.enabled
     requireConsent.value = cfg.require_consent !== false
     guidance.value = cfg.guidance || ''
-    fields.value = cfg.fields || []
+    fields.value = Array.isArray(cfg.fields) ? cfg.fields : []
     assignmentMode.value = cfg.assignment_mode || 'none'
     crmSyncTarget.value = cfg.crm_sync_target || 'none'
     slackNotifyEnabled.value = !!cfg.slack_notify_enabled
@@ -134,13 +137,15 @@ async function load() {
     loading.value = false
   }
   try {
-    crmConnections.value = await crmService.listConnections()
+    const connections = await crmService.listConnections()
+    crmConnections.value = Array.isArray(connections) ? connections : []
   } catch {
     crmConnections.value = []  // plan-gated or unavailable — just no warning
   }
 }
 
 async function save() {
+  if (saving.value) return false
   saving.value = true
   try {
     const updated: LeadCaptureConfig = await leadCaptureService.updateConfig(props.agentId, {
@@ -153,10 +158,12 @@ async function save() {
       crm_sync_target: crmSyncTarget.value as any,
       slack_notify_enabled: slackNotifyEnabled.value,
     })
-    enabled.value = !!updated.enabled
+    if (updated && typeof updated === 'object') enabled.value = !!updated.enabled
     toast.success('线索收集配置已保存')
+    return true
   } catch {
     toast.error('保存线索收集配置失败')
+    return false
   } finally {
     saving.value = false
   }
@@ -185,7 +192,7 @@ onMounted(load)
               <div class="lc-toggle-title">启用智能线索收集</div>
               <div class="lc-toggle-desc">智能体将根据上下文自主判断留资时机，以自然对话的形式收集买家或访客信息。</div>
             </div>
-            <button class="lc-switch" :class="{ on: enabled }" @click="enabled = !enabled" :aria-pressed="enabled">
+            <button class="lc-switch" :class="{ on: enabled }" @click="enabled = !enabled" :aria-pressed="enabled" :disabled="saving">
               <span class="lc-knob"></span>
             </button>
           </div>
@@ -201,6 +208,7 @@ onMounted(load)
                 v-for="sf in STANDARD_FIELDS" :key="sf.key"
                 class="lc-chip" :class="{ on: isStandardEnabled(sf.key) }"
                 @click="toggleStandard(sf.key)"
+                :disabled="saving"
               >
                 <span class="lc-cbox" :class="{ on: isStandardEnabled(sf.key) }">
                   <svg v-if="isStandardEnabled(sf.key)" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5" /></svg>
@@ -225,14 +233,14 @@ onMounted(load)
                   @click="toggleRequired(cf.key)"
                   :title="cf.required ? '当前为必填 — 点击设为选填' : '当前为选填 — 点击设为必填'"
                 >{{ cf.required ? '必填' : '选填' }}</span>
-                <button class="lc-chip-x" title="删除字段" @click="removeCustomField(cf.key)">✕</button>
+                <button class="lc-chip-x" title="删除字段" @click="removeCustomField(cf.key)" :disabled="saving">✕</button>
               </span>
             </div>
             <p class="lc-chip-hint">点击字段上的 <b>选填 / 必填</b> 可控制智能客服是否必须获得该项信息才生成有效线索（邮箱默认为核心必填项）。</p>
             <div class="lc-custom-add">
-              <input class="lc-input" v-model="newFieldLabel" placeholder="自定义字段标签 (例如：采购预算/店铺规模)" />
-              <input class="lc-input" v-model="newFieldOptions" placeholder="可选候选值列表，英文逗号分隔 (可选)" />
-              <button class="lc-add" @click="addCustomField">＋ 添加字段</button>
+              <input class="lc-input" v-model="newFieldLabel" placeholder="自定义字段标签 (例如：采购预算/店铺规模)" :disabled="saving" />
+              <input class="lc-input" v-model="newFieldOptions" placeholder="可选候选值列表，英文逗号分隔 (可选)" :disabled="saving" />
+              <button class="lc-add" @click="addCustomField" :disabled="saving">＋ 添加字段</button>
             </div>
           </section>
 
@@ -244,7 +252,7 @@ onMounted(load)
                 <div class="lc-toggle-title">收集前征得客户同意 <span class="lc-badge">GDPR 合规</span></div>
                 <div class="lc-toggle-desc">智能体在记录联系方式前会礼貌询问客户是否同意销售专员联系。强烈建议开启。</div>
               </div>
-              <button class="lc-switch" :class="{ on: requireConsent }" @click="requireConsent = !requireConsent" :aria-pressed="requireConsent">
+              <button class="lc-switch" :class="{ on: requireConsent }" @click="requireConsent = !requireConsent" :aria-pressed="requireConsent" :disabled="saving">
                 <span class="lc-knob"></span>
               </button>
             </div>
@@ -254,6 +262,7 @@ onMounted(load)
               v-model="guidance"
               rows="3"
               placeholder="引导智能体在何时以何种语气索取联系方式 — 例如：“优先关注浏览了批量批发页面的访客；非工作时间提高留资主动性。”"
+              :disabled="saving"
             ></textarea>
           </section>
 
@@ -263,7 +272,7 @@ onMounted(load)
             <p class="lc-card-sub">将合格线索实时推送到您的企业 CRM 客户关系管理系统中。</p>
             <div class="lc-route-row">
               <span>同步至 CRM 系统</span>
-              <select class="lc-input lc-input-sm" v-model="crmSyncTarget">
+              <select class="lc-input lc-input-sm" v-model="crmSyncTarget" :disabled="saving">
                 <option value="none">暂不同步</option>
                 <option value="hubspot">HubSpot</option>
                 <option value="pipedrive">Pipedrive</option>

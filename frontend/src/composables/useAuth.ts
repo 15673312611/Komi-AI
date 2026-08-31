@@ -27,19 +27,35 @@ export function useAuth() {
   const error = ref('')
 
   const logout = async () => {
+    if (isLoggingOut.value) return
+
+    isLoggingOut.value = true
+    error.value = ''
     try {
-      isLoggingOut.value = true
       // Unregister this device's push token first — only this one, so the
       // user's other signed-in devices keep receiving notifications.
-      await unregisterFCMToken()
+      try {
+        await unregisterFCMToken()
+      } catch (err) {
+        // Push cleanup is best-effort and must never strand the user on the
+        // dashboard when the notification provider is unavailable.
+        console.error('FCM cleanup during logout failed:', err)
+      }
       // Then proceed with normal logout
       await authService.logout()
-      router.push('/login')
     } catch (err) {
       error.value = err instanceof Error ? err.message : 'Failed to logout'
       console.error('Logout failed:', err)
     } finally {
       isLoggingOut.value = false
+    }
+
+    // authService clears the local session even when the API request fails, so
+    // always leave the authenticated area after a logout attempt.
+    try {
+      await router.push('/login')
+    } catch (err) {
+      console.error('Failed to navigate to login after logout:', err)
     }
   }
 

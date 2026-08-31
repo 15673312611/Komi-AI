@@ -52,7 +52,7 @@ describe('routeChatToHuman', () => {
 
     await expect(routeChatToHuman('s1')).resolves.toBeNull()
     expect(toastError).toHaveBeenCalledWith(
-      'Failed to hand this chat over',
+      '转交人工团队失败',
       expect.objectContaining({ description: 'A human is already handling this chat' })
     )
   })

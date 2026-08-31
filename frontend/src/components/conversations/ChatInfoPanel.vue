@@ -10,6 +10,7 @@ import ShopifyOrderPanel from '@/components/conversations/ShopifyOrderPanel.vue'
 import CreateTicketModal from '@/components/conversations/CreateTicketModal.vue'
 import { chatService, type CustomerSummary } from '@/services/chat'
 import { permissionChecks } from '@/utils/permissions'
+import { copyTextToClipboard } from '@/utils/clipboard'
 import { chatHandler } from '@/utils/chatState'
 
 const props = defineProps<{
@@ -110,13 +111,12 @@ const addPresetTag = (name: string) => {
 
 const copyEmail = async () => {
   if (!customerEmail.value) return
-  if (!navigator.clipboard) {
-    emit('action-toast', '无法访问剪贴板，请手动复制客户邮箱', 'error')
-    return
-  }
   try {
-    await navigator.clipboard.writeText(customerEmail.value)
-    emit('action-toast', '客户邮箱已复制到剪贴板', 'success')
+    if (await copyTextToClipboard(customerEmail.value)) {
+      emit('action-toast', '客户邮箱已复制到剪贴板', 'success')
+    } else {
+      emit('action-toast', '无法访问剪贴板，请手动复制客户邮箱', 'error')
+    }
   } catch {
     emit('action-toast', '无法访问剪贴板，请手动复制客户邮箱', 'error')
   }

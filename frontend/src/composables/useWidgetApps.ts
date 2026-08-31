@@ -23,6 +23,8 @@ export function useWidgetApps() {
   const allApps = ref<WidgetApp[]>([])
   const loading = ref(false)
   const error = ref<string | null>(null)
+  const actionBusy = ref<'create' | 'update' | 'delete' | 'regenerate' | null>(null)
+  let appsRequestVersion = 0
 
   // Modal states
   const showCreateModal = ref(false)
@@ -53,12 +55,16 @@ export function useWidgetApps() {
 
   // Fetch all apps (always include inactive to know if filter should show)
   const fetchApps = async () => {
+    const requestVersion = ++appsRequestVersion
     try {
       loading.value = true
       error.value = null
       const response = await widgetAppService.listApps(true) // Always fetch all
-      allApps.value = response.apps
+      if (requestVersion !== appsRequestVersion) return false
+      allApps.value = Array.isArray(response?.apps) ? response.apps : []
+      return true
     } catch (err: any) {
+      if (requestVersion !== appsRequestVersion) return false
       error.value = 'Failed to load widget apps'
       console.error('Error loading widget apps:', err)
       toast.error('Error', {
@@ -66,13 +72,16 @@ export function useWidgetApps() {
         duration: 4000,
         closeButton: true
       })
+      return false
     } finally {
-      loading.value = false
+      if (requestVersion === appsRequestVersion && !actionBusy.value) loading.value = false
     }
   }
 
   // Create app
   const handleCreateApp = async (appData: WidgetAppCreate) => {
+    if (actionBusy.value) return false
+    actionBusy.value = 'create'
     try {
       loading.value = true
       error.value = null
@@ -102,6 +111,7 @@ export function useWidgetApps() {
         duration: 4000,
         closeButton: true
       })
+      return true
     } catch (err: any) {
       error.value = 'Failed to create widget app'
       toast.error('Error', {
@@ -109,9 +119,10 @@ export function useWidgetApps() {
         duration: 4000,
         closeButton: true
       })
-      throw err
+      return false
     } finally {
       loading.value = false
+      actionBusy.value = null
     }
   }
 
@@ -123,12 +134,14 @@ export function useWidgetApps() {
 
   // Update app (accepts WidgetAppCreate since form always provides required fields)
   const handleUpdateApp = async (appData: WidgetAppCreate) => {
-    if (!selectedApp.value) return
+    if (!selectedApp.value || actionBusy.value) return false
+    const appId = selectedApp.value.id
+    actionBusy.value = 'update'
 
     try {
       loading.value = true
       error.value = null
-      const updatedApp = await widgetAppService.updateApp(selectedApp.value.id, appData)
+      const updatedApp = await widgetAppService.updateApp(appId, appData)
 
       // Update in list
       const index = allApps.value.findIndex(a => a.id === updatedApp.id)
@@ -144,6 +157,7 @@ export function useWidgetApps() {
         duration: 4000,
         closeButton: true
       })
+      return true
     } catch (err: any) {
       error.value = 'Failed to update widget app'
       toast.error('Error', {
@@ -151,9 +165,10 @@ export function useWidgetApps() {
         duration: 4000,
         closeButton: true
       })
-      throw err
+      return false
     } finally {
       loading.value = false
+      actionBusy.value = null
     }
   }
 
@@ -164,15 +179,17 @@ export function useWidgetApps() {
   }
 
   const confirmDeleteApp = async () => {
-    if (!selectedApp.value) return
+    if (!selectedApp.value || actionBusy.value) return false
+    const appId = selectedApp.value.id
+    actionBusy.value = 'delete'
 
     try {
       loading.value = true
       error.value = null
-      await widgetAppService.deleteApp(selectedApp.value.id)
+      await widgetAppService.deleteApp(appId)
 
       // Remove from list
-      allApps.value = allApps.value.filter(a => a.id !== selectedApp.value?.id)
+      allApps.value = allApps.value.filter(a => a.id !== appId)
 
       showDeleteModal.value = false
       selectedApp.value = null
@@ -182,6 +199,7 @@ export function useWidgetApps() {
         duration: 4000,
         closeButton: true
       })
+      return true
     } catch (err: any) {
       error.value = 'Failed to delete widget app'
       toast.error('Error', {
@@ -189,17 +207,21 @@ export function useWidgetApps() {
         duration: 4000,
         closeButton: true
       })
+      return false
     } finally {
       loading.value = false
+      actionBusy.value = null
     }
   }
 
   // Regenerate API key
   const handleRegenerateKey = async (app: WidgetApp) => {
+    if (actionBusy.value) return false
     if (!confirm('Are you sure? This will invalidate the current API key immediately.')) {
-      return
+      return false
     }
 
+    actionBusy.value = 'regenerate'
     try {
       loading.value = true
       error.value = null
@@ -229,6 +251,7 @@ export function useWidgetApps() {
         duration: 4000,
         closeButton: true
       })
+      return true
     } catch (err: any) {
       error.value = 'Failed to regenerate API key'
       toast.error('Error', {
@@ -236,8 +259,10 @@ export function useWidgetApps() {
         duration: 4000,
         closeButton: true
       })
+      return false
     } finally {
       loading.value = false
+      actionBusy.value = null
     }
   }
 
@@ -251,6 +276,7 @@ export function useWidgetApps() {
     apps,
     loading,
     error,
+    actionBusy,
     showCreateModal,
     showEditModal,
     showDeleteModal,

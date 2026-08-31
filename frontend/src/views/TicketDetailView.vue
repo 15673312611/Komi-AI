@@ -30,6 +30,7 @@ import TicketRcaDoc from '@/components/tickets/TicketRcaDoc.vue'
 import TicketApprovalBanner from '@/components/tickets/TicketApprovalBanner.vue'
 import { permissionChecks } from '@/utils/permissions'
 import type { TicketPriority, TicketStatus } from '@/types/ticket'
+import { copyTextToClipboard } from '@/utils/clipboard'
 
 const route = useRoute()
 const router = useRouter()
@@ -39,7 +40,8 @@ const {
   detail, investigation, ticket, activities, hasActiveRun, isLoading, isSavingComment,
   error, setStatus, setPriority, setSeverity, setTitle, setDescription,
   setAssignee, setCustomer, addComment, resolve, reopen, investigate,
-  saveRcaDraft, sendRcaToCustomer, isRcaBusy, approveProposal, rejectProposal,
+  isSavingCustomer,
+  saveRcaDraft, sendRcaToCustomer, isRcaBusy, isActionBusy, isPatching, approveProposal, rejectProposal,
 } = useTicketDetail(ticketId)
 
 const canManage = permissionChecks.canManageTickets()
@@ -88,8 +90,7 @@ function startDescriptionEdit() {
 }
 
 async function saveDescription() {
-  await setDescription(descriptionDraft.value.trim())
-  isEditingDescription.value = false
+  if (await setDescription(descriptionDraft.value.trim())) isEditingDescription.value = false
 }
 
 function commitTitle() {
@@ -99,11 +100,12 @@ function commitTitle() {
   titleDraft.value = null
 }
 
-function copyLink() {
-  navigator.clipboard
-    .writeText(window.location.href)
-    .then(() => toast.success('工单链接已复制到剪贴板'))
-    .catch(() => {})
+async function copyLink() {
+  if (await copyTextToClipboard(window.location.href)) {
+    toast.success('工单链接已复制到剪贴板')
+  } else {
+    toast.error('复制失败，请手动选择并复制链接')
+  }
 }
 
 const isResolving = ref(false)
@@ -113,12 +115,14 @@ async function submitResolve() {
   if (isResolving.value) return
   isResolving.value = true
   try {
-    await resolve({
+    const resolved = await resolve({
       outcome: resolveOutcome.value,
       customer_message: resolveCustomerMessage.value.trim() || undefined,
     })
-    showResolvePanel.value = false
-    resolveCustomerMessage.value = ''
+    if (resolved) {
+      showResolvePanel.value = false
+      resolveCustomerMessage.value = ''
+    }
   } finally {
     isResolving.value = false
   }
@@ -164,7 +168,7 @@ async function submitResolve() {
               <span class="control-label">工单状态</span>
               <select
                 :value="ticket.status"
-                :disabled="!canManage"
+                :disabled="!canManage || isPatching || isActionBusy"
                 class="control-select"
                 @change="setStatus(($event.target as HTMLSelectElement).value as TicketStatus)"
               >
@@ -180,7 +184,7 @@ async function submitResolve() {
               <span class="control-label">优先级</span>
               <select
                 :value="ticket.priority"
-                :disabled="!canManage"
+                :disabled="!canManage || isPatching || isActionBusy"
                 class="control-select"
                 :style="{ color: priorityMeta(ticket.priority).color }"
                 @change="setPriority(($event.target as HTMLSelectElement).value as TicketPriority)"
@@ -192,7 +196,7 @@ async function submitResolve() {
               <span class="control-label">严重等级</span>
               <select
                 :value="ticket.severity ?? ''"
-                :disabled="!canManage"
+                :disabled="!canManage || isPatching || isActionBusy"
                 class="control-select"
                 @change="setSeverity(Number(($event.target as HTMLSelectElement).value))"
               >
@@ -207,7 +211,7 @@ async function submitResolve() {
               <button
                 v-if="canManage && !hasActiveRun"
                 class="action-btn"
-                :disabled="isReopenable"
+                :disabled="isReopenable || isActionBusy"
                 :title="
                   isReopenable
                     ? '该工单已解决 — 重新开启后可重新调查'
@@ -221,6 +225,7 @@ async function submitResolve() {
               <button
                 v-if="canManage && isReopenable"
                 class="action-btn"
+                :disabled="isActionBusy"
                 @click="reopen()"
               >
                 重新开启
@@ -228,6 +233,7 @@ async function submitResolve() {
               <button
                 v-if="canManage && !isReopenable"
                 class="action-btn resolve"
+                :disabled="isActionBusy"
                 @click="showResolvePanel = !showResolvePanel"
               >
                 完成解决…
@@ -242,6 +248,7 @@ async function submitResolve() {
           :proposal="bannerProposal"
           :hypotheses="investigation?.hypotheses || []"
           :can-approve="canApprove"
+          :action-busy="isActionBusy"
           @approve="approveProposal"
           @reject="(reason, reinvestigate) => rejectProposal(reason, reinvestigate)"
         />
@@ -302,7 +309,7 @@ async function submitResolve() {
             ></textarea>
             <div class="edit-actions">
               <button class="action-btn" @click="isEditingDescription = false">取消</button>
-              <button class="edit-save" @click="saveDescription">保存修改</button>
+              <button class="edit-save" :disabled="isPatching" @click="saveDescription">{{ isPatching ? '正在保存…' : '保存修改' }}</button>
             </div>
           </template>
           <p v-else-if="ticket.description" class="description-text">{{ ticket.description }}</p>
@@ -344,6 +351,7 @@ async function submitResolve() {
         :ticket="ticket"
         :linked-session-ids="detail?.linked_session_ids || []"
         :can-manage="canManage"
+        :is-saving-customer="isSavingCustomer"
         @assign="setAssignee"
         @set-customer="setCustomer"
       />

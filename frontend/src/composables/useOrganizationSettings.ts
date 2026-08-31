@@ -18,6 +18,7 @@ import { ref, computed } from 'vue'
 import { useAuth } from '@/composables/useAuth'
 import { organizationService } from '@/services/organization'
 import type { Organization, BusinessHoursDict } from '@/types/organization'
+import { validateDomain } from '@/utils/validators'
 
 export function useOrganizationSettings() {
   const { user } = useAuth()
@@ -34,10 +35,17 @@ export function useOrganizationSettings() {
 
   // Server-stored business_hours may be empty or missing days; merge over the
   // full default so every day key is present (presets + day-rows assume this).
-  const normalizeBusinessHours = (raw: unknown): BusinessHoursDict => ({
-    ...defaultBusinessHours(),
-    ...(raw && typeof raw === 'object' ? raw as Partial<BusinessHoursDict> : {})
-  })
+  const normalizeBusinessHours = (raw: unknown): BusinessHoursDict => {
+    const normalized = defaultBusinessHours()
+    const source = raw && typeof raw === 'object' ? raw as Partial<BusinessHoursDict> : {}
+    for (const day of Object.keys(normalized) as (keyof BusinessHoursDict)[]) {
+      const value = source[day]
+      if (value && typeof value === 'object') {
+        normalized[day] = { ...normalized[day], ...value }
+      }
+    }
+    return normalized
+  }
 
   const formData = ref({
     name: '',
@@ -68,6 +76,8 @@ export function useOrganizationSettings() {
   const message = ref('')
   const error = ref('')
   const stats = ref<any>(null)
+  let loadVersion = 0
+  let mutationVersion = 0
 
   const originalData = ref({
     name: '',
@@ -87,6 +97,8 @@ export function useOrganizationSettings() {
 
   const loadOrganizationData = async () => {
     if (user.value?.organization_id) {
+      const version = ++loadVersion
+      const mutationAtStart = mutationVersion
       try {
         loading.value = true
         const [org, orgStats] = await Promise.all([
@@ -94,6 +106,7 @@ export function useOrganizationSettings() {
           organizationService.getOrganizationStats(user.value.organization_id)
         ])
         
+        if (version !== loadVersion || mutationAtStart !== mutationVersion) return
         formData.value = {
           name: org.name,
           domain: org.domain,
@@ -105,20 +118,51 @@ export function useOrganizationSettings() {
         originalData.value = JSON.parse(JSON.stringify(formData.value))
         
         stats.value = orgStats
+        error.value = ''
       } catch (err: any) {
+        if (version !== loadVersion) return
         error.value = err.message || 'Failed to load organization data'
       } finally {
-        loading.value = false
+        if (version === loadVersion) loading.value = false
       }
     }
   }
 
   const updateOrganization = async () => {
+    if (loading.value) return
     if (!user.value?.organization_id || !hasChanges.value) {
       message.value = 'No changes to save'
       return
     }
 
+    const name = formData.value.name.trim()
+    const domain = formData.value.domain.trim()
+    if (name.length < 2 || name.length > 100) {
+      error.value = '组织名称长度须在 2-100 个字符之间'
+      return
+    }
+    if (!validateDomain(domain)) {
+      error.value = '请输入有效的主业务域名，例如 example.com'
+      return
+    }
+    if (!formData.value.timezone.trim()) {
+      error.value = '请选择企业默认时区'
+      return
+    }
+    for (const day of Object.keys(formData.value.business_hours) as (keyof BusinessHoursDict)[]) {
+      const hours = formData.value.business_hours[day]
+      const validTime = (value: string) => /^([01]\d|2[0-3]):[0-5]\d$/.test(value)
+      if (!validTime(hours.start) || !validTime(hours.end)) {
+        error.value = '工作时间必须使用 HH:MM 格式'
+        return
+      }
+      if (hours.enabled && hours.start >= hours.end) {
+        error.value = '每个工作日的开始时间必须早于结束时间'
+        return
+      }
+    }
+
+    const mutation = ++mutationVersion
     loading.value = true
     error.value = ''
     message.value = ''
@@ -127,11 +171,11 @@ export function useOrganizationSettings() {
       const updateData: Partial<Organization> = {}
       
       if (formData.value.name !== originalData.value.name) {
-        updateData.name = formData.value.name
+        updateData.name = name
       }
       
       if (formData.value.domain !== originalData.value.domain) {
-        updateData.domain = formData.value.domain
+        updateData.domain = domain
       }
       
       if (formData.value.timezone !== originalData.value.timezone) {
@@ -147,13 +191,16 @@ export function useOrganizationSettings() {
       }
 
       await organizationService.updateOrganization(user.value.organization_id, updateData)
+      if (mutation !== mutationVersion) return
+      formData.value.name = name
+      formData.value.domain = domain
       message.value = 'Organization updated successfully'
       
       originalData.value = JSON.parse(JSON.stringify(formData.value))
     } catch (err: any) {
-      error.value = err.message || 'Failed to update organization'
+      if (mutation === mutationVersion) error.value = err.message || 'Failed to update organization'
     } finally {
-      loading.value = false
+      if (mutation === mutationVersion) loading.value = false
     }
   }
 
@@ -169,4 +216,4 @@ export function useOrganizationSettings() {
     loadOrganizationData,
     updateOrganization
   }
-} 
+}

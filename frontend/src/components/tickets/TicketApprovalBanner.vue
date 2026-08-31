@@ -15,13 +15,14 @@ limitations under the License.
 -->
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import type { InvestigationHypothesis, TicketProposal } from '@/types/ticket'
 
 const props = defineProps<{
   proposal: TicketProposal
   hypotheses: InvestigationHypothesis[]
   canApprove: boolean
+  actionBusy?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -33,6 +34,11 @@ const isRejecting = ref(false)
 const rejectReason = ref('')
 const reinvestigate = ref(true)
 const isSubmitting = ref(false)
+const submitting = computed(() => isSubmitting.value || Boolean(props.actionBusy))
+
+watch(() => props.actionBusy, (busy) => {
+  if (!busy) isSubmitting.value = false
+})
 
 const bestHypothesis = computed(() => {
   const validated = props.hypotheses.filter((h) => h.status === 'validated')
@@ -48,11 +54,13 @@ function jumpToHypothesis() {
 }
 
 function approve() {
+  if (submitting.value) return
   isSubmitting.value = true
   emit('approve')
 }
 
 function submitReject() {
+  if (submitting.value) return
   isSubmitting.value = true
   emit('reject', rejectReason.value.trim(), reinvestigate.value)
 }
@@ -93,10 +101,10 @@ function submitReject() {
 
       <div v-if="canApprove" class="banner-actions">
         <template v-if="!isRejecting">
-          <button class="reject-btn" :disabled="isSubmitting" @click="isRejecting = true">
+          <button class="reject-btn" :disabled="submitting" @click="isRejecting = true">
             驳回预案…
           </button>
-          <button class="approve-btn" :disabled="isSubmitting" @click="approve">
+          <button class="approve-btn" :disabled="submitting" @click="approve">
             <font-awesome-icon :icon="['fas', 'check']" />
             审批通过并解决
           </button>
@@ -113,7 +121,7 @@ function submitReject() {
           </label>
           <div class="reject-actions">
             <button class="cancel-btn" @click="isRejecting = false">取消</button>
-            <button class="reject-confirm" :disabled="isSubmitting" @click="submitReject">
+            <button class="reject-confirm" :disabled="submitting" @click="submitReject">
               确认驳回预案
             </button>
           </div>

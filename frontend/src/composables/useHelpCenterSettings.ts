@@ -32,54 +32,114 @@ export function useHelpCenterSettings(settings: Ref<HelpCenterSettings | null>) 
   const saveState = ref<SaveState>('idle')
 
   let debounceTimer: ReturnType<typeof setTimeout> | null = null
-  let saveInFlight = false
-  let trailingSave: HelpCenterSettingsUpdate | null = null
+  let pendingSave: HelpCenterSettingsUpdate | null = null
+  let unsavedPatch: HelpCenterSettingsUpdate = {}
+  let settingsWriteQueue: Promise<void> = Promise.resolve()
   let suppressWatch = false
 
   const brandColor = computed(() => settings.value?.brand_color || '#4338CA')
 
-  function applyResponse(updated: HelpCenterSettings): void {
+  function errorMessage(error: unknown, fallback: string): string {
+    return error instanceof Error && error.message ? error.message : fallback
+  }
+
+  function recordPatch(payload: HelpCenterSettingsUpdate): void {
+    unsavedPatch = { ...unsavedPatch, ...payload }
+  }
+
+  function applyResponse(
+    updated: HelpCenterSettings,
+    committedPatch?: HelpCenterSettingsUpdate,
+  ): void {
+    const remainingPatch = { ...unsavedPatch }
+    if (committedPatch) {
+      for (const key of Object.keys(committedPatch) as Array<keyof HelpCenterSettingsUpdate>) {
+        // A newer edit keeps the field dirty; an unchanged field can use the
+        // canonical value returned by the server.
+        if (remainingPatch[key] === committedPatch[key]) delete remainingPatch[key]
+      }
+    }
+    unsavedPatch = remainingPatch
     suppressWatch = true
-    settings.value = updated
+    settings.value = { ...updated, ...remainingPatch }
     // Release after the watcher has seen (and ignored) this assignment.
     setTimeout(() => {
       suppressWatch = false
     }, 0)
   }
 
-  async function save(payload: HelpCenterSettingsUpdate): Promise<void> {
-    if (saveInFlight) {
-      trailingSave = { ...(trailingSave || {}), ...payload }
-      return
-    }
-    saveInFlight = true
-    saveState.value = 'saving'
-    try {
-      applyResponse(await faqService.updateSettings(payload))
-      saveState.value = 'saved'
-    } catch (error: any) {
-      saveState.value = 'error'
-      toast.error(error.message)
-    } finally {
-      saveInFlight = false
-      if (trailingSave) {
-        const queued = trailingSave
-        trailingSave = null
-        void save(queued)
+  function enqueueSettingsMutation(
+    operation: () => Promise<HelpCenterSettings>,
+    committedPatch?: HelpCenterSettingsUpdate,
+    fallback = 'Failed to save help center settings',
+  ): Promise<void> {
+    const task = settingsWriteQueue.then(async () => {
+      saveState.value = 'saving'
+      try {
+        applyResponse(await operation(), committedPatch)
+        saveState.value = 'saved'
+      } catch (error: unknown) {
+        saveState.value = 'error'
+        toast.error(errorMessage(error, fallback))
       }
+    })
+    // One failed request must not prevent later edits or an image operation
+    // from running. The task itself handles and reports the failure.
+    settingsWriteQueue = task.then(() => undefined, () => undefined)
+    return task
+  }
+
+  function takePendingSave(): HelpCenterSettingsUpdate | null {
+    if (debounceTimer) clearTimeout(debounceTimer)
+    debounceTimer = null
+    const payload = pendingSave
+    pendingSave = null
+    return payload
+  }
+
+  function enqueueAssetMutation(
+    operation: () => Promise<HelpCenterSettings>,
+    fallback: string,
+  ): Promise<void> {
+    const payload = takePendingSave()
+    if (payload && Object.keys(payload).length) {
+      // Enqueue both parts synchronously so a second asset action cannot be
+      // placed between the pending settings save and the first asset action.
+      void enqueueSettingsMutation(
+        () => faqService.updateSettings(payload),
+        payload,
+      )
     }
+    return enqueueSettingsMutation(operation, undefined, fallback)
   }
 
   /** Debounced path for text inputs (links, CTA, labels). */
   function queueSave(payload: HelpCenterSettingsUpdate): void {
+    if (!Object.keys(payload).length) return
+    recordPatch(payload)
+    pendingSave = { ...(pendingSave || {}), ...payload }
     if (debounceTimer) clearTimeout(debounceTimer)
-    debounceTimer = setTimeout(() => void save(payload), AUTOSAVE_DEBOUNCE_MS)
+    debounceTimer = setTimeout(() => {
+      const queued = takePendingSave()
+      if (queued) {
+        void enqueueSettingsMutation(
+          () => faqService.updateSettings(queued),
+          queued,
+        )
+      }
+    }, AUTOSAVE_DEBOUNCE_MS)
   }
 
   /** Immediate path for discrete actions (swatch click, toggles, selects). */
   async function saveNow(payload: HelpCenterSettingsUpdate): Promise<void> {
-    if (debounceTimer) clearTimeout(debounceTimer)
-    await save(payload)
+    if (!Object.keys(payload).length) return
+    recordPatch(payload)
+    const queued = takePendingSave()
+    const merged = { ...(queued || {}), ...payload }
+    await enqueueSettingsMutation(
+      () => faqService.updateSettings(merged),
+      merged,
+    )
   }
 
   // Deep-watch branding fields the inputs mutate in place (header_links rows).
@@ -97,25 +157,17 @@ export function useHelpCenterSettings(settings: Ref<HelpCenterSettings | null>) 
       toast.error('Logo must be 2 MB or smaller')
       return
     }
-    saveState.value = 'saving'
-    try {
-      applyResponse(await faqService.uploadLogo(file))
-      saveState.value = 'saved'
-    } catch (error: any) {
-      saveState.value = 'error'
-      toast.error(error.message)
-    }
+    await enqueueAssetMutation(
+      () => faqService.uploadLogo(file),
+      'Failed to upload logo',
+    )
   }
 
   async function removeLogo(): Promise<void> {
-    saveState.value = 'saving'
-    try {
-      applyResponse(await faqService.removeLogo())
-      saveState.value = 'saved'
-    } catch (error: any) {
-      saveState.value = 'error'
-      toast.error(error.message)
-    }
+    await enqueueAssetMutation(
+      () => faqService.removeLogo(),
+      'Failed to remove logo',
+    )
   }
 
   async function uploadFavicon(file: File): Promise<void> {
@@ -123,31 +175,24 @@ export function useHelpCenterSettings(settings: Ref<HelpCenterSettings | null>) 
       toast.error('Favicon must be 1 MB or smaller')
       return
     }
-    saveState.value = 'saving'
-    try {
-      applyResponse(await faqService.uploadFavicon(file))
-      saveState.value = 'saved'
-    } catch (error: any) {
-      saveState.value = 'error'
-      toast.error(error.message)
-    }
+    await enqueueAssetMutation(
+      () => faqService.uploadFavicon(file),
+      'Failed to upload favicon',
+    )
   }
 
   async function removeFavicon(): Promise<void> {
-    saveState.value = 'saving'
-    try {
-      applyResponse(await faqService.removeFavicon())
-      saveState.value = 'saved'
-    } catch (error: any) {
-      saveState.value = 'error'
-      toast.error(error.message)
-    }
+    await enqueueAssetMutation(
+      () => faqService.removeFavicon(),
+      'Failed to remove favicon',
+    )
   }
 
   // Domain lifecycle (explicit Verify button — never autosaved).
   const domainBusy = ref(false)
 
   async function setDomain(domain: string): Promise<void> {
+    if (domainBusy.value) return
     domainBusy.value = true
     try {
       const result = await faqService.setDomain(domain)
@@ -160,6 +205,7 @@ export function useHelpCenterSettings(settings: Ref<HelpCenterSettings | null>) 
   }
 
   async function verifyDomain(): Promise<void> {
+    if (domainBusy.value) return
     domainBusy.value = true
     try {
       const result = await faqService.verifyDomain()
@@ -177,6 +223,7 @@ export function useHelpCenterSettings(settings: Ref<HelpCenterSettings | null>) 
   }
 
   async function removeDomain(): Promise<void> {
+    if (domainBusy.value) return
     domainBusy.value = true
     try {
       const result = await faqService.removeDomain()

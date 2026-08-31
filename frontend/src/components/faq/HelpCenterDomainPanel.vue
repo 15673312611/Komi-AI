@@ -18,6 +18,7 @@ limitations under the License.
 import { computed, ref, watch } from 'vue'
 import { toast } from 'vue-sonner'
 import type { HelpCenterDomain } from '@/types/faq'
+import { copyTextToClipboard } from '@/utils/clipboard'
 
 const props = defineProps<{
   domain: HelpCenterDomain | null
@@ -71,8 +72,11 @@ function addDomain() {
 
 async function copy(text: string) {
   try {
-    await navigator.clipboard.writeText(text)
-    toast.success('已复制到剪贴板')
+    if (await copyTextToClipboard(text)) {
+      toast.success('已复制到剪贴板')
+    } else {
+      toast.error('复制失败 — 请手动选中文本复制')
+    }
   } catch {
     toast.error('复制失败 — 请手动选中文本复制')
   }

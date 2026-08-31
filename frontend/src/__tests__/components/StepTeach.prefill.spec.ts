@@ -14,6 +14,7 @@ vi.mock('@/services/knowledge', () => ({
   knowledgeService: {
     getKnowledgeByAgent: (...a: unknown[]) => getKnowledgeByAgent(...a),
     getKnowledgeByOrganization: (...a: unknown[]) => getKnowledgeByOrganization(...a),
+    addUrls: vi.fn().mockResolvedValue({}),
     getAgentQueueItems: vi.fn().mockResolvedValue({ queue_items: [] })
   }
 }))
@@ -91,7 +92,7 @@ describe('StepTeach - signup domain prefill', () => {
 
     expect(urlInput(wrapper).value).toBe('')
     expect(wrapper.find('.source-list').exists()).toBe(false)
-    expect(wrapper.text()).toContain('Teach it your business')
+    expect(wrapper.text()).toContain('注入业务知识库')
   })
 
   it('stages a typed URL on Continue without needing "Add"', async () => {
@@ -100,7 +101,7 @@ describe('StepTeach - signup domain prefill', () => {
     const wrapper = await mountStep()
     await wrapper.find('input[type="text"]').setValue('docs.company.com')
 
-    const cont = wrapper.findAll('button').find((b: any) => b.text().includes('Continue'))!
+    const cont = wrapper.find('button.btn-accent')
     await cont.trigger('click')
     await flushPromises()
 
@@ -113,7 +114,7 @@ describe('StepTeach - signup domain prefill', () => {
     const wrapper = await mountStep()
     await wrapper.find('input[type="text"]').setValue('not a url')
 
-    const cont = wrapper.findAll('button').find((b: any) => b.text().includes('Continue'))!
+    const cont = wrapper.find('button.btn-accent')
     await cont.trigger('click')
     await flushPromises()
 

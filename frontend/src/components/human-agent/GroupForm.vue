@@ -20,6 +20,7 @@ import type { UserGroup } from '@/types/user'
 
 const props = defineProps<{
   group?: UserGroup | null
+  submitting?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -31,9 +32,20 @@ const formData = ref({
   name: props.group?.name || '',
   description: props.group?.description || ''
 })
+const error = ref('')
 
 const handleSubmit = () => {
-  emit('submit', formData.value)
+  if (props.submitting) return
+  const name = formData.value.name.trim()
+  if (!name) {
+    error.value = '业务组名称不能为空'
+    return
+  }
+  error.value = ''
+  emit('submit', {
+    name,
+    description: formData.value.description.trim() || undefined
+  })
 }
 </script>
 
@@ -49,6 +61,7 @@ const handleSubmit = () => {
         required
         class="form-input"
       />
+      <span v-if="error" class="form-error">{{ error }}</span>
     </div>
 
     <div class="form-group">
@@ -66,8 +79,8 @@ const handleSubmit = () => {
       <button type="button" class="btn btn-secondary" @click="emit('cancel')">
         取消
       </button>
-      <button type="submit" class="btn btn-primary">
-        {{ props.group ? '保存修改' : '确认创建' }}
+      <button type="submit" class="btn btn-primary" :disabled="props.submitting">
+        {{ props.submitting ? '正在保存...' : (props.group ? '保存修改' : '确认创建') }}
       </button>
     </div>
   </form>
@@ -92,10 +105,20 @@ const handleSubmit = () => {
   border-radius: var(--radius-sm);
 }
 
+.form-error {
+  color: var(--error-color);
+  font-size: var(--text-sm);
+}
+
 .form-actions {
   display: flex;
   justify-content: flex-end;
   gap: var(--space-md);
   margin-top: var(--space-md);
 }
-</style> 
+
+.btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+</style>

@@ -143,8 +143,15 @@ const phoneLooksValid = computed(() =>
 )
 
 const canSend = computed(
-  () => phoneLooksValid.value && !!selection.value?.complete && !sending.value,
+  () => !!accountId.value && phoneLooksValid.value && !!selection.value?.complete && !sending.value,
 )
+
+watch(() => props.accounts, (accounts) => {
+  if (!accounts.some(account => account.id === accountId.value)) {
+    accountId.value = accounts[0]?.id ?? ''
+    selection.value = null
+  }
+}, { deep: true })
 
 const send = async () => {
   if (!canSend.value || !selection.value) return
@@ -175,7 +182,10 @@ const send = async () => {
   }
 }
 
-onBeforeUnmount(() => clearTimeout(searchTimer))
+onBeforeUnmount(() => {
+  clearTimeout(searchTimer)
+  searchToken += 1
+})
 </script>
 
 <template>

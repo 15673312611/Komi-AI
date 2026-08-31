@@ -25,7 +25,7 @@ export interface Permission {
 
 export async function listRoles(): Promise<Role[]> {
     const response = await api.get('/roles')
-    return response.data
+    return Array.isArray(response.data) ? response.data : []
 }
 
 export async function getRole(id: string): Promise<Role> {
@@ -35,7 +35,7 @@ export async function getRole(id: string): Promise<Role> {
 
 export async function listPermissions(): Promise<Permission[]> {
   const response = await api.get('/roles/permissions/all')
-  return response.data
+  return Array.isArray(response.data) ? response.data : []
 }
 
 export async function createRole(roleData: Partial<Role>): Promise<Role> {
@@ -50,4 +50,4 @@ export async function updateRole(id: string, roleData: Partial<Role>): Promise<R
 
 export async function deleteRole(id: string): Promise<void> {
   await api.delete(`roles/${id}`)
-} 
+}

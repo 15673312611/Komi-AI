@@ -44,10 +44,10 @@ describe('FaqGenerationProgress', () => {
     const wrapper = mount(FaqGenerationProgress, { props: { job: job('analyzing_sources') } })
     const labels = wrapper.findAll('.step__label').map((el) => el.text())
     expect(labels).toEqual([
-      'Analyzing your sources',
-      'Extracting questions from your content',
-      'Drafting grounded answers',
-      'Grouping by topic',
+      '正在分析知识源文档',
+      '从知识正文中提取高频问题',
+      '依据知识库内容起草标准回答',
+      '智能主题分类与归纳整理',
     ])
   })
 

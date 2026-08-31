@@ -17,16 +17,24 @@ limitations under the License.
 import api from './api'
 import { apiPath } from '@/config/api'
 
+export interface JiraConnectionStatus {
+  connected: boolean
+  site_url?: string
+  [key: string]: unknown
+}
+
 /**
  * Check if Jira is connected for the current organization
  */
 export const checkJiraConnection = async () => {
   try {
     const response = await api.get('/jira/status')
-    return response.data
+    return response.data && typeof response.data === 'object'
+      ? { ...response.data, connected: Boolean(response.data.connected) } as JiraConnectionStatus
+      : { connected: false } as JiraConnectionStatus
   } catch (error) {
     console.error('Error checking Jira connection:', error)
-    return { connected: false }
+    return { connected: false } as JiraConnectionStatus
   }
 }
 
@@ -56,7 +64,7 @@ export const disconnectJira = async () => {
 export const getJiraProjects = async () => {
   try {
     const response = await api.get('/jira/projects')
-    return response.data
+    return Array.isArray(response.data) ? response.data : []
   } catch (error) {
     console.error('Error getting Jira projects:', error)
     throw error
@@ -69,7 +77,7 @@ export const getJiraProjects = async () => {
 export const getJiraIssueTypes = async (projectKey: string) => {
   try {
     const response = await api.get(`/jira/projects/${projectKey}/issue-types`)
-    return response.data
+    return Array.isArray(response.data) ? response.data : []
   } catch (error) {
     console.error('Error getting Jira issue types:', error)
     throw error
@@ -132,7 +140,7 @@ export const createJiraTicket = async (data: {
 export const getJiraPriorities = async () => {
   try {
     const response = await api.get('/jira/priorities')
-    return response.data
+    return Array.isArray(response.data) ? response.data : []
   } catch (error) {
     console.error('Error getting Jira priorities:', error)
     throw error
@@ -150,4 +158,4 @@ export const checkPriorityAvailability = async (projectKey: string, issueTypeId:
     console.error('Error checking priority availability:', error)
     return false
   }
-} 
+}

@@ -15,7 +15,7 @@ limitations under the License.
 -->
 
 <script setup lang="ts">
-import { ref, watch, computed, type Ref } from 'vue'
+import { ref, watch, computed, onBeforeUnmount, type Ref } from 'vue'
 import type { Node, Edge } from '@vue-flow/core'
 import { workflowNodeService } from '@/services/workflowNode'
 import { workflowCacheStorage } from '@/utils/storage'
@@ -34,6 +34,7 @@ import { ExitCondition } from '@/types/workflow'
 import { listGroups } from '@/services/groups'
 import type { UserGroup } from '@/types/user'
 import { toast } from 'vue-sonner'
+import { copyTextToClipboard } from '@/utils/clipboard'
 
 // Collapsible sections state
 const collapsedSections = ref({
@@ -150,10 +151,20 @@ const autoSaveTimeout = ref<number | null>(null)
 // Simple debounce implementation
 const debounce = (func: Function, delay: number) => {
   return (...args: any[]) => {
-    if (autoSaveTimeout.value) {
+    if (autoSaveTimeout.value !== null) {
       clearTimeout(autoSaveTimeout.value)
     }
-    autoSaveTimeout.value = setTimeout(() => func(...args), delay)
+    autoSaveTimeout.value = window.setTimeout(() => {
+      autoSaveTimeout.value = null
+      void func(...args)
+    }, delay)
+  }
+}
+
+const cancelAutoSave = () => {
+  if (autoSaveTimeout.value !== null) {
+    clearTimeout(autoSaveTimeout.value)
+    autoSaveTimeout.value = null
   }
 }
 
@@ -181,7 +192,12 @@ const getVariableSyntax = (fieldName: string) => {
 const copyVariableToClipboard = async (variable: any) => {
   try {
     const variableSyntax = getVariableSyntax(variable.fieldName)
-    await navigator.clipboard.writeText(variableSyntax)
+    if (!(await copyTextToClipboard(variableSyntax))) {
+      toast.error('Failed to copy to clipboard', {
+        position: 'top-center'
+      })
+      return
+    }
     
     // Show success toast
     toast.success(`Copied ${variableSyntax} to clipboard`, {
@@ -598,6 +614,9 @@ watch(() => props.currentEdges, () => {
 }, { deep: true })
 
 watch(() => props.selectedNode, (newNode) => {
+  // A pending edit belongs to the previous node. Do not replay it against the
+  // newly selected node after Vue swaps the prop.
+  cancelAutoSave()
   if (newNode) {
     console.log('Node changed, loading form data for:', newNode.id)
     
@@ -928,6 +947,8 @@ const autoSaveToCache = debounce(async () => {
     cacheUpdated: true
   })
 }, 500) // Auto-save after 500ms of inactivity
+
+onBeforeUnmount(cancelAutoSave)
 
 // Map frontend node types to backend enum values
 const mapNodeTypeToBackend = (frontendType: string) => {
@@ -2173,4 +2194,4 @@ const handleDelete = () => {
   color: var(--error-color, #EF4444);
 }
 
-</style> 
+</style>

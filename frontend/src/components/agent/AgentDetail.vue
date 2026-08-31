@@ -40,6 +40,7 @@ import { agentService } from '@/services/agent'
 import { toast } from 'vue-sonner'
 import { agentStorage, subscriptionStorage } from '@/utils/storage'
 import { useEnterpriseFeatures } from '@/composables/useEnterpriseFeatures'
+import { copyTextToClipboard } from '@/utils/clipboard'
 
 const props = defineProps<{
     agent: AgentWithCustomization
@@ -104,6 +105,7 @@ const persistAvatarMeta = async (patch: Record<string, unknown>, photoUrl?: stri
 const selectOrbAvatar = async (variant: number) => {
   if (isUploading.value) return
   closeAvatarPicker()
+  isUploading.value = true
   try {
     // Store the orb as an SVG data URI in photo_url so it propagates everywhere
     // (agent list, widget header, previews) via the normal avatar path.
@@ -112,12 +114,15 @@ const selectOrbAvatar = async (variant: number) => {
   } catch (error) {
     console.error('Failed to set orb avatar:', error)
     toast.error('Failed to update avatar')
+  } finally {
+    isUploading.value = false
   }
 }
 
 const selectTerminalMark = async () => {
   if (isUploading.value) return
   closeAvatarPicker()
+  isUploading.value = true
   try {
     // Tint the ">" mark with the agent's accent (falls back to the Terminal lime).
     const accent = (agentData.value.customization?.accent_color as string | undefined) || undefined
@@ -126,6 +131,8 @@ const selectTerminalMark = async () => {
   } catch (error) {
     console.error('Failed to set terminal mark avatar:', error)
     toast.error('Failed to update avatar')
+  } finally {
+    isUploading.value = false
   }
 }
 
@@ -134,9 +141,12 @@ const selectPresetAvatar = async (url: string) => {
   closeAvatarPicker()
   optimisticPhoto.value = url
   try {
-    await applyPresetAvatar(url)
-    // A real picture was chosen — turn off the orb if it was on.
-    if (useOrbAvatar.value) await persistAvatarMeta({ avatar_style: 'photo' })
+    const applied = await applyPresetAvatar(url)
+    // Only write metadata after the photo upload succeeded. Otherwise a
+    // transient fetch/upload failure can leave the avatar state inconsistent.
+    if (applied && (useOrbAvatar.value || useTerminalMark.value)) {
+      await persistAvatarMeta({ avatar_style: 'photo' })
+    }
   } finally {
     optimisticPhoto.value = null
   }
@@ -168,6 +178,12 @@ const previewCustomization = ref<AgentCustomization>({
     chat_style: agentData.value.customization?.chat_style ?? 'CHATBOT',
     widget_position: agentData.value.customization?.widget_position
 })
+
+const isUpdatingWorkflow = ref(false)
+const isUpdatingTicketing = ref(false)
+const isUpdatingStatus = ref(false)
+const isSavingHeader = ref(false)
+const isSavingAgentTab = ref(false)
 
 
 
@@ -266,6 +282,7 @@ const {
   selectedIssueType,
   loadingProjects,
   loadingIssueTypes,
+  jiraActionLoading,
   checkJiraStatus,
   toggleCreateTicket,
   saveJiraConfig,
@@ -335,18 +352,14 @@ const copyWidgetCode = () => {
     copyWidgetCodeFn(agentData.value.require_token_auth)
 }
 
-const copyIframeCode = () => {
+const copyIframeCode = async () => {
     if (!widget.value?.id) return
     const iframeCode = `<iframe src="${widgetUrl.value}/api/v1/widgets/${widget.value.id}/data" width="100%" height="600" frameborder="0" title="AI Assistant" allow="clipboard-write"></iframe>`
-    navigator.clipboard.writeText(iframeCode).then(() => {
-        // Could show a toast notification here
-        console.log('Iframe code copied to clipboard')
-    }).catch(err => {
-        console.error('Failed to copy iframe code: ', err)
-    })
+    if (await copyTextToClipboard(iframeCode)) toast.success('Iframe 嵌入代码已复制到剪贴板')
+    else toast.error('复制失败，请手动选择并复制代码')
 }
 
-const copyBackendCode = () => {
+const copyBackendCode = async () => {
     if (!widget.value?.id) return
     const backendCode = `// Your backend endpoint (e.g., /api/chat-token)
 const response = await fetch('${widgetUrl.value}/api/v1/generate-token', {
@@ -364,11 +377,8 @@ const response = await fetch('${widgetUrl.value}/api/v1/generate-token', {
 
 const { data } = await response.json();
 // Return data.token to your frontend`
-    navigator.clipboard.writeText(backendCode).then(() => {
-        console.log('Backend code copied to clipboard')
-    }).catch(err => {
-        console.error('Failed to copy backend code: ', err)
-    })
+    if (await copyTextToClipboard(backendCode)) toast.success('后端令牌代码已复制到剪贴板')
+    else toast.error('复制失败，请手动选择并复制代码')
 }
 
 // Dialog state for knowledge tips
@@ -393,7 +403,7 @@ const closeUpgradeModal = () => {
 const handleUpgrade = () => {
     // Navigate to subscription/upgrade page
     // You can implement this based on your routing structure
-    window.location.href = '/subscription'
+    window.location.href = '/settings/subscription'
 }
 
 // Tab switching function
@@ -564,7 +574,9 @@ const handleToggleUseWorkflow = async () => {
         return
     }
 
+    if (isUpdatingWorkflow.value) return
     try {
+        isUpdatingWorkflow.value = true
         const newValue = !agentData.value.use_workflow
         const updatedAgent = await agentService.updateAgent(agentData.value.id, { use_workflow: newValue })
         
@@ -601,6 +613,8 @@ const handleToggleUseWorkflow = async () => {
             duration: 4000,
             closeButton: true
         })
+    } finally {
+        isUpdatingWorkflow.value = false
     }
 }
 
@@ -608,7 +622,9 @@ const handleToggleUseWorkflow = async () => {
 // gate still applies on top in the backend).
 const toggleTicketing = async () => {
     if (isTicketingLocked.value) return
+    if (isUpdatingTicketing.value) return
     try {
+        isUpdatingTicketing.value = true
         const newValue = !agentData.value.ticketing_enabled
         const updatedAgent = await agentService.updateAgent(agentData.value.id, { ticketing_enabled: newValue })
         Object.assign(agentData.value, updatedAgent)
@@ -623,6 +639,8 @@ const toggleTicketing = async () => {
             duration: 4000,
             closeButton: true
         })
+    } finally {
+        isUpdatingTicketing.value = false
     }
 }
 
@@ -665,15 +683,22 @@ const handleCustomizationSave = (updatedAgent: AgentWithCustomization) => {
         }
     }
     
-    // Switch back to general tab
-    switchTab('general')
+    // Switch back to the editable agent tab.
+    switchTab('agent')
 }
 
 // Handle save header changes
 const handleSaveHeader = async () => {
+    if (isSavingHeader.value) return
+    const displayName = editDisplayName.value.trim()
+    if (!displayName) {
+        toast.error('展示名称不能为空')
+        return
+    }
     try {
+        isSavingHeader.value = true
         const updatedAgent = await agentService.updateAgent(agentData.value.id, {
-            display_name: editDisplayName.value,
+            display_name: displayName,
             is_active: editIsActive.value
         })
         
@@ -695,6 +720,8 @@ const handleSaveHeader = async () => {
             duration: 4000,
             closeButton: true
         })
+    } finally {
+        isSavingHeader.value = false
     }
 }
 
@@ -712,14 +739,19 @@ const handleStatusToggle = async (event: Event) => {
     if (isEditingHeader.value) {
         editIsActive.value = newStatus
     } else {
+        if (isUpdatingStatus.value) {
+            ;(event.target as HTMLInputElement).checked = agentData.value.is_active
+            return
+        }
         // Directly update the agent status
         try {
+            isUpdatingStatus.value = true
             const updatedAgent = await agentService.updateAgent(agentData.value.id, {
                 is_active: newStatus
             })
             
             // Update the agent data to trigger reactivity
-            agentData.value.is_active = newStatus
+            agentData.value.is_active = updatedAgent.is_active ?? newStatus
             
             // Update storage to keep data in sync
             agentStorage.updateAgent(updatedAgent)
@@ -736,12 +768,16 @@ const handleStatusToggle = async (event: Event) => {
             })
             // Revert the checkbox state on error
             ;(event.target as HTMLInputElement).checked = agentData.value.is_active
+        } finally {
+            isUpdatingStatus.value = false
         }
     }
 }
 
 // Handle save agent from tab
 const handleSaveAgentFromTab = async (data: any) => {
+    if (isSavingAgentTab.value) return
+    isSavingAgentTab.value = true
     try {
         // Convert instructions back to array format if it's a string
         let instructions = data.instructions
@@ -761,9 +797,13 @@ const handleSaveAgentFromTab = async (data: any) => {
         })
         
         // Update agent groups if changed
-        if (data.selectedGroupIds && data.selectedGroupIds.length !== selectedGroupIds.value.length || 
-            !data.selectedGroupIds.every((id: string) => selectedGroupIds.value.includes(id))) {
-            await updateAgentGroups(data.selectedGroupIds)
+        const nextGroupIds = Array.isArray(data.selectedGroupIds)
+            ? data.selectedGroupIds
+            : selectedGroupIds.value
+        const groupsChanged = nextGroupIds.length !== selectedGroupIds.value.length ||
+            !nextGroupIds.every((id: string) => selectedGroupIds.value.includes(id))
+        if (groupsChanged && !(await updateAgentGroups(nextGroupIds))) {
+            throw new Error('Failed to update agent groups')
         }
         
         // Update responseDelay and unknown_fallback_strategy in customization_metadata if present
@@ -780,8 +820,13 @@ const handleSaveAgentFromTab = async (data: any) => {
             agentData.value.customization = updatedCustomization
         }
 
+        const currentGroups = agentData.value.groups
+        const currentCustomization = agentData.value.customization
+
         // Update the agent data to trigger reactivity
         Object.assign(agentData.value, updatedAgent)
+        if (groupsChanged) agentData.value.groups = currentGroups
+        if (currentCustomization) agentData.value.customization = currentCustomization
         
         // Update storage to keep data in sync
         agentStorage.updateAgent(agentData.value)
@@ -796,6 +841,8 @@ const handleSaveAgentFromTab = async (data: any) => {
             duration: 4000,
             closeButton: true
         })
+    } finally {
+        isSavingAgentTab.value = false
     }
 }
 
@@ -971,7 +1018,8 @@ const isWorkflowFullscreen = ref(false)
                                             'active': agentData.use_workflow,
                                             'locked': isWorkflowLocked
                                         }"
-                                        :disabled="isWorkflowLocked && !agentData.use_workflow"
+                                        :disabled="isUpdatingWorkflow"
+                                        :aria-disabled="isWorkflowLocked && !agentData.use_workflow"
                                         @click="agentData.use_workflow || handleToggleUseWorkflow()"
                                         :title="isWorkflowLocked ? '升级套餐解锁可视化工作流编排' : '切换至工作流编排模式'"
                                     >
@@ -1011,7 +1059,7 @@ const isWorkflowFullscreen = ref(false)
                                 'active': activeTab === 'workflow-builder',
                                 'locked': isWorkflowLocked 
                             }"
-                            :disabled="isWorkflowLocked"
+                            :aria-disabled="isWorkflowLocked"
                             @click="isWorkflowLocked ? (upgradeModalType = 'workflow', showUpgradeModal = true) : switchTab('workflow-builder')"
                             :title="isWorkflowLocked ? '升级套餐解锁工作流编排器' : '工作流编排器'"
                             v-if="agentData.use_workflow || isWorkflowLocked"
@@ -1060,7 +1108,7 @@ const isWorkflowFullscreen = ref(false)
                         <button
                             class="tab-button"
                             :class="{ 'active': activeTab === 'lead-capture', 'locked': isLeadCaptureLocked }"
-                            :disabled="isLeadCaptureLocked"
+                            :aria-disabled="isLeadCaptureLocked"
                             @click="isLeadCaptureLocked ? (upgradeModalType = 'lead-capture', showUpgradeModal = true) : switchTab('lead-capture')"
                             :title="isLeadCaptureLocked ? '升级套餐解锁线索收集' : '线索收集'"
                         >
@@ -1070,7 +1118,7 @@ const isWorkflowFullscreen = ref(false)
                         <button
                             class="tab-button"
                             :class="{ 'active': activeTab === 'mcp-tools', 'locked': isMCPLocked }"
-                            :disabled="isMCPLocked"
+                            :aria-disabled="isMCPLocked"
                             @click="isMCPLocked ? (upgradeModalType = 'mcp', showUpgradeModal = true) : switchTab('mcp-tools')"
                             :title="isMCPLocked ? '升级套餐解锁 MCP 工具协议' : 'MCP 工具'"
                         >
@@ -1087,7 +1135,7 @@ const isWorkflowFullscreen = ref(false)
                         <button 
                             class="tab-button" 
                             :class="{ 'active': activeTab === 'advanced', 'locked': isAdvancedLocked }"
-                            :disabled="isAdvancedLocked"
+                            :aria-disabled="isAdvancedLocked"
                             @click="isAdvancedLocked ? (upgradeModalType = 'advanced', showUpgradeModal = true) : switchTab('advanced')"
                             :title="isAdvancedLocked ? '升级套餐解锁高级大模型参数配置' : '高级配置'"
                         >
@@ -1114,6 +1162,7 @@ const isWorkflowFullscreen = ref(false)
                                 :loading-groups="loadingGroups"
                                 :is-editing="true"
                                 :agent="agentData"
+                                :saving="isSavingAgentTab"
                                 @save-agent="handleSaveAgentFromTab"
                             />
                         </div>
@@ -1198,6 +1247,7 @@ const isWorkflowFullscreen = ref(false)
                                 :selected-issue-type="selectedIssueType"
                                 :loading-projects="loadingProjects"
                                 :loading-issue-types="loadingIssueTypes"
+                                :jira-action-loading="jiraActionLoading"
                                 :shopify-integration-enabled="shopifyIntegrationEnabled"
                                 :shopify-shop-domain="shopifyShopDomain"
                                 @toggle-ticketing="toggleTicketing"

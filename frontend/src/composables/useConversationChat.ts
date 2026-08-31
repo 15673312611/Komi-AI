@@ -18,8 +18,6 @@ export interface OutboundFile {
   size: number
 }
 
-type ChatStatus = 'open' | 'closed' | 'transferred'
-
 interface DeliveryErrorEvent {
   error?: string
   type?: string
@@ -91,7 +89,7 @@ export function useConversationChat(
     }
   })
   const canSendMessage = computed(() =>
-    !showTakenOverStatus.value
+    Boolean(chat.value.session_id) && !showTakenOverStatus.value
   )
 
   const scrollToBottom = async () => {
@@ -242,6 +240,7 @@ export function useConversationChat(
   }
 
   const reopenChat = async () => {
+    if (isLoading.value || !chat.value.session_id) return false
     const context = captureChatContext()
     try {
       isLoading.value = true
@@ -343,6 +342,7 @@ export function useConversationChat(
   }
 
   const handleTakeover = async () => {
+    if (isLoading.value || !chat.value.session_id) return false
     const context = captureChatContext()
     try {
       isLoading.value = true
@@ -360,6 +360,7 @@ export function useConversationChat(
   }
 
   const handleRouteToHuman = async () => {
+    if (isLoading.value || !chat.value.session_id) return false
     const context = captureChatContext()
     try {
       isLoading.value = true
@@ -375,6 +376,7 @@ export function useConversationChat(
   }
 
   const handleHandBackToAI = async () => {
+    if (isLoading.value || !chat.value.session_id) return false
     const context = captureChatContext()
     try {
       isLoading.value = true
@@ -392,6 +394,7 @@ export function useConversationChat(
   }
 
   const toggleAIAutoReply = async (enabled: boolean) => {
+    if (isLoading.value || aiToggleLoading.value || !chat.value.session_id) return false
     const context = captureChatContext()
     try {
       aiToggleLoading.value = true
@@ -571,7 +574,14 @@ export function useConversationChat(
     socketService.off('chat_reply', handleChatReply)
     socketService.off('bot_typing', handleBotTyping)
   }
-  const handleSocketReconnect = () => { cleanupSocketListeners(); setupSocketListeners() }
+  const handleSocketReconnect = () => {
+    // Socket.IO reconnects the transport but does not restore application
+    // rooms. Clear the old local marker so setupSocketListeners emits a fresh
+    // join for the current conversation.
+    joinedSessionId = null
+    cleanupSocketListeners()
+    setupSocketListeners()
+  }
 
   onMounted(() => { setupSocketListeners(); socketService.onReconnect(handleSocketReconnect) })
   onBeforeUnmount(() => {

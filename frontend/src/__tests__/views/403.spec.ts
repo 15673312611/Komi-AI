@@ -55,7 +55,7 @@ describe('403 View', () => {
         plugins: [router],
         stubs: {
           RouterLink: {
-            template: '<a :href="to" class="router-link"><slot /></a>',
+            template: '<a :href="to" class="router-link" @click.prevent><slot /></a>',
             props: ['to']
           },
           DashboardLayout: {
@@ -68,8 +68,8 @@ describe('403 View', () => {
 
   it('renders properly', () => {
     expect(wrapper.find('.unauthorized').exists()).toBe(true)
-    expect(wrapper.find('h1').text()).toBe('Access Denied')
-    expect(wrapper.find('p').text()).toBe('You don\'t have permission to access this page.')
+    expect(wrapper.find('h1').text()).toBe('访问受限 (403)')
+    expect(wrapper.find('p').text()).toBe('抱歉，您当前的角色账号没有权限访问该页面或功能。')
   })
 
   it('is wrapped in DashboardLayout', () => {
@@ -105,4 +105,4 @@ describe('403 View', () => {
     
     expect(router.currentRoute.value.path).toBe('/')
   })
-}) 
+})

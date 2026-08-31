@@ -21,7 +21,7 @@ import api from './api'
 
 export async function listGroups(): Promise<UserGroup[]> {
   const response = await api.get('/groups')
-  return response.data
+  return Array.isArray(response.data) ? response.data : []
 }
 
 export async function createGroup(groupData: Partial<UserGroup>): Promise<UserGroup> {
@@ -49,4 +49,4 @@ export async function removeUserFromGroup(groupId: string, userId: string): Prom
 export async function getGroupUsers(groupId: string): Promise<UserGroup> {
   const response = await api.get(`user-groups/${groupId}`)
   return response.data
-} 
+}

@@ -29,31 +29,48 @@ export function useUsers() {
   const showCreateModal = ref(false)
   const showResetPasswordModal = ref(false)
   const resettingPassword = ref(false)
+  let usersRequestVersion = 0
+
+  const getErrorDetail = (err: any): string => {
+    const detail = err?.response?.data?.detail
+    if (Array.isArray(detail)) {
+      return detail.map(item => item?.msg || item?.message).filter(Boolean).join('; ')
+    }
+    return detail || err?.message || '未知错误'
+  }
 
   const fetchUsers = async () => {
+    const requestVersion = ++usersRequestVersion
     try {
       loading.value = true
-      users.value = await listUsers()
+      const result = await listUsers()
+      if (requestVersion === usersRequestVersion) {
+        users.value = Array.isArray(result) ? result : []
+        error.value = null
+      }
     } catch (err: any) {
-      error.value = 'Failed to load users - ' + err.response.data.detail
-      console.error('Error loading users:', err.response.data.detail)
+      const detail = getErrorDetail(err)
+      if (requestVersion === usersRequestVersion) error.value = `加载坐席列表失败：${detail}`
+      console.error('Error loading users:', detail)
     } finally {
-      loading.value = false
+      if (requestVersion === usersRequestVersion) loading.value = false
     }
   }
 
   const handleEditUser = (user: User) => {
+    error.value = null
     selectedUser.value = user
     showEditModal.value = true
   }
 
-  const handleUpdateUser = async (userData: Partial<User> & ChatScopeFields) => {
-    if (!selectedUser.value) return
+  const handleUpdateUser = async (userData: Partial<User> & ChatScopeFields): Promise<boolean> => {
+    if (!selectedUser.value || loading.value) return false
+    const userId = selectedUser.value.id
 
     try {
       loading.value = true
       error.value = null
-      const updatedUser = await updateUser(selectedUser.value.id, userData)
+      const updatedUser = await updateUser(userId, userData)
       
       // Update local users list
       const index = users.value.findIndex(u => u.id === updatedUser.id)
@@ -68,14 +85,17 @@ export function useUsers() {
         duration: 4000,
         closeButton: true
       })
+      return true
     } catch (err: any) {
+      const detail = getErrorDetail(err)
       error.value = 'Failed to update user'
-      console.error('Error updating user:', err.response.data.detail)
+      console.error('Error updating user:', detail)
       toast.error('Error', {
-        description: 'Failed to update user - ' + err.response.data.detail,
+        description: 'Failed to update user - ' + detail,
         duration: 4000,
         closeButton: true
       })
+      return false
     } finally {
       loading.value = false
     }
@@ -87,7 +107,7 @@ export function useUsers() {
   }
 
   const confirmResetPassword = async (newPassword: string) => {
-    if (!selectedUser.value) return
+    if (!selectedUser.value || resettingPassword.value) return
 
     try {
       resettingPassword.value = true
@@ -124,16 +144,17 @@ export function useUsers() {
     showDeleteModal.value = true
   }
 
-  const confirmDeleteUser = async () => {
-    if (!selectedUser.value) return
+  const confirmDeleteUser = async (): Promise<boolean> => {
+    if (!selectedUser.value || loading.value) return false
+    const userId = selectedUser.value.id
 
     try {
       loading.value = true
       error.value = null
-      await deleteUser(selectedUser.value.id)
+      await deleteUser(userId)
       
       // Remove user from local list
-      users.value = users.value.filter(u => u.id !== selectedUser.value?.id)
+      users.value = users.value.filter(u => u.id !== userId)
       
       showDeleteModal.value = false
       selectedUser.value = null
@@ -142,20 +163,24 @@ export function useUsers() {
         duration: 4000,
         closeButton: true
       })
+      return true
     } catch (err: any) {
+      const detail = getErrorDetail(err)
       error.value = 'Failed to delete user'
-      console.error('Error deleting user:', err.response.data.detail)
+      console.error('Error deleting user:', detail)
       toast.error('Error', {
-        description: 'Failed to delete user - ' + err.response.data.detail,
+        description: 'Failed to delete user - ' + detail,
         duration: 4000,
         closeButton: true
       })
+      return false
     } finally {
       loading.value = false
     }
   }
 
-  const handleCreateUser = async (userData: Partial<User> & ChatScopeFields & { password?: string }) => {
+  const handleCreateUser = async (userData: Partial<User> & ChatScopeFields & { password?: string }): Promise<boolean> => {
+    if (loading.value) return false
     try {
       loading.value = true
       error.value = null
@@ -167,14 +192,17 @@ export function useUsers() {
         duration: 4000,
         closeButton: true
       })
+      return true
     } catch (err: any) {
+      const detail = getErrorDetail(err)
       error.value = 'Failed to create user'
-      console.error('Error creating user:', err.response.data.detail)
+      console.error('Error creating user:', detail)
       toast.error('Error', {
-        description: 'Failed to create user - ' + err.response.data.detail,
+        description: 'Failed to create user - ' + detail,
         duration: 4000,
         closeButton: true
       })
+      return false
     } finally {
       loading.value = false
     }
@@ -199,4 +227,4 @@ export function useUsers() {
     handleResetPassword,
     confirmResetPassword
   }
-} 
+}

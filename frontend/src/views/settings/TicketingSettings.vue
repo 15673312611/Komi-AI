@@ -25,6 +25,7 @@ import TicketDbConnectorsSection from '@/components/tickets/TicketDbConnectorsSe
 import { apiPath } from '@/config/api'
 import { userService } from '@/services/user'
 import type { SlaTarget, TicketPriority } from '@/types/ticket'
+import { copyTextToClipboard } from '@/utils/clipboard'
 
 const { settings, isLoading, isSaving, error, planGated, save } = useTicketingSettings()
 
@@ -80,10 +81,10 @@ const webhookUrl = computed(() => {
 
 function copyWebhookUrl() {
   if (!webhookUrl.value) return
-  navigator.clipboard
-    .writeText(webhookUrl.value)
-    .then(() => toast.success('Webhook 告警接收地址已复制到剪贴板'))
-    .catch(() => {})
+  copyTextToClipboard(webhookUrl.value).then((copied) => {
+    if (copied) toast.success('Webhook 告警接收地址已复制到剪贴板')
+    else toast.error('复制失败，请手动选择并复制地址')
+  })
 }
 
 const DEFAULT_SLA: Record<TicketPriority, SlaTarget> = {
@@ -97,7 +98,7 @@ const DEFAULT_SLA: Record<TicketPriority, SlaTarget> = {
 // objects, so edits would mutate the baseline and isDirty could never fire.
 const cloneSla = (targets?: Record<TicketPriority, SlaTarget> | null) =>
   Object.fromEntries(
-    PRIORITIES.map((p) => [p, { ...(targets?.[p] || DEFAULT_SLA[p]) }]),
+    PRIORITIES.map((p) => [p, { ...DEFAULT_SLA[p], ...(targets?.[p] || {}) }]),
   ) as Record<TicketPriority, SlaTarget>
 
 const slaDraft = ref<Record<TicketPriority, SlaTarget>>(cloneSla())
@@ -110,7 +111,7 @@ watch(settings, (next) => {
   slaDraft.value = cloneSla(next.sla_targets)
   createdTemplate.value = next.created_template || defaultCreated
   resolvedTemplate.value = next.resolved_template || defaultResolved
-  confirmationTimeout.value = next.confirmation_timeout_hours
+  confirmationTimeout.value = next.confirmation_timeout_hours ?? 72
 })
 
 const defaultCreated =
@@ -131,12 +132,38 @@ const isDirty = computed(() => {
   )
 })
 
+const isValidPositiveInteger = (value: unknown, max?: number) => {
+  const number = Number(value)
+  return Number.isInteger(number) && number > 0 && (max === undefined || number <= max)
+}
+
+function validateDraft(): boolean {
+  for (const priority of PRIORITIES) {
+    const target = slaDraft.value[priority]
+    if (!isValidPositiveInteger(target?.first_response_minutes) ||
+        !isValidPositiveInteger(target?.resolution_minutes)) {
+      toast.error('SLA 时效必须填写大于 0 的整数分钟数')
+      return false
+    }
+  }
+  if (!isValidPositiveInteger(confirmationTimeout.value, 720)) {
+    toast.error('自动关单等待时间必须是 1 至 720 小时的整数')
+    return false
+  }
+  if (!createdTemplate.value.trim() || !resolvedTemplate.value.trim()) {
+    toast.error('工单通知模板不能为空')
+    return false
+  }
+  return true
+}
+
 function saveAll() {
+  if (isSaving.value || !validateDraft()) return
   save({
-    sla_targets: slaDraft.value,
+    sla_targets: cloneSla(slaDraft.value),
     created_template: createdTemplate.value,
     resolved_template: resolvedTemplate.value,
-    confirmation_timeout_hours: confirmationTimeout.value,
+    confirmation_timeout_hours: Number(confirmationTimeout.value),
   })
 }
 </script>
@@ -170,7 +197,7 @@ function saveAll() {
               selected: settings.autonomy_level === card.level,
               disabled: card.disabled,
             }"
-            @click="!card.disabled && save({ autonomy_level: card.level })"
+            @click="!card.disabled && !isSaving && save({ autonomy_level: card.level })"
           >
             <div class="card-head">
               <span class="radio" :class="{ on: settings.autonomy_level === card.level }">
@@ -200,6 +227,7 @@ function saveAll() {
           <input
             type="checkbox"
             :checked="settings.auto_investigate_on_create"
+            :disabled="isSaving"
             @change="save({ auto_investigate_on_create: ($event.target as HTMLInputElement).checked })"
           />
           工单创建后自动启动 AI 智能分诊与深度调查
@@ -218,8 +246,8 @@ function saveAll() {
               <span class="dot" :style="{ background: priorityMeta(p).color }"></span>
               {{ priorityMeta(p).label }}
             </span>
-            <input v-model.number="slaDraft[p].first_response_minutes" type="number" min="1" class="sla-input" />
-            <input v-model.number="slaDraft[p].resolution_minutes" type="number" min="1" class="sla-input" />
+            <input v-model.number="slaDraft[p].first_response_minutes" type="number" min="1" class="sla-input" :disabled="isSaving" />
+            <input v-model.number="slaDraft[p].resolution_minutes" type="number" min="1" class="sla-input" :disabled="isSaving" />
           </div>
         </div>
       </section>
@@ -232,6 +260,7 @@ function saveAll() {
             <input
               type="checkbox"
               :checked="settings.csat_enabled"
+              :disabled="isSaving"
               @change="save({ csat_enabled: ($event.target as HTMLInputElement).checked })"
             />
             工单解决后自动向客户发起满意度评价 (CSAT)
@@ -245,13 +274,13 @@ function saveAll() {
         <div class="template-grid">
           <div class="template-card">
             <div class="card-label">模板 · 工单创建通知</div>
-            <textarea v-model="createdTemplate" class="template-input"></textarea>
+            <textarea v-model="createdTemplate" class="template-input" :disabled="isSaving"></textarea>
             <div class="card-label">效果预览</div>
             <div class="template-preview">{{ preview(createdTemplate) }}</div>
           </div>
           <div class="template-card">
             <div class="card-label">模板 · 工单解决通知</div>
-            <textarea v-model="resolvedTemplate" class="template-input"></textarea>
+            <textarea v-model="resolvedTemplate" class="template-input" :disabled="isSaving"></textarea>
             <div class="card-label">效果预览</div>
             <div class="template-preview">{{ preview(resolvedTemplate) }}</div>
           </div>
@@ -260,7 +289,7 @@ function saveAll() {
           <span class="timeout-label">
             在客户未回复的情况下，解决后等待
           </span>
-          <input v-model.number="confirmationTimeout" type="number" min="1" max="720" class="sla-input" />
+          <input v-model.number="confirmationTimeout" type="number" min="1" max="720" class="sla-input" :disabled="isSaving" />
           <span class="timeout-label">小时后自动关闭归档工单</span>
         </div>
       </section>
@@ -276,7 +305,7 @@ function saveAll() {
         </p>
         <TicketConnectorsSection
           :selected-ids="settings.investigation_mcp_tool_ids || []"
-          @update:selected-ids="(ids: number[]) => save({ investigation_mcp_tool_ids: ids })"
+          @update:selected-ids="(ids: number[]) => !isSaving && save({ investigation_mcp_tool_ids: ids })"
         />
       </section>
 
@@ -303,6 +332,7 @@ function saveAll() {
             <input
               type="checkbox"
               :checked="settings.alert_webhook_enabled"
+              :disabled="isSaving"
               @change="save({ alert_webhook_enabled: ($event.target as HTMLInputElement).checked })"
             />
             已启用
@@ -325,6 +355,7 @@ function saveAll() {
             <input
               type="checkbox"
               :checked="settings.jira_escalation_enabled"
+              :disabled="isSaving"
               @change="save({ jira_escalation_enabled: ($event.target as HTMLInputElement).checked })"
             />
             已启用
@@ -338,6 +369,7 @@ function saveAll() {
           <select
             class="sla-input jira-select"
             :value="settings.jira_escalation_priority || 'urgent'"
+            :disabled="isSaving"
             @change="save({ jira_escalation_priority: ($event.target as HTMLSelectElement).value as TicketPriority })"
           >
             <option v-for="p in PRIORITIES" :key="p" :value="p">{{ priorityMeta(p).label }} 及以上</option>

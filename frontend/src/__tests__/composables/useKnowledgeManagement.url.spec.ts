@@ -12,6 +12,7 @@ vi.mock('@/services/knowledge', () => ({
 }))
 
 import { useKnowledgeManagement } from '@/composables/useKnowledgeManagement'
+import { knowledgeService } from '@/services/knowledge'
 
 const setup = () => useKnowledgeManagement('agent-1', 'org-1')
 
@@ -112,5 +113,28 @@ describe('useKnowledgeManagement - URL handling', () => {
       expect(urls.value).toEqual(['https://docs.company.com'])
       expect(urlFormError.value).toBe('This URL has already been added to the current batch')
     })
+  })
+
+  it('does not let an older full refresh overwrite a newer organization page', async () => {
+    let resolveOldOrganization: (value: unknown) => void = () => undefined
+    vi.mocked(knowledgeService.getKnowledgeByOrganization)
+      .mockImplementationOnce(() => new Promise(resolve => { resolveOldOrganization = resolve }))
+      .mockResolvedValueOnce({
+        knowledge: [{ id: 2, name: 'new-page', type: 'website', pages: [] }],
+        pagination: { total_pages: 2 },
+      })
+    const state = setup()
+
+    const oldRefresh = state.fetchKnowledge()
+    state.orgCurrentPage.value = 2
+    await state.fetchOrgKnowledge()
+    resolveOldOrganization({
+      knowledge: [{ id: 1, name: 'old-page', type: 'website', pages: [] }],
+      pagination: { total_pages: 1 },
+    })
+    await oldRefresh
+
+    expect(state.orgKnowledgeItems.value.map(item => item.name)).toEqual(['new-page'])
+    expect(state.orgCurrentPage.value).toBe(2)
   })
 })
