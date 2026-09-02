@@ -1,625 +1,249 @@
-# Komi AI - Open Source AI Customer Support Chatbot Platform
+<div align="center">
 
-[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
-[![npm version](https://img.shields.io/npm/v/komi-deploy.svg)](https://www.npmjs.com/package/komi-deploy)
-[![Docker Pulls](https://img.shields.io/docker/pulls/komi/backend.svg)](https://hub.docker.com/r/komi/backend)
+# 🤖 Komi AI
 
-![Komi AI Logo](frontend/public/assets/images/logo.svg)
+### 面向跨境电商与现代企业的开源 AI 智能客服与智能体平台
 
-> **Open-source AI customer support platform with human handoff.** A no-code AI chatbot for 24/7 customer service automation — multi-model AI (OpenAI, Anthropic Claude, Google Gemini, Mistral, xAI Grok, DeepSeek, Groq), intelligent AI-to-human handover, **Shopify & e-commerce support**, Slack and Jira integrations, visual workflow builder, and a fully themeable chat widget. Use the free hosted service or self-host it as an **open-source alternative to Intercom, Zendesk, and Chatbase**.
+<p align="center">
+  <b>融合大模型、可视化 Agent 工作流、企业级 RAG 知识库与多渠道统一收件箱的下一代客户沟通中台</b>
+</p>
 
-**[Documentation](https://docs.komi.ai)** | **[Live Demo](https://komi.ai)** | **[Free Signup](https://app.komi.ai)** | **[Shopify App](https://apps.shopify.com/komi-chat)** | **[WordPress Plugin](https://github.com/komi/komi-wordpress-plugin/releases/latest/download/komi-chat.zip)**
+<p align="center">
+  <a href="https://opensource.org/licenses/Apache-2.0"><img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg?style=flat-square" alt="License"></a>
+  <a href="https://vuejs.org/"><img src="https://img.shields.io/badge/Frontend-Vue%203%20%7C%20Vite%20%7C%20TS-4FC08D.svg?style=flat-square" alt="Vue 3"></a>
+  <a href="https://fastapi.tiangolo.com/"><img src="https://img.shields.io/badge/Backend-FastAPI%20%2B%20Golang-009688.svg?style=flat-square" alt="Backend"></a>
+  <a href="https://www.postgresql.org/"><img src="https://img.shields.io/badge/Database-PostgreSQL%20%2B%20Redis-336791.svg?style=flat-square" alt="Database"></a>
+  <a href="https://modelcontextprotocol.io/"><img src="https://img.shields.io/badge/Protocol-MCP%20Enabled-black.svg?style=flat-square" alt="MCP"></a>
+  <img src="https://img.shields.io/badge/PRs-Welcome-brightgreen.svg?style=flat-square" alt="PRs Welcome">
+</p>
 
----
-
-## Table of Contents
-
-- [Why Komi AI?](#why-komi)
-- [Features](#features)
-- [Integrations](#integrations)
-- [Komi AI vs. Intercom, Zendesk & Chatbase](#komi-vs-intercom-zendesk--chatbase)
-- [Demo](#demo)
-- [Quick Start](#quick-start)
-- [Installation](#installation-methods)
-- [Deployment](#deployment)
-- [FAQ](#faq)
-- [Roadmap](#roadmap)
-- [Contributing](#contributing)
-- [Support](#support)
-
----
-
-## Why Komi AI?
-
-Komi AI is a **no-code AI customer support platform** that enables businesses to provide **24/7 customer service** through intelligent AI agents. Your AI chatbot handles common queries, escalates complex issues to human agents when needed, and continuously learns from your knowledge base. Integrate the chat widget on any website — or any **Shopify store** — with a single line of code.
-
-**Perfect for:** e-commerce and Shopify stores, SaaS companies, help desks, customer success teams, and any business looking to automate customer support while maintaining a human touch.
-
-![Komi AI chat widget on an e-commerce store](.github/images/chat-widget.webp)
+<p align="center">
+  <a href="#-核心特性">核心特性</a> •
+  <a href="#-系统架构">系统架构</a> •
+  <a href="#-多渠道生态">多渠道生态</a> •
+  <a href="#-快速开始">快速开始</a> •
+  <a href="#-安全与隐私保护">安全与隐私</a> •
+  <a href="#-方案对比">方案对比</a>
+</p>
 
 ---
 
-## Features
+</div>
 
-### Core Features
+## 📖 项目简介
 
-| Feature | Description |
-|---------|-------------|
-| 🤝 **Smart Human Handoff** | Intelligent AI-to-human transfer with **business hours awareness**, real-time availability detection, and context-aware escalation messages. |
-| 🛍️ **Shopify & E-commerce Support** | Native **Shopify integration** ([App Store listing](https://apps.shopify.com/komi-chat)) — answer order, shipping, and product questions from store data. Works for any online store. |
-| 📝 **WordPress Plugin** | Official **WordPress plugin** ([download](https://github.com/komi/komi-wordpress-plugin/releases/latest/download/komi-chat.zip)) — add the chat widget to any WordPress site by entering your Widget ID. No theme edits required. |
-| 🧠 **Multi-Model AI Support** | Choose your AI provider — **OpenAI**, **Anthropic (Claude)**, **Google Gemini**, **Mistral**, **xAI (Grok)**, **DeepSeek**, and **Groq** — with your own API key, or enter a custom model ID. Switch providers anytime without code changes. |
-| 💬 **Ask Anything Mode** | Let visitors start conversations instantly — no signup or email required. Perfect for Q&A, documentation assistants, and exploratory chat experiences. |
-| 📎 **File Attachments** | Customers can share **images, PDFs, Word docs, spreadsheets**, and more directly in chat. Secure uploads with S3 storage and magic byte validation. |
-| 🌍 **Auto Translation** | Multilingual support with configurable **default language per workflow**. Serve customers globally in their preferred language. |
-| 🎫 **AI Ticketing** | Native tickets raised straight from chat, then **auto-triaged and investigated by AI** — it forms hypotheses, gathers evidence from your observability tools and databases, and writes a root-cause analysis you can read and audit. See [AI Ticketing](#ai-ticketing). |
-| 🔗 **Jira Ticket Creation** | Create and manage **Jira tickets directly from chat** conversations. OAuth 2.0 secure integration with automatic ticket tracking. Native tickets can also escalate to Jira one-way. |
-| 🔑 **Widget Authentication** | **Token-based security** for embedded widgets. Support both public Q&A and private authenticated conversations. |
-| 💼 **Slack Integration** | Connect your **Slack workspace** for internal product support. Teams get AI-powered assistance directly in Slack channels. |
-| 🧩 **Visual Workflow Builder** | Design conversation flows with a **drag-and-drop interface**. Branching logic, conditional responses, and multi-step workflows without coding. |
+**Komi AI** 是一套专为**跨境电商独立站、SaaS 软件及现代数字化企业**打造的高性能开源 AI 智能客服与自动化沟通平台。
 
-### Workflow Builder
+平台深度融合了现代大语言模型（LLM）与智能体工作流（AI Agent Workflow），支持在 **Shopify、WordPress、独立站网站、WhatsApp、Instagram、Facebook Messenger、Telegram、Slack、邮件** 等多渠道中提供 7×24 小时的智能问答、意图识别、自动化订单/物流追踪与智能人机协作转接。
 
-Build sophisticated conversation flows visually with our intuitive workflow builder:
-
-![No-code AI chatbot workflow builder with drag-and-drop nodes and human handoff](.github/images/workflow-builder.webp)
-
-**Workflow Builder Features:**
-- **Drag-and-drop nodes** - AI responses, human handoff, conditions, and more
-- **Branching logic** - Create different paths based on user input
-- **Node types** - Start, AI Response, Human Transfer, Condition, End nodes
-- **Real-time preview** - Test workflows before deploying
-- **Version control** - Save and restore workflow versions
-
-### AI Ticketing
-
-Tickets are raised from a conversation (by the AI or an agent), or from an alert
-webhook. Each one is triaged, deduplicated against open tickets, and then
-investigated: the AI proposes hypotheses, tests each against your connected
-tools, and records every query it ran as evidence you can inspect. The result is
-a versioned root-cause analysis with citations back to that evidence.
-
-Connect read-only investigation sources under **Settings → Ticketing**:
-observability platforms via MCP (Grafana, Elasticsearch, Sentry, CloudWatch, or
-any MCP server), and optionally a **guardrailed SQL connector** (Postgres/MySQL,
-direct or over an SSH tunnel).
-
-**Autonomy is staged, and you choose the level:**
-
-| Level | The AI can |
-|-------|-----------|
-| **L1** | Investigate and document only |
-| **L2** | Also propose a resolution — a human approves or rejects it |
-| **L3** | Also message the customer and close the ticket, behind confidence guards |
-
-#### Guardrails
-
-The investigation agent reads untrusted customer text and holds live tool
-access, so the limits are enforced in code, not by prompting:
-
-- **The SQL connector is read-only, structurally.** Queries are parsed to an AST
-  and rejected unless they are a single plain `SELECT`. Writes, DDL, multiple
-  statements, and a denylist of dangerous functions cannot pass. Table access is
-  restricted to an allowlist you pick, enforced through CTEs, joins and
-  subqueries. A `LIMIT` is forced. Comments are stripped before execution, since
-  MySQL executes `/*! */`. The connection itself is a read-only transaction with
-  a statement timeout — a second, independent barrier.
-- **Columns you mask are never readable.** Masked columns are blocked from being
-  referenced anywhere, including in a `WHERE` clause, so their values can't be
-  probed; whole-row tricks that would smuggle them out (`to_jsonb(t)`, `t::text`,
-  `to_json(t.*)`) are blocked too, and results are masked again on the way back.
-- **Nothing is written to your database, ever.** Approving an AI proposal records
-  the decision — any change to your systems is made by your team.
-- **Row-level scoping keeps one customer's data out of another's ticket.** Mark
-  the column that identifies the customer on any table holding per-customer rows
-  (`orders → customer_email`). Queries against it are rewritten to read only the
-  ticket customer's own rows — the AI cannot widen that, because the filter is
-  applied to the table it selects *from*, not to a condition it could write
-  around. A ticket with no known customer cannot query a scoped table at all,
-  rather than falling back to reading everything. Tables you leave unscoped
-  (products, error codes) stay fully readable.
-- **Cross-customer isolation on outbound messages.** Identifiers belonging to
-  anyone other than the recipient are stripped from every message sent to a
-  customer, and other customers' tickets are redacted before they reach the
-  model — a second line behind row scoping.
-- **Every query is audited.** Each attempt is logged with the SQL and outcome;
-  returned rows are deliberately never stored.
-
-> **When you connect a database:** set a row-scope column for every table that
-> holds per-customer rows — it's the control that stops the agent reading across
-> customers, and it's off until you set it. Point the connector at a service
-> account restricted to what support genuinely needs, and prefer views that are
-> already scoped.
-
-### Platform Features
-
-| Feature | Description |
-|---------|-------------|
-| 🤖 **AI-Powered Responses** | Context-aware AI with conversation memory across sessions |
-| 📊 **Analytics Dashboard** | Real-time monitoring, conversation insights, and performance metrics |
-| 📚 **Knowledge Base Training** | Train your AI with domain-specific knowledge and FAQs |
-| 🎨 **Custom Theming** | Fully customizable chat widget to match your brand |
-| 🔐 **Role-Based Access Control** | Granular permissions for team members |
-| 🌐 **Open Source & Self-Hosted** | Full control over your data with self-hosting option |
-
-### Integrations
-
-**All of these are free and included** — every adapter ships in the
-open-source codebase, and self-hosting unlocks the lot.
-
-What some of them need is **your own credentials**, because the integration
-talks to your account on someone else's platform:
-
-- **You create the app** — a developer app registered once per Komi AI
-  install, with its keys in the backend `.env`.
-- **You paste a token** — no app to create; you generate a token or API key on
-  the provider's side and enter it in the Komi AI UI when connecting.
-
-Both are marked in the tables below.
-
-**Messaging channels** — one shared inbox for all of them, with the same AI
-answers, human handoff, and workflows as the web widget:
-
-| Channel | Setup | Notes |
-|---------|-------|-------|
-| 💬 **WhatsApp** | Your Meta app | WhatsApp Business Cloud API — templates, media, and 24-hour session handling |
-| 💬 **Facebook Messenger** | Your Meta app | Meta Messenger Platform, connected per Page |
-| 📷 **Instagram** | Your Meta app | Instagram Direct Messages via the Meta Graph API |
-| 🔷 **Slack** | Your Slack app | Your Slack workspace as an internal support channel |
-| ✈️ **Telegram** | Paste a token | Bot token from BotFather — no app registration |
-| 🟢 **LINE** | Paste a token | LINE Messaging API channel credentials |
-| 📱 **SMS** | Paste a token | Your **Twilio**, **Vonage**, **Plivo**, or **MessageBird** account keys |
-| 📧 **Email** | Paste a token | Your mailbox credentials; inbound email becomes a conversation and replies go back over email |
-| 🌐 **Web widget** | Nothing | The embeddable widget, plus **Shopify** and **WordPress** surfaces |
-
-**CRM** — push captured leads and contacts out to your sales stack:
-
-| Integration | Setup | Notes |
-|-------------|-------|-------|
-| 🟠 **HubSpot** | Your HubSpot app | Contacts and leads pushed from chat, OAuth connected |
-| 🟩 **Pipedrive** | Your Pipedrive app | Persons and leads pushed from chat, OAuth connected |
-
-Synced by the `crm_sync` worker — see [Background processors](#background-processors).
-
-**Tickets, data and tooling**
-
-| Integration | Setup | Notes |
-|-------------|-------|-------|
-| 🔗 **Jira** | Your Atlassian app | Create and track Jira issues from chat (OAuth 2.0); native tickets can escalate to Jira |
-| 🛍️ **Shopify** | Your Shopify app | Order, shipping, and product answers from live store data |
-| 🧰 **MCP servers** | Paste a token | Any MCP server as an agent tool — Grafana, Elasticsearch, Sentry, CloudWatch, and others |
-| 🗄️ **SQL connectors** | Paste a token | Read-only, guardrailed **PostgreSQL** and **MySQL** access for AI ticket investigation |
-| 🪝 **Webhooks** | Nothing | Outbound ticket webhooks to drive your own automations |
-
-> Adding a channel means implementing one adapter in `backend/app/channels/`
-> against the shared `ChannelAdapter` base — the inbox, AI, and handoff come for
-> free. CRM adapters follow the same shape in `backend/app/crm/`.
+作为 **Intercom、Zendesk、Crisp 与 Chatbase** 的高自由度开源私有化替代方案，Komi AI 确保企业在享受前沿 AI 能力的同时，拥有 **100% 的数据自主权与本地安全可控性**。
 
 ---
 
-## Komi AI vs. Intercom, Zendesk & Chatbase
+## ✨ 核心特性
 
-Komi AI is a **free, open-source alternative to Intercom, Zendesk AI, and Chatbase** — with AI answers *and* human handoff in one inbox:
+### 🤖 1. 全主流大模型与私有化模型支持 (Multi-Model AI)
+- **自由切换模型底座**：原生接入 **OpenAI (GPT-4o/o1/o3)、Anthropic Claude 3.5、Google Gemini 1.5/2.0、DeepSeek (V3/R1)、Mistral、xAI Grok、Groq**。
+- **支持自定义与本地模型**：兼容 OpenAI API 标准格式的本地 Ollama / vLLM 私有化大模型部署，企业无需锁定单一供应商。
 
-| | **Komi AI** | Intercom | Zendesk AI | Chatbase |
-|---|---|---|---|---|
-| Open source (Apache-2.0) | ✅ | ❌ | ❌ | ❌ |
-| Self-hosting / data ownership | ✅ | ❌ | ❌ | ❌ |
-| AI answers from your knowledge base | ✅ | ✅ | ✅ | ✅ |
-| Built-in human handoff + shared inbox | ✅ | ✅ | ✅ | ⚠️ limited |
-| Bring your own AI model (OpenAI, Claude, Gemini, Grok, +more) | ✅ | ❌ | ❌ | ⚠️ limited |
-| Visual no-code workflow builder | ✅ | ✅ | ⚠️ add-on | ❌ |
-| Free tier | ✅ | trial only | trial only | ✅ |
-| Per-AI-resolution fees | ❌ none | $0.99/resolution | usage-based | credit-based |
+### 🛍️ 2. 电商与独立站原生赋能 (E-commerce Automation)
+- **Shopify 原生插件与 API 直连**：实时拉取店铺商品、库存、订单履约状态及物流轨迹，实现自动化催付、退换货指引与物流查询。
+- **多平台挂件一键集成**：提供轻量级 Web Widget 悬浮挂件与 WordPress 插件，一行代码即可嵌入任意网站。
 
-Detailed comparisons: [Komi AI vs Chatbase](https://komi.ai/komi-vs-chatbase/) · [Komi AI vs Chatwoot](https://komi.ai/komi-vs-chatwoot/)
+### 🧩 3. 可视化 AI Agent 工作流编排器 (Workflow Builder)
+- **低代码拖拽式画布**：支持自由编排多轮对话流，包含 **LLM 意图判断、条件分支路由、人机转接节点、结构化表单收集、API 触发器**。
+- **版本控制与实时沙盒调试**：支持工作流多版本保存、回滚以及在发布前进行全流程可视化即时测试。
 
----
+### 📚 4. 企业级 RAG 向量知识库 (Knowledge Base)
+- **多源数据混合导入**：支持一键爬取整站文档 URL，批量解析 **PDF、Word、Markdown、Excel、TXT** 等格式文件。
+- **高精度召回与幻觉抑制**：采用分块重排（Re-ranking）与向量混合检索技术，精准输出带溯源引用的专业回答。
 
-## Demo
+### 🤝 5. 智能人机无缝协同 (Smart Human Handoff)
+- **营业时间与在线状态感知**：AI 根据客服在线状态智能路由，复杂诉求或高意向客户自动无缝升级至人工坐席。
+- **坐席统一协作工作台**：人工坐席可实时查看客户完整上下文、AI 生成的摘要总结，并获得 AI 一键辅助拟答。
 
-### Video Walkthrough
-[![Komi AI Demo](https://img.youtube.com/vi/bk40VSS2BLU/0.jpg)](https://youtu.be/bk40VSS2BLU)
-[![Komi AI Demo](https://img.youtube.com/vi/WyMQ8Poqn5E/0.jpg)](https://www.youtube.com/embed/WyMQ8Poqn5E?mute=1&loop=1&playlist=WyMQ8Poqn5E&rel=0&controls=1)
+### 🎫 6. 自动化 AI 工单调查与根因分析 (AI Ticketing & Root-Cause)
+- **AI 自主排查**：工单生成后，AI Agent 自动调取日志、监控数据与业务数据库进行假设验证，生成带证据链的排查报告（Root-Cause Analysis）。
+- **只读安全 SQL 围栏**：内置 AST 语法树解析器，确保 AI 仅能执行受严格白名单与客户行级隔离保护的只读查询。
 
-### Shared Inbox with AI + Human Handoff
-![AI customer support shared inbox with human handoff](.github/images/inbox-human-handoff.webp)
-
-### Analytics Dashboard
-![AI customer support analytics dashboard — resolution rate, CSAT, AI vs human performance](.github/images/analytics-dashboard.webp)
+### 🧰 7. 原生 Model Context Protocol (MCP) 支持
+- 支持作为 MCP 客户端/服务端接入 **Grafana、Elasticsearch、Sentry、CloudWatch** 等企业内部监控与数据工具链。
 
 ---
 
-## Quick Start
+## 🌐 多渠道生态 (Omnichannel Inbox)
 
-There are two ways to run Komi AI. **Most people want the hosted service** — sign up and
-manage everything from the dashboard, the CLI, or an AI agent. **Self-host with Docker** only if
-you need to run Komi AI on your own infrastructure.
+通过统一后台集中管理所有用户触点，对话状态与 AI 策略全渠道实时同步：
 
-### Option A — Hosted (fastest)
+| 渠道分类 | 支持平台 | 说明 |
+| :--- | :--- | :--- |
+| **独立站与 Web** | 🌐 **Web Chat Widget**、🛍️ **Shopify**、📝 **WordPress** | 极速加载，全自定义 UI 主题与品牌风格 |
+| **海外主流社媒** | 💬 **WhatsApp Cloud API**、📷 **Instagram DM**、💬 **Messenger** | 官方 Meta 商业套件接入，支持富媒体与模板消息 |
+| **办公与即时通讯** | 🔷 **Slack**、✈️ **Telegram**、🟢 **LINE** | 团队内部技术支持或海外用户社群沟通 |
+| **传统通讯** | 📧 **Email (邮件工单)**、📱 **SMS (Twilio/Vonage/Plivo)** | 邮件往来自动转为会话，短信自动化通知 |
+| **CRM 客户管理** | 🟠 **HubSpot**、🟩 **Pipedrive** | 自动将对话捕获的高意向商机同步至销售 CRM |
 
-1. **Sign up:** [app.komi.ai](https://app.komi.ai) — free, no card required.
-2. **Manage from your terminal, automate, or drive it with an AI agent** using the **Komi AI CLI**:
+---
 
-```bash
-# The Komi AI CLI — sign up, mint tokens, and manage agents, workflows & knowledge
-pip install komi-cli          # installs the `komi` command
+## 🏗️ 系统架构
 
-komi signup --name "Acme Inc" --domain acme.com --admin-email you@acme.com
-komi agent create --name "Support" --type customer_support -i "Be concise and friendly"
-komi knowledge add-url --website https://docs.acme.com --agent-id <agent-id>
+```mermaid
+flowchart TB
+    subgraph ClientLayer [终端多渠道接入层]
+        Web[Web 悬浮挂件 / PWA]
+        Shopify[Shopify / WordPress 插件]
+        Meta[WhatsApp / Instagram / Messenger]
+        IM[Slack / Telegram / LINE / 邮件]
+    end
+
+    subgraph GatewayLayer [接入网关与安全控制]
+        GoGateway[高性能 Go 消息与 WS 路由]
+        AuthGuard[JWT 鉴权 / RBAC 权限控制 / 租户隔离]
+    end
+
+    subgraph CoreEngine [Komi 核心服务引擎]
+        AgentEngine[AI Agent 编排引擎 & 工作流引擎]
+        RAGModule[RAG 知识库检索 & 文档解析]
+        TicketEngine[AI 智能工单与根因调查模块]
+        HandoffMgr[人机协同与会话分流调度]
+    end
+
+    subgraph LLM_MCP [大模型与工具协议层]
+        LLMHub[LLM 聚合调度 (OpenAI/Claude/Gemini/DeepSeek/Ollama)]
+        MCPHub[MCP 工具连接器 (Grafana/Sentry/SQL/APIs)]
+    end
+
+    subgraph DataStorage [数据存储层]
+        PG[(PostgreSQL + 向量检索)]
+        Redis[(Redis 缓存 & 实时状态)]
+        S3[(对象存储 / 媒体文件)]
+    end
+
+    ClientLayer --> GatewayLayer
+    GatewayLayer --> CoreEngine
+    CoreEngine --> LLM_MCP
+    CoreEngine --> DataStorage
 ```
 
-➡️ **[AI Agent & Automation Quickstart](https://docs.komi.ai/features/agents-quickstart)** · **[CLI reference](https://docs.komi.ai/features/cli)** · **[MCP server](https://docs.komi.ai/features/mcp-server)**
-
-> 🤖 **Building an AI agent that sets up Komi AI?** Start at
-> [`komi.ai/llms.txt`](https://komi.ai/llms.txt), follow the
-> [agent quickstart](https://docs.komi.ai/features/agents-quickstart), or connect the
-> [MCP server](https://docs.komi.ai/features/mcp-server) to configure Komi AI over MCP.
-
-### Option B — Self-host with Docker
-
-Run the full Komi AI stack on your own infrastructure with the **self-host CLI** (Docker-based):
-
-```bash
-# Install the self-host / deployment CLI
-npm install -g komi-deploy
-
-# Scaffold a project, then start the full stack (Postgres, Redis, backend, frontend, worker)
-komi-deploy init my-komi-project
-cd my-komi-project
-komi-deploy start                  # then open http://localhost/
-```
-
-<details>
-<summary>Self-host CLI commands</summary>
-
-```bash
-komi-deploy init <project-name>    # Scaffold a new self-hosted project
-komi-deploy start                  # Start all services (Docker)
-komi-deploy stop                   # Stop all services
-komi-deploy status                 # Check service status
-komi-deploy logs                   # View service logs
-komi-deploy reset                  # Reset and remove all data
-```
-</details>
-
-> ⚠️ **Two different `komi` commands — don't mix them up.** The **hosted CLI**
-> (`pip install komi-cli`) signs you up and manages agents/knowledge against the
-> Komi AI API. The **self-host CLI** (`npm install -g komi-deploy`) scaffolds and runs
-> the Docker stack. They are separate tools that happen to share the `komi` name.
-
 ---
 
-## Installation Methods
+## 🚀 快速开始
 
-> Prefer the hosted service? Skip this section — just [sign up](https://app.komi.ai)
-> and/or use the [Komi AI CLI](https://docs.komi.ai/features/cli)
-> (`pip install komi-cli`). The methods below are for **self-hosting**.
+### 方式一：Docker 一键极速部署（推荐）
 
-### Prerequisites
-
-**For Self-Host CLI (Recommended)**
-- Node.js 16+
-- Docker & Docker Compose
-- npm or yarn
-
-**For Manual Installation**
-- Python 3.12+
-- PostgreSQL 14+ (with Vector extension)
-- Firebase Project (for push notifications)
-- Redis (optional, for rate limiting and multi-server socket deployment)
-
-### Method 1: Self-Host CLI (Recommended)
-
-The self-host CLI (`komi-deploy`, installed via npm) scaffolds and runs the Docker stack.
-This is **not** the account CLI — for signup and agent management see the
-[Komi AI CLI](https://docs.komi.ai/features/cli).
+Komi AI 提供了开箱即用的 Docker Compose 编排文件：
 
 ```bash
-npm install -g komi-deploy
-komi-deploy init my-project
-cd my-project
-komi-deploy start
-```
+# 1. 克隆代码仓库
+git clone https://github.com/15673312611/Komi-AI.git
+cd Komi-AI
 
-### Method 2: Docker Installation
+# 2. 配置环境变量（从安全模板复制，按需配置密钥）
+cp backend/.env.example backend/.env
+cp frontend/.env.example frontend/.env
 
-```bash
-# Build and start all services
-docker compose up --build
-
-# Run in background
+# 3. 启动全栈服务（包含前端、后端、Go网关与数据库）
 docker compose up -d
-
-# Stop services
-docker compose down
-
-# View logs
-docker compose logs -f
 ```
 
-### Method 3: Manual Installation
+启动完成后，在浏览器中访问：
+- **控制台看板**：`http://localhost:3000`
+- **后端 API 文档**：`http://localhost:8000/docs`
 
-<details>
-<summary>Click to expand manual installation steps</summary>
+---
 
-#### Backend Setup
-```bash
-cd backend
-python -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
-pip install -r requirements.txt
+### 方式二：本地源码开发调试
 
-# Set up environment variables
-cp .env.example .env
-# Configure .env with your credentials
-
-# Database setup
-alembic upgrade head
-
-# To generate revisions if any model changes
-alembic revision --autogenerate -m "Changes description"
-```
-
-#### Frontend Setup
+#### 1. 前端环境构建
 ```bash
 cd frontend
 npm install
-cp .env.example .env
-```
-
-For Web Push notification, generate a firebase config and place it in `backend/app/config/firebase-config.json`
-
-</details>
-
----
-
-## Running the Application
-
-**Backend**
-```bash
-# Development
-uvicorn app.main:app --reload --port 8000
-
-# Run Knowledge Processor (in a separate terminal)
-python -m app.workers.run_knowledge_processor
-```
-
-### Background processors
-
-The API server only enqueues long-running jobs — a separate worker process
-executes them. If no worker is running, jobs sit at `pending` forever and the
-UI shows a progress bar that never advances.
-
-| Worker | Command | Handles |
-|---|---|---|
-| Knowledge + FAQ | `python -m app.workers.run_knowledge_processor` | Knowledge ingestion (crawl, PDF, sitemap) **and** FAQ jobs |
-| Ticket investigator | `python -m app.workers.ticket_investigator` | AI ticket investigation + ticket lifecycle |
-| CRM sync | `python -m app.workers.crm_sync` | Lead push to HubSpot / Pipedrive |
-
-Run each from the `backend/` directory with the virtualenv active.
-
-**FAQ / Help Center processor.** FAQ generation and import jobs (Generate FAQs,
-"Migrate an existing help center", PDF import) are drained by the *knowledge
-worker* — there is no separate FAQ container. Both knowledge entrypoints pick
-up the FAQ queue, so either one is enough:
-
-```bash
-# Recommended for local dev — knowledge and FAQ in one loop
-python -m app.workers.run_knowledge_processor
-
-# What Docker runs: knowledge and FAQ as independent asyncio tasks, so a long
-# FAQ generation never blocks knowledge ingestion
-python -m app.workers.knowledge_processor
-
-# FAQ queue only — useful when debugging generation/import in isolation
-python -m app.workers.faq_processor
-```
-
-Polls every 60s. On startup it fails any job left stuck in `processing` by a
-previous crash, so a killed worker doesn't strand a job forever.
-
-**Ticket investigator.** Runs two loops in one process — investigation runs
-(polled every 15s) and ticket lifecycle/SLA sweeps (every 5 min):
-
-```bash
-python -m app.workers.ticket_investigator
-```
-
-Needs Redis (`REDIS_URL`) to push live `ticket_update` frames to dashboard
-clients; without it the frontend falls back to polling. Orphaned runs are
-reaped on startup.
-
-**Under Docker**, these already run as services — `docker compose up` starts
-them alongside the API:
-
-```bash
-docker compose logs -f knowledge_processor   # knowledge + FAQ jobs
-docker compose logs -f ticket_investigator
-```
-
-**Frontend**
-```bash
-# Development
 npm run dev
-
-# Build Widget for chat integration
-npm run build:widget
-
-# Build Web Client
-npm run build:webclient
 ```
 
----
-
-## Testing
-
-**Backend**
+#### 2. Python 后端服务构建
 ```bash
-pytest tests/
+cd backend
+python -m venv venv
+# Windows: venv\Scripts\activate | Linux/macOS: source venv/bin/activate
+pip install -r requirements.txt
+
+# 初始化数据库结构迁移
+alembic upgrade head
+
+# 启动后端 API 服务
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-**Frontend**
+#### 3. Go 高性能服务端（可选）
 ```bash
-npm run test:unit    # Unit tests
-npm run test:e2e     # E2E tests
+cd backend-go
+go run main.go
 ```
 
 ---
 
-## Deployment
+## 🔒 安全与隐私保护 (Security & Privacy)
 
-### Docker Deployment (Recommended)
+Komi AI 将数据安全与合规放在首位，专为企业级私有化生产环境设计：
 
-Pre-built Docker images are available:
-
-```bash
-# Pull images
-docker pull komi/frontend:latest
-docker pull komi/backend:latest
-
-# Run with production compose
-docker compose -f docker-compose.prod.yml up -d
-```
-
-<details>
-<summary>Click for production deployment without Docker</summary>
-
-**Backend**
-```bash
-pip install gunicorn
-
-gunicorn app.main:app \
-    --workers 4 \
-    --worker-class uvicorn.workers.UvicornWorker \
-    --bind 0.0.0.0:8000 \
-    --access-logfile - \
-    --error-logfile - \
-    --log-level info \
-    --timeout 120
-```
-
-**Knowledge Processor (systemd)**
-```bash
-sudo tee /etc/systemd/system/komi-knowledge-processor.service << EOF
-[Unit]
-Description=Komi AI Knowledge Processor
-After=network.target
-
-[Service]
-User=komi
-Group=komi
-WorkingDirectory=/path/to/komi/backend
-Environment="PATH=/path/to/komi/backend/venv/bin"
-ExecStart=/path/to/komi/backend/venv/bin/python -m app.workers.run_knowledge_processor
-Restart=always
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-sudo systemctl daemon-reload
-sudo systemctl enable komi-knowledge-processor
-sudo systemctl start komi-knowledge-processor
-```
-
-**Frontend**
-```bash
-npm run build
-# Serve using nginx or other web server
-```
-
-</details>
+1. **核心机密与配置隔离**：所有 API 密钥、数据库连接串、JWT 密钥均采用环境变量形式管理，严禁硬编码，代码仓库中仅保留安全模版。
+2. **只读 SQL 深度安全围栏**：
+   - 强制只读 AST 语法树检测，杜绝任何 `INSERT/UPDATE/DELETE/DROP` 及批处理注入风险。
+   - 强制行级租户隔离（Row-Level Scoping），防止跨客户数据越权访问。
+3. **敏感信息动态脱敏**：对话与导出日志中的邮箱、手机号、支付信息均支持可配置的动态掩码。
+4. **全链路加密**：静态存储支持 Fernet 算法加密，传输链路全量强制 TLS/WSS 加密。
 
 ---
 
-## FAQ
+## 📊 方案对比
 
-**What is Komi AI?**
-Komi AI is an open-source AI customer support platform. It combines an AI chatbot (trained on your knowledge base) with human agents in a shared inbox, so AI handles routine questions 24/7 and hands off to your team when it matters.
-
-**Is Komi AI free and open source?**
-Yes. The core platform is Apache-2.0 licensed — free for personal and commercial use, including self-hosted production deployments. There's also a free hosted plan at [app.komi.ai](https://app.komi.ai).
-
-**Can the AI hand off conversations to a human agent?**
-Yes — human handoff is a core feature, not an add-on. Komi AI detects frustration or explicit requests for a human and transfers the conversation with full context, respecting business hours and agent availability.
-
-**Does Komi AI work with Shopify?**
-Yes. Install it from the [Shopify App Store](https://apps.shopify.com/komi-chat) to answer order-status, shipping, and product questions directly from your store data. The widget also embeds on any other e-commerce or website platform with one line of code.
-
-**Does Komi AI work with WordPress?**
-Yes. Download the [WordPress plugin](https://github.com/komi/komi-wordpress-plugin/releases/latest/download/komi-chat.zip), install it via **Plugins → Add New → Upload Plugin**, then enter your Widget ID under **Settings → Komi AI Chat**. The chat launcher appears on your site with no theme edits. A WordPress.org directory listing is in progress.
-
-**Can I self-host Komi AI?**
-Yes. Run the full stack (Postgres, Redis, backend, frontend) on your own infrastructure with `npm install -g komi-deploy` — see [Quick Start](#quick-start). Self-hosting gives you complete data ownership.
-
-**Which AI models does Komi AI support?**
-OpenAI, Anthropic (Claude), Google Gemini, Mistral, xAI (Grok), DeepSeek, and Groq — bring your own API key, or enter a custom model ID for any model a provider supports. You can switch providers at any time without code changes.
+| 功能特性 | **Komi AI (本项目)** | **Intercom / Zendesk** | **传统开源客服系统** |
+| :--- | :---: | :---: | :---: |
+| **部署方式** | 🟢 **100% 私有化自托管 / 云原生** | 🔴 仅 SaaS (数据上公有云) | 🟡 部分支持 |
+| **数据所有权** | 🟢 **企业完全自主掌控** | 🔴 平台集中托管 | 🟢 自主掌控 |
+| **大模型选择** | 🟢 **自由切换 (DeepSeek/GPT/Claude/Ollama)** | 🔴 厂商封闭绑定 | 🟡 仅支持单一模型 |
+| **电商/Shopify 深度整合** | 🟢 **原生支持订单/物流/商品** | 🟡 需昂贵三方插件 | 🔴 无 |
+| **多渠道统一接入 (WhatsApp/Meta)** | 🟢 **原生全部集成** | 🟡 需额外加购按席位收费 | 🔴 仅网页端 |
+| **AI 智能工单调查分析** | 🟢 **自带 AST 围栏与证据溯源** | 🔴 仅基础派单规则 | 🔴 无 |
+| **成本预算** | 🟢 **完全开源免费，仅消耗 Token 成本** | 🔴 极高 (每月每席位数百美元) | 🟢 免费 |
 
 ---
 
-## Roadmap
+## 🛠️ 技术栈一览
 
-### Coming Soon
-
-- 🔄 **Auto Follow-up System** - Automated follow-ups for idle customers
-- 📘 **Customer Contact Management** - CRM-like contact organization
-- 🤝 **Human Agent AI Suggestions** - AI-powered response suggestions for agents
-- 📞 **AI Voice Chat** - Voice-enabled AI conversations
-- 🔌 **More Integrations** - Zendesk, Intercom, and more
+- **前端架构**：`Vue 3` + `TypeScript` + `Vite` + `TailwindCSS` + `Pinia` + `PWA`
+- **后端架构**：`Python 3.11+` + `FastAPI` + `SQLAlchemy 2.0` + `Celery / Redis`
+- **高性能服务**：`Golang (Gin / Gorilla WebSocket)`
+- **数据与检索**：`PostgreSQL 15+` + `pgvector` + `Redis`
+- **协议与集成**：`Model Context Protocol (MCP)` + `OAuth 2.0` + `Meta Graph API` + `Shopify Storefront API`
 
 ---
 
-## Contributing
+## 🗺️ 发展路线 (Roadmap)
 
-We welcome contributions! Here's how to get started:
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
-### Development Guidelines
-- Follow PEP 8 style guide
-- Write tests for new features
-- Update documentation as needed
-- Add type hints to new functions
+- [x] 多主流大模型统一调度与切换 (OpenAI, Claude, Gemini, DeepSeek)
+- [x] 可视化 AI Agent 工作流与条件分支引擎
+- [x] Shopify / WordPress / Web 挂件原生适配
+- [x] WhatsApp / Instagram / Messenger 多渠道收件箱
+- [x] 基于 MCP 的安全数据库与监控工具调用
+- [ ] 语音通话与实时多模态 Agent 交互支持
+- [ ] 更多跨境电商独立站平台（WooCommerce、Shoplazza 等）一键适配
+- [ ] 本地模型微调与量化评估工作台
 
 ---
 
-## Support
+## 🤝 贡献与反馈 (Contributing)
 
-- 📖 **Documentation**: [docs.komi.ai](https://docs.komi.ai)
-- 🐛 **Issues**: [GitHub Issues](https://github.com/komi/komi/issues)
-- 📧 **Email**: support@komi.ai
+欢迎所有开发者参与共建！无论是提交 Issue、改进文档，还是发起 Pull Request：
 
----
-
-## License
-
-Komi AI follows an **open-core** model:
-
-**Open Source Core ([Apache-2.0](https://opensource.org/licenses/Apache-2.0))**
-- Free for personal and commercial use — including proprietary and SaaS deployments
-- No source-disclosure or copyleft obligations
-- Includes an explicit patent grant
-- See [LICENSE](LICENSE) and [NOTICE](NOTICE)
-
-**Enterprise features & support**
-- Advanced/enterprise capabilities are provided separately under a commercial arrangement
-- Priority support, warranties, and indemnification available
-- Contact: [contact@komi.ai](mailto:contact@komi.ai)
-
-Contributions are accepted under Apache-2.0 with a [Developer Certificate of Origin](DCO) sign-off — see [CONTRIBUTING.md](CONTRIBUTING.md).
+1. Fork 本仓库并创建特性分支 (`git checkout -b feature/AmazingFeature`)
+2. 提交您的修改 (`git commit -m 'feat: Add some AmazingFeature'`)
+3. 推送到远程分支 (`git push origin feature/AmazingFeature`)
+4. 提交 Pull Request
 
 ---
 
-<p align="center">
-  Made with ❤️ by the Komi AI team
-</p>
+## 📄 开源许可证
 
-<p align="center">
-  <b>Keywords:</b> AI customer support, AI chatbot, Shopify chatbot, WordPress chatbot, WordPress chat plugin, ecommerce chatbot, customer support automation, open source help desk, live chat software, self-hosted chatbot, Intercom alternative, Zendesk alternative, Chatbase alternative, no-code chatbot builder, human handoff, Jira integration, Slack bot, multilingual chatbot
-</p>
+本项目采用 [Apache-2.0 开源许可证](LICENSE)。
