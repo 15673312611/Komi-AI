@@ -29,6 +29,6 @@ app.get("/", (req, res) => {
 app.listen(port, () => {
   console.log(`Test server running at http://localhost:${port}`);
   console.log(`UI options gallery:   http://localhost:${port}/ui-options.html`);
-  console.log(`Widget loader from:   ${FRONTEND_ORIGIN}/webclient/chattermate.min.js`);
+  console.log(`Widget loader from:   ${FRONTEND_ORIGIN}/webclient/komi.min.js`);
   console.log(`(rebuild it after loader changes: cd ../frontend && npm run build:webclient:prod)`);
 });

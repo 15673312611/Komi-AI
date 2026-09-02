@@ -1,5 +1,5 @@
 /*
-Copyright 2024-2026 ChatterMate
+Copyright 2024-2026 Komi AI
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -16,7 +16,7 @@ limitations under the License.
 
 import { userService } from '@/services/user'
 
-const STORAGE_KEY = 'chattermate:onboarding:v1'
+const STORAGE_KEY = 'komi:onboarding:v1'
 
 export const ONBOARDING_STEPS = ['Create', 'Teach', 'Test', 'Launch'] as const
 export type OnboardingStepIndex = 0 | 1 | 2 | 3

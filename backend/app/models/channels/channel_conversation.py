@@ -1,5 +1,5 @@
 """
-Copyright 2024-2026 ChatterMate
+Copyright 2024-2026 Komi AI
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -25,7 +25,7 @@ from app.database import Base
 
 
 class ChannelConversation(Base):
-    """Maps an external channel conversation to a ChatterMate session.
+    """Maps an external channel conversation to a Komi AI session.
 
     The generic analog of SlackConversation: one row per
     (connected account, platform conversation, session). A new session for

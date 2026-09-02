@@ -12,9 +12,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/rs/zerolog"
 
-	"github.com/chattermate/chattermate/backend-go/internal/auth"
-	"github.com/chattermate/chattermate/backend-go/internal/config"
-	"github.com/chattermate/chattermate/backend-go/internal/user"
+	"github.com/komi/komi/backend-go/internal/auth"
+	"github.com/komi/komi/backend-go/internal/config"
+	"github.com/komi/komi/backend-go/internal/user"
 )
 
 type fakeUserStore struct {
@@ -39,7 +39,7 @@ func (f *fakeUserStore) SetOnline(_ context.Context, _ uuid.UUID, online bool) e
 
 func testConfig() config.Config {
 	return config.Config{
-		ProjectName:        "ChatterMate",
+		ProjectName:        "Komi AI",
 		Version:            "0.1.0",
 		APIBasePath:        "/api/v1",
 		CORSOrigins:        []string{"http://localhost:5173"},
@@ -68,7 +68,7 @@ func TestRootAndHealthContract(t *testing.T) {
 		status int
 		body   string
 	}{
-		{http.MethodGet, "/", http.StatusOK, `"name":"ChatterMate"`},
+		{http.MethodGet, "/", http.StatusOK, `"name":"Komi AI"`},
 		{http.MethodGet, "/health", http.StatusOK, `"status":"healthy"`},
 		{http.MethodHead, "/health", http.StatusOK, ""},
 		{http.MethodGet, "/health/help-center-domain?domain=unknown.example", http.StatusNotFound, ""},

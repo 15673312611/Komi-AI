@@ -1,5 +1,5 @@
 """
-Copyright 2024-2026 ChatterMate
+Copyright 2024-2026 Komi AI
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -26,7 +26,7 @@ from app.core.config import settings
 # AIModelType values, uppercased.
 _PROVIDER_DEFAULT_TOKENS = {
     "OPENAI": 16_000,
-    "CHATTERMATE": 128_000,
+    "KOMI_AI": 128_000,
     "ANTHROPIC": 200_000,
     "DEEPSEEK": 64_000,
     "GOOGLE": 32_000,

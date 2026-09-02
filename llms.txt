@@ -1,49 +1,49 @@
-# ChatterMate
+# Komi AI
 
-> ChatterMate is an open-source AI customer-support chatbot platform. You can sign up, create AI
+> Komi AI is an open-source AI customer-support chatbot platform. You can sign up, create AI
 > agents, add knowledge sources, and embed a chat widget — all from a browser, the terminal (CLI),
 > or programmatically via an AI agent over MCP.
 
 ## Start here (AI agents & automation)
 
-Use the **ChatterMate CLI** (the `chattermate` command, installed with `pip install chattermate-cli`)
+Use the **Komi AI CLI** (the `komi` command, installed with `pip install komi-cli`)
 to sign up and manage everything from the terminal. It is the account/config CLI — distinct from the
-self-host Docker tool (`npm install -g chattermate-deploy`).
+self-host Docker tool (`npm install -g komi-deploy`).
 
 Minimal end-to-end flow:
 
 ```bash
-pip install chattermate-cli
-chattermate signup --name "Acme Inc" --domain acme.com --admin-email you@acme.com --admin-name "You"
-chattermate agent create --name "Support" --type customer_support -i "Be concise" --json
+pip install komi-cli
+komi signup --name "Acme Inc" --domain acme.com --admin-email you@acme.com --admin-name "You"
+komi agent create --name "Support" --type customer_support -i "Be concise" --json
 # Add knowledge from a URL or a local PDF:
-chattermate knowledge add-url --website https://docs.acme.com --agent-id <agent-id>
-chattermate knowledge add-file ./guide.pdf --agent-id <agent-id>
+komi knowledge add-url --website https://docs.acme.com --agent-id <agent-id>
+komi knowledge add-file ./guide.pdf --agent-id <agent-id>
 # Create a widget to get the embed id:
-chattermate widget create --agent-id <agent-id> --name "Website widget"
+komi widget create --agent-id <agent-id> --name "Website widget"
 # Embed on your site:
 # <script>window.chattermateId='YOUR_WIDGET_ID';</script>
-# <script src="https://app.chattermate.chat/webclient/chattermate.min.js"></script>
+# <script src="https://app.komi.ai/webclient/komi.min.js"></script>
 ```
 
 ## Docs
 
-- [AI Agent & Automation Quickstart](https://docs.chattermate.chat/features/agents-quickstart): copy-paste path from signup to a live widget, built for AI agents and CI.
-- [CLI reference](https://docs.chattermate.chat/features/cli): the account CLI — signup, login, tokens, agents, workflows, knowledge.
-- [MCP Server](https://docs.chattermate.chat/features/mcp-server): let an AI agent configure ChatterMate over the Model Context Protocol (`chattermate-mcp`).
-- [Quickstart](https://docs.chattermate.chat/quickstart): hosted vs self-host, side by side.
-- [Widget integration](https://docs.chattermate.chat/features/widget): embed the chat widget on any site.
-- [Widget Apps & API keys](https://docs.chattermate.chat/features/widget-apps): authenticated widgets and programmatic tokens.
+- [AI Agent & Automation Quickstart](https://docs.komi.ai/features/agents-quickstart): copy-paste path from signup to a live widget, built for AI agents and CI.
+- [CLI reference](https://docs.komi.ai/features/cli): the account CLI — signup, login, tokens, agents, workflows, knowledge.
+- [MCP Server](https://docs.komi.ai/features/mcp-server): let an AI agent configure Komi AI over the Model Context Protocol (`komi-mcp`).
+- [Quickstart](https://docs.komi.ai/quickstart): hosted vs self-host, side by side.
+- [Widget integration](https://docs.komi.ai/features/widget): embed the chat widget on any site.
+- [Widget Apps & API keys](https://docs.komi.ai/features/widget-apps): authenticated widgets and programmatic tokens.
 
 ## Key URLs
 
-- Sign up / dashboard: https://app.chattermate.chat
-- Hosted API base: https://api.chattermate.chat (routes under `/api/v1`)
-- Widget script: https://app.chattermate.chat/webclient/chattermate.min.js
-- Documentation: https://docs.chattermate.chat
-- GitHub: https://github.com/chattermate/chattermate.chat
+- Sign up / dashboard: https://app.komi.ai
+- Hosted API base: https://api.komi.ai (routes under `/api/v1`)
+- Widget script: https://app.komi.ai/webclient/komi.min.js
+- Documentation: https://docs.komi.ai
+- GitHub: https://github.com/komi/komi.ai
 
 ## Self-hosting (optional)
 
-- [Self-host with Docker](https://docs.chattermate.chat/quickstart#option-b-self-host-with-docker): run the full stack on your own infrastructure with the self-host CLI (`npm install -g chattermate-deploy`, command `chattermate-deploy init/start/stop`).
-- [Docker deployment](https://docs.chattermate.chat/deployment/docker)
+- [Self-host with Docker](https://docs.komi.ai/quickstart#option-b-self-host-with-docker): run the full stack on your own infrastructure with the self-host CLI (`npm install -g komi-deploy`, command `komi-deploy init/start/stop`).
+- [Docker deployment](https://docs.komi.ai/deployment/docker)

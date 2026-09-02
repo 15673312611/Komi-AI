@@ -1,5 +1,5 @@
 /*
-Copyright 2024-2026 ChatterMate
+Copyright 2024-2026 Komi AI
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -18,6 +18,7 @@ import { ref, onUnmounted } from 'vue'
 import type { AgentWithCustomization, AgentUpdate } from '@/types/agent'
 import { agentService } from '@/services/agent'
 import { widgetService } from '@/services/widget'
+import { storeService } from '@/services/store'
 import type { Widget } from '@/types/widget'
 import { toast } from 'vue-sonner'
 import type { UserGroup } from '@/types/user'
@@ -191,10 +192,28 @@ export function useAgentDetail(agentData: { value: AgentWithCustomization }, emi
       } else {
         // Create new widget if none exists
         const newWidget = await widgetService.createWidget({
-          name: `${agentData.value.name} Widget`,
+          name: `${agentData.value.name} 挂件`,
           agent_id: agentData.value.id
         })
         widget.value = newWidget
+
+        // Automatically sync to store management
+        try {
+          const stores = await storeService.getStores()
+          const hasStore = stores.some(s => s.agent_id === agentData.value.id)
+          if (!hasStore) {
+            await storeService.createStore({
+              name: `${agentData.value.display_name || agentData.value.name} 挂件店铺`,
+              platform: 'email_custom',
+              agent_id: agentData.value.id,
+              is_active: true,
+              currency: 'USD',
+              timezone: 'America/New_York',
+            })
+          }
+        } catch (e) {
+          console.warn('Auto store creation skipped:', e)
+        }
       }
     } catch (error) {
       console.error('Failed to initialize widget:', error)

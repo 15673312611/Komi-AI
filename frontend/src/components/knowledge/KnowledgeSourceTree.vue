@@ -1,5 +1,5 @@
 <!--
-Copyright 2024-2026 ChatterMate
+Copyright 2024-2026 Komi AI
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -101,10 +101,9 @@ const MAX_AVATARS = 3
             class="src__toggle"
             type="button"
             :aria-expanded="source.queued ? undefined : source.expanded"
-            :disabled="source.queued"
-            @click="!source.queued && emit('toggle', source)"
+            @click="emit('toggle', source)"
           >
-            <svg v-if="!source.queued" class="chev" :class="{ 'chev--open': source.expanded }" viewBox="0 0 24 24"
+            <svg v-if="!source.queued || (source.pageStubs && source.pageStubs.length > 0)" class="chev" :class="{ 'chev--open': source.expanded }" viewBox="0 0 24 24"
               width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"
               stroke-linejoin="round" aria-hidden="true">
               <path d="M9 6l6 6-6 6" />
@@ -114,7 +113,7 @@ const MAX_AVATARS = 3
             <span class="src__meta">
               <span class="src__name" :title="source.name">{{ source.name }}</span>
               <span class="src__count" :class="{ 'src__count--error': source.queued && statusOf(source) === 'error' }">
-                {{ source.queued ? queuedLabel(source) : (source.pages ?? source.pageStubs).length + ' 个子页面' }}
+                {{ source.queued ? (statusOf(source) === 'crawling' && (source.pages ?? source.pageStubs).length > 0 ? `抓取中 (${(source.pages ?? source.pageStubs).length} 页)` : queuedLabel(source)) : (source.pages ?? source.pageStubs).length + ' 个子页面' }}
               </span>
             </span>
           </button>
@@ -161,7 +160,7 @@ const MAX_AVATARS = 3
           {{ source.queuedError }}
         </div>
 
-        <div v-if="source.expanded && !source.queued" class="src__pages">
+        <div v-if="source.expanded" class="src__pages">
           <div v-if="source.loadingContent" class="src__hint">正在加载知识页面…</div>
           <div v-else-if="source.contentError" class="src__hint src__hint--error">
             <span>{{ source.contentError }}</span>

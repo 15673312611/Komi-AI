@@ -1,6 +1,6 @@
 <!--
-Copyright 2024-2026 ChatterMate
-中栏：聊天流与工作流主屏 (ConversationChat.vue - 1:1 原版 FontAwesome 复刻)
+Copyright 2024-2026 Komi AI
+中栏：聊天流与工作流主屏 (ConversationChat.vue - 现代高定多维色彩体系，精准左右消息流)
 -->
 
 <script setup lang="ts">
@@ -11,7 +11,7 @@ import AICopilotAssistModal from '@/components/conversations/AICopilotAssistModa
 import CannedResponsesModal from '@/components/conversations/CannedResponsesModal.vue'
 import ShopifyProductPicker from '@/components/conversations/ShopifyProductPicker.vue'
 import WhatsAppTemplatePicker from '@/components/conversations/WhatsAppTemplatePicker.vue'
-import type { ChatDetail } from '@/types/chat'
+import type { ChatDetail, Message } from '@/types/chat'
 import type { ShopifyProduct } from '@/services/chat'
 import { useConversationChat } from '@/composables/useConversationChat'
 import type { Teammate } from '@/services/users'
@@ -60,94 +60,91 @@ watch(() => chatModel.value.session_id, () => {
   mentionableRequest += 1
   mentionableSessionId = ''
   mentionableTeammates.value = []
-  mentionsLoading.value = false
 })
-const formatMessageTime = (dateStr?: string) => {
-  if (!dateStr) return ''
-  const d = new Date(dateStr)
-  return isNaN(d.getTime()) ? '' : d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false })
-}
 
-const messages = computed(() => (chatState.formattedMessages.value || []).map((msg: any) => {
-  const isCustomer = msg.message_type === 'user'
-  const isBot = msg.message_type === 'bot'
-  const isNote = msg.message_type === 'private_note'
-
-  let author = msg.user_name || msg.agent_name
-  if (!author) {
-    if (isCustomer) {
-      author = customerName.value || '客户'
-    } else if (isBot) {
-      author = chatModel.value.agent?.display_name || chatModel.value.agent?.name || 'AI 客服'
-    } else if (isNote) {
-      author = '内部便签'
-    } else {
-      author = '人工客服'
-    }
-  }
-
-  return {
-    ...msg,
-    type: isCustomer ? 'customer' : isBot ? 'ai' : isNote ? 'note' : 'agent',
-    author,
-    text: msg.message || '',
-    time: formatMessageTime(msg.created_at),
-  }
-}))
-const currentStatus = computed(() => {
-  if (!chatModel.value.session_id) return 'empty'
-  return chatState.isChatClosed.value
-    ? 'resolved'
-    : chatState.handledByAI.value
-      ? 'ai'
-      : chatState.isWaitingForHuman.value
-        ? 'waiting'
-        : 'human'
-})
-const canManageChat = computed(() => permissionChecks.canTakeOverChats())
-const canToggleAiAutoReply = computed(() => canManageChat.value && !chatState.isChatClosed.value)
-const canHandBackToAI = computed(() =>
-  canManageChat.value &&
-  (currentStatus.value === 'human' || currentStatus.value === 'waiting') &&
-  (!chatModel.value.user_id || String(chatModel.value.user_id) === String(userService.getUserId())),
-)
 const customerName = computed(() => chatModel.value.customer?.full_name || chatModel.value.customer?.email || '未知客户')
 const customerEmail = computed(() => chatModel.value.customer?.email || '')
 const customerInitial = computed(() => customerName.value.trim().slice(0, 1).toUpperCase() || '?')
 const channelLabel = computed(() => {
   const channel = chatModel.value.channel || 'web'
-  return channel === 'web' ? '网页会话' : channel[0].toUpperCase() + channel.slice(1)
+  return channel === 'web' ? '网页挂件' : channel === 'whatsapp' ? 'WhatsApp' : channel === 'email' ? '邮件' : channel[0].toUpperCase() + channel.slice(1)
 })
+const currentUserId = computed(() => userService.getUserId())
+const canManageChat = computed(() => permissionChecks.canTakeOverChats())
+const canHandBackToAI = computed(() => canManageChat.value && (chatModel.value.user_id ? String(chatModel.value.user_id) === String(currentUserId.value) : true))
+
 const storeName = computed(() => {
-  const value = chatModel.value.customer?.meta_data?.store_name
-  return typeof value === 'string' && value.trim() ? value.trim() : null
+  const meta = chatModel.value.customer?.meta_data
+  return typeof meta?.store_name === 'string' && meta.store_name.trim() ? meta.store_name.trim() : ''
 })
-const latestCustomerMessage = computed(() => {
-  const messages = chatModel.value.messages || []
-  for (let index = messages.length - 1; index >= 0; index -= 1) {
-    if (messages[index].message_type === 'user' && messages[index].message?.trim()) return messages[index]
-  }
-  return null
+
+const currentStatus = computed<'empty' | 'ai' | 'human' | 'waiting' | 'resolved'>(() => {
+  if (!chatModel.value.session_id) return 'empty'
+  if (chatModel.value.status === 'closed') return 'resolved'
+  if (chatModel.value.user_id) return 'human'
+  if (chatModel.value.status === 'transferred' || chatModel.value.ai_auto_reply === false || chatModel.value.agent?.ai_replies_enabled === false) return 'waiting'
+  return 'ai'
+})
+
+// 精准识别用户消息（左侧）与 AI / 客服回复（右侧）
+const messages = computed(() => {
+  return (chatModel.value.messages || []).map((m: Message) => {
+    let msgType: 'customer' | 'ai' | 'agent' | 'note' | 'system' = 'ai'
+    if (m.message_type === 'user' || m.message_type === 'customer') {
+      msgType = 'customer'
+    } else if (m.message_type === 'private_note') {
+      msgType = 'note'
+    } else if (m.message_type === 'agent') {
+      msgType = 'agent'
+    } else if (m.message_type === 'system' || m.message_type === 'form') {
+      msgType = 'system'
+    } else {
+      msgType = 'ai'
+    }
+
+    const author = msgType === 'customer'
+      ? customerName.value
+      : msgType === 'agent'
+      ? m.user_name || '人工客服'
+      : msgType === 'note'
+      ? m.user_name || '团队便签'
+      : 'AI 智能体'
+
+    return {
+      id: m.id || m.client_message_id,
+      client_message_id: m.client_message_id,
+      type: msgType,
+      author,
+      time: m.created_at ? new Date(m.created_at).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false }) : '',
+      text: m.message || '',
+      attachments: m.attachments || [],
+    }
+  })
+})
+
+const lastMsg = computed(() => {
+  const list = chatModel.value.messages || []
+  return list[list.length - 1]
+})
+const lastCustomerMsg = computed(() => {
+  const list = chatModel.value.messages || []
+  return list.slice().reverse().find(m => m.message_type === 'user' || m.message_type === 'customer')
 })
 const suggestionContextKey = computed(() => {
-  // AI 自动应答模式下不触发 Copilot 推荐；仅在人工客服接管/排队等待人工时为坐席提供辅助推荐
-  if (currentStatus.value === 'ai' || currentStatus.value === 'resolved') {
-    return ''
-  }
-  const message = latestCustomerMessage.value
-  return message
-    ? `${chatModel.value.session_id}:${message.id || message.client_message_id || message.created_at}:${message.message}`
-    : ''
-})
-const loadReplySuggestions = async () => {
-  const key = suggestionContextKey.value
   const sessionId = chatModel.value.session_id
-  const request = ++suggestionRequest
-  if (!key || !sessionId || chatModel.value.status === 'closed' || currentStatus.value === 'ai') {
+  if (!sessionId) return ''
+  return `${sessionId}-${lastMsg.value?.id || ''}-${lastCustomerMsg.value?.message || ''}`
+})
+
+const loadReplySuggestions = async () => {
+  const sessionId = chatModel.value.session_id
+  const key = suggestionContextKey.value
+  if (!sessionId || !key || chatModel.value.status === 'closed' || currentStatus.value === 'ai') {
     aiSuggestions.value = []
     aiSuggestionsLoading.value = false
     return
   }
+  const request = ++suggestionRequest
   aiSuggestionsLoading.value = true
   try {
     const result = await chatService.getReplySuggestions(sessionId)
@@ -239,87 +236,91 @@ const insertProduct = (product: ShopifyProduct, shopDomain?: string) => {
 </script>
 
 <template>
-  <main class="flex-1 flex flex-col bg-[#080B11] relative overflow-hidden h-full">
-    <!-- 顶部工作流状态条 (Workflow Header - 1:1 h-16 对齐) -->
-    <header class="h-16 px-4 bg-[#0F1523]/90 border-b border-white/[0.08] flex items-center justify-between shrink-0 crystal-panel z-10 shadow-sm">
+  <main class="flex-1 flex flex-col bg-[#F8FAFC] relative overflow-hidden h-full">
+    <!-- 顶部工作流状态条 -->
+    <header class="h-16 px-5 bg-[#FFFFFF] border-b border-slate-200/80 flex items-center justify-between shrink-0 z-10 shadow-[0_1px_3px_rgba(0,0,0,0.02)]">
       <!-- 客户主信息与渠道 -->
       <div class="flex items-center gap-3">
         <div class="relative">
-          <div class="w-10 h-10 rounded-xl border border-white/10 bg-slate-700 text-sm font-bold text-slate-100 flex items-center justify-center shadow-md">
+          <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-500 to-purple-600 text-sm font-bold text-white flex items-center justify-center shadow-md shadow-indigo-500/20">
             {{ customerInitial }}
           </div>
-          <span class="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-emerald-500 text-white flex items-center justify-center text-[9px] shadow-sm">
-            <i v-if="chatModel.channel === 'whatsapp'" class="fa-brands fa-whatsapp"></i>
-            <i v-else-if="chatModel.channel === 'email'" class="fa-regular fa-envelope"></i>
-            <i v-else class="fa-solid fa-message"></i>
+          <span class="absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full bg-[#25D366] text-white flex items-center justify-center text-[8px] border-2 border-white shadow-sm" v-if="chatModel.channel === 'whatsapp'">
+            <i class="fa-brands fa-whatsapp"></i>
+          </span>
+          <span class="absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full bg-blue-500 text-white flex items-center justify-center text-[8px] border-2 border-white shadow-sm" v-else-if="chatModel.channel === 'email'">
+            <i class="fa-regular fa-envelope"></i>
+          </span>
+          <span class="absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full bg-indigo-500 text-white flex items-center justify-center text-[8px] border-2 border-white shadow-sm" v-else>
+            <i class="fa-solid fa-message"></i>
           </span>
         </div>
         <div>
           <div class="flex items-center gap-2">
-            <h2 class="text-sm font-bold text-slate-100">{{ customerName }}</h2>
-            <span class="px-1.5 py-0.2 text-[10px] font-medium bg-white/5 text-slate-300 border border-white/10 rounded">
+            <h2 class="text-sm font-bold text-[#0F172A]">{{ customerName }}</h2>
+            <span class="px-2 py-0.5 text-[10.5px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200/70 rounded-md">
               {{ storeName || channelLabel }}
             </span>
           </div>
-          <div class="flex items-center gap-3 text-xs text-slate-400 mt-0.5">
-            <span v-if="customerEmail" class="flex items-center gap-1 text-[11px]">
-              <i class="fa-regular fa-envelope text-[10px]"></i> {{ customerEmail }}
+          <div class="flex items-center gap-2 text-xs text-slate-400 mt-0.5">
+            <span v-if="customerEmail" class="flex items-center gap-1 text-[11px] text-slate-500">
+              <i class="fa-regular fa-envelope text-[10px] text-indigo-500"></i> {{ customerEmail }}
             </span>
-            <span v-if="customerEmail" class="text-slate-600">·</span>
-            <span class="text-[11px] text-emerald-400 font-mono flex items-center gap-1">
-              <i class="fa-solid fa-message text-[10px]"></i> {{ channelLabel }}
+            <span v-if="customerEmail" class="text-slate-300">·</span>
+            <span class="text-[11px] text-indigo-600 font-medium flex items-center gap-1">
+              <i class="fa-solid fa-circle-nodes text-[10px]"></i> {{ channelLabel }}
             </span>
           </div>
         </div>
       </div>
 
       <!-- 实时接待状态指示灯 + 快捷操作组 -->
-      <div class="flex items-center gap-2.5">
+      <div class="flex items-center gap-3">
         <!-- 实时状态胶囊 -->
         <div
           v-if="currentStatus === 'empty'"
-          class="flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-700/40 border border-white/10 text-slate-400 text-xs font-semibold"
+          class="flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-100 text-slate-500 text-xs font-medium"
         >
           <i class="fa-solid fa-inbox text-[10px]"></i>
           <span>请选择一个会话</span>
         </div>
         <div
           v-else-if="currentStatus === 'ai'"
-          class="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-xs font-semibold shadow-[0_0_12px_rgba(16,185,129,0.25)]"
+          class="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 border border-emerald-300 text-emerald-700 text-xs font-semibold shadow-sm"
         >
-          <span class="w-2 h-2 rounded-full bg-emerald-400 pulse-subtle"></span>
-          <span>AI 自动回复</span>
+          <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+          <span>AI 自动回复中</span>
         </div>
         <div
           v-else-if="currentStatus === 'human'"
-          class="flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-500/15 border border-blue-500/30 text-blue-400 text-xs font-semibold shadow-[0_0_12px_rgba(59,130,246,0.25)]"
+          class="flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-50 border border-blue-300 text-blue-700 text-xs font-semibold shadow-sm"
         >
-          <span class="w-2 h-2 rounded-full bg-blue-400"></span>
+          <span class="w-2 h-2 rounded-full bg-blue-500"></span>
           <span>人工接管 · {{ chatModel.user_name || '客服' }}</span>
         </div>
         <div
           v-else-if="currentStatus === 'waiting'"
-          class="flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-300 text-xs font-semibold"
+          class="flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 border border-amber-300 text-amber-800 text-xs font-semibold shadow-sm"
         >
-          <span class="w-2 h-2 rounded-full bg-amber-400"></span>
+          <span class="w-2 h-2 rounded-full bg-amber-500"></span>
           <span>等待人工接入</span>
         </div>
         <div
           v-else
-          class="flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-700/40 border border-white/10 text-slate-400 text-xs font-semibold"
+          class="flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-100 border border-slate-200 text-slate-500 text-xs font-medium"
         >
           <span class="flex items-center gap-1"><i class="fa-solid fa-lock text-[10px] text-slate-400"></i>已解决归档</span>
         </div>
 
-        <div class="h-5 w-px bg-white/10"></div>
+        <div class="h-4 w-px bg-slate-200"></div>
 
         <!-- 操作按钮组 -->
-        <div class="flex items-center gap-1.5">
+        <div class="flex items-center gap-2">
           <button
             v-if="chatState.showTakeoverButton.value"
             @click="handleTakeover"
             :disabled="chatState.isLoading.value"
-            class="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs flex items-center gap-1.5 shadow-[0_0_12px_rgba(59,130,246,0.3)] transition-all"
+            class="px-3.5 py-1.5 rounded-lg bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-semibold text-xs flex items-center gap-1.5 shadow-md shadow-blue-500/20 transition-all active:scale-[0.98]"
           >
             <i class="fa-solid fa-user-check text-xs"></i>
             <span>人工接管</span>
@@ -329,10 +330,10 @@ const insertProduct = (product: ShopifyProduct, shopDomain?: string) => {
             v-if="!chatState.showTakeoverButton.value && canHandBackToAI"
             @click="handleHandoverAI"
             :disabled="chatState.isLoading.value"
-            class="px-2.5 py-1.5 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-300 font-medium text-xs flex items-center gap-1.5 transition-all"
+            class="px-3 py-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 text-emerald-700 font-semibold text-xs flex items-center gap-1.5 transition-all shadow-sm"
             title="交还给 AI 自动回复"
           >
-            <i class="fa-solid fa-robot text-xs"></i>
+            <i class="fa-solid fa-robot text-xs text-emerald-600"></i>
             <span>转回 AI</span>
           </button>
 
@@ -340,7 +341,7 @@ const insertProduct = (product: ShopifyProduct, shopDomain?: string) => {
             v-if="currentStatus === 'resolved'"
             @click="handleReopenSession"
             :disabled="chatState.isLoading.value"
-            class="px-2.5 py-1.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-300 font-semibold text-xs flex items-center gap-1.5 transition-all shadow-[0_0_10px_rgba(16,185,129,0.2)]"
+            class="px-3 py-1.5 rounded-lg bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 font-semibold text-xs flex items-center gap-1.5 transition-all shadow-sm"
             title="重新打开并接管此会话"
           >
             <i class="fa-solid fa-arrow-rotate-left text-xs"></i>
@@ -351,10 +352,10 @@ const insertProduct = (product: ShopifyProduct, shopDomain?: string) => {
             v-if="chatModel.session_id && currentStatus !== 'resolved' && canManageChat"
             @click="emit('open-transfer')"
             :disabled="chatState.isLoading.value"
-            class="px-2.5 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 text-xs flex items-center gap-1.5 transition-all disabled:cursor-not-allowed disabled:opacity-50"
+            class="px-3 py-1.5 rounded-lg bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-semibold flex items-center gap-1.5 transition-all disabled:cursor-not-allowed disabled:opacity-50 shadow-sm"
             title="转派给特定团队成员或转入排队队列"
           >
-            <i class="fa-solid fa-arrow-right-arrow-left text-xs"></i>
+            <i class="fa-solid fa-arrow-right-arrow-left text-xs text-indigo-500"></i>
             <span>转交团队</span>
           </button>
 
@@ -362,132 +363,139 @@ const insertProduct = (product: ShopifyProduct, shopDomain?: string) => {
             v-if="chatModel.session_id && currentStatus !== 'resolved' && chatState.canSendMessage.value && canManageChat"
             @click="handleResolveSession"
             :disabled="chatState.isLoading.value"
-            class="px-2.5 py-1.5 rounded-lg bg-white/5 hover:bg-emerald-500/20 hover:text-emerald-300 hover:border-emerald-500/30 border border-white/10 text-slate-300 text-xs flex items-center gap-1.5 transition-all disabled:cursor-not-allowed disabled:opacity-50"
+            class="px-3 py-1.5 rounded-lg bg-white hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-300 border border-slate-200 text-slate-700 text-xs font-semibold flex items-center gap-1.5 transition-all disabled:cursor-not-allowed disabled:opacity-50 shadow-sm"
             title="解决并关闭会话"
           >
-            <i class="fa-solid fa-check-double text-xs"></i>
+            <i class="fa-solid fa-check text-xs text-emerald-600"></i>
             <span>解决</span>
           </button>
 
           <button
             @click="emit('toggle-right-drawer')"
-            class="w-8 h-8 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 flex items-center justify-center transition-all ml-1"
-            title="展开/收起右侧栏"
+            class="w-8 h-8 rounded-lg bg-white hover:bg-slate-50 border border-slate-200 text-slate-600 flex items-center justify-center transition-all ml-1 shadow-sm"
+            title="展开/收起右侧客户资料栏"
           >
             <i class="fa-solid fa-table-columns text-xs"></i>
           </button>
         </div>
-
       </div>
     </header>
 
     <!-- WhatsApp 合规窗口提示条 -->
-    <div v-if="chatModel.channel === 'whatsapp'" class="bg-amber-500/10 border-b border-amber-500/20 px-4 py-1.5 flex items-center justify-between text-xs text-amber-300 shrink-0">
+    <div v-if="chatModel.channel === 'whatsapp'" class="bg-amber-50 border-b border-amber-200 px-4 py-2 flex items-center justify-between text-xs text-amber-800 shrink-0">
       <div class="flex items-center gap-2">
-        <i class="fa-solid fa-triangle-exclamation text-amber-400"></i>
+        <i class="fa-solid fa-triangle-exclamation text-amber-500"></i>
         <span><strong>WhatsApp 24小时会话窗口：</strong> 窗口关闭后，仅允许发送 Meta 已批准的模板消息。</span>
       </div>
       <button
         @click="showTemplateModal = true"
-        class="px-2.5 py-0.5 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 rounded text-amber-200 text-[11px] font-medium transition-colors flex items-center gap-1"
+        class="px-2.5 py-0.5 bg-amber-100 hover:bg-amber-200 border border-amber-300 rounded text-amber-900 text-[11px] font-medium transition-colors flex items-center gap-1 shadow-sm"
       >
         <i class="fa-solid fa-file-lines text-[10px]"></i> 选取官方模板
       </button>
     </div>
 
     <!-- 消息流区域 (Chat Space Feed) -->
-    <div class="flex-1 overflow-y-auto p-4 space-y-4 chat-space-bg">
-      <div class="flex items-center justify-center my-1">
-        <div class="px-3.5 py-1 rounded-full bg-[#0F1523] border border-white/10 text-[11px] text-slate-400 flex items-center gap-1.5 shadow-sm">
-          <i class="fa-solid fa-lock text-emerald-400 text-xs"></i>
-          <span>会话渠道：{{ channelLabel }}<template v-if="storeName"> · 所属店铺：{{ storeName }}</template></span>
+    <div class="flex-1 overflow-y-auto p-5 space-y-4 bg-[#F8FAFC]">
+      <div v-if="!chatModel.session_id" class="flex flex-col items-center justify-center h-full text-slate-400 space-y-3">
+        <div class="w-14 h-14 rounded-2xl bg-white border border-slate-200 flex items-center justify-center text-indigo-500 shadow-sm">
+          <i class="fa-solid fa-comments text-xl"></i>
         </div>
+        <p class="text-xs text-slate-500 font-medium">请从左侧列表选择一个客户会话以开始接待</p>
       </div>
 
       <div
+        v-else
         v-for="(msg, idx) in messages"
         :key="`msg-${msg.id || msg.client_message_id || idx}`"
         class="animate-in fade-in duration-200"
       >
+        <!-- 1. 客户消息 (左侧对齐：纯净立体白卡，深灰清晰字体) -->
         <div
           v-if="msg.type === 'customer'"
-          class="flex items-start gap-3 max-w-[80%]"
+          class="flex items-start gap-3 max-w-[75%]"
         >
-          <div class="w-9 h-9 rounded-xl shrink-0 mt-0.5 border border-white/10 bg-slate-700 text-xs font-bold text-slate-100 flex items-center justify-center shadow-sm">
+          <div class="w-8 h-8 rounded-full shrink-0 mt-0.5 bg-slate-100 border border-slate-300 text-xs font-bold text-slate-700 flex items-center justify-center shadow-sm">
             {{ customerInitial }}
           </div>
           <div class="space-y-1">
             <div class="flex items-center gap-2">
-              <span class="text-xs font-semibold text-slate-300">{{ msg.author }}</span>
-              <span class="text-[10px] text-slate-500 font-mono">{{ msg.time }}</span>
+              <span class="text-xs font-semibold text-slate-700">{{ msg.author }}</span>
+              <span class="text-[10px] text-slate-400 font-mono">{{ msg.time }}</span>
             </div>
-            <div class="p-3 rounded-2xl rounded-tl-sm bg-[#131B2E] border border-white/10 text-xs text-slate-100 leading-relaxed shadow-sm">
+            <div class="p-3.5 rounded-2xl rounded-tl-sm bg-[#FFFFFF] border border-slate-200/90 text-[13px] text-slate-900 leading-relaxed shadow-sm">
               {{ msg.text }}
             </div>
           </div>
         </div>
 
+        <!-- 2. AI 智能体消息 (右侧对齐：现代皇家紫靛高定渐变气泡，白字清爽) -->
         <div
           v-else-if="msg.type === 'ai'"
-          class="flex flex-col items-end max-w-[85%] ml-auto space-y-1.5"
+          class="flex flex-col items-end max-w-[80%] ml-auto space-y-1"
         >
           <div class="flex items-center gap-2">
-            <span class="px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 text-[10px] font-bold border border-emerald-500/30 flex items-center gap-1">
-              <i class="fa-solid fa-bolt text-emerald-400 text-[10px]"></i>
-              AI 回复
+            <span class="px-2.5 py-0.5 rounded-full bg-indigo-50 text-indigo-700 text-[10px] font-semibold border border-indigo-200 flex items-center gap-1.5 shadow-sm">
+              <i class="fa-solid fa-sparkles text-indigo-600 text-[9px]"></i>
+              AI 智能应答
             </span>
-            <span class="text-[10px] text-slate-500 font-mono">{{ msg.time }}</span>
+            <span class="text-[10px] text-slate-400 font-mono">{{ msg.time }}</span>
           </div>
 
-          <div class="ai-crystal-bubble p-3.5 rounded-2xl rounded-tr-sm text-xs text-slate-100 leading-relaxed shadow-md">
+          <div class="p-3.5 rounded-2xl rounded-tr-sm bg-gradient-to-br from-indigo-600 via-indigo-600 to-violet-600 text-white text-[13px] leading-relaxed shadow-md shadow-indigo-500/20">
             <div>{{ msg.text }}</div>
           </div>
         </div>
 
+        <!-- 3. 人工客服消息 (右侧对齐：蔚蓝科技感渐变气泡) -->
         <div
           v-else-if="msg.type === 'agent'"
           class="flex flex-col items-end max-w-[80%] ml-auto space-y-1"
         >
           <div class="flex items-center gap-2">
-            <span class="text-xs font-semibold text-blue-400">{{ msg.author }}</span>
-            <span class="text-[10px] text-slate-500 font-mono">{{ msg.time }}</span>
+            <span class="text-xs font-semibold text-blue-700 flex items-center gap-1">
+              <i class="fa-solid fa-user-tie text-[10px]"></i>
+              {{ msg.author }}
+            </span>
+            <span class="text-[10px] text-slate-400 font-mono">{{ msg.time }}</span>
           </div>
-          <div class="p-3 rounded-2xl rounded-tr-sm bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-xs leading-relaxed shadow-[0_0_16px_rgba(59,130,246,0.4)]">
+          <div class="p-3.5 rounded-2xl rounded-tr-sm bg-gradient-to-br from-sky-600 to-blue-600 text-white text-[13px] leading-relaxed shadow-md shadow-blue-500/20">
             {{ msg.text }}
           </div>
         </div>
 
+        <!-- 4. 内部私信便签 (居中暖黄雅致便签卡) -->
         <div
           v-else-if="msg.type === 'note'"
-          class="my-2 p-3 rounded-xl note-crystal-bubble text-xs text-amber-200 space-y-1 shadow-sm"
+          class="my-2 p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-950 space-y-1 shadow-sm"
         >
-          <div class="flex items-center justify-between text-amber-400 font-bold text-[11px]">
+          <div class="flex items-center justify-between text-amber-800 font-bold text-[11px]">
             <span class="flex items-center gap-1.5">
-              <i class="fa-solid fa-lock text-xs"></i>
+              <i class="fa-solid fa-lock text-xs text-amber-600"></i>
               <span>内部团队私信便签</span>
             </span>
-            <span class="font-normal font-mono text-[10px]">{{ msg.author }} · {{ msg.time }}</span>
+            <span class="font-normal font-mono text-[10px] text-amber-700">{{ msg.author }} · {{ msg.time }}</span>
           </div>
-          <p class="leading-relaxed text-amber-100/90">{{ msg.text }}</p>
+          <p class="leading-relaxed text-amber-950 text-[12.5px]">{{ msg.text }}</p>
         </div>
 
-        <div v-else class="my-2 p-2 rounded bg-white/5 text-center text-xs text-slate-400">
+        <div v-else class="my-2 p-2 rounded-lg bg-slate-100 border border-slate-200 text-center text-xs text-slate-500">
           <span>{{ msg.text }}</span>
         </div>
 
-        <div v-if="msg.attachments && msg.attachments.length > 0" :class="[msg.type === 'customer' ? 'ml-12 max-w-[80%]' : 'ml-auto max-w-[80%]', 'mt-1 flex flex-wrap gap-2']">
+        <div v-if="msg.attachments && msg.attachments.length > 0" :class="[msg.type === 'customer' ? 'ml-11 max-w-[80%]' : 'ml-auto max-w-[80%]', 'mt-1 flex flex-wrap gap-2']">
           <a
             v-for="attachment in msg.attachments"
             :key="attachment.id || attachment.filename"
             :href="attachmentUrl(attachment.file_url)"
             target="_blank"
             rel="noreferrer"
-            class="flex max-w-full items-center gap-2 rounded-lg border border-white/10 bg-[#131B2E] p-1.5 text-[11px] text-slate-200 hover:border-emerald-500/40"
+            class="flex max-w-full items-center gap-2 rounded-lg border border-slate-200 bg-white p-2 text-[11px] text-slate-800 hover:border-indigo-400 shadow-sm"
           >
             <img v-if="isImageAttachment(attachment.content_type)" :src="attachmentUrl(attachment.file_url)" :alt="attachment.filename" class="h-10 w-10 rounded object-cover" />
             <i v-else class="fa-solid fa-file-lines text-slate-400"></i>
-            <span class="max-w-44 truncate">{{ attachment.filename }}</span>
-            <span class="text-slate-500">{{ attachmentSize(attachment.file_size) }}</span>
+            <span class="max-w-40 truncate font-medium">{{ attachment.filename }}</span>
+            <span class="text-slate-400">{{ attachmentSize(attachment.file_size) }}</span>
           </a>
         </div>
       </div>
@@ -495,17 +503,17 @@ const insertProduct = (product: ShopifyProduct, shopDomain?: string) => {
       <!-- AI 实时思考与知识库检索动态指示器 -->
       <div
         v-if="chatState.isAiTyping.value"
-        class="flex items-center gap-3 p-3 my-2 rounded-xl bg-indigo-950/40 border border-indigo-500/20 text-indigo-200 text-xs shadow-inner animate-pulse max-w-fit"
+        class="flex items-center gap-3 p-3 my-2 rounded-xl bg-white border border-indigo-200 text-indigo-900 text-xs shadow-sm max-w-fit"
       >
-        <div class="flex items-center justify-center w-6 h-6 rounded-lg bg-indigo-500/20 text-indigo-400">
+        <div class="flex items-center justify-center w-6 h-6 rounded-lg bg-indigo-50 text-indigo-600">
           <i class="fa-solid fa-sparkles text-xs animate-spin" style="animation-duration: 3s;"></i>
         </div>
         <div class="flex items-center gap-2">
-          <span class="font-medium text-indigo-300">{{ chatState.typingMessage.value }}</span>
+          <span class="font-medium text-indigo-950">{{ chatState.typingMessage.value }}</span>
           <span class="flex gap-1 items-center">
-            <span class="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-bounce" style="animation-delay: 0ms;"></span>
-            <span class="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-bounce" style="animation-delay: 150ms;"></span>
-            <span class="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-bounce" style="animation-delay: 300ms;"></span>
+            <span class="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-bounce" style="animation-delay: 0ms;"></span>
+            <span class="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-bounce" style="animation-delay: 150ms;"></span>
+            <span class="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-bounce" style="animation-delay: 300ms;"></span>
           </span>
         </div>
       </div>
@@ -518,26 +526,24 @@ const insertProduct = (product: ShopifyProduct, shopDomain?: string) => {
       :ai-suggestions="aiSuggestions"
       :ai-suggestions-loading="aiSuggestionsLoading"
       :ai-auto-reply-enabled="chatModel.ai_auto_reply"
-      :ai-auto-reply-disabled="!canToggleAiAutoReply || chatState.isLoading.value"
-      :ai-auto-reply-loading="chatState.aiToggleLoading.value"
-      :disabled="!chatState.canSendMessage.value || chatState.isLoading.value"
-      :is-resolved="currentStatus === 'resolved'"
-      :allow-attachments="chatModel.agent?.allow_attachments ?? true"
-      :allowed-attachment-types="chatModel.agent?.allowed_attachment_types"
+      :ai-auto-reply-disabled="!canManageChat || chatModel.status === 'closed'"
+      :disabled="!chatModel.session_id || chatModel.status === 'closed' || !chatState.canSendMessage.value"
+      :is-resolved="chatModel.status === 'closed'"
+      :allow-attachments="chatModel.agent?.allow_attachments !== false"
       :mentionable-teammates="mentionableTeammates"
       :mentions-loading="mentionsLoading"
       @send="handleSendMessage"
       @send-and-resolve="handleSendAndResolve"
+      @toggle-ai-auto-reply="enabled => chatState.toggleAIAutoReply(enabled)"
+      @update:draft="text => emit('update:draft', text)"
       @request-mentions="loadMentionableTeammates"
-      @update:draft="(text: string) => emit('update:draft', text)"
-      @toggle-ai-auto-reply="(enabled: boolean) => canToggleAiAutoReply && chatState.toggleAIAutoReply(enabled)"
       @open-ai-polish="showAiPolishModal = true"
       @open-canned="showCannedModal = true"
       @open-product="showProductPicker = true"
       @action-toast="(msg, type) => emit('action-toast', msg, type)"
     />
 
-    <!-- AI Copilot 智能改写润色弹窗 -->
+    <!-- AI Copilot 润色弹窗 -->
     <AICopilotAssistModal
       :open="showAiPolishModal"
       :chat="chatModel"
@@ -546,7 +552,7 @@ const insertProduct = (product: ShopifyProduct, shopDomain?: string) => {
       @insert="(text: string) => emit('update:draft', text)"
     />
 
-    <!-- 快捷话术库弹窗 -->
+    <!-- 快捷话术模板库弹窗 -->
     <CannedResponsesModal
       :open="showCannedModal"
       :customer-name="customerName"
@@ -573,39 +579,4 @@ const insertProduct = (product: ShopifyProduct, shopDomain?: string) => {
 </template>
 
 <style scoped>
-.crystal-panel {
-  background: rgba(15, 21, 35, 0.85);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.07);
-  border-top: 1px solid rgba(255, 255, 255, 0.12);
-}
-
-.ai-crystal-bubble {
-  background: linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(6, 78, 59, 0.2) 100%);
-  border: 1px solid rgba(16, 185, 129, 0.3);
-  border-top: 1px solid rgba(52, 211, 153, 0.5);
-  box-shadow: 0 4px 20px -4px rgba(16, 185, 129, 0.15);
-}
-
-.note-crystal-bubble {
-  background: linear-gradient(135deg, rgba(245, 158, 11, 0.09) 0%, rgba(217, 119, 6, 0.05) 100%);
-  border: 1px solid rgba(245, 158, 11, 0.28);
-  border-top: 1px solid rgba(251, 191, 36, 0.5);
-}
-
-.chat-space-bg {
-  background-color: #080B11;
-  background-image: 
-    radial-gradient(at 50% 0%, rgba(16, 185, 129, 0.03) 0px, transparent 60%),
-    radial-gradient(at 100% 100%, rgba(59, 130, 246, 0.02) 0px, transparent 50%);
-}
-
-@keyframes pulse-subtle {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.7; transform: scale(1.04); }
-}
-.pulse-subtle {
-  animation: pulse-subtle 3s infinite ease-in-out;
-}
 </style>

@@ -114,7 +114,7 @@ def get_model_config():
 
 def build_agent(model_type: str, api_key: str, model_name: str) -> Agent:
     # Same construction shape as production: create_model() (agno OpenAIChat for
-    # OPENAI/CHATTERMATE) + ChatResponse response_model + structured outputs. No
+    # OPENAI/KOMI_AI) + ChatResponse response_model + structured outputs. No
     # tools/knowledge here — we're testing the conversational lead-ask behaviour.
     return Agent(
         model=create_model(model_type, api_key, model_name, max_tokens=1000),

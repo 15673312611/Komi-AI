@@ -1,5 +1,5 @@
 """
-Copyright 2024-2026 ChatterMate
+Copyright 2024-2026 Komi AI
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -232,7 +232,7 @@ class PipedriveAdapter(CrmAdapter):
         if listing.json().get("data") or []:
             return None, None  # open lead exists — nothing to create
 
-        body = {"title": f"{payload.name or payload.email} — ChatterMate lead",
+        body = {"title": f"{payload.name or payload.email} — Komi AI lead",
                 "person_id": person_id}
         if org_id:
             body["organization_id"] = org_id

@@ -1,5 +1,5 @@
 /*
-Copyright 2024-2026 ChatterMate
+Copyright 2024-2026 Komi AI
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -44,17 +44,17 @@ describe('buildWidgetEmbed', () => {
     const code = buildWidgetEmbed('w-123')
     expect(code).toContain(`window.chattermateBaseUrl = '${API_URL}'`)
     expect(code).toContain(`window.chattermateId = 'w-123'`)
-    expect(code).toContain(`${ORIGIN}/webclient/chattermate.min.js`)
+    expect(code).toContain(`${ORIGIN}/webclient/komi.min.js`)
   })
 
   it('bakes chattermateBaseUrl in the token-auth variant too', () => {
     const code = buildWidgetEmbed('w-123', true)
     expect(code).toContain(`window.chattermateBaseUrl = '${API_URL}'`)
-    expect(code).toContain(`${ORIGIN}/webclient/chattermate.min.js`)
+    expect(code).toContain(`${ORIGIN}/webclient/komi.min.js`)
   })
 
   it('never hardcodes the vendor cloud when self-host config is present', () => {
     const code = buildWidgetEmbed('w-123')
-    expect(code).not.toContain('api.chattermate.chat')
+    expect(code).not.toContain('api.komi.ai')
   })
 })

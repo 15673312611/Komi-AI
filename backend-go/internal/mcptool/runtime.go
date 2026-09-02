@@ -445,7 +445,7 @@ func (c *stdioConnector) initialize(ctx context.Context) error {
 	_, err := c.request(ctx, "initialize", map[string]any{
 		"protocolVersion": "2024-11-05",
 		"capabilities":    map[string]any{},
-		"clientInfo":      map[string]string{"name": "chattermate-go", "version": "1"},
+		"clientInfo":      map[string]string{"name": "komi-go", "version": "1"},
 	})
 	if err != nil {
 		return err
@@ -589,7 +589,7 @@ func (c *httpConnector) Connect(ctx context.Context) error {
 	response, err := c.request(ctx, "initialize", map[string]any{
 		"protocolVersion": "2024-11-05",
 		"capabilities":    map[string]any{},
-		"clientInfo":      map[string]string{"name": "chattermate-go", "version": "1"},
+		"clientInfo":      map[string]string{"name": "komi-go", "version": "1"},
 	})
 	if err != nil {
 		return err
@@ -793,7 +793,7 @@ func (c *sseConnector) Connect(ctx context.Context) error {
 	response, err := c.request(ctx, "initialize", map[string]any{
 		"protocolVersion": "2024-11-05",
 		"capabilities":    map[string]any{},
-		"clientInfo":      map[string]string{"name": "chattermate-go", "version": "1"},
+		"clientInfo":      map[string]string{"name": "komi-go", "version": "1"},
 	})
 	if err != nil {
 		return err

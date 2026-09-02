@@ -1,5 +1,5 @@
 <!--
-Copyright 2024-2026 ChatterMate
+Copyright 2024-2026 Komi AI
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -1284,7 +1284,7 @@ const handleParentMessage = (event: MessageEvent) => {
         }
     }
     if (event.data.type === 'PREFILL_MESSAGE' && typeof event.data.text === 'string') {
-        // Prefill (never auto-send) the chat input, e.g. ChatterMate.open({ message }).
+        // Prefill (never auto-send) the chat input, e.g. Komi AI.open({ message }).
         newMessage.value = event.data.text.slice(0, 2000)
         nextTick(() => {
             const input = document.querySelector<HTMLInputElement>(
@@ -1646,7 +1646,7 @@ const parentDisplay = ref<{ mode?: string; width?: number; height?: number; hotk
 // the loader corrects it immediately with WIDGET_VISIBILITY on load.
 const hostVisible = ref(true)
 
-// Classic floating-window geometry — must mirror the chattermate.js config defaults
+// Classic floating-window geometry — must mirror the komi.js config defaults
 // (displayMode/containerWidth/containerHeight); at these values the loader behaves
 // exactly as before display modes existed.
 const CLASSIC_DISPLAY = { mode: 'floating', width: 400, height: 560 }
@@ -1670,7 +1670,7 @@ const hasCustomDisplay = computed(() => {
 })
 
 const containerStyles = computed(() => {
-    // Always fill the embed iframe exactly. chattermate.js sizes the iframe itself
+    // Always fill the embed iframe exactly. komi.js sizes the iframe itself
     // (fixed size on desktop, full-screen on mobile), so 100%/100% here guarantees the
     // panel fills it with no right-side gap. (Previously this branched on a one-shot,
     // non-reactive window.innerWidth check + 100vw, which could leave the panel narrower
@@ -1800,13 +1800,13 @@ const askAiHotkey = computed(() => parentDisplay.value?.hotkey !== false)
                 This chat widget is not currently configured. Please contact the website administrator to enable chat support.
             </p>
             <div class="widget-unavailable-footer">
-                <svg class="chattermate-logo-small" width="14" height="14" viewBox="0 0 60 60" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <svg class="komi-logo-small" width="14" height="14" viewBox="0 0 60 60" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <path d="M19 3H41A16 16 0 0 1 57 19V41A16 16 0 0 1 41 57H9A6 6 0 0 1 3 51V19A16 16 0 0 1 19 3Z" fill="#C9F24E"/>
                     <circle cx="19.7" cy="30" r="4.3" fill="#0B0C10"/>
                     <circle cx="30" cy="30" r="4.3" fill="#0B0C10"/>
                     <circle cx="40.3" cy="30" r="4.3" fill="#0B0C10"/>
                 </svg>
-                <a class="cm-powered-link" href="https://chattermate.chat" target="_blank" rel="noopener"><span class="cm-powered-prefix">Powered by </span><strong class="cm-brand">ChatterMate</strong></a>
+                <a class="cm-powered-link" href="https://komi.ai" target="_blank" rel="noopener"><span class="cm-powered-prefix">Powered by </span><strong class="cm-brand">Komi AI</strong></a>
             </div>
         </div>
     </div>
@@ -1964,13 +1964,13 @@ const askAiHotkey = computed(() => parentDisplay.value?.hotkey !== false)
 
             <!-- Powered by footer for welcome message -->
             <div class="powered-by-welcome" :style="messageNameStyles">
-                <svg class="chattermate-logo" width="16" height="16" viewBox="0 0 60 60" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <svg class="komi-logo" width="16" height="16" viewBox="0 0 60 60" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <path d="M19 3H41A16 16 0 0 1 57 19V41A16 16 0 0 1 41 57H9A6 6 0 0 1 3 51V19A16 16 0 0 1 19 3Z" fill="#C9F24E"/>
                     <circle cx="19.7" cy="30" r="4.3" fill="#0B0C10"/>
                     <circle cx="30" cy="30" r="4.3" fill="#0B0C10"/>
                     <circle cx="40.3" cy="30" r="4.3" fill="#0B0C10"/>
                 </svg>
-                <a class="cm-powered-link" href="https://chattermate.chat" target="_blank" rel="noopener"><span class="cm-powered-prefix">Powered by </span><strong class="cm-brand">ChatterMate</strong></a>
+                <a class="cm-powered-link" href="https://komi.ai" target="_blank" rel="noopener"><span class="cm-powered-prefix">Powered by </span><strong class="cm-brand">Komi AI</strong></a>
             </div>
         </div>
 
@@ -1996,13 +1996,13 @@ const askAiHotkey = computed(() => parentDisplay.value?.hotkey !== false)
             </div>
             <!-- Powered by footer for landing page -->
             <div class="powered-by-landing" :style="messageNameStyles">
-                <svg class="chattermate-logo" width="16" height="16" viewBox="0 0 60 60" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <svg class="komi-logo" width="16" height="16" viewBox="0 0 60 60" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <path d="M19 3H41A16 16 0 0 1 57 19V41A16 16 0 0 1 41 57H9A6 6 0 0 1 3 51V19A16 16 0 0 1 19 3Z" fill="#C9F24E"/>
                     <circle cx="19.7" cy="30" r="4.3" fill="#0B0C10"/>
                     <circle cx="30" cy="30" r="4.3" fill="#0B0C10"/>
                     <circle cx="40.3" cy="30" r="4.3" fill="#0B0C10"/>
                 </svg>
-                <a class="cm-powered-link" href="https://chattermate.chat" target="_blank" rel="noopener"><span class="cm-powered-prefix">Powered by </span><strong class="cm-brand">ChatterMate</strong></a>
+                <a class="cm-powered-link" href="https://komi.ai" target="_blank" rel="noopener"><span class="cm-powered-prefix">Powered by </span><strong class="cm-brand">Komi AI</strong></a>
             </div>
         </div>
 
@@ -2159,13 +2159,13 @@ const askAiHotkey = computed(() => parentDisplay.value?.hotkey !== false)
             </div>
             <!-- Powered by footer for form -->
             <div class="powered-by-landing" :style="messageNameStyles">
-                <svg class="chattermate-logo" width="16" height="16" viewBox="0 0 60 60" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <svg class="komi-logo" width="16" height="16" viewBox="0 0 60 60" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <path d="M19 3H41A16 16 0 0 1 57 19V41A16 16 0 0 1 41 57H9A6 6 0 0 1 3 51V19A16 16 0 0 1 19 3Z" fill="#C9F24E"/>
                     <circle cx="19.7" cy="30" r="4.3" fill="#0B0C10"/>
                     <circle cx="30" cy="30" r="4.3" fill="#0B0C10"/>
                     <circle cx="40.3" cy="30" r="4.3" fill="#0B0C10"/>
                 </svg>
-                <a class="cm-powered-link" href="https://chattermate.chat" target="_blank" rel="noopener"><span class="cm-powered-prefix">Powered by </span><strong class="cm-brand">ChatterMate</strong></a>
+                <a class="cm-powered-link" href="https://komi.ai" target="_blank" rel="noopener"><span class="cm-powered-prefix">Powered by </span><strong class="cm-brand">Komi AI</strong></a>
             </div>
         </div>
 
@@ -2853,13 +2853,13 @@ const askAiHotkey = computed(() => parentDisplay.value?.hotkey !== false)
 
             <!-- Powered by footer -->
             <div class="powered-by" :style="messageNameStyles">
-                <svg class="chattermate-logo" width="16" height="16" viewBox="0 0 60 60" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <svg class="komi-logo" width="16" height="16" viewBox="0 0 60 60" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <path d="M19 3H41A16 16 0 0 1 57 19V41A16 16 0 0 1 41 57H9A6 6 0 0 1 3 51V19A16 16 0 0 1 19 3Z" fill="#C9F24E"/>
                     <circle cx="19.7" cy="30" r="4.3" fill="#0B0C10"/>
                     <circle cx="30" cy="30" r="4.3" fill="#0B0C10"/>
                     <circle cx="40.3" cy="30" r="4.3" fill="#0B0C10"/>
                 </svg>
-                <a class="cm-powered-link" href="https://chattermate.chat" target="_blank" rel="noopener"><span class="cm-powered-prefix">Powered by </span><strong class="cm-brand">ChatterMate</strong></a>
+                <a class="cm-powered-link" href="https://komi.ai" target="_blank" rel="noopener"><span class="cm-powered-prefix">Powered by </span><strong class="cm-brand">Komi AI</strong></a>
             </div>
         </div>
 
@@ -3524,7 +3524,7 @@ const askAiHotkey = computed(() => parentDisplay.value?.hotkey !== false)
     gap: 6px;
 }
 
-/* Footer: "Powered by" muted, "ChatterMate" emphasized (comp). Dimming lives on the
+/* Footer: "Powered by" muted, "Komi AI" emphasized (comp). Dimming lives on the
    prefix span (not the container) so the brand keeps the full text colour. */
 .cm-powered-prefix { opacity: 0.6; }
 .cm-brand { font-weight: 700; }
@@ -6894,7 +6894,7 @@ const askAiHotkey = computed(() => parentDisplay.value?.hotkey !== false)
   opacity: 0.8;
 }
 
-.chattermate-logo-small {
+.komi-logo-small {
   opacity: 0.6;
 }
 

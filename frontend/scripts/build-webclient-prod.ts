@@ -24,16 +24,16 @@ async function buildWebClientProd() {
     // Baked DEFAULT base URL. This only sets the fallback; getBaseUrl() still
     // resolves window.chattermateBaseUrl / window.APP_CONFIG at runtime, so an
     // env change on a deployment needs no rebuild of this artifact.
-    const apiUrl = process.env.VITE_API_URL || 'https://api.chattermate.chat/api/v1'
+    const apiUrl = process.env.VITE_API_URL || 'https://api.komi.ai/api/v1'
     console.log('Using API URL:', apiUrl)
 
-    const sourceFile = resolve(dirname(__dirname), 'src/webclient/chattermate.js')
+    const sourceFile = resolve(dirname(__dirname), 'src/webclient/komi.js')
 
     await build({
       entryPoints: [sourceFile],
       bundle: true,
       minify: true,
-      outfile: resolve(dirname(__dirname), 'public/webclient/chattermate.min.js'),
+      outfile: resolve(dirname(__dirname), 'public/webclient/komi.min.js'),
       format: 'iife',
       target: ['es2015'],
       loader: {
@@ -41,14 +41,14 @@ async function buildWebClientProd() {
       },
       define: {
         'process.env.NODE_ENV': '"production"',
-        '__CHATTERMATE_API_URL__': JSON.stringify(apiUrl),
+        '__KOMI_AI_API_URL__': JSON.stringify(apiUrl),
       },
     })
 
     // Copy output to dist/webclient directory
-    const publicWebclientPath = resolve(dirname(__dirname), 'public/webclient/chattermate.min.js')
+    const publicWebclientPath = resolve(dirname(__dirname), 'public/webclient/komi.min.js')
     const distWebclientDir = resolve(dirname(__dirname), 'dist/webclient')
-    const distWebclientPath = resolve(distWebclientDir, 'chattermate.min.js')
+    const distWebclientPath = resolve(distWebclientDir, 'komi.min.js')
     
     // Ensure dist/webclient directory exists
     if (!fs.existsSync(distWebclientDir)) {

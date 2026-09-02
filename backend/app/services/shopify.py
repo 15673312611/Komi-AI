@@ -1,5 +1,5 @@
 """
-Copyright 2024-2026 ChatterMate
+Copyright 2024-2026 Komi AI
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -1410,7 +1410,7 @@ class ShopifyService:
 
     async def inject_widget_script(self, shop: ShopifyShop, script_tag: str) -> None:
         """
-        Creates a Shopify Script Tag to inject the ChatterMate widget using the scriptTagCreate GraphQL mutation.
+        Creates a Shopify Script Tag to inject the Komi AI widget using the scriptTagCreate GraphQL mutation.
         
         Args:
             shop: The ShopifyShop object.
@@ -1424,7 +1424,7 @@ class ShopifyService:
         
         # 1. Extract the script URL from the script_tag string
         # The script_tag is in format: 
-        # <script>/* ChatterMate Start */window.chattermateId='widget_id';</script><script src="script_url" async defer></script>
+        # <script>/* Komi AI Start */window.chattermateId='widget_id';</script><script src="script_url" async defer></script>
         # We need to extract the script_url
         
         import re
@@ -1459,7 +1459,7 @@ class ShopifyService:
         script_edges = script_response["data"]["scriptTags"]["edges"]
         for edge in script_edges:
             if edge["node"]["src"] == script_url:
-                logger.info(f"ChatterMate script already installed at {script_url}. Skipping injection.")
+                logger.info(f"Komi AI script already installed at {script_url}. Skipping injection.")
                 return
         
         # 3. Create the script tag using scriptTagCreate mutation
@@ -1509,7 +1509,7 @@ class ShopifyService:
 
     async def remove_widget_script(self, shop: ShopifyShop, widget_id: str) -> None:
         """
-        Removes the ChatterMate widget script tag using scriptTagDelete GraphQL mutation.
+        Removes the Komi AI widget script tag using scriptTagDelete GraphQL mutation.
         
         Args:
             shop: The ShopifyShop object.
@@ -1546,11 +1546,11 @@ class ShopifyService:
             src = edge["node"]["src"]
             # Match any scripts from your domain and potentially containing the widget ID
             # Adjust this condition based on your script URL structure
-            if "chattermate" in src.lower():
+            if "komi" in src.lower():
                 widget_scripts.append(edge["node"]["id"])
         
         if not widget_scripts:
-            logger.info(f"No ChatterMate script tags found for shop {shop.shop_domain}. Nothing to remove.")
+            logger.info(f"No Komi AI script tags found for shop {shop.shop_domain}. Nothing to remove.")
             return
         
         # 3. Delete each matching script tag

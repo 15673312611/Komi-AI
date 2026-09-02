@@ -1,5 +1,5 @@
 """
-Copyright 2024-2026 ChatterMate
+Copyright 2024-2026 Komi AI
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -283,7 +283,7 @@ class TestRefusalDetection:
         "I can only assist with questions related to freetest. How can I help?",
         "I can only help with questions about Acme — what do you need?",
         "Sorry, I can only assist with inquiries about our products.",
-        "I can only help with ChatterMate topics.",
+        "I can only help with Komi AI topics.",
     ])
     def test_recognises_decline_variants(self, reply):
         assert looks_like_scope_refusal(reply) is True

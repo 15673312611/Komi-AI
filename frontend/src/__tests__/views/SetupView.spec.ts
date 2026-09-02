@@ -1,5 +1,5 @@
 /*
-Copyright 2024-2026 ChatterMate
+Copyright 2024-2026 Komi AI
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -91,7 +91,7 @@ describe('SetupView', () => {
 
   it('renders properly', () => {
     expect(wrapper.find('.setup').exists()).toBe(true)
-    expect(wrapper.find('h1').text()).toBe('欢迎使用 ChatterMate')
+    expect(wrapper.find('h1').text()).toBe('欢迎使用 Komi AI')
   })
 
   it('checks for existing organization on mount', async () => {

@@ -20,7 +20,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 
-	"github.com/chattermate/chattermate/backend-go/internal/config"
+	"github.com/komi/komi/backend-go/internal/config"
 )
 
 var ErrRemote = errors.New("Shopify API request failed")

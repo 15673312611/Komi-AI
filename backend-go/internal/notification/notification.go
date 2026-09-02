@@ -258,7 +258,7 @@ func (r *Repository) CreateTest(ctx context.Context, userID uuid.UUID) error {
 	_, err = r.pool.Exec(ctx, `
 INSERT INTO notifications (user_id, type, title, message, notification_metadata, is_read)
 VALUES ($1, 'CHAT'::notificationtype, $2, $3, $4, FALSE)`,
-		userID, "Test Notification", "This is a test notification from ChatterMate", metadata)
+		userID, "Test Notification", "This is a test notification from Komi AI", metadata)
 	return err
 }
 

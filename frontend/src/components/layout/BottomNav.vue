@@ -1,5 +1,5 @@
 <!--
-Copyright 2024-2026 ChatterMate
+Copyright 2024-2026 Komi AI
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -81,76 +81,98 @@ const badgeText = computed(() => formatBadgeCount(props.unreadCount))
         bottom: 0;
         z-index: var(--z-bottom-nav);
         display: flex;
-        justify-content: space-between;
-        background: var(--bg2);
-        border-top: 1px solid var(--o07);
-        padding: 6px 14px calc(6px + var(--safe-bottom));
+        justify-content: space-around;
+        align-items: center;
+        background: rgba(255, 255, 255, 0.92);
+        backdrop-filter: blur(20px) saturate(180%);
+        -webkit-backdrop-filter: blur(20px) saturate(180%);
+        border-top: 1px solid var(--border-color);
+        padding: 6px 12px calc(6px + var(--safe-bottom));
+        box-shadow: 0 -4px 20px rgba(15, 23, 42, 0.04);
     }
 }
 
 .bottom-nav-item {
     position: relative;
     flex: 1;
-    min-height: 44px;
+    min-height: 46px;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
     gap: 3px;
-    padding: 2px 0;
+    padding: 4px 0;
     background: none;
     border: none;
     color: var(--muted);
     text-decoration: none;
     font-family: var(--font-sans);
     cursor: pointer;
-    transition: color var(--transition-fast);
+    border-radius: var(--radius-btn);
+    transition: all var(--transition-fast);
     -webkit-tap-highlight-color: transparent;
 }
 
 .bottom-nav-item.active {
-    color: var(--accent-ink);
+    color: var(--accent-solid);
 }
 
 .bottom-nav-icon {
     display: flex;
     align-items: center;
     justify-content: center;
+    transition: transform var(--transition-fast);
+}
+
+.bottom-nav-item.active .bottom-nav-icon {
+    transform: scale(1.08);
 }
 
 .bottom-nav-icon :deep(svg) {
-    width: 24px;
-    height: 24px;
+    width: 22px;
+    height: 22px;
     display: block;
-    stroke-width: 1.8;
+    stroke-width: 1.75;
 }
 
 .bottom-nav-label {
     font-size: 11px;
-    font-weight: var(--font-weight-medium);
+    font-weight: 500;
     line-height: 1;
+    letter-spacing: -0.01em;
 }
 
 .bottom-nav-item.active .bottom-nav-label {
-    font-weight: var(--font-weight-semibold);
+    font-weight: 600;
 }
 
 .bottom-nav-badge {
     position: absolute;
     top: 2px;
-    left: calc(50% + 6px);
-    min-width: 17px;
-    height: 17px;
+    left: calc(50% + 8px);
+    min-width: 16px;
+    height: 16px;
     padding: 0 4px;
     background: var(--c-danger);
-    color: var(--on-dark);
-    border: 1.5px solid var(--bg2);
+    color: #FFFFFF;
+    border: 2px solid #FFFFFF;
     border-radius: var(--radius-pill);
-    font-family: var(--font-display);
+    font-family: var(--font-sans);
     font-size: 10px;
-    font-weight: var(--font-weight-bold);
+    font-weight: 700;
     display: flex;
     align-items: center;
     justify-content: center;
 }
+
+[data-theme="dark"] .bottom-nav {
+    background: rgba(15, 17, 24, 0.92);
+    border-top-color: rgba(255, 255, 255, 0.08);
+    box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.3);
+}
+
+[data-theme="dark"] .bottom-nav-badge {
+    border-color: var(--bg2);
+}
 </style>
+

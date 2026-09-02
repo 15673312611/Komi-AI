@@ -1,5 +1,5 @@
 """
-Copyright 2024-2026 ChatterMate
+Copyright 2024-2026 Komi AI
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -440,7 +440,7 @@ class TestTemplateManagement:
         assert graph.await_count == 1
 
 class TestEmbeddedSignupConfig:
-    """Embedded Signup onboards a number under ChatterMate's own approved Meta
+    """Embedded Signup onboards a number under Komi AI's own approved Meta
     app, so without a config id it structurally cannot work — that is the whole
     gate. Like every other integration, it is not restricted by plan."""
 

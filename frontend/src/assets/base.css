@@ -1,15 +1,15 @@
-/* ChatterMate base — global resets & keyframes */
+/* Komi AI base — global resets & keyframes */
 :root {
   --vt-c-white: #ffffff;
-  --vt-c-white-soft: #f8f8f8;
-  --vt-c-white-mute: #f2f2f2;
-  --vt-c-black: #181818;
-  --vt-c-black-soft: #222222;
-  --vt-c-black-mute: #282828;
-  --vt-c-indigo: #2c3e50;
-  --background-base-rgb: 11,12,16;
-  --background-soft-rgb: 14,15,20;
-  --background-dark-rgb: 0,0,0;
+  --vt-c-white-soft: #f8fafc;
+  --vt-c-white-mute: #f1f5f9;
+  --vt-c-black: #0f172a;
+  --vt-c-black-soft: #1e293b;
+  --vt-c-black-mute: #334155;
+  --vt-c-indigo: #2563eb;
+  --background-base-rgb: 248,250,252;
+  --background-soft-rgb: 255,255,255;
+  --background-dark-rgb: 15,23,42;
 }
 
 *,
@@ -28,7 +28,7 @@ html, body {
 body {
   line-height: 1.6;
   font-family: var(--font-sans);
-  font-size: 15px;
+  font-size: 14.5px;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -40,7 +40,7 @@ h1, h2, h3, h4, h5, h6 {
   font-weight: var(--font-weight-bold);
   letter-spacing: var(--tracking-display);
   color: var(--text);
-  line-height: 1.2;
+  line-height: 1.25;
 }
 
 /* Inputs inherit font */
@@ -55,19 +55,19 @@ input::placeholder, textarea::placeholder {
 
 /* Text selection */
 ::selection {
-  background: #C9F24E;
-  color: #0B0C10;
+  background: rgba(37, 99, 235, 0.18);
+  color: #1D4ED8;
 }
 
-[data-theme="light"] ::selection {
-  background: #4C7A0B;
-  color: #ffffff;
+[data-theme="dark"] ::selection {
+  background: rgba(59, 130, 246, 0.35);
+  color: #FFFFFF;
 }
 
 /* Scrollbars */
 ::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
+  width: 6px;
+  height: 6px;
 }
 
 ::-webkit-scrollbar-track {
@@ -75,12 +75,20 @@ input::placeholder, textarea::placeholder {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--o10);
-  border-radius: 6px;
+  background: rgba(15, 23, 42, 0.12);
+  border-radius: 99px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--o16);
+  background: rgba(15, 23, 42, 0.22);
+}
+
+[data-theme="dark"] ::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+[data-theme="dark"] ::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.25);
 }
 
 /* Global focus ring */
@@ -109,10 +117,11 @@ input::placeholder, textarea::placeholder {
 
 @keyframes cm-float {
   0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-12px); }
+  50% { transform: translateY(-8px); }
 }
 
 @keyframes button-loading-spinner {
   from { transform: rotate(0turn); }
   to { transform: rotate(1turn); }
 }
+

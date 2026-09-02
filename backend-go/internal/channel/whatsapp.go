@@ -10,7 +10,7 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/chattermate/chattermate/backend-go/internal/config"
+	"github.com/komi/komi/backend-go/internal/config"
 )
 
 const (

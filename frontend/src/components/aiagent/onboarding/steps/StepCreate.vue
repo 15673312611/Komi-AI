@@ -1,5 +1,5 @@
 <!--
-Copyright 2024-2026 ChatterMate
+Copyright 2024-2026 Komi AI
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -24,7 +24,7 @@ import { useEnterpriseFeatures } from '@/composables/useEnterpriseFeatures'
 import { subscriptionStorage } from '@/utils/storage'
 import type { Agent } from '@/types/agent'
 
-// Lazy-load the provider setup form — only needed on OSS builds without ChatterMate AI
+// Lazy-load the provider setup form — only needed on OSS builds without Komi AI
 const AISetup = defineAsyncComponent(() => import('@/components/ai/AISetup.vue'))
 
 const { hasEnterpriseModule } = useEnterpriseFeatures()
@@ -209,7 +209,7 @@ const generateWithAI = async () => {
     isGenerating.value = false
   }
 }
-// OSS-only: when ChatterMate AI isn't available we must collect a provider key first
+// OSS-only: when Komi AI isn't available we must collect a provider key first
 const showAiGate = ref(false)
 
 const ensureAIConfig = async (): Promise<boolean> => {
@@ -219,10 +219,10 @@ const ensureAIConfig = async (): Promise<boolean> => {
   } catch (err) {
     if (err instanceof AxiosError && err.response?.status === 404) {
       if (hasEnterpriseModule) {
-        // Managed ChatterMate AI — zero setup, backend injects the key
+        // Managed Komi AI — zero setup, backend injects the key
         await aiService.setupAI({
-          model_type: 'CHATTERMATE',
-          model_name: 'chattermate',
+          model_type: 'KOMI_AI',
+          model_name: 'komi',
           api_key: '',
         })
         return true
@@ -442,7 +442,7 @@ const onAiConfigured = async () => {
       <div class="ai-note">
         <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="8" /></svg>
         <span>
-          由 ChatterMate AI 强劲驱动 — 开箱即用。如需接入自备模型，可在后续前往
+          由 Komi AI 强劲驱动 — 开箱即用。如需接入自备模型，可在后续前往
           <strong>系统设置 → AI 模型配置</strong> 中绑定。
         </span>
       </div>

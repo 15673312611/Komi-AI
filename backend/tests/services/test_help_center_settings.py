@@ -1,5 +1,5 @@
 """
-Copyright 2024-2026 ChatterMate
+Copyright 2024-2026 Komi AI
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -52,8 +52,8 @@ def test_live_url_custom_domain_wins(monkeypatch):
 
 def test_live_url_subdomain_mode(monkeypatch):
     monkeypatch.setattr(settings, "HELP_CENTER_PUBLIC_MODE", "subdomain")
-    monkeypatch.setattr(settings, "HELP_CENTER_BASE_DOMAIN", "chattermate.help")
-    assert live_url(_row()) == "https://acme.chattermate.help"
+    monkeypatch.setattr(settings, "HELP_CENTER_BASE_DOMAIN", "komi.help")
+    assert live_url(_row()) == "https://acme.komi.help"
 
 
 def test_live_url_path_mode_uses_backend_url(monkeypatch):

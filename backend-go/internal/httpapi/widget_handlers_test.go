@@ -12,12 +12,12 @@ import (
 	"github.com/google/uuid"
 	"github.com/rs/zerolog"
 
-	"github.com/chattermate/chattermate/backend-go/internal/agent"
-	"github.com/chattermate/chattermate/backend-go/internal/auth"
-	"github.com/chattermate/chattermate/backend-go/internal/customer"
-	"github.com/chattermate/chattermate/backend-go/internal/session"
-	"github.com/chattermate/chattermate/backend-go/internal/widget"
-	"github.com/chattermate/chattermate/backend-go/internal/widgetapp"
+	"github.com/komi/komi/backend-go/internal/agent"
+	"github.com/komi/komi/backend-go/internal/auth"
+	"github.com/komi/komi/backend-go/internal/customer"
+	"github.com/komi/komi/backend-go/internal/session"
+	"github.com/komi/komi/backend-go/internal/widget"
+	"github.com/komi/komi/backend-go/internal/widgetapp"
 )
 
 type fakeWidgetStore struct {

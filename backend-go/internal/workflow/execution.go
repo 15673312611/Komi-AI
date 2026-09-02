@@ -12,7 +12,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/chattermate/chattermate/backend-go/internal/session"
+	"github.com/komi/komi/backend-go/internal/session"
 )
 
 // ExecutionStore is the read-only subset required to execute a published

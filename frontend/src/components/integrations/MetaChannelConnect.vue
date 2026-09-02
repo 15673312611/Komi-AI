@@ -1,5 +1,5 @@
 <!--
-Copyright 2024-2026 ChatterMate
+Copyright 2024-2026 Komi AI
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -168,7 +168,7 @@ const saveAgent = async () => {
           @select="onPageSelected"
         />
 
-        <!-- One-click signup under ChatterMate's Meta app; the manual form
+        <!-- One-click signup under Komi AI's Meta app; the manual form
              stays available for anyone who already has their own credentials. -->
         <div v-else-if="signupEnabled && !showManualForm" class="meta-signup">
           <p class="meta-intro">{{ signupCopy.intro }}</p>

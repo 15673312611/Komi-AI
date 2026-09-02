@@ -1,5 +1,5 @@
 <!--
-Copyright 2024-2026 ChatterMate
+Copyright 2024-2026 Komi AI
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -483,21 +483,6 @@ const availableIntegrations = computed<IntegrationCard[]>(() => [
     connectAction: connectSlack,
     disconnectAction: handleDisconnectSlack
   },
-  {
-    id: 'telegram',
-    name: 'Telegram',
-    description: '连接 Telegram Bot，让客户可直接在 Telegram 上与 AI 客服对话。',
-    logo: telegramLogo,
-    category: '即时通讯',
-    color: 'accent',
-    connected: telegramAccounts.value.length > 0,
-    teamName: telegramAccounts.value.map(a => a.display_name).filter(Boolean).join(', '),
-    isLoading: channelsLoading.value,
-    loadError: channelsLoadError.value,
-    retryAction: fetchChannelAccounts,
-    connectAction: () => { showTelegramModal.value = true },
-    disconnectAction: handleDisconnectTelegram
-  },
   ...(['whatsapp', 'messenger', 'instagram'] as const).map(channel => {
     const meta = {
       whatsapp: { name: 'WhatsApp', logo: whatsappLogo, color: 'teal',
@@ -751,21 +736,32 @@ watch(() => route.query, () => {
       <div class="int-page-header">
         <div class="int-page-titles">
           <h1 class="int-title">第三方渠道与平台集成</h1>
-          <p class="int-subtitle">将 ChatterMate 与您团队正在使用的电商、即时通讯、工单和 CRM 工具无缝连接。</p>
+          <p class="int-subtitle">将 Komi AI 与您团队正在使用的电商、即时通讯、工单和 CRM 工具无缝连接。</p>
         </div>
-        <div class="int-search">
-          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
-            <circle cx="11" cy="11" r="7"></circle>
-            <path d="M21 21l-4-4"></path>
-          </svg>
-          <input
-            v-model="intQuery"
-            type="search"
-            name="integration-search"
-            autocomplete="off"
-            aria-label="搜索集成平台"
-            placeholder="搜索集成渠道与平台…"
-          />
+        <div class="flex items-center gap-3">
+          <a
+            href="/channel_simulator.html"
+            target="_blank"
+            class="px-3.5 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-bold text-xs flex items-center gap-2 shadow-md shadow-indigo-500/20 transition-all shrink-0"
+          >
+            <i class="fa-solid fa-flask-vial"></i>
+            <span>全渠道测试沙盒 (模拟 WhatsApp / IG / LINE)</span>
+            <i class="fa-solid fa-arrow-up-right-from-square text-[10px] opacity-80"></i>
+          </a>
+          <div class="int-search">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+              <circle cx="11" cy="11" r="7"></circle>
+              <path d="M21 21l-4-4"></path>
+            </svg>
+            <input
+              v-model="intQuery"
+              type="search"
+              name="integration-search"
+              autocomplete="off"
+              aria-label="搜索集成平台"
+              placeholder="搜索集成渠道与平台…"
+            />
+          </div>
         </div>
       </div>
 
@@ -1111,14 +1107,14 @@ watch(() => route.query, () => {
 .int-title {
   font-family: var(--font-display);
   font-weight: 700;
-  font-size: 30px;
+  font-size: 22px;
   letter-spacing: -0.02em;
   color: var(--text);
   margin: 0 0 6px;
 }
 
 .int-subtitle {
-  font-size: 15px;
+  font-size: 13.5px;
   color: var(--muted);
   margin: 0;
 }
@@ -1128,7 +1124,7 @@ watch(() => route.query, () => {
   align-items: center;
   gap: 9px;
   padding: 10px 14px;
-  background: var(--surface);
+  background: #FFFFFF;
   border: 1px solid var(--o10);
   border-radius: var(--radius-btn);
   min-width: 230px;
@@ -1175,9 +1171,9 @@ watch(() => route.query, () => {
 }
 
 .integration-card {
-  background: var(--surface);
-  border: 1px solid var(--o08);
-  border-radius: 18px;
+  background: #FFFFFF;
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
   padding: 22px;
   display: flex;
   flex-direction: column;
@@ -1348,10 +1344,9 @@ watch(() => route.query, () => {
 .int-btn-connect {
   width: 100%;
   padding: 12px;
-  background: var(--accent-solid);
-  color: var(--on-accent-solid);
+  background: #0F172A; color: #FFFFFF; border: 1px solid rgba(15, 23, 42, 0.9);
   border: none;
-  border-radius: var(--radius-chip);
+  border-radius: var(--radius-btn);
   font-size: 14px;
   font-weight: 600;
 }
@@ -1365,7 +1360,7 @@ watch(() => route.query, () => {
   padding: 11px;
   background: var(--o05);
   border: 1px solid var(--o14);
-  border-radius: var(--radius-chip);
+  border-radius: var(--radius-btn);
   color: var(--text);
 }
 
@@ -1378,7 +1373,7 @@ watch(() => route.query, () => {
   padding: 11px 16px;
   background: transparent;
   border: 1px solid var(--coral-border);
-  border-radius: var(--radius-chip);
+  border-radius: var(--radius-btn);
   color: var(--c-coral);
 }
 
@@ -1390,8 +1385,8 @@ watch(() => route.query, () => {
   width: 100%;
   padding: 12px;
   background: var(--o03);
-  border: 1px solid var(--o08);
-  border-radius: var(--radius-chip);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-btn);
   color: var(--faint);
   font-size: 14px;
   cursor: not-allowed;
@@ -1401,8 +1396,8 @@ watch(() => route.query, () => {
   width: 100%;
   padding: 12px;
   background: var(--o03);
-  border: 1px solid var(--o08);
-  border-radius: var(--radius-chip);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-btn);
   color: var(--muted);
   font-size: 14px;
   cursor: default;

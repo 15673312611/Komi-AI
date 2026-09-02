@@ -1,5 +1,5 @@
 """
-Copyright 2024-2026 ChatterMate
+Copyright 2024-2026 Komi AI
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -34,7 +34,7 @@ logger = get_logger(__name__)
 
 # Model type whose provider costs land on the platform, hence metered. Own-key
 # orgs pay their provider directly and are never metered or blocked.
-HOSTED_MODEL_TYPE = "CHATTERMATE"
+HOSTED_MODEL_TYPE = "KOMI_AI"
 
 
 def is_hosted_model(db: Session, organization_id: UUID) -> bool:

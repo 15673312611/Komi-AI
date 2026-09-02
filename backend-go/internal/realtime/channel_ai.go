@@ -15,12 +15,12 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/chattermate/chattermate/backend-go/internal/agent"
-	"github.com/chattermate/chattermate/backend-go/internal/aiconfig"
-	"github.com/chattermate/chattermate/backend-go/internal/channel"
-	"github.com/chattermate/chattermate/backend-go/internal/chat"
-	"github.com/chattermate/chattermate/backend-go/internal/guardrail"
-	"github.com/chattermate/chattermate/backend-go/internal/leadcapture"
+	"github.com/komi/komi/backend-go/internal/agent"
+	"github.com/komi/komi/backend-go/internal/aiconfig"
+	"github.com/komi/komi/backend-go/internal/channel"
+	"github.com/komi/komi/backend-go/internal/chat"
+	"github.com/komi/komi/backend-go/internal/guardrail"
+	"github.com/komi/komi/backend-go/internal/leadcapture"
 )
 
 type channelAIMessage struct {

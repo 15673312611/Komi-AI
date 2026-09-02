@@ -8,7 +8,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
-	"github.com/chattermate/chattermate/backend-go/internal/analytics"
+	"github.com/komi/komi/backend-go/internal/analytics"
 )
 
 func registerAnalyticsRoutes(r chi.Router, deps Dependencies) {

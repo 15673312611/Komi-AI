@@ -1,5 +1,5 @@
 <!--
-Copyright 2024-2026 ChatterMate
+Copyright 2024-2026 Komi AI
 100% 离线、零外部字体依赖的 FontAwesome 6 官方矢量图标组件 (FaIcon.vue)
 确保所有图标在任何网络环境下 1:1 精确呈现，绝不出现缺失或占位符方块。
 -->

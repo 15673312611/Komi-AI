@@ -1,5 +1,5 @@
 <!--
-Copyright 2024-2026 ChatterMate
+Copyright 2024-2026 Komi AI
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -548,40 +548,46 @@ fetchAnalytics()
 
 <style scoped>
 .analytics-container {
-  padding: var(--space-lg);
+  padding: 24px 32px 60px;
+  max-width: 1320px;
+  margin: 0 auto;
 }
 
 .analytics-header {
   display: flex;
   justify-content: flex-end;
   align-items: center;
-  margin-bottom: var(--space-md);
+  margin-bottom: 16px;
 }
 
 .analytics-tabs {
-  margin-bottom: var(--space-xl);
+  margin-bottom: 24px;
 }
 
 .tab-buttons {
   display: flex;
-  border-bottom: 1px solid var(--o08);
-  margin-bottom: var(--space-lg);
+  border-bottom: 1px solid var(--border-color);
+  margin-bottom: 20px;
 }
 
 .tab-buttons button {
-  padding: var(--space-md) var(--space-lg);
+  padding: 10px 16px;
   background: none;
   border: none;
   cursor: pointer;
-  font-size: var(--text-sm);
+  font-size: 13.5px;
   color: var(--muted);
   transition: all var(--transition-fast);
   position: relative;
   font-family: var(--font-sans);
 }
 
+.tab-buttons button:hover {
+  color: var(--text);
+}
+
 .tab-buttons button.active {
-  color: var(--accent-ink);
+  color: #0F172A;
   font-weight: 600;
 }
 
@@ -592,100 +598,104 @@ fetchAnalytics()
   left: 0;
   right: 0;
   height: 2px;
-  background: var(--accent-solid);
+  background: #0F172A;
 }
 
 .time-range-selector {
   display: flex;
   gap: 4px;
-  background: var(--o06);
-  border: 1px solid var(--o10);
-  padding: 4px;
-  border-radius: var(--radius-full);
+  background: rgba(15, 23, 42, 0.04);
+  border: 1px solid var(--border-color);
+  padding: 3px;
+  border-radius: 8px;
 }
 
 .time-range-selector button {
   padding: 5px 12px;
   border: none;
   background: none;
-  border-radius: var(--radius-full);
+  border-radius: 6px;
   cursor: pointer;
   color: var(--muted);
   font-size: 12.5px;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
+  font-weight: 500;
   transition: all var(--transition-fast);
 }
 
 .time-range-selector button.active {
-  background: var(--accent-solid);
-  color: var(--on-accent-solid);
+  background: #0F172A;
+  color: #FFFFFF;
   font-weight: 600;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
 }
 
 .metrics-overview {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-  gap: var(--space-lg);
-  margin-bottom: var(--space-xl);
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
 }
 
 .metric-card {
-  background: var(--surface);
-  padding: var(--space-lg);
-  border-radius: 18px;
-  border: 1px solid var(--o08);
+  background: #FFFFFF;
+  padding: 20px 22px;
+  border-radius: 14px;
+  border: 1px solid var(--border-color);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
 }
 
 .metric-card h3 {
-  font-family: var(--font-mono);
-  font-size: 10.5px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--faint);
-  margin-bottom: var(--space-sm);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+  margin: 0 0 10px;
 }
 
 .metric-value {
-  font-family: var(--font-display);
-  font-size: var(--text-2xl);
+  font-family: var(--font-sans);
+  font-size: 26px;
   font-weight: 700;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.025em;
   display: flex;
   align-items: baseline;
-  gap: var(--space-sm);
+  gap: 8px;
   color: var(--text);
+  margin: 0;
 }
 
 .change {
-  font-size: var(--text-sm);
-  color: var(--c-coral);
+  font-size: 12.5px;
+  color: var(--c-danger);
+  font-weight: 600;
 }
 
 .change.positive {
-  color: var(--c-teal);
+  color: #10B981;
 }
 
 .charts-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  gap: var(--space-lg);
-  margin-top: var(--space-xl);
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 16px;
+  margin-top: 24px;
 }
 
 .chart-container {
-  padding: var(--space-lg);
-  border-radius: 18px;
-  border: 1px solid var(--o08);
-  background: var(--surface);
+  padding: 20px 22px;
+  border-radius: 14px;
+  border: 1px solid var(--border-color);
+  background: #FFFFFF;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
 }
 
 .chart-container h3 {
-  font-family: var(--font-mono);
-  font-size: 10.5px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--faint);
-  margin-bottom: var(--space-md);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  margin: 0 0 16px;
 }
 
 .error-state {
@@ -725,7 +735,6 @@ fetchAnalytics()
 .trend-up {
   border-bottom: 4px solid currentColor;
 }
-
 .trend-down {
   border-top: 4px solid currentColor;
 }

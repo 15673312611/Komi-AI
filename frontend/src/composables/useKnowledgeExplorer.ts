@@ -1,5 +1,5 @@
 /*
-Copyright 2024-2026 ChatterMate
+Copyright 2024-2026 Komi AI
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -62,7 +62,8 @@ export interface ExplorerSource {
   queuedError?: string | null
 }
 
-const POLL_INTERVAL_MS = 10000
+const FAST_POLL_INTERVAL_MS = 1500
+const SLOW_POLL_INTERVAL_MS = 10000
 
 /**
  * State engine for the master-detail knowledge explorer, shared by the
@@ -92,7 +93,7 @@ export function useKnowledgeExplorer(
   const isSaving = ref(false)
   const isDeleting = ref(false)
 
-  let pollTimer: ReturnType<typeof setInterval> | null = null
+  let pollTimer: ReturnType<typeof setTimeout> | null = null
   let pollInFlight = false
   let sourceRequestVersion = 0
   let queueRequestVersion = 0
@@ -205,20 +206,36 @@ export function useKnowledgeExplorer(
     status === 'failed' ? 'error' : status === 'processing' ? 'crawling' : 'queued'
 
   // Placeholder source for an in-flight queue item (negative id = queue-item id).
-  const toSyntheticSource = (item: QueueItem): ExplorerSource => ({
-    id: -item.id,
-    name: queueSourceName(item),
-    type: queueKind(item.source_type),
-    agents: [],
-    pageStubs: [],
-    expanded: false,
-    loadingContent: false,
-    contentError: null,
-    pages: [],
-    queued: true,
-    queuedStatus: queueStatusToSource(item.status),
-    queuedError: item.status === 'failed' ? item.error ?? null : null,
-  })
+  const toSyntheticSource = (item: QueueItem): ExplorerSource => {
+    const urls = item.crawled_urls || []
+    return {
+      id: -item.id,
+      name: queueSourceName(item),
+      type: queueKind(item.source_type),
+      agents: [],
+      pageStubs: urls.map((u) => ({
+        subpage: u,
+        created_at: null,
+        updated_at: null,
+      })),
+      expanded: true,
+      loadingContent: false,
+      contentError: null,
+      pages: urls.map((u) => ({
+        page_id: u,
+        url: u,
+        title: titleFromId(u),
+        content: '抓取完成，正在建立向量索引…',
+        word_count: 0,
+        chunk_count: 1,
+        updated_at: null,
+        chunk_ids: [],
+      })),
+      queued: true,
+      queuedStatus: queueStatusToSource(item.status),
+      queuedError: item.status === 'failed' ? item.error ?? null : null,
+    }
+  }
 
   // Real sources plus a placeholder for every in-flight queue item that has not
   // yet produced a real source — so a just-queued crawl shows immediately and is
@@ -607,40 +624,45 @@ export function useKnowledgeExplorer(
     crawlingNames = activeCrawlNames()
   }
 
-  const startPolling = () => {
-    if (pollTimer) return
-    pollTimer = setInterval(async () => {
-      if (pollInFlight) return
-      pollInFlight = true
-      try {
-        await fetchQueue()
-        const active = activeCrawlNames()
-        const currentIds = queueIds()
-        // Reconcile when a crawl is in flight OR the queue changed since the last
-        // tick (an item was added or finished/removed) — the latter catches a
-        // crawl that completed within a single poll window.
-        if (active.size || setsDiffer(currentIds, lastQueueIds)) {
-          await fetchSources(true)
-          // Force-refresh the content of any expanded source that is (or just was)
-          // crawling, so newly-extracted pages appear without a manual re-expand.
-          const touched = new Set<string>([...active, ...crawlingNames])
-          for (const source of sources.value) {
-            if (source.expanded && touched.has(source.name)) {
-              await loadSourceContent(source.id, true)
-            }
+  const activeCrawls = computed(() =>
+    queueItems.value.filter((q) => q.status === 'pending' || q.status === 'processing'),
+  )
+
+  const pollTick = async () => {
+    if (pollInFlight) return
+    pollInFlight = true
+    try {
+      await fetchQueue()
+      const active = activeCrawlNames()
+      const currentIds = queueIds()
+      if (active.size || setsDiffer(currentIds, lastQueueIds)) {
+        await fetchSources(true)
+        const touched = new Set<string>([...active, ...crawlingNames])
+        for (const source of sources.value) {
+          if (touched.has(source.name) || source.expanded) {
+            await loadSourceContent(source.id, true)
           }
         }
-        crawlingNames = active
-        lastQueueIds = currentIds
-      } finally {
-        pollInFlight = false
       }
-    }, POLL_INTERVAL_MS)
+      crawlingNames = active
+      lastQueueIds = currentIds
+    } finally {
+      pollInFlight = false
+      if (pollTimer !== null) {
+        const nextDelay = activeCrawlNames().size > 0 ? FAST_POLL_INTERVAL_MS : SLOW_POLL_INTERVAL_MS
+        pollTimer = setTimeout(pollTick, nextDelay)
+      }
+    }
+  }
+
+  const startPolling = () => {
+    if (pollTimer !== null) return
+    pollTimer = setTimeout(pollTick, FAST_POLL_INTERVAL_MS)
   }
 
   const stopPolling = () => {
-    if (pollTimer) {
-      clearInterval(pollTimer)
+    if (pollTimer !== null) {
+      clearTimeout(pollTimer)
       pollTimer = null
     }
   }
@@ -667,6 +689,7 @@ export function useKnowledgeExplorer(
     orgSourcesError,
     linkingIds,
     // computed
+    activeCrawls,
     selectedSource,
     selectedPage,
     filteredSources,

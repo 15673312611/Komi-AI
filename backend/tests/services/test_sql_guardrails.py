@@ -1,5 +1,5 @@
 """
-Copyright 2024-2026 ChatterMate
+Copyright 2024-2026 Komi AI
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -248,7 +248,7 @@ class TestEdgeCases:
 
 
 ROW_SCOPE = {"public.orders": "customer_email", "public.customers": "email"}
-OWNER = "arun@chattermate.chat"
+OWNER = "arun@komi.ai"
 
 
 def scoped(sql, scope=None, value=OWNER, allowed=ALLOWED, masked=None):
@@ -359,7 +359,7 @@ class TestRowScopeCaseInsensitivity:
         )
 
     def test_predicate_folds_both_sides(self):
-        result = self._ci("Arun@ChatterMate.Chat")
+        result = self._ci("Arun@Komi AI.Chat")
         assert result.ok
         assert "LOWER(customer_email) = '%s'" % OWNER in result.sql
 
@@ -369,10 +369,10 @@ class TestRowScopeCaseInsensitivity:
         assert "'x'' or ''1''=''1'" in result.sql.lower()
 
     def test_exact_match_when_disabled(self):
-        result = scoped("SELECT id FROM orders", value="Arun@ChatterMate.Chat")
+        result = scoped("SELECT id FROM orders", value="Arun@Komi AI.Chat")
         assert result.ok
         assert "LOWER(" not in result.sql
-        assert "customer_email = 'Arun@ChatterMate.Chat'" in result.sql
+        assert "customer_email = 'Arun@Komi AI.Chat'" in result.sql
 
     def test_still_fails_closed(self):
         result = self._ci(value=None)

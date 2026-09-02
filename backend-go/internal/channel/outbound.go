@@ -24,7 +24,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/sns"
 	"github.com/google/uuid"
 
-	"github.com/chattermate/chattermate/backend-go/internal/config"
+	"github.com/komi/komi/backend-go/internal/config"
 )
 
 // SendResult keeps the channel-specific outcome behind one delivery contract.
@@ -486,7 +486,7 @@ func (s *Sender) sendEmail(ctx context.Context, account *Account, conversation *
 	} else if !strings.HasPrefix(strings.ToLower(subject), "re:") {
 		subject = "Re: " + subject
 	}
-	messageID := fmt.Sprintf("<%s@chattermate>", uuid.NewString())
+	messageID := fmt.Sprintf("<%s@komi>", uuid.NewString())
 	lastInbound := stringValue(conversation.Extra["last_message_id"])
 	var builder strings.Builder
 	builder.WriteString("From: " + cleanHeader(settings.FromEmail) + "\r\n")

@@ -1,5 +1,5 @@
 /*
-Copyright 2024-2026 ChatterMate
+Copyright 2024-2026 Komi AI
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -57,7 +57,7 @@ describe('service worker navigation denylist', () => {
   })
 
   describe('the pre-existing exclusions still hold', () => {
-    it.each(['/api/v1/users/login', '/widget/abc', '/webclient/chattermate.min.js', '/shopify/inbox'])(
+    it.each(['/api/v1/users/login', '/widget/abc', '/webclient/komi.min.js', '/shopify/inbox'])(
       'denies %s',
       (path) => {
         expect(isDeniedNavigation(path)).toBe(true)

@@ -6,9 +6,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/zishang520/socket.io/v2/socket"
 
-	"github.com/chattermate/chattermate/backend-go/internal/notification"
-	"github.com/chattermate/chattermate/backend-go/internal/session"
-	"github.com/chattermate/chattermate/backend-go/internal/user"
+	"github.com/komi/komi/backend-go/internal/notification"
+	"github.com/komi/komi/backend-go/internal/session"
+	"github.com/komi/komi/backend-go/internal/user"
 )
 
 // EmitNotification mirrors the user-scoped notification delivery used by the

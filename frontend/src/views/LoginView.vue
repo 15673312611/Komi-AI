@@ -1,5 +1,5 @@
 <!--
-Copyright 2024-2026 ChatterMate
+Copyright 2024-2026 Komi AI
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -286,7 +286,7 @@ const handleVerifyAndResetPassword = async () => {
                     <div class="dot"></div>
                     <div class="dot"></div>
                 </div>
-                <span class="logo-word">ChatterMate</span>
+                <span class="logo-word">Komi AI</span>
             </div>
 
             <h1 class="auth-title">欢迎回来</h1>

@@ -1,5 +1,5 @@
 <!--
-Copyright 2024-2026 ChatterMate
+Copyright 2024-2026 Komi AI
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -144,28 +144,28 @@ const navigate = (to?: string) => {
 .more-scrim {
     position: absolute;
     inset: 0;
-    background: var(--scrim);
-    backdrop-filter: blur(2px);
+    background: rgba(15, 23, 42, 0.4);
+    backdrop-filter: blur(4px);
 }
 
 .more-sheet {
     position: relative;
-    background: var(--bg2);
-    border-top: 1px solid var(--o07);
+    background: #FFFFFF;
+    border-top: 1px solid var(--border-color);
     border-top-left-radius: 24px;
     border-top-right-radius: 24px;
     padding: 12px 18px calc(var(--space-lg) + var(--safe-bottom));
-    box-shadow: var(--shadow-lg);
+    box-shadow: 0 -8px 32px rgba(15, 23, 42, 0.12);
     max-height: calc(100dvh - 60px);
     overflow-y: auto;
 }
 
 .drag-handle {
     width: 38px;
-    height: 5px;
-    border-radius: 3px;
-    background: var(--o10);
-    margin: 0 auto 18px;
+    height: 4.5px;
+    border-radius: 99px;
+    background: rgba(15, 23, 42, 0.12);
+    margin: 0 auto 16px;
 }
 
 .availability-card {
@@ -175,19 +175,19 @@ const navigate = (to?: string) => {
     gap: 12px;
     padding: 14px 16px;
     border-radius: 16px;
-    background: var(--success-color-soft);
-    border: 1px solid color-mix(in srgb, var(--success-color) 35%, transparent);
+    background: rgba(16, 185, 129, 0.08);
+    border: 1px solid rgba(16, 185, 129, 0.22);
     margin-bottom: 14px;
     cursor: pointer;
     font-family: var(--font-sans);
     color: var(--text);
     text-align: left;
-    transition: opacity var(--transition-fast);
+    transition: all var(--transition-fast);
 }
 
 .availability-card.offline {
-    background: var(--o04);
-    border-color: var(--o10);
+    background: #F8FAFC;
+    border-color: var(--border-color);
 }
 
 .availability-card:disabled {
@@ -205,7 +205,7 @@ const navigate = (to?: string) => {
 
 .availability-dot.online {
     background: var(--success-color);
-    box-shadow: 0 0 0 4px var(--success-color-soft);
+    box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.2);
 }
 
 .availability-text {
@@ -217,8 +217,9 @@ const navigate = (to?: string) => {
 }
 
 .availability-title {
-    font-weight: var(--font-weight-semibold);
-    font-size: 15px;
+    font-weight: 600;
+    font-size: 14.5px;
+    color: var(--text);
 }
 
 .availability-sub {
@@ -227,10 +228,10 @@ const navigate = (to?: string) => {
 }
 
 .toggle-track {
-    width: 48px;
-    height: 28px;
-    border-radius: 16px;
-    background: var(--toggle-track-off);
+    width: 44px;
+    height: 24px;
+    border-radius: 99px;
+    background: rgba(15, 23, 42, 0.12);
     position: relative;
     flex-shrink: 0;
     transition: background-color var(--transition-fast);
@@ -242,12 +243,13 @@ const navigate = (to?: string) => {
 
 .toggle-knob {
     position: absolute;
-    top: 3px;
-    left: 3px;
-    width: 22px;
-    height: 22px;
+    top: 2px;
+    left: 2px;
+    width: 20px;
+    height: 20px;
     border-radius: 50%;
-    background: var(--toggle-knob);
+    background: #FFFFFF;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
     transition: transform var(--transition-fast);
 }
 
@@ -255,36 +257,40 @@ const navigate = (to?: string) => {
     transform: translateX(20px);
 }
 
-/* Typography comes from the shared .nav-section-heading (components.css) */
 .sheet-section {
     padding: 0 4px;
     margin-bottom: 8px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    color: var(--muted2);
+    text-transform: uppercase;
 }
 
 .sheet-card {
-    background: var(--o04);
-    border: 1px solid var(--o07);
+    background: #F8FAFC;
+    border: 1px solid var(--border-color);
     border-radius: 16px;
     overflow: hidden;
     margin-bottom: 14px;
 }
 
 .sheet-card .sheet-row + .sheet-row {
-    border-top: 1px solid var(--o06);
+    border-top: 1px solid var(--border-color);
 }
 
 .sheet-row {
     width: 100%;
     display: flex;
     align-items: center;
-    gap: 13px;
-    padding: 14px 16px;
+    gap: 12px;
+    padding: 13px 16px;
     background: none;
     border: none;
     color: var(--text);
     font-family: var(--font-sans);
-    font-size: 15px;
-    font-weight: var(--font-weight-medium);
+    font-size: 14px;
+    font-weight: 500;
     cursor: pointer;
     text-align: left;
     transition: background-color var(--transition-fast);
@@ -292,12 +298,12 @@ const navigate = (to?: string) => {
 }
 
 .sheet-row:hover {
-    background: var(--o05);
+    background: rgba(15, 23, 42, 0.04);
 }
 
 .sheet-row.standalone {
-    background: var(--o04);
-    border: 1px solid var(--o07);
+    background: #F8FAFC;
+    border: 1px solid var(--border-color);
     border-radius: 14px;
     margin-bottom: 14px;
 }
@@ -311,33 +317,34 @@ const navigate = (to?: string) => {
 }
 
 .theme-icon {
-    color: var(--c-purple);
+    color: var(--accent-solid);
 }
 
 .row-label {
     flex: 1;
     min-width: 0;
+    font-weight: 500;
 }
 
 .row-value {
     color: var(--muted);
-    font-size: 14px;
+    font-size: 13px;
 }
 
 .row-chevron {
-    color: var(--muted);
+    color: var(--muted2);
     display: flex;
 }
 
 .row-badge {
-    min-width: 22px;
-    height: 22px;
-    padding: 0 7px;
-    border-radius: 11px;
-    background: var(--c-coral);
-    color: var(--on-light);
-    font-size: 12px;
-    font-weight: var(--font-weight-bold);
+    min-width: 20px;
+    height: 20px;
+    padding: 0 6px;
+    border-radius: 10px;
+    background: var(--c-danger);
+    color: #FFFFFF;
+    font-size: 11px;
+    font-weight: 700;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -356,14 +363,14 @@ const navigate = (to?: string) => {
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 9px;
-    padding: 13px;
+    gap: 8px;
+    padding: 12px;
     background: none;
     border: none;
-    color: var(--c-coral);
+    color: var(--c-danger);
     font-family: var(--font-sans);
-    font-weight: var(--font-weight-semibold);
-    font-size: 15px;
+    font-weight: 600;
+    font-size: 14px;
     cursor: pointer;
 }
 
@@ -391,4 +398,29 @@ const navigate = (to?: string) => {
 .more-sheet-leave-to .more-sheet {
     transform: translateY(100%);
 }
+
+/* Dark theme overrides */
+[data-theme="dark"] .more-sheet {
+    background: var(--surface);
+    border-top-color: var(--border-color);
+}
+
+[data-theme="dark"] .drag-handle {
+    background: rgba(255, 255, 255, 0.15);
+}
+
+[data-theme="dark"] .sheet-card,
+[data-theme="dark"] .sheet-row.standalone {
+    background: var(--bg2);
+    border-color: var(--border-color);
+}
+
+[data-theme="dark"] .sheet-card .sheet-row + .sheet-row {
+    border-top-color: var(--border-color);
+}
+
+[data-theme="dark"] .sheet-row:hover {
+    background: rgba(255, 255, 255, 0.05);
+}
 </style>
+

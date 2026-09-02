@@ -1,6 +1,6 @@
 <!--
-Copyright 2024-2026 ChatterMate
-左栏：会话导航与卡片列表 (ConversationsList.vue - 原版绿色体系 + 现代清晰背景 + 零发光干净质感)
+Copyright 2024-2026 Komi AI
+左栏：会话导航与卡片列表 (ConversationsList.vue - 现代高定多维色彩体系)
 -->
 
 <script setup lang="ts">
@@ -98,11 +98,11 @@ const normalizeConversations = (items: Conversation[]) => items.map(conv => {
     avatar: typeof meta.avatar_url === 'string' && meta.avatar_url ? meta.avatar_url : undefined,
     email: conv.customer?.email || '',
     channel: conv.channel || 'web',
-    channelColor: conv.channel === 'whatsapp' ? 'bg-[#25D366] text-white' : conv.channel === 'email' ? 'bg-blue-500 text-white' : 'bg-slate-600 text-white',
+    channelColor: conv.channel === 'whatsapp' ? 'bg-[#25D366] text-white' : conv.channel === 'email' ? 'bg-blue-500 text-white' : 'bg-indigo-600 text-white',
     storeId: storeName,
     storeName,
     storePlatform: conv.channel ? conv.channel[0].toUpperCase() + conv.channel.slice(1) : 'Web',
-    platformBadge: 'bg-slate-500/10 text-slate-300 border-slate-500/20',
+    platformBadge: 'bg-indigo-50 text-indigo-700 border-indigo-200',
     status,
     unreadCount: props.unreadCounts?.[conv.session_id] || 0,
     lastTime: safeTimeString(conv.updated_at),
@@ -134,13 +134,13 @@ const stores = computed(() => {
   })
 
   return [
-    { id: 'all', name: '所有关联店铺', iconClass: 'fa-solid fa-store', badge: String(inboxConversations.value.length), color: 'text-emerald-400 bg-emerald-500/15 border border-emerald-500/20' },
+    { id: 'all', name: '所有关联店铺', iconClass: 'fa-solid fa-store', badge: String(inboxConversations.value.length), color: 'text-indigo-600 bg-indigo-50 border border-indigo-200' },
     ...[...storeNames].map(name => ({
       id: name,
       name,
       iconClass: 'fa-solid fa-store',
       badge: String(inboxConversations.value.filter(conv => conv.storeId === name || conv.storeName === name).length),
-      color: 'text-slate-300 bg-slate-500/10 border border-slate-500/20',
+      color: 'text-slate-600 bg-slate-100 border border-slate-200',
     })),
   ]
 })
@@ -241,24 +241,23 @@ onBeforeUnmount(() => window.removeEventListener('keydown', focusSearch))
 </script>
 
 <template>
-  <!-- 侧边栏大容器：深邃纯净底色，无任何刺眼发光 -->
-  <section class="w-[340px] bg-[#0D111A] border-r border-[#1E2638] flex flex-col shrink-0 relative z-20 select-none h-full shadow-lg">
+  <section class="w-[330px] bg-[#FFFFFF] border-r border-slate-200/80 flex flex-col shrink-0 relative z-20 select-none h-full shadow-[1px_0_4px_rgba(0,0,0,0.02)]">
     
     <!-- 顶部标题栏 -->
-    <div class="p-3.5 border-b border-[#1E2638] flex items-center justify-between bg-[#111724]">
+    <div class="p-3.5 border-b border-slate-100 flex items-center justify-between bg-[#FFFFFF]">
       <div class="flex items-center gap-2">
-        <h1 class="text-sm font-extrabold text-slate-100 tracking-tight flex items-center gap-2">
+        <h1 class="text-sm font-bold text-[#0F172A] tracking-tight flex items-center gap-2">
           <span>会话中心</span>
-          <span class="px-2 py-0.5 text-[11px] font-bold bg-emerald-500/15 text-emerald-400 rounded-full border border-emerald-500/30">
+          <span class="px-2 py-0.5 text-[11px] font-bold bg-indigo-50 text-indigo-700 rounded-full border border-indigo-200/70 shadow-sm">
             <span class="font-mono">{{ openCount }}</span> 待办
           </span>
         </h1>
       </div>
-      <div class="flex items-center gap-1.5">
+      <div class="flex items-center gap-1">
         <button
           type="button"
           @click="openNewWhatsApp"
-          class="w-7 h-7 rounded-lg text-slate-400 hover:text-emerald-400 hover:bg-white/[0.06] border border-transparent hover:border-white/10 flex items-center justify-center transition-colors"
+          class="w-7 h-7 rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 flex items-center justify-center transition-colors"
           title="发起 WhatsApp 新会话"
           aria-label="发起 WhatsApp 新会话"
         >
@@ -266,14 +265,14 @@ onBeforeUnmount(() => window.removeEventListener('keydown', focusSearch))
         </button>
         <button
           @click="showFolderDrawer = !showFolderDrawer"
-          class="w-7 h-7 rounded-lg text-slate-400 hover:text-emerald-400 hover:bg-white/[0.06] border border-transparent hover:border-white/10 flex items-center justify-center transition-colors"
+          class="w-7 h-7 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 flex items-center justify-center transition-colors"
           title="展开/收起分组视图"
         >
           <i class="fa-solid fa-layer-group text-xs"></i>
         </button>
         <button
           @click="emit('refresh')"
-          class="w-7 h-7 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-white/[0.06] border border-transparent hover:border-white/10 flex items-center justify-center transition-colors"
+          class="w-7 h-7 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 flex items-center justify-center transition-colors"
           title="刷新列表"
         >
           <i class="fa-solid fa-arrow-rotate-right text-xs"></i>
@@ -282,7 +281,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', focusSearch))
     </div>
 
     <!-- 搜索框 & 店铺筛选器 -->
-    <div class="p-3 space-y-2.5 border-b border-[#1E2638] bg-[#0F1420]/80">
+    <div class="p-3 space-y-2 border-b border-slate-100 bg-[#FAFAFC]">
       <!-- 搜索框 -->
       <div class="relative">
         <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs pointer-events-none"></i>
@@ -291,46 +290,47 @@ onBeforeUnmount(() => window.removeEventListener('keydown', focusSearch))
           v-model="searchQuery"
           type="text"
           placeholder="搜索客户姓名、邮箱或消息..."
-          class="w-full bg-[#151C2C] text-xs text-slate-100 placeholder-slate-500 rounded-lg pl-8 pr-9 py-2 border border-[#222E46] focus:border-emerald-500/70 focus:outline-none transition-colors"
+          class="w-full bg-[#FFFFFF] text-xs text-[#0F172A] placeholder-slate-400 rounded-lg pl-8 pr-9 py-2 border border-slate-200/80 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/20 focus:outline-none transition-all shadow-sm"
         />
-        <span class="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] text-slate-400 bg-white/[0.07] px-1.5 py-0.5 rounded font-mono border border-white/[0.06]">⌘K</span>
+        <span class="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded font-mono border border-slate-200">⌘K</span>
       </div>
 
       <!-- 店铺选择器与高级筛选 -->
       <div class="flex items-center gap-2">
-      <div class="relative flex-1 min-w-0">
-        <button
-          @click="showStoreDropdown = !showStoreDropdown"
-          class="w-full flex items-center justify-between px-2.5 py-1.5 bg-[#151C2C] hover:bg-[#1A2336] rounded-lg border border-[#222E46] hover:border-slate-600 text-xs text-slate-200 transition-colors"
-        >
-          <div class="flex items-center gap-2 truncate">
-            <span :class="['w-4 h-4 rounded flex items-center justify-center text-[10px] shrink-0', selectedStoreObj.color]">
-              <i :class="selectedStoreObj.iconClass"></i>
-            </span>
-            <span class="font-medium truncate text-xs">{{ selectedStoreObj.name }}</span>
-          </div>
-          <i class="fa-solid fa-chevron-down text-[10px] text-slate-400"></i>
-        </button>
-
-        <!-- 下拉菜单 -->
-        <div
-          v-if="showStoreDropdown"
-          class="absolute left-0 right-0 top-full mt-1.5 bg-[#161E30] border border-slate-700/80 rounded-xl shadow-xl p-1.5 z-50 text-xs space-y-1 animate-in fade-in zoom-in-95 duration-150"
-        >
-          <div
-            v-for="st in stores"
-            :key="st.id"
-            @click="selectStore(st.id)"
-            class="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-white/[0.08] cursor-pointer text-slate-200 transition-colors"
+        <div class="relative flex-1 min-w-0">
+          <button
+            @click="showStoreDropdown = !showStoreDropdown"
+            class="w-full flex items-center justify-between px-2.5 py-1.5 bg-[#FFFFFF] hover:bg-slate-50 rounded-lg border border-slate-200/80 text-xs text-[#0F172A] transition-colors shadow-sm"
           >
-            <span :class="['w-5 h-5 rounded flex items-center justify-center text-[10px] shrink-0', st.color]">
-              <i :class="st.iconClass"></i>
-            </span>
-            <span class="flex-1 font-medium truncate">{{ st.name }}</span>
-            <span class="text-[10px] text-slate-400 font-mono px-1.5 py-0.5 rounded bg-white/5 border border-white/5">{{ st.badge }}</span>
+            <div class="flex items-center gap-2 truncate">
+              <span :class="['w-4 h-4 rounded flex items-center justify-center text-[10px] shrink-0', selectedStoreObj.color]">
+                <i :class="selectedStoreObj.iconClass"></i>
+              </span>
+              <span class="font-medium truncate text-xs">{{ selectedStoreObj.name }}</span>
+            </div>
+            <i class="fa-solid fa-chevron-down text-[10px] text-slate-400"></i>
+          </button>
+
+          <!-- 下拉菜单 -->
+          <div
+            v-if="showStoreDropdown"
+            class="absolute left-0 right-0 top-full mt-1 bg-[#FFFFFF] border border-slate-200 rounded-xl shadow-xl p-1.5 z-50 text-xs space-y-1"
+          >
+            <div
+              v-for="st in stores"
+              :key="st.id"
+              @click="selectStore(st.id)"
+              class="flex items-center gap-2 px-2.5 py-1.5 rounded-lg hover:bg-slate-100 cursor-pointer text-[#0F172A] transition-colors"
+            >
+              <span :class="['w-4 h-4 rounded flex items-center justify-center text-[10px] shrink-0', st.color]">
+                <i :class="st.iconClass"></i>
+              </span>
+              <span class="flex-1 font-medium truncate">{{ st.name }}</span>
+              <span class="text-[10px] text-slate-500 font-mono px-1.5 py-0.5 rounded bg-slate-100">{{ st.badge }}</span>
+            </div>
           </div>
         </div>
-      </div>
+
         <ConversationFilters
           :show-filters="props.showFilters || false"
           :filter-values="props.filterValues || { customerEmailFilter: '', agentFilter: '', userFilter: '', dateFromFilter: '', dateToFilter: '' }"
@@ -353,100 +353,67 @@ onBeforeUnmount(() => window.removeEventListener('keydown', focusSearch))
       @started="handleWhatsAppStarted"
     />
 
-    <!-- 零滚动 3+2 筛选矩阵 (对齐 workbench_v2.html) -->
-    <div class="p-2.5 border-b border-[#1E2638] bg-[#0A0E17]/60 space-y-1.5">
-      <!-- 第一行 -->
+    <!-- 筛选状态矩阵胶囊 -->
+    <div class="p-2.5 border-b border-slate-100 bg-[#FAFAFC] space-y-1.5">
       <div class="grid grid-cols-3 gap-1.5">
         <button
           @click="selectStatus('all')"
-          :class="['matrix-pill', currentFilterTab === 'all' ? 'active-pill-emerald' : '']"
+          :class="['matrix-pill', currentFilterTab === 'all' ? 'active-all' : '']"
         >
-          <span class="flex items-center gap-1.5 truncate"><i class="fa-solid fa-inbox text-[11px]"></i> 全部</span>
-          <span class="text-[10px] font-mono px-1 rounded bg-white/10 text-slate-200">{{ countBy() }}</span>
+          <span class="flex items-center gap-1.5 truncate"><i class="fa-solid fa-inbox text-[11px] text-slate-500"></i> 全部</span>
+          <span class="pill-count">{{ countBy() }}</span>
         </button>
 
         <button
           @click="selectStatus('ai')"
-          :class="['matrix-pill', currentFilterTab === 'ai' ? 'active-pill-emerald' : '']"
+          :class="['matrix-pill', currentFilterTab === 'ai' ? 'active-ai' : 'bg-emerald-50/50 text-emerald-800 border-emerald-200/70']"
         >
-          <span class="flex items-center gap-1.5 truncate"><i class="fa-solid fa-robot text-[11px] text-emerald-400"></i> AI</span>
-          <span class="text-[10px] font-mono px-1 rounded bg-emerald-500/20 text-emerald-300">{{ countBy('ai') }}</span>
+          <span class="flex items-center gap-1.5 truncate"><i class="fa-solid fa-robot text-[11px] text-emerald-600"></i> AI</span>
+          <span class="pill-count bg-emerald-100 text-emerald-800">{{ countBy('ai') }}</span>
         </button>
 
         <button
           @click="selectStatus('mine')"
-          :class="['matrix-pill', currentFilterTab === 'mine' ? 'active-pill-blue' : '']"
+          :class="['matrix-pill', currentFilterTab === 'mine' ? 'active-mine' : 'bg-blue-50/50 text-blue-800 border-blue-200/70']"
         >
-          <span class="flex items-center gap-1.5 truncate"><i class="fa-solid fa-user-check text-[11px] text-blue-400"></i> 我的</span>
-          <span class="text-[10px] font-mono px-1 rounded bg-blue-500/20 text-blue-300">{{ countBy('mine') }}</span>
+          <span class="flex items-center gap-1.5 truncate"><i class="fa-solid fa-user-check text-[11px] text-blue-600"></i> 我的</span>
+          <span class="pill-count bg-blue-100 text-blue-800">{{ countBy('mine') }}</span>
         </button>
       </div>
 
-      <!-- 第二行 -->
       <div class="grid grid-cols-2 gap-1.5">
         <button
           @click="selectStatus('queue')"
-          :class="['matrix-pill', currentFilterTab === 'queue' ? 'active-pill-amber' : '']"
+          :class="['matrix-pill', currentFilterTab === 'queue' ? 'active-queue' : 'bg-amber-50/50 text-amber-800 border-amber-200/70']"
         >
           <span class="flex items-center gap-1.5 truncate">
-            <span class="w-2 h-2 rounded-full bg-amber-400 shrink-0"></span>
+            <span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
             <span class="truncate">待人工接入</span>
           </span>
-          <span class="text-[10px] font-mono font-bold px-1.5 rounded bg-amber-500/20 text-amber-300">{{ countBy('queue') }}</span>
+          <span class="pill-count bg-amber-100 text-amber-800">{{ countBy('queue') }}</span>
         </button>
 
         <button
           @click="selectStatus('closed')"
-          :class="['matrix-pill', currentFilterTab === 'closed' ? 'active-pill-closed' : '']"
+          :class="['matrix-pill', currentFilterTab === 'closed' ? 'active-closed' : '']"
         >
           <span class="flex items-center gap-1.5 truncate">
-            <i class="fa-solid fa-lock text-[10px] text-slate-500"></i>
-            <span class="truncate">已解决关闭</span>
+            <i class="fa-solid fa-lock text-[10px] text-slate-400"></i>
+            <span class="truncate">已关闭</span>
           </span>
-          <span class="text-[10px] font-mono px-1 rounded bg-white/5 text-slate-400">{{ countBy('closed') }}</span>
+          <span class="pill-count">{{ countBy('closed') }}</span>
         </button>
       </div>
     </div>
 
-    <!-- 展开抽屉面板 -->
-    <div
-      v-if="showFolderDrawer"
-      class="p-2 border-b border-[#1E2638] bg-[#141C2E] space-y-1 text-xs animate-in fade-in duration-150"
-    >
-      <div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-2 py-1 flex items-center justify-between">
-        <span>收件箱全景视图</span>
-        <span class="text-emerald-400 font-mono">{{ openCount }} 进行中</span>
+    <!-- 会话卡片列表容器 -->
+    <div class="flex-1 overflow-y-auto p-2 space-y-1.5 bg-[#F8FAFC]" @scroll="handleConversationScroll">
+      <div v-if="props.loading" class="py-14 text-center text-slate-400 text-xs">
+        <i class="fa-solid fa-spinner fa-spin mr-2 text-indigo-500"></i>正在加载会话…
       </div>
-      <div @click="selectStatus('all')" class="flex items-center justify-between p-2 rounded-lg hover:bg-white/[0.06] cursor-pointer text-slate-200">
-        <span class="flex items-center gap-2"><i class="fa-solid fa-inbox text-emerald-400"></i> 全部实时会话</span>
-        <span class="font-mono text-slate-400 font-bold">{{ countBy() }}</span>
-      </div>
-      <div @click="selectStatus('ai')" class="flex items-center justify-between p-2 rounded-lg hover:bg-white/[0.06] cursor-pointer text-slate-200">
-        <span class="flex items-center gap-2"><i class="fa-solid fa-robot text-emerald-400"></i> AI 智能应答中</span>
-        <span class="font-mono text-emerald-400 font-bold">{{ countBy('ai') }}</span>
-      </div>
-      <div @click="selectStatus('mine')" class="flex items-center justify-between p-2 rounded-lg hover:bg-white/[0.06] cursor-pointer text-slate-200">
-        <span class="flex items-center gap-2"><i class="fa-solid fa-user-check text-blue-400"></i> 分配给我的接待</span>
-        <span class="font-mono text-blue-400 font-bold">{{ countBy('mine') }}</span>
-      </div>
-      <div @click="selectStatus('queue')" class="flex items-center justify-between p-2 rounded-lg hover:bg-white/[0.06] cursor-pointer text-slate-200">
-        <span class="flex items-center gap-2"><i class="fa-solid fa-clock text-amber-400"></i> 待人工接入队列</span>
-        <span class="font-mono text-amber-400 font-bold">{{ countBy('queue') }}</span>
-      </div>
-      <div @click="selectStatus('closed')" class="flex items-center justify-between p-2 rounded-lg hover:bg-white/[0.06] cursor-pointer text-slate-200">
-        <span class="flex items-center gap-2"><i class="fa-solid fa-circle-check text-slate-400"></i> 已解决/历史归档</span>
-        <span class="font-mono text-slate-500">{{ countBy('closed') }}</span>
-      </div>
-    </div>
-
-    <!-- 会话卡片列表容器 (重点：原版绿色、清晰轮廓、零发光) -->
-    <div class="flex-1 overflow-y-auto p-2 space-y-2" @scroll="handleConversationScroll">
-      <div v-if="props.loading" class="py-14 text-center text-slate-500 text-xs">
-        <i class="fa-solid fa-spinner fa-spin mr-2"></i>正在加载会话…
-      </div>
-      <div v-else-if="props.error" class="py-10 px-4 text-center text-rose-300 text-xs">
+      <div v-else-if="props.error" class="py-10 px-4 text-center text-rose-500 text-xs">
         <p>{{ props.error }}</p>
-        <button class="mt-3 px-3 py-1.5 rounded-lg border border-rose-500/30 hover:bg-rose-500/10" @click="emit('refresh')">重试</button>
+        <button class="mt-3 px-3 py-1.5 rounded-lg border border-rose-200 bg-white hover:bg-rose-50 text-rose-600 font-medium" @click="emit('refresh')">重试</button>
       </div>
       <div
         v-else v-for="conv in filteredConversations"
@@ -454,24 +421,24 @@ onBeforeUnmount(() => window.removeEventListener('keydown', focusSearch))
         @click="selectSession(conv.id)"
         :class="[
           'p-3 rounded-xl cursor-pointer relative transition-all duration-150 group',
-          activeId === conv.id ? 'clean-card-active' : 'clean-card-default',
+          activeId === conv.id ? 'conv-card-active' : 'conv-card-default',
         ]"
       >
-        <div class="flex items-start gap-3">
-          <!-- 头像与渠道徽标 (无发光) -->
+        <div class="flex items-start gap-2.5">
+          <!-- 头像与渠道徽标 -->
           <div class="relative shrink-0 mt-0.5">
             <img
               v-if="conv.avatar"
               :src="conv.avatar"
               :alt="conv.customerName"
-              class="w-10 h-10 rounded-xl object-cover border border-white/10"
+              class="w-9 h-9 rounded-full object-cover border border-indigo-200"
             />
-            <div v-else class="w-10 h-10 rounded-xl border border-white/10 bg-slate-700 text-sm font-bold text-slate-200 flex items-center justify-center">
+            <div v-else class="w-9 h-9 rounded-full border border-indigo-200 bg-gradient-to-tr from-indigo-100 to-purple-100 text-xs font-bold text-indigo-700 flex items-center justify-center shadow-sm">
               {{ conv.initials }}
             </div>
             <span
               :class="[
-                'absolute -bottom-1 -right-1 w-4 h-4 rounded-full flex items-center justify-center text-[9px] border-2 border-[#161D2B]',
+                'absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full flex items-center justify-center text-[8px] border-2 border-white shadow-sm',
                 conv.channelColor,
               ]"
             >
@@ -488,78 +455,72 @@ onBeforeUnmount(() => window.removeEventListener('keydown', focusSearch))
 
           <!-- 卡片主体信息 -->
           <div class="flex-1 min-w-0">
-            <!-- 姓名、平台、时间 (原版原色) -->
-            <div class="flex items-center justify-between leading-none">
+            <!-- 姓名、平台、时间 -->
+            <div class="flex items-center justify-between leading-tight">
               <div class="flex items-center gap-1.5 truncate">
                 <span
-                  :class="[
-                    'font-bold text-xs truncate transition-colors',
-                    activeId === conv.id ? 'text-emerald-400' : 'text-slate-100 group-hover:text-emerald-300',
-                  ]"
+                  class="font-bold text-xs truncate text-[#0F172A]"
                 >
                   {{ conv.customerName }}
                 </span>
                 <span
-                  :class="[
-                    'text-[10px] px-1.5 py-0.2 rounded font-medium border truncate',
-                    conv.platformBadge,
-                  ]"
+                  class="text-[9.5px] px-1.5 py-0.2 rounded font-medium bg-indigo-50 text-indigo-700 border border-indigo-200/60 truncate"
                 >
                   {{ conv.storePlatform }}
                 </span>
               </div>
-              <span class="text-[11px] text-slate-400 font-mono shrink-0 ml-1">{{ conv.lastTime }}</span>
+              <span class="text-[10.5px] text-slate-400 font-mono shrink-0 ml-1">{{ conv.lastTime }}</span>
             </div>
 
             <!-- 消息摘要 -->
             <p
               :class="[
-                'text-xs truncate mt-1 leading-snug transition-colors',
-                conv.unreadCount > 0 ? 'text-slate-200 font-semibold' : 'text-slate-400',
+                'text-[11.5px] truncate mt-1 leading-snug transition-colors',
+                conv.unreadCount > 0 ? 'text-indigo-900 font-bold' : 'text-slate-500',
               ]"
             >
               {{ conv.lastMessage }}
             </p>
 
-            <!-- 底部状态徽章与未读数 (无发光) -->
-            <div class="flex items-center justify-between mt-2 pt-1.5 border-t border-white/[0.06]">
+            <!-- 底部状态徽章与未读数 -->
+            <div class="flex items-center justify-between mt-2 pt-1.5 border-t border-slate-100">
               <div>
                 <span
                   v-if="conv.status === 'ai'"
-                  class="inline-flex items-center gap-1 px-1.5 py-0.2 text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/25 rounded-md"
+                  class="inline-flex items-center gap-1 px-1.5 py-0.2 text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-md"
                 >
-                  <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>AI 处理中
+                  <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>AI 处理中
                 </span>
                 <span
                   v-else-if="conv.status === 'queue'"
-                  class="inline-flex items-center gap-1 px-1.5 py-0.2 text-[10px] font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/25 rounded-md"
+                  class="inline-flex items-center gap-1 px-1.5 py-0.2 text-[10px] font-semibold bg-amber-50 text-amber-700 border border-amber-200 rounded-md"
                 >
-                  <span class="w-1.5 h-1.5 rounded-full bg-amber-400"></span>待人工接入
+                  <span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span>待人工接入
                 </span>
                 <span
                   v-else-if="conv.status === 'mine'"
-                  class="inline-flex items-center gap-1 px-1.5 py-0.2 text-[10px] font-semibold bg-blue-500/10 text-blue-400 border border-blue-500/25 rounded-md"
+                  class="inline-flex items-center gap-1 px-1.5 py-0.2 text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-200 rounded-md"
                 >
-                  <i class="fa-solid fa-user-check text-[9px]"></i>人工接管
+                  <i class="fa-solid fa-user-check text-[8px]"></i>人工接管
                 </span>
                 <span
                   v-else-if="conv.status === 'assigned'"
-                  class="inline-flex items-center gap-1 px-1.5 py-0.2 text-[10px] font-semibold bg-blue-500/10 text-blue-400 border border-blue-500/25 rounded-md"
+                  class="inline-flex items-center gap-1 px-1.5 py-0.2 text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-200 rounded-md"
                 >
-                  <i class="fa-solid fa-user text-[9px]"></i>其他客服接待
+                  <i class="fa-solid fa-user text-[8px]"></i>团队接待
                 </span>
                 <span
                   v-else
-                  class="inline-flex items-center gap-1 px-1.5 py-0.2 text-[10px] font-medium bg-slate-800/80 text-slate-400 border border-slate-700/50 rounded-md"
+                  class="inline-flex items-center gap-1 px-1.5 py-0.2 text-[10px] font-medium bg-slate-100 text-slate-500 border border-slate-200 rounded-md"
                 >
-                  <i class="fa-solid fa-lock text-[9px]"></i>已解决关闭
+                  <i class="fa-solid fa-lock text-[8px]"></i>已关闭
                 </span>
               </div>
 
-              <!-- 纯色未读红点 (无发光) -->
+              <!-- 未读红点 -->
               <span
                 v-if="conv.unreadCount > 0"
-                class="px-2 py-0.2 bg-rose-500 text-white font-black text-[10px] rounded-full"
+                class="px-1.5 py-0.2 bg-rose-500 text-white font-bold text-[9px] rounded-full shadow-sm"
               >
                 {{ conv.unreadCount }}
               </span>
@@ -567,23 +528,23 @@ onBeforeUnmount(() => window.removeEventListener('keydown', focusSearch))
           </div>
         </div>
 
-        <!-- 激活专属原版绿色指示条 (清晰质感，零发光) -->
+        <!-- 激活专属高光指示条 -->
         <div
           v-if="activeId === conv.id"
-          class="absolute left-0 top-2.5 bottom-2.5 w-[3px] bg-emerald-400 rounded-r-full"
+          class="absolute left-0 top-2.5 bottom-2.5 w-[3.5px] bg-indigo-600 rounded-r-full shadow-sm"
         ></div>
       </div>
 
       <div
         v-if="filteredConversations.length === 0"
-        class="py-14 text-center text-slate-500 text-xs"
+        class="py-14 text-center text-slate-400 text-xs"
       >
         没有匹配的会话
       </div>
       <button
         v-else-if="hasMore || loadingMore"
         type="button"
-        class="w-full py-2 text-center text-[11px] text-slate-400 hover:text-emerald-300 disabled:cursor-wait disabled:opacity-60"
+        class="w-full py-2 text-center text-[11px] text-indigo-600 hover:text-indigo-800 disabled:cursor-wait disabled:opacity-60 font-semibold"
         :disabled="loadingMore"
         @click="requestMore"
       >
@@ -592,74 +553,127 @@ onBeforeUnmount(() => window.removeEventListener('keydown', focusSearch))
     </div>
 
     <!-- 列表底部状态条 -->
-    <div class="p-2.5 border-t border-[#1E2638] bg-[#0E1422] text-[11px] text-slate-400 flex items-center justify-between px-3">
+    <div class="p-2.5 border-t border-slate-100 bg-[#FFFFFF] text-[11px] text-slate-500 flex items-center justify-between px-3">
       <span class="flex items-center gap-1.5">
         <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
-        <span>会话状态</span>
+        <span class="font-medium text-slate-700">会话中心</span>
       </span>
-      <span class="text-slate-400 font-mono text-[10px]">{{ openCount }} 进行中</span>
+      <span class="text-indigo-600 font-mono text-[10px] font-bold">{{ openCount }} 进行中</span>
     </div>
   </section>
 </template>
 
 <style scoped>
-/* 默认未选中卡片：清晰分明的炭曜灰底色 + 明显立体的边框轮廓 (零发光) */
-.clean-card-default {
-  background: #161D2B;
-  border: 1px solid #28344B;
-  border-top: 1px solid #364665;
+/* 默认未选中卡片 */
+.conv-card-default {
+  background: #FFFFFF;
+  border: 1px solid rgba(15, 23, 42, 0.06);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
 }
-.clean-card-default:hover {
-  background: #1B2436;
-  border-color: #3B4B6E;
-  border-top-color: #4D628F;
-}
-
-/* 激活选中卡片：原版经典绿意 + 清晰绿色立体轮廓 (零发光) */
-.clean-card-active {
-  background: #152227;
-  border: 1px solid #10b981;
-  border-top: 1px solid #34d399;
+.conv-card-default:hover {
+  background: #FFFFFF;
+  border-color: rgba(99, 102, 241, 0.3);
+  box-shadow: 0 2px 6px rgba(99, 102, 241, 0.06);
 }
 
-/* 3+2 紧凑胶囊按钮 (清晰轮廓，零发光) */
+/* 激活选中卡片 */
+.conv-card-active {
+  background: linear-gradient(90deg, rgba(238, 242, 255, 0.7) 0%, #FFFFFF 100%);
+  border: 1.5px solid #6366F1;
+  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.12);
+}
+
+/* 状态矩阵胶囊按钮 */
 .matrix-pill {
-  padding: 6px 8px;
+  padding: 5px 8px;
   border-radius: 8px;
-  background: #151C2C;
-  border: 1px solid #28344B;
-  border-top: 1px solid #364665;
-  color: #94a3b8;
+  background: #FFFFFF;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  color: #64748B;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  font-size: 12px;
+  font-size: 11.5px;
   font-weight: 600;
   transition: all 0.15s ease;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.01);
 }
 .matrix-pill:hover {
-  color: #fff;
-  background: #1B2436;
-  border-color: #3B4B6E;
+  color: #0F172A;
+  transform: translateY(-0.5px);
 }
-.matrix-pill.active-pill-emerald {
-  background: #152227;
-  border-color: #10b981;
-  color: #34d399;
+
+.pill-count {
+  font-size: 10px;
+  font-family: monospace;
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: #F1F5F9;
+  color: #475569;
 }
-.matrix-pill.active-pill-blue {
-  background: #151D2E;
-  border-color: #3b82f6;
-  color: #60a5fa;
+
+.active-all {
+  background: #0F172A !important;
+  border-color: #0F172A !important;
+  color: #FFFFFF !important;
 }
-.matrix-pill.active-pill-amber {
-  background: #241D17;
-  border-color: #f59e0b;
-  color: #fbbf24;
+.active-all .pill-count {
+  background: rgba(255, 255, 255, 0.2) !important;
+  color: #FFFFFF !important;
 }
-.matrix-pill.active-pill-closed {
-  background: #1E2533;
-  border-color: #475569;
-  color: #f8fafc;
+.active-all i {
+  color: #FFFFFF !important;
+}
+
+.active-ai {
+  background: #059669 !important;
+  border-color: #059669 !important;
+  color: #FFFFFF !important;
+}
+.active-ai .pill-count {
+  background: rgba(255, 255, 255, 0.2) !important;
+  color: #FFFFFF !important;
+}
+.active-ai i {
+  color: #FFFFFF !important;
+}
+
+.active-mine {
+  background: #2563EB !important;
+  border-color: #2563EB !important;
+  color: #FFFFFF !important;
+}
+.active-mine .pill-count {
+  background: rgba(255, 255, 255, 0.2) !important;
+  color: #FFFFFF !important;
+}
+.active-mine i {
+  color: #FFFFFF !important;
+}
+
+.active-queue {
+  background: #D97706 !important;
+  border-color: #D97706 !important;
+  color: #FFFFFF !important;
+}
+.active-queue .pill-count {
+  background: rgba(255, 255, 255, 0.2) !important;
+  color: #FFFFFF !important;
+}
+.active-queue span {
+  color: #FFFFFF !important;
+}
+
+.active-closed {
+  background: #475569 !important;
+  border-color: #475569 !important;
+  color: #FFFFFF !important;
+}
+.active-closed .pill-count {
+  background: rgba(255, 255, 255, 0.2) !important;
+  color: #FFFFFF !important;
+}
+.active-closed i {
+  color: #FFFFFF !important;
 }
 </style>

@@ -3,17 +3,17 @@
 // in a page self === window, so window.APP_CONFIG still works.
 self.APP_CONFIG = {
     // API URLs
-    API_URL: "https://devapi.chattermate.chat/api/v1",
-    WS_URL: "wss://devapi.chattermate.chat",
-    WIDGET_URL: "https://devapp.chattermate.chat",
+    API_URL: "https://devapi.komi.ai/api/v1",
+    WS_URL: "wss://devapi.komi.ai",
+    WIDGET_URL: "https://devapp.komi.ai",
     
     // Firebase Configuration
     FIREBASE_API_KEY: "AIzaSyDTwDgANnBItYx39qm-6shq4cUws6QY4wI",
-    FIREBASE_AUTH_DOMAIN: "chattermate-13e0a.firebaseapp.com",
-    FIREBASE_PROJECT_ID: "chattermate-13e0a",
+    FIREBASE_AUTH_DOMAIN: "komi-13e0a.firebaseapp.com",
+    FIREBASE_PROJECT_ID: "komi-13e0a",
     FIREBASE_MESSAGING_SENDER_ID: "680125690355",
     FIREBASE_APP_ID: "1:680125690355:web:466f50999a6c91935ae286",
-    FIREBASE_STORAGE_BUCKET: "chattermate-13e0a.firebasestorage.app",
+    FIREBASE_STORAGE_BUCKET: "komi-13e0a.firebasestorage.app",
     FIREBASE_MEASUREMENT_ID: "G-7LGB58R2Q7",
     FIREBASE_VAPID_KEY: "BJKnggErez2qK3AxBhHyEV-EoS9lfcWO1GDXhRwUKIHbT_PH23vhY_8HRIz_KyuC-0gbuViSrtSMiFp7zgyYY4g",
     

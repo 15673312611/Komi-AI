@@ -653,7 +653,7 @@ func (r *Repository) activities(ctx context.Context, ticketID uuid.UUID) ([]Acti
 		if name.Valid {
 			a.ActorName = &name.String
 		} else if a.ActorType == "ai" {
-			value := "ChatterMate AI"
+			value := "Komi AI"
 			a.ActorName = &value
 		}
 		result = append(result, a)

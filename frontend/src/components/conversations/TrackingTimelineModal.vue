@@ -44,22 +44,22 @@ const insertDraft = () => {
 
 <template>
   <div v-if="show" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-in fade-in duration-200" @click.self="emit('close')">
-    <div class="w-full max-w-lg bg-[#0F1523] border border-white/10 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
+    <div class="w-full max-w-lg bg-[#FAFAFC] border border-slate-200 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
       <!-- 头部 -->
-      <div class="px-5 py-4 border-b border-white/[0.08] flex items-center justify-between bg-[#141B2E]">
+      <div class="px-5 py-4 border-b border-slate-200 flex items-center justify-between bg-[#141B2E]">
         <div class="flex items-center gap-3">
           <div class="w-9 h-9 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 flex items-center justify-center text-sm shadow-[0_0_12px_rgba(16,185,129,0.3)]">
             <i class="fa-solid fa-truck-fast"></i>
           </div>
           <div>
-            <h3 class="font-bold text-slate-100 text-sm">物流追踪与履约详情</h3>
+            <h3 class="font-bold text-[#0F172A] text-sm">物流追踪与履约详情</h3>
             <p class="text-[11px] text-slate-400 mt-0.5">{{ order?.name || '当前订单' }} · 实时同步 Shopify 物流轨迹</p>
           </div>
         </div>
         <button
           type="button"
           @click="emit('close')"
-          class="w-7 h-7 rounded-lg hover:bg-white/10 text-slate-400 hover:text-slate-100 flex items-center justify-center transition-colors"
+          class="w-7 h-7 rounded-lg hover:bg-white/10 text-slate-400 hover:text-[#0F172A] flex items-center justify-center transition-colors"
         >
           <i class="fa-solid fa-xmark text-sm"></i>
         </button>
@@ -85,7 +85,7 @@ const insertDraft = () => {
                   <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
                   {{ (fulfillment as any).status || (fulfillment as any).shipment_status || '履约就绪' }}
                 </span>
-                <span v-if="(fulfillment as any).tracking_company" class="px-2 py-0.5 rounded-full bg-white/5 border border-white/10 text-[10px] text-slate-300">
+                <span v-if="(fulfillment as any).tracking_company" class="px-2 py-0.5 rounded-full bg-white/5 border border-slate-200 text-[10px] text-slate-300">
                   {{ (fulfillment as any).tracking_company }}
                 </span>
               </div>
@@ -107,7 +107,7 @@ const insertDraft = () => {
                   <button
                     type="button"
                     @click="copy(url, '物流链接已复制')"
-                    class="text-[11px] text-slate-400 hover:text-slate-200 shrink-0"
+                    class="text-[11px] text-slate-400 hover:text-slate-800 shrink-0"
                   >
                     复制
                   </button>
@@ -119,11 +119,11 @@ const insertDraft = () => {
       </div>
 
       <!-- 底部栏 -->
-      <div class="px-5 py-3.5 border-t border-white/[0.08] bg-[#141B2E] flex items-center justify-between gap-2">
+      <div class="px-5 py-3.5 border-t border-slate-200 bg-[#141B2E] flex items-center justify-between gap-2">
         <button
           type="button"
           @click="emit('close')"
-          class="px-3.5 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 text-xs font-medium transition-all"
+          class="px-3.5 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-slate-200 text-slate-300 text-xs font-medium transition-all"
         >
           关闭
         </button>

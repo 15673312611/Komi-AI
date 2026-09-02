@@ -1,4 +1,4 @@
-// Copyright 2024-2026 ChatterMate
+// Copyright 2024-2026 Komi AI
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -25,6 +25,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 	"unicode"
 
@@ -45,10 +46,12 @@ func NewProcessor(repo *Repository, logger zerolog.Logger) *Processor {
 		TLSClientConfig:       &tls.Config{InsecureSkipVerify: true},
 		ResponseHeaderTimeout: 15 * time.Second,
 		DisableKeepAlives:     false,
+		MaxIdleConns:          50,
+		MaxIdleConnsPerHost:   10,
 	}
 	client := &http.Client{
 		Transport: tr,
-		Timeout:   20 * time.Second,
+		Timeout:   18 * time.Second,
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			if len(via) >= 10 {
 				return errors.New("stopped after 10 redirects")
@@ -67,7 +70,7 @@ func NewProcessor(repo *Repository, logger zerolog.Logger) *Processor {
 func (p *Processor) Start(ctx context.Context) {
 	p.logger.Info().Msg("knowledge queue processor worker started")
 	go func() {
-		ticker := time.NewTicker(2 * time.Second)
+		ticker := time.NewTicker(1 * time.Second)
 		defer ticker.Stop()
 
 		for {
@@ -138,9 +141,10 @@ func (p *Processor) executeItem(ctx context.Context, item *QueueItem) error {
 }
 
 type crawledPage struct {
-	URL     string
-	Title   string
-	Content string
+	URL         string
+	Title       string
+	Description string
+	Content     string
 }
 
 func (p *Processor) processWebsite(ctx context.Context, item *QueueItem) error {
@@ -167,74 +171,7 @@ func (p *Processor) processWebsite(ctx context.Context, item *QueueItem) error {
 		crawlScope = strings.ToLower(s)
 	}
 
-	// 1. Stage: Crawling
-	_ = p.repo.UpdateQueueProgress(ctx, item.ID, "crawling", 5, 1, 0, rawSource)
-
-	toVisit := []string{rawSource}
-	visited := make(map[string]bool)
-	var pages []crawledPage
-
-	for len(toVisit) > 0 && len(pages) < maxLinks {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		default:
-		}
-
-		currentURL := toVisit[0]
-		toVisit = toVisit[1:]
-
-		normalizedURL := stripFragment(currentURL)
-		if visited[normalizedURL] {
-			continue
-		}
-		visited[normalizedURL] = true
-
-		pageCtx, pageCancel := context.WithTimeout(ctx, 15*time.Second)
-		page, links, finalURL, fetchErr := p.fetchAndExtract(pageCtx, currentURL)
-		pageCancel()
-
-		if fetchErr != nil {
-			if len(pages) == 0 {
-				// If root URL fails, fail the whole job
-				return fmt.Errorf("抓取起始页面失败 [%s]: %w", currentURL, fetchErr)
-			}
-			p.logger.Warn().Str("url", currentURL).Err(fetchErr).Msg("skipped subpage fetch error")
-			continue
-		}
-
-		// Update base URL if redirected on root page
-		if len(pages) == 0 && finalURL != nil {
-			parsedBase = finalURL
-		}
-
-		if len(strings.TrimSpace(page.Content)) > 20 {
-			pages = append(pages, *page)
-		}
-
-		// Update progress after each page
-		progressPct := float64(len(pages)) / float64(maxLinks) * 70.0
-		if progressPct > 70 {
-			progressPct = 70
-		}
-		_ = p.repo.UpdateQueueProgress(ctx, item.ID, "crawling", progressPct, maxLinks, len(pages), currentURL)
-
-		// Discover matching links
-		for _, link := range links {
-			normLink := stripFragment(link)
-			if !visited[normLink] && isLinkInScope(parsedBase, normLink, crawlScope) {
-				toVisit = append(toVisit, normLink)
-			}
-		}
-	}
-
-	if len(pages) == 0 {
-		return errors.New("未能从目标网址抓取到有效文本内容，请确认该网页是否公开可读")
-	}
-
-	// 2. Stage: Embedding & Indexing
-	_ = p.repo.UpdateQueueProgress(ctx, item.ID, "embedding", 75, len(pages), len(pages), "")
-
+	// 1. 即抓即存：任务一开始立即初始化知识源，让用户在界面实时看到知识源建立
 	source, err := p.repo.ensureSource(ctx, item.OrganizationID, item.Source, "WEBSITE")
 	if err != nil {
 		return fmt.Errorf("创建知识库源失败: %w", err)
@@ -244,32 +181,141 @@ func (p *Processor) processWebsite(ctx context.Context, item *QueueItem) error {
 		_ = p.repo.Link(ctx, source.ID, item.OrganizationID, *item.AgentID)
 	}
 
-	for i, pg := range pages {
+	_ = p.repo.UpdateQueueProgress(ctx, item.ID, "crawling", 5, maxLinks, 0, rawSource)
+
+	// 并发与队列状态管理
+	var mu sync.Mutex
+	toVisit := []string{normalizeURLClean(rawSource)}
+	visited := make(map[string]bool)
+	pagesIndexed := 0
+
+	// 先抓取首页
+	firstURL := toVisit[0]
+	toVisit = toVisit[1:]
+	visited[firstURL] = true
+
+	pageCtx, pageCancel := context.WithTimeout(ctx, 15*time.Second)
+	firstPage, initialLinks, finalURL, fetchErr := p.fetchAndExtract(pageCtx, firstURL)
+	pageCancel()
+
+	if fetchErr != nil {
+		return fmt.Errorf("抓取起始页面失败 [%s]: %w", firstURL, fetchErr)
+	}
+
+	if finalURL != nil {
+		parsedBase = finalURL
+	}
+
+	if len(strings.TrimSpace(firstPage.Content)) >= 20 {
+		meta := map[string]any{
+			"url":         firstPage.URL,
+			"title":       firstPage.Title,
+			"description": firstPage.Description,
+		}
+		// 抓一个存一个，立即进入向量数据库
+		_ = p.repo.IndexDocument(ctx, source, firstPage.URL, firstPage.Content, meta)
+		pagesIndexed++
+		progressPct := (float64(pagesIndexed) / float64(maxLinks)) * 95.0
+		_ = p.repo.UpdateQueueProgress(ctx, item.ID, "crawling", progressPct, maxLinks, pagesIndexed, firstPage.URL)
+	}
+
+	// 发现首批链接
+	for _, link := range initialLinks {
+		norm := normalizeURLClean(link)
+		if !visited[norm] && isLinkInScope(parsedBase, norm, crawlScope) {
+			toVisit = append(toVisit, norm)
+		}
+	}
+
+	// 并发池流水线并发抓取剩余页面
+	const concurrency = 3
+	type result struct {
+		page     *crawledPage
+		links    []string
+		url      string
+		fetchErr error
+	}
+
+	for len(toVisit) > 0 && pagesIndexed < maxLinks {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
 		default:
 		}
 
-		pageID := pg.URL
-		meta := map[string]any{
-			"url":   pg.URL,
-			"title": pg.Title,
+		// 批次取出最多 concurrency 个 URL
+		mu.Lock()
+		var batch []string
+		for len(toVisit) > 0 && len(batch) < concurrency && (pagesIndexed+len(batch)) < maxLinks {
+			u := toVisit[0]
+			toVisit = toVisit[1:]
+			if !visited[u] {
+				visited[u] = true
+				batch = append(batch, u)
+			}
+		}
+		mu.Unlock()
+
+		if len(batch) == 0 {
+			break
 		}
 
-		// Index document into vector database
-		if err := p.repo.IndexDocument(ctx, source, pageID, pg.Content, meta); err != nil {
-			p.logger.Warn().Str("page_url", pg.URL).Err(err).Msg("failed indexing document chunk")
+		resChan := make(chan result, len(batch))
+		var wg sync.WaitGroup
+
+		for _, targetURL := range batch {
+			wg.Add(1)
+			go func(u string) {
+				defer wg.Done()
+				subCtx, subCancel := context.WithTimeout(ctx, 15*time.Second)
+				pg, lks, _, err := p.fetchAndExtract(subCtx, u)
+				subCancel()
+				resChan <- result{page: pg, links: lks, url: u, fetchErr: err}
+			}(targetURL)
 		}
 
-		indexingProgress := 75.0 + (float64(i+1)/float64(len(pages)))*25.0
-		if indexingProgress > 99 {
-			indexingProgress = 99
+		wg.Wait()
+		close(resChan)
+
+		for res := range resChan {
+			if res.fetchErr != nil {
+				p.logger.Warn().Str("url", res.url).Err(res.fetchErr).Msg("skipped subpage fetch error")
+				continue
+			}
+
+			if res.page != nil && len(strings.TrimSpace(res.page.Content)) >= 20 {
+				meta := map[string]any{
+					"url":         res.page.URL,
+					"title":       res.page.Title,
+					"description": res.page.Description,
+				}
+				// 实时入库
+				_ = p.repo.IndexDocument(ctx, source, res.page.URL, res.page.Content, meta)
+				pagesIndexed++
+				progressPct := (float64(pagesIndexed) / float64(maxLinks)) * 95.0
+				if progressPct > 98 {
+					progressPct = 98
+				}
+				_ = p.repo.UpdateQueueProgress(ctx, item.ID, "crawling", progressPct, maxLinks, pagesIndexed, res.page.URL)
+			}
+
+			// 收集新链接
+			mu.Lock()
+			for _, link := range res.links {
+				norm := normalizeURLClean(link)
+				if !visited[norm] && isLinkInScope(parsedBase, norm, crawlScope) {
+					toVisit = append(toVisit, norm)
+				}
+			}
+			mu.Unlock()
 		}
-		_ = p.repo.UpdateQueueProgress(ctx, item.ID, "embedding", indexingProgress, len(pages), i+1, pg.URL)
 	}
 
-	_ = p.repo.UpdateQueueProgress(ctx, item.ID, "completed", 100, len(pages), len(pages), "")
+	if pagesIndexed == 0 {
+		return errors.New("未能从目标网址提取到有效正文内容，请确认该网页是否公开可读")
+	}
+
+	_ = p.repo.UpdateQueueProgress(ctx, item.ID, "completed", 100, maxLinks, pagesIndexed, "")
 	return nil
 }
 
@@ -297,7 +343,7 @@ func (p *Processor) processSitemap(ctx context.Context, item *QueueItem) error {
 	if err != nil {
 		return err
 	}
-	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) ChatterMate-Bot/1.0")
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Komi AI-Bot/1.0")
 
 	resp, err := p.client.Do(req)
 	if err != nil {
@@ -358,12 +404,12 @@ func (p *Processor) processSitemap(ctx context.Context, item *QueueItem) error {
 		page, _, _, err := p.fetchAndExtract(pageCtx, u)
 		pageCancel()
 
-		if err != nil || len(strings.TrimSpace(page.Content)) < 20 {
+		if err != nil || page == nil || len(strings.TrimSpace(page.Content)) < 20 {
 			continue
 		}
-		_ = p.repo.IndexDocument(ctx, source, u, page.Content, map[string]any{"url": u, "title": page.Title})
+		_ = p.repo.IndexDocument(ctx, source, u, page.Content, map[string]any{"url": u, "title": page.Title, "description": page.Description})
 		pagesIndexed++
-		_ = p.repo.UpdateQueueProgress(ctx, item.ID, "crawling", float64(i+1)/float64(len(urls))*90, len(urls), pagesIndexed, u)
+		_ = p.repo.UpdateQueueProgress(ctx, item.ID, "crawling", float64(i+1)/float64(len(urls))*95, len(urls), pagesIndexed, u)
 	}
 
 	if pagesIndexed == 0 {
@@ -408,7 +454,7 @@ func (p *Processor) fetchAndExtract(ctx context.Context, targetURL string) (*cra
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 ChatterMate-Bot/1.0")
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36 Komi AI-Bot/1.0")
 	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
 	req.Header.Set("Accept-Language", "zh-CN,zh;q=0.9,en;q=0.8")
 
@@ -434,6 +480,9 @@ func (p *Processor) fetchAndExtract(ctx context.Context, targetURL string) (*cra
 
 	parsedBase := resp.Request.URL
 	var pageTitle string
+	var ogTitle string
+	var h1Title string
+	var pageDescription string
 	var textBuf bytes.Buffer
 	var links []string
 	seenLinks := make(map[string]bool)
@@ -442,12 +491,42 @@ func (p *Processor) fetchAndExtract(ctx context.Context, targetURL string) (*cra
 	walk = func(n *html.Node) {
 		if n.Type == html.ElementNode {
 			tag := strings.ToLower(n.Data)
-			if tag == "script" || tag == "style" || tag == "noscript" || tag == "iframe" || tag == "svg" {
+
+			// 剔除噪音与无关代码标签
+			if isNoiseTag(tag) || isNoiseNode(n) {
 				return
 			}
+
+			// 提取 Meta 标签 (og:title, description, og:description)
+			if tag == "meta" {
+				var name, prop, content string
+				for _, a := range n.Attr {
+					k := strings.ToLower(a.Key)
+					if k == "name" {
+						name = strings.ToLower(a.Val)
+					} else if k == "property" {
+						prop = strings.ToLower(a.Val)
+					} else if k == "content" {
+						content = strings.TrimSpace(a.Val)
+					}
+				}
+				if (prop == "og:title" || name == "twitter:title") && ogTitle == "" {
+					ogTitle = content
+				}
+				if (name == "description" || prop == "og:description") && pageDescription == "" {
+					pageDescription = content
+				}
+			}
+
 			if tag == "title" && n.FirstChild != nil && pageTitle == "" {
 				pageTitle = strings.TrimSpace(n.FirstChild.Data)
 			}
+
+			if tag == "h1" && h1Title == "" {
+				h1Title = extractNodeText(n)
+			}
+
+			// 提取超链接并清洗追踪参数
 			if tag == "a" {
 				for _, a := range n.Attr {
 					if strings.ToLower(a.Key) == "href" {
@@ -455,7 +534,7 @@ func (p *Processor) fetchAndExtract(ctx context.Context, targetURL string) (*cra
 						if isLegitWebHref(href) {
 							resolved, err := parsedBase.Parse(href)
 							if err == nil && (resolved.Scheme == "http" || resolved.Scheme == "https") {
-								clean := stripFragment(resolved.String())
+								clean := normalizeURLClean(resolved.String())
 								if !seenLinks[clean] {
 									seenLinks[clean] = true
 									links = append(links, clean)
@@ -465,7 +544,13 @@ func (p *Processor) fetchAndExtract(ctx context.Context, targetURL string) (*cra
 					}
 				}
 			}
-			if isBlockElement(tag) {
+
+			// 标题/段落格式化
+			if strings.HasPrefix(tag, "h") && len(tag) == 2 && tag[1] >= '1' && tag[1] <= '6' {
+				textBuf.WriteString("\n\n### ")
+			} else if tag == "li" {
+				textBuf.WriteString("\n- ")
+			} else if isBlockElement(tag) {
 				textBuf.WriteString("\n")
 			}
 		} else if n.Type == html.TextNode {
@@ -488,23 +573,79 @@ func (p *Processor) fetchAndExtract(ctx context.Context, targetURL string) (*cra
 	walk(doc)
 
 	cleanedText := cleanExtractedText(textBuf.String())
-	if pageTitle == "" {
-		pageTitle = parsedBase.Path
-		if pageTitle == "" || pageTitle == "/" {
-			pageTitle = parsedBase.Host
+
+	// 智能标题优先级选择：og:title > h1 > <title> > URL
+	finalTitle := ogTitle
+	if finalTitle == "" {
+		finalTitle = h1Title
+	}
+	if finalTitle == "" {
+		finalTitle = pageTitle
+	}
+	if finalTitle == "" {
+		finalTitle = parsedBase.Path
+		if finalTitle == "" || finalTitle == "/" {
+			finalTitle = parsedBase.Host
 		}
 	}
 
 	return &crawledPage{
-		URL:     parsedBase.String(),
-		Title:   pageTitle,
-		Content: cleanedText,
+		URL:         parsedBase.String(),
+		Title:       finalTitle,
+		Description: pageDescription,
+		Content:     cleanedText,
 	}, links, parsedBase, nil
+}
+
+func isNoiseTag(tag string) bool {
+	switch tag {
+	case "script", "style", "noscript", "iframe", "svg", "nav", "footer",
+		"aside", "form", "button", "select", "option", "dialog", "canvas",
+		"video", "audio", "template", "head":
+		return true
+	default:
+		return false
+	}
+}
+
+func isNoiseNode(n *html.Node) bool {
+	for _, a := range n.Attr {
+		k := strings.ToLower(a.Key)
+		v := strings.ToLower(a.Val)
+		if k == "aria-hidden" && v == "true" {
+			return true
+		}
+		if k == "role" && (v == "navigation" || v == "banner" || v == "contentinfo") {
+			return true
+		}
+		if k == "class" || k == "id" {
+			if strings.Contains(v, "cookie-banner") || strings.Contains(v, "cookie-consent") ||
+				strings.Contains(v, "privacy-policy-modal") || strings.Contains(v, "footer-copyright") {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func extractNodeText(n *html.Node) string {
+	var buf strings.Builder
+	var walk func(*html.Node)
+	walk = func(node *html.Node) {
+		if node.Type == html.TextNode {
+			buf.WriteString(node.Data)
+		}
+		for c := node.FirstChild; c != nil; c = c.NextSibling {
+			walk(c)
+		}
+	}
+	walk(n)
+	return strings.TrimSpace(buf.String())
 }
 
 func isBlockElement(tag string) bool {
 	switch tag {
-	case "p", "div", "h1", "h2", "h3", "h4", "h5", "h6", "li", "tr", "br", "section", "article", "header", "footer", "main":
+	case "p", "div", "h1", "h2", "h3", "h4", "h5", "h6", "li", "tr", "br", "section", "article", "header", "main":
 		return true
 	default:
 		return false
@@ -517,12 +658,37 @@ func isLegitWebHref(href string) bool {
 		return false
 	}
 	lower := strings.ToLower(href)
-	for _, ext := range []string{".jpg", ".jpeg", ".png", ".gif", ".svg", ".zip", ".tar", ".gz", ".mp4", ".mp3", ".css", ".js"} {
+	for _, ext := range []string{".jpg", ".jpeg", ".png", ".gif", ".svg", ".zip", ".tar", ".gz", ".mp4", ".mp3", ".css", ".js", ".woff", ".woff2", ".ttf", ".eot"} {
 		if strings.HasSuffix(lower, ext) {
 			return false
 		}
 	}
 	return true
+}
+
+func normalizeURLClean(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return stripFragment(raw)
+	}
+	u.Fragment = "" // 移除锚点
+	// 清理跟踪参数
+	q := u.Query()
+	for param := range q {
+		pLower := strings.ToLower(param)
+		if strings.HasPrefix(pLower, "utm_") || pLower == "fbclid" || pLower == "gclid" ||
+			pLower == "ref" || pLower == "source" || pLower == "_ga" || pLower == "spm" ||
+			pLower == "from" || pLower == "sessionid" || pLower == "session_id" {
+			q.Del(param)
+		}
+	}
+	u.RawQuery = q.Encode()
+	res := u.String()
+	// 移除尾部多余的斜杠
+	if strings.HasSuffix(res, "/") && len(u.Path) > 1 {
+		res = strings.TrimRight(res, "/")
+	}
+	return res
 }
 
 func stripFragment(u string) string {

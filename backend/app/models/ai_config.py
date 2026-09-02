@@ -1,5 +1,5 @@
 """
-Copyright 2024-2026 ChatterMate
+Copyright 2024-2026 Komi AI
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -33,7 +33,7 @@ class AIModelType(str, Enum):
     XAI = "XAI"
     ZHIPU = "ZHIPU"
     KIMI = "KIMI"
-    CHATTERMATE = "CHATTERMATE" # own model for enterprise customers
+    KOMI_AI = "KOMI_AI" # own model for enterprise customers
 
 class AIConfig(Base):
     __tablename__ = "ai_configs"

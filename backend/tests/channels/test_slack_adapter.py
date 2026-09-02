@@ -1,5 +1,5 @@
 """
-Copyright 2024-2026 ChatterMate
+Copyright 2024-2026 Komi AI
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -277,7 +277,7 @@ def test_parse_dm_with_thread_keys_by_thread(adapter):
     assert m.external_conversation_id == "D7:1719999999.0001"
 
 
-DASH = "https://app.chattermate.chat"
+DASH = "https://app.komi.ai"
 
 
 class TestHomeView:

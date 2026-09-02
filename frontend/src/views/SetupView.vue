@@ -1,5 +1,5 @@
 <!--
-Copyright 2024-2026 ChatterMate
+Copyright 2024-2026 Komi AI
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -211,7 +211,7 @@ const timeOptions = Array.from({ length: 24 * 4 }, (_, i) => {
         <div class="container">
             <!-- Header -->
             <header class="setup-header text-center">
-                <h1 class="gradient-text">欢迎使用 ChatterMate</h1>
+                <h1 class="gradient-text">欢迎使用 Komi AI</h1>
                 <p class="subtitle opacity-80">让我们来完成您企业的初始化配置</p>
             </header>
 

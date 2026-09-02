@@ -1,5 +1,5 @@
 """
-Copyright 2024-2026 ChatterMate
+Copyright 2024-2026 Komi AI
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -48,7 +48,7 @@ def create_model(model_type: str, api_key: str, model_name: str, max_tokens: int
     model_type = model_type.upper()
     
     try:
-        if model_type == 'OPENAI' or model_type == 'CHATTERMATE': # own model for enterprise customers
+        if model_type == 'OPENAI' or model_type == 'KOMI_AI': # own model for enterprise customers
             if response_format:
                 return OpenAIChat(api_key=api_key, id=model_name, max_tokens=max_tokens, response_format=response_format)
             else:

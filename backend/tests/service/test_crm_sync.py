@@ -1,5 +1,5 @@
 """
-Copyright 2024-2026 ChatterMate
+Copyright 2024-2026 Komi AI
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -272,7 +272,7 @@ class TestManualSync:
             organization_id=test_organization.id, agent_id=test_agent.id,
             customer_id=cust.id, consent=True,
             field_values={"email": "amit@gmail.com", "name": "Arun",
-                          "company": "ChatterMate", "phone": "6362262617"}))
+                          "company": "Komi AI", "phone": "6362262617"}))
         db.commit()
 
         captured = {}
@@ -286,7 +286,7 @@ class TestManualSync:
 
         payload = captured["payload"]
         assert payload.name == "Arun"
-        assert payload.company == "ChatterMate"     # was silently dropped before
+        assert payload.company == "Komi AI"     # was silently dropped before
         assert payload.phone == "6362262617"        # from field_values, not the empty column
 
     @pytest.mark.asyncio

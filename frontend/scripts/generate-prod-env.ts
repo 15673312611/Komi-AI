@@ -14,9 +14,9 @@ const configContent = `// Runtime configuration - this file gets replaced at con
 // it too; in a page self === window, so window.APP_CONFIG still works.
 self.APP_CONFIG = {
   // API URLs
-  API_URL: "${process.env.VITE_API_URL || 'https://api.chattermate.chat/api/v1'}",
-  WS_URL: "${process.env.VITE_WS_URL || 'wss://api.chattermate.chat'}",
-  WIDGET_URL: "${process.env.VITE_WIDGET_URL || 'https://api.chattermate.chat'}",
+  API_URL: "${process.env.VITE_API_URL || 'https://api.komi.ai/api/v1'}",
+  WS_URL: "${process.env.VITE_WS_URL || 'wss://api.komi.ai'}",
+  WIDGET_URL: "${process.env.VITE_WIDGET_URL || 'https://api.komi.ai'}",
   
   // Firebase Configuration
   FIREBASE_API_KEY: "${process.env.VITE_FIREBASE_API_KEY || ''}",

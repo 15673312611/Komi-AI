@@ -6,7 +6,7 @@ import (
 
 	goRedis "github.com/redis/go-redis/v9"
 
-	"github.com/chattermate/chattermate/backend-go/internal/config"
+	"github.com/komi/komi/backend-go/internal/config"
 )
 
 var ErrNotConfigured = errors.New("redis is not configured")

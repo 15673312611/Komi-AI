@@ -1,23 +1,23 @@
-# ChatterMate - Open Source AI Customer Support Chatbot Platform
+# Komi AI - Open Source AI Customer Support Chatbot Platform
 
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
-[![npm version](https://img.shields.io/npm/v/chattermate-deploy.svg)](https://www.npmjs.com/package/chattermate-deploy)
-[![Docker Pulls](https://img.shields.io/docker/pulls/chattermate/backend.svg)](https://hub.docker.com/r/chattermate/backend)
+[![npm version](https://img.shields.io/npm/v/komi-deploy.svg)](https://www.npmjs.com/package/komi-deploy)
+[![Docker Pulls](https://img.shields.io/docker/pulls/komi/backend.svg)](https://hub.docker.com/r/komi/backend)
 
-![ChatterMate Logo](frontend/public/assets/images/logo.svg)
+![Komi AI Logo](frontend/public/assets/images/logo.svg)
 
 > **Open-source AI customer support platform with human handoff.** A no-code AI chatbot for 24/7 customer service automation — multi-model AI (OpenAI, Anthropic Claude, Google Gemini, Mistral, xAI Grok, DeepSeek, Groq), intelligent AI-to-human handover, **Shopify & e-commerce support**, Slack and Jira integrations, visual workflow builder, and a fully themeable chat widget. Use the free hosted service or self-host it as an **open-source alternative to Intercom, Zendesk, and Chatbase**.
 
-**[Documentation](https://docs.chattermate.chat)** | **[Live Demo](https://chattermate.chat)** | **[Free Signup](https://app.chattermate.chat)** | **[Shopify App](https://apps.shopify.com/chattermate-chat)** | **[WordPress Plugin](https://github.com/chattermate/chattermate-wordpress-plugin/releases/latest/download/chattermate-chat.zip)**
+**[Documentation](https://docs.komi.ai)** | **[Live Demo](https://komi.ai)** | **[Free Signup](https://app.komi.ai)** | **[Shopify App](https://apps.shopify.com/komi-chat)** | **[WordPress Plugin](https://github.com/komi/komi-wordpress-plugin/releases/latest/download/komi-chat.zip)**
 
 ---
 
 ## Table of Contents
 
-- [Why ChatterMate?](#why-chattermate)
+- [Why Komi AI?](#why-komi)
 - [Features](#features)
 - [Integrations](#integrations)
-- [ChatterMate vs. Intercom, Zendesk & Chatbase](#chattermate-vs-intercom-zendesk--chatbase)
+- [Komi AI vs. Intercom, Zendesk & Chatbase](#komi-vs-intercom-zendesk--chatbase)
 - [Demo](#demo)
 - [Quick Start](#quick-start)
 - [Installation](#installation-methods)
@@ -29,13 +29,13 @@
 
 ---
 
-## Why ChatterMate?
+## Why Komi AI?
 
-ChatterMate is a **no-code AI customer support platform** that enables businesses to provide **24/7 customer service** through intelligent AI agents. Your AI chatbot handles common queries, escalates complex issues to human agents when needed, and continuously learns from your knowledge base. Integrate the chat widget on any website — or any **Shopify store** — with a single line of code.
+Komi AI is a **no-code AI customer support platform** that enables businesses to provide **24/7 customer service** through intelligent AI agents. Your AI chatbot handles common queries, escalates complex issues to human agents when needed, and continuously learns from your knowledge base. Integrate the chat widget on any website — or any **Shopify store** — with a single line of code.
 
 **Perfect for:** e-commerce and Shopify stores, SaaS companies, help desks, customer success teams, and any business looking to automate customer support while maintaining a human touch.
 
-![ChatterMate AI chat widget on an e-commerce store](.github/images/chat-widget.webp)
+![Komi AI chat widget on an e-commerce store](.github/images/chat-widget.webp)
 
 ---
 
@@ -46,8 +46,8 @@ ChatterMate is a **no-code AI customer support platform** that enables businesse
 | Feature | Description |
 |---------|-------------|
 | 🤝 **Smart Human Handoff** | Intelligent AI-to-human transfer with **business hours awareness**, real-time availability detection, and context-aware escalation messages. |
-| 🛍️ **Shopify & E-commerce Support** | Native **Shopify integration** ([App Store listing](https://apps.shopify.com/chattermate-chat)) — answer order, shipping, and product questions from store data. Works for any online store. |
-| 📝 **WordPress Plugin** | Official **WordPress plugin** ([download](https://github.com/chattermate/chattermate-wordpress-plugin/releases/latest/download/chattermate-chat.zip)) — add the chat widget to any WordPress site by entering your Widget ID. No theme edits required. |
+| 🛍️ **Shopify & E-commerce Support** | Native **Shopify integration** ([App Store listing](https://apps.shopify.com/komi-chat)) — answer order, shipping, and product questions from store data. Works for any online store. |
+| 📝 **WordPress Plugin** | Official **WordPress plugin** ([download](https://github.com/komi/komi-wordpress-plugin/releases/latest/download/komi-chat.zip)) — add the chat widget to any WordPress site by entering your Widget ID. No theme edits required. |
 | 🧠 **Multi-Model AI Support** | Choose your AI provider — **OpenAI**, **Anthropic (Claude)**, **Google Gemini**, **Mistral**, **xAI (Grok)**, **DeepSeek**, and **Groq** — with your own API key, or enter a custom model ID. Switch providers anytime without code changes. |
 | 💬 **Ask Anything Mode** | Let visitors start conversations instantly — no signup or email required. Perfect for Q&A, documentation assistants, and exploratory chat experiences. |
 | 📎 **File Attachments** | Customers can share **images, PDFs, Word docs, spreadsheets**, and more directly in chat. Secure uploads with S3 storage and magic byte validation. |
@@ -150,10 +150,10 @@ open-source codebase, and self-hosting unlocks the lot.
 What some of them need is **your own credentials**, because the integration
 talks to your account on someone else's platform:
 
-- **You create the app** — a developer app registered once per ChatterMate
+- **You create the app** — a developer app registered once per Komi AI
   install, with its keys in the backend `.env`.
 - **You paste a token** — no app to create; you generate a token or API key on
-  the provider's side and enter it in the ChatterMate UI when connecting.
+  the provider's side and enter it in the Komi AI UI when connecting.
 
 Both are marked in the tables below.
 
@@ -197,11 +197,11 @@ Synced by the `crm_sync` worker — see [Background processors](#background-proc
 
 ---
 
-## ChatterMate vs. Intercom, Zendesk & Chatbase
+## Komi AI vs. Intercom, Zendesk & Chatbase
 
-ChatterMate is a **free, open-source alternative to Intercom, Zendesk AI, and Chatbase** — with AI answers *and* human handoff in one inbox:
+Komi AI is a **free, open-source alternative to Intercom, Zendesk AI, and Chatbase** — with AI answers *and* human handoff in one inbox:
 
-| | **ChatterMate** | Intercom | Zendesk AI | Chatbase |
+| | **Komi AI** | Intercom | Zendesk AI | Chatbase |
 |---|---|---|---|---|
 | Open source (Apache-2.0) | ✅ | ❌ | ❌ | ❌ |
 | Self-hosting / data ownership | ✅ | ❌ | ❌ | ❌ |
@@ -212,15 +212,15 @@ ChatterMate is a **free, open-source alternative to Intercom, Zendesk AI, and Ch
 | Free tier | ✅ | trial only | trial only | ✅ |
 | Per-AI-resolution fees | ❌ none | $0.99/resolution | usage-based | credit-based |
 
-Detailed comparisons: [ChatterMate vs Chatbase](https://chattermate.chat/chattermate-vs-chatbase/) · [ChatterMate vs Chatwoot](https://chattermate.chat/chattermate-vs-chatwoot/)
+Detailed comparisons: [Komi AI vs Chatbase](https://komi.ai/komi-vs-chatbase/) · [Komi AI vs Chatwoot](https://komi.ai/komi-vs-chatwoot/)
 
 ---
 
 ## Demo
 
 ### Video Walkthrough
-[![ChatterMate Demo](https://img.youtube.com/vi/bk40VSS2BLU/0.jpg)](https://youtu.be/bk40VSS2BLU)
-[![ChatterMate Demo](https://img.youtube.com/vi/WyMQ8Poqn5E/0.jpg)](https://www.youtube.com/embed/WyMQ8Poqn5E?mute=1&loop=1&playlist=WyMQ8Poqn5E&rel=0&controls=1)
+[![Komi AI Demo](https://img.youtube.com/vi/bk40VSS2BLU/0.jpg)](https://youtu.be/bk40VSS2BLU)
+[![Komi AI Demo](https://img.youtube.com/vi/WyMQ8Poqn5E/0.jpg)](https://www.youtube.com/embed/WyMQ8Poqn5E?mute=1&loop=1&playlist=WyMQ8Poqn5E&rel=0&controls=1)
 
 ### Shared Inbox with AI + Human Handoff
 ![AI customer support shared inbox with human handoff](.github/images/inbox-human-handoff.webp)
@@ -232,70 +232,70 @@ Detailed comparisons: [ChatterMate vs Chatbase](https://chattermate.chat/chatter
 
 ## Quick Start
 
-There are two ways to run ChatterMate. **Most people want the hosted service** — sign up and
+There are two ways to run Komi AI. **Most people want the hosted service** — sign up and
 manage everything from the dashboard, the CLI, or an AI agent. **Self-host with Docker** only if
-you need to run ChatterMate on your own infrastructure.
+you need to run Komi AI on your own infrastructure.
 
 ### Option A — Hosted (fastest)
 
-1. **Sign up:** [app.chattermate.chat](https://app.chattermate.chat) — free, no card required.
-2. **Manage from your terminal, automate, or drive it with an AI agent** using the **ChatterMate CLI**:
+1. **Sign up:** [app.komi.ai](https://app.komi.ai) — free, no card required.
+2. **Manage from your terminal, automate, or drive it with an AI agent** using the **Komi AI CLI**:
 
 ```bash
-# The ChatterMate CLI — sign up, mint tokens, and manage agents, workflows & knowledge
-pip install chattermate-cli          # installs the `chattermate` command
+# The Komi AI CLI — sign up, mint tokens, and manage agents, workflows & knowledge
+pip install komi-cli          # installs the `komi` command
 
-chattermate signup --name "Acme Inc" --domain acme.com --admin-email you@acme.com
-chattermate agent create --name "Support" --type customer_support -i "Be concise and friendly"
-chattermate knowledge add-url --website https://docs.acme.com --agent-id <agent-id>
+komi signup --name "Acme Inc" --domain acme.com --admin-email you@acme.com
+komi agent create --name "Support" --type customer_support -i "Be concise and friendly"
+komi knowledge add-url --website https://docs.acme.com --agent-id <agent-id>
 ```
 
-➡️ **[AI Agent & Automation Quickstart](https://docs.chattermate.chat/features/agents-quickstart)** · **[CLI reference](https://docs.chattermate.chat/features/cli)** · **[MCP server](https://docs.chattermate.chat/features/mcp-server)**
+➡️ **[AI Agent & Automation Quickstart](https://docs.komi.ai/features/agents-quickstart)** · **[CLI reference](https://docs.komi.ai/features/cli)** · **[MCP server](https://docs.komi.ai/features/mcp-server)**
 
-> 🤖 **Building an AI agent that sets up ChatterMate?** Start at
-> [`chattermate.chat/llms.txt`](https://chattermate.chat/llms.txt), follow the
-> [agent quickstart](https://docs.chattermate.chat/features/agents-quickstart), or connect the
-> [MCP server](https://docs.chattermate.chat/features/mcp-server) to configure ChatterMate over MCP.
+> 🤖 **Building an AI agent that sets up Komi AI?** Start at
+> [`komi.ai/llms.txt`](https://komi.ai/llms.txt), follow the
+> [agent quickstart](https://docs.komi.ai/features/agents-quickstart), or connect the
+> [MCP server](https://docs.komi.ai/features/mcp-server) to configure Komi AI over MCP.
 
 ### Option B — Self-host with Docker
 
-Run the full ChatterMate stack on your own infrastructure with the **self-host CLI** (Docker-based):
+Run the full Komi AI stack on your own infrastructure with the **self-host CLI** (Docker-based):
 
 ```bash
 # Install the self-host / deployment CLI
-npm install -g chattermate-deploy
+npm install -g komi-deploy
 
 # Scaffold a project, then start the full stack (Postgres, Redis, backend, frontend, worker)
-chattermate-deploy init my-chattermate-project
-cd my-chattermate-project
-chattermate-deploy start                  # then open http://localhost/
+komi-deploy init my-komi-project
+cd my-komi-project
+komi-deploy start                  # then open http://localhost/
 ```
 
 <details>
 <summary>Self-host CLI commands</summary>
 
 ```bash
-chattermate-deploy init <project-name>    # Scaffold a new self-hosted project
-chattermate-deploy start                  # Start all services (Docker)
-chattermate-deploy stop                   # Stop all services
-chattermate-deploy status                 # Check service status
-chattermate-deploy logs                   # View service logs
-chattermate-deploy reset                  # Reset and remove all data
+komi-deploy init <project-name>    # Scaffold a new self-hosted project
+komi-deploy start                  # Start all services (Docker)
+komi-deploy stop                   # Stop all services
+komi-deploy status                 # Check service status
+komi-deploy logs                   # View service logs
+komi-deploy reset                  # Reset and remove all data
 ```
 </details>
 
-> ⚠️ **Two different `chattermate` commands — don't mix them up.** The **hosted CLI**
-> (`pip install chattermate-cli`) signs you up and manages agents/knowledge against the
-> ChatterMate API. The **self-host CLI** (`npm install -g chattermate-deploy`) scaffolds and runs
-> the Docker stack. They are separate tools that happen to share the `chattermate` name.
+> ⚠️ **Two different `komi` commands — don't mix them up.** The **hosted CLI**
+> (`pip install komi-cli`) signs you up and manages agents/knowledge against the
+> Komi AI API. The **self-host CLI** (`npm install -g komi-deploy`) scaffolds and runs
+> the Docker stack. They are separate tools that happen to share the `komi` name.
 
 ---
 
 ## Installation Methods
 
-> Prefer the hosted service? Skip this section — just [sign up](https://app.chattermate.chat)
-> and/or use the [ChatterMate CLI](https://docs.chattermate.chat/features/cli)
-> (`pip install chattermate-cli`). The methods below are for **self-hosting**.
+> Prefer the hosted service? Skip this section — just [sign up](https://app.komi.ai)
+> and/or use the [Komi AI CLI](https://docs.komi.ai/features/cli)
+> (`pip install komi-cli`). The methods below are for **self-hosting**.
 
 ### Prerequisites
 
@@ -312,15 +312,15 @@ chattermate-deploy reset                  # Reset and remove all data
 
 ### Method 1: Self-Host CLI (Recommended)
 
-The self-host CLI (`chattermate-deploy`, installed via npm) scaffolds and runs the Docker stack.
+The self-host CLI (`komi-deploy`, installed via npm) scaffolds and runs the Docker stack.
 This is **not** the account CLI — for signup and agent management see the
-[ChatterMate CLI](https://docs.chattermate.chat/features/cli).
+[Komi AI CLI](https://docs.komi.ai/features/cli).
 
 ```bash
-npm install -g chattermate-deploy
-chattermate-deploy init my-project
+npm install -g komi-deploy
+komi-deploy init my-project
 cd my-project
-chattermate-deploy start
+komi-deploy start
 ```
 
 ### Method 2: Docker Installation
@@ -476,8 +476,8 @@ Pre-built Docker images are available:
 
 ```bash
 # Pull images
-docker pull chattermate/frontend:latest
-docker pull chattermate/backend:latest
+docker pull komi/frontend:latest
+docker pull komi/backend:latest
 
 # Run with production compose
 docker compose -f docker-compose.prod.yml up -d
@@ -502,17 +502,17 @@ gunicorn app.main:app \
 
 **Knowledge Processor (systemd)**
 ```bash
-sudo tee /etc/systemd/system/chattermate-knowledge-processor.service << EOF
+sudo tee /etc/systemd/system/komi-knowledge-processor.service << EOF
 [Unit]
-Description=ChatterMate Knowledge Processor
+Description=Komi AI Knowledge Processor
 After=network.target
 
 [Service]
-User=chattermate
-Group=chattermate
-WorkingDirectory=/path/to/chattermate/backend
-Environment="PATH=/path/to/chattermate/backend/venv/bin"
-ExecStart=/path/to/chattermate/backend/venv/bin/python -m app.workers.run_knowledge_processor
+User=komi
+Group=komi
+WorkingDirectory=/path/to/komi/backend
+Environment="PATH=/path/to/komi/backend/venv/bin"
+ExecStart=/path/to/komi/backend/venv/bin/python -m app.workers.run_knowledge_processor
 Restart=always
 
 [Install]
@@ -520,8 +520,8 @@ WantedBy=multi-user.target
 EOF
 
 sudo systemctl daemon-reload
-sudo systemctl enable chattermate-knowledge-processor
-sudo systemctl start chattermate-knowledge-processor
+sudo systemctl enable komi-knowledge-processor
+sudo systemctl start komi-knowledge-processor
 ```
 
 **Frontend**
@@ -536,25 +536,25 @@ npm run build
 
 ## FAQ
 
-**What is ChatterMate?**
-ChatterMate is an open-source AI customer support platform. It combines an AI chatbot (trained on your knowledge base) with human agents in a shared inbox, so AI handles routine questions 24/7 and hands off to your team when it matters.
+**What is Komi AI?**
+Komi AI is an open-source AI customer support platform. It combines an AI chatbot (trained on your knowledge base) with human agents in a shared inbox, so AI handles routine questions 24/7 and hands off to your team when it matters.
 
-**Is ChatterMate free and open source?**
-Yes. The core platform is Apache-2.0 licensed — free for personal and commercial use, including self-hosted production deployments. There's also a free hosted plan at [app.chattermate.chat](https://app.chattermate.chat).
+**Is Komi AI free and open source?**
+Yes. The core platform is Apache-2.0 licensed — free for personal and commercial use, including self-hosted production deployments. There's also a free hosted plan at [app.komi.ai](https://app.komi.ai).
 
 **Can the AI hand off conversations to a human agent?**
-Yes — human handoff is a core feature, not an add-on. ChatterMate detects frustration or explicit requests for a human and transfers the conversation with full context, respecting business hours and agent availability.
+Yes — human handoff is a core feature, not an add-on. Komi AI detects frustration or explicit requests for a human and transfers the conversation with full context, respecting business hours and agent availability.
 
-**Does ChatterMate work with Shopify?**
-Yes. Install it from the [Shopify App Store](https://apps.shopify.com/chattermate-chat) to answer order-status, shipping, and product questions directly from your store data. The widget also embeds on any other e-commerce or website platform with one line of code.
+**Does Komi AI work with Shopify?**
+Yes. Install it from the [Shopify App Store](https://apps.shopify.com/komi-chat) to answer order-status, shipping, and product questions directly from your store data. The widget also embeds on any other e-commerce or website platform with one line of code.
 
-**Does ChatterMate work with WordPress?**
-Yes. Download the [WordPress plugin](https://github.com/chattermate/chattermate-wordpress-plugin/releases/latest/download/chattermate-chat.zip), install it via **Plugins → Add New → Upload Plugin**, then enter your Widget ID under **Settings → ChatterMate Chat**. The chat launcher appears on your site with no theme edits. A WordPress.org directory listing is in progress.
+**Does Komi AI work with WordPress?**
+Yes. Download the [WordPress plugin](https://github.com/komi/komi-wordpress-plugin/releases/latest/download/komi-chat.zip), install it via **Plugins → Add New → Upload Plugin**, then enter your Widget ID under **Settings → Komi AI Chat**. The chat launcher appears on your site with no theme edits. A WordPress.org directory listing is in progress.
 
-**Can I self-host ChatterMate?**
-Yes. Run the full stack (Postgres, Redis, backend, frontend) on your own infrastructure with `npm install -g chattermate-deploy` — see [Quick Start](#quick-start). Self-hosting gives you complete data ownership.
+**Can I self-host Komi AI?**
+Yes. Run the full stack (Postgres, Redis, backend, frontend) on your own infrastructure with `npm install -g komi-deploy` — see [Quick Start](#quick-start). Self-hosting gives you complete data ownership.
 
-**Which AI models does ChatterMate support?**
+**Which AI models does Komi AI support?**
 OpenAI, Anthropic (Claude), Google Gemini, Mistral, xAI (Grok), DeepSeek, and Groq — bring your own API key, or enter a custom model ID for any model a provider supports. You can switch providers at any time without code changes.
 
 ---
@@ -591,15 +591,15 @@ We welcome contributions! Here's how to get started:
 
 ## Support
 
-- 📖 **Documentation**: [docs.chattermate.chat](https://docs.chattermate.chat)
-- 🐛 **Issues**: [GitHub Issues](https://github.com/chattermate/chattermate/issues)
-- 📧 **Email**: support@chattermate.chat
+- 📖 **Documentation**: [docs.komi.ai](https://docs.komi.ai)
+- 🐛 **Issues**: [GitHub Issues](https://github.com/komi/komi/issues)
+- 📧 **Email**: support@komi.ai
 
 ---
 
 ## License
 
-ChatterMate follows an **open-core** model:
+Komi AI follows an **open-core** model:
 
 **Open Source Core ([Apache-2.0](https://opensource.org/licenses/Apache-2.0))**
 - Free for personal and commercial use — including proprietary and SaaS deployments
@@ -610,14 +610,14 @@ ChatterMate follows an **open-core** model:
 **Enterprise features & support**
 - Advanced/enterprise capabilities are provided separately under a commercial arrangement
 - Priority support, warranties, and indemnification available
-- Contact: [contact@chattermate.chat](mailto:contact@chattermate.chat)
+- Contact: [contact@komi.ai](mailto:contact@komi.ai)
 
 Contributions are accepted under Apache-2.0 with a [Developer Certificate of Origin](DCO) sign-off — see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ---
 
 <p align="center">
-  Made with ❤️ by the ChatterMate team
+  Made with ❤️ by the Komi AI team
 </p>
 
 <p align="center">

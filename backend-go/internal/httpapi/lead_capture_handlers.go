@@ -7,8 +7,8 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
-	"github.com/chattermate/chattermate/backend-go/internal/leadcapture"
-	"github.com/chattermate/chattermate/backend-go/internal/user"
+	"github.com/komi/komi/backend-go/internal/leadcapture"
+	"github.com/komi/komi/backend-go/internal/user"
 )
 
 func registerLeadCaptureRoutes(r chi.Router, deps Dependencies) {

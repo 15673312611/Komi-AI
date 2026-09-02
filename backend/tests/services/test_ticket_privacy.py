@@ -1,5 +1,5 @@
 """
-Copyright 2024-2026 ChatterMate
+Copyright 2024-2026 Komi AI
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -23,7 +23,7 @@ from app.services.ticket_privacy import (
     scrub_outbound,
 )
 
-OWNER_EMAIL = "arun@chattermate.chat"
+OWNER_EMAIL = "arun@komi.ai"
 OWNER_PHONE = "+441234567890"
 
 
@@ -41,7 +41,7 @@ class TestScrubOutbound:
         assert scrub_outbound(text, (OWNER_EMAIL,)) == text
 
     def test_own_email_matched_case_insensitively(self):
-        text = "Your account Arun@ChatterMate.Chat is fixed."
+        text = "Your account Arun@Komi AI.Chat is fixed."
         assert scrub_outbound(text, (OWNER_EMAIL,)) == text
 
     def test_own_phone_survives_reformatting(self):

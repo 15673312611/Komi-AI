@@ -20,7 +20,7 @@ from typing import List, Tuple
 
 # --- Apache-2.0 short header ------------------------------------------------
 
-COPYRIGHT = "Copyright 2024-2026 ChatterMate"
+COPYRIGHT = "Copyright 2024-2026 Komi AI"
 
 BODY = f"""{COPYRIGHT}
 

@@ -14,16 +14,16 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/chattermate/chattermate/backend-go/internal/agent"
-	"github.com/chattermate/chattermate/backend-go/internal/aiconfig"
-	"github.com/chattermate/chattermate/backend-go/internal/chat"
-	"github.com/chattermate/chattermate/backend-go/internal/customer"
-	"github.com/chattermate/chattermate/backend-go/internal/guardrail"
-	"github.com/chattermate/chattermate/backend-go/internal/leadcapture"
-	"github.com/chattermate/chattermate/backend-go/internal/organization"
-	"github.com/chattermate/chattermate/backend-go/internal/session"
-	"github.com/chattermate/chattermate/backend-go/internal/store"
-	"github.com/chattermate/chattermate/backend-go/internal/user"
+	"github.com/komi/komi/backend-go/internal/agent"
+	"github.com/komi/komi/backend-go/internal/aiconfig"
+	"github.com/komi/komi/backend-go/internal/chat"
+	"github.com/komi/komi/backend-go/internal/customer"
+	"github.com/komi/komi/backend-go/internal/guardrail"
+	"github.com/komi/komi/backend-go/internal/leadcapture"
+	"github.com/komi/komi/backend-go/internal/organization"
+	"github.com/komi/komi/backend-go/internal/session"
+	"github.com/komi/komi/backend-go/internal/store"
+	"github.com/komi/komi/backend-go/internal/user"
 )
 
 // InboundMessage is the channel-independent representation consumed by the

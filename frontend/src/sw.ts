@@ -1,5 +1,5 @@
 /*
-Copyright 2024-2026 ChatterMate
+Copyright 2024-2026 Komi AI
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -110,7 +110,7 @@ if (firebaseConfig.apiKey) {
     // Messages are data-only (title/body in data): a notification payload
     // would make the Firebase SDK auto-display a duplicate copy that also
     // swallows clicks. The notification?. fallbacks keep older senders working.
-    const title = payload.data?.title || payload.notification?.title || 'ChatterMate'
+    const title = payload.data?.title || payload.notification?.title || 'Komi AI'
     const body = payload.data?.body || payload.notification?.body
     const sessionId = payload.data?.session_id
 

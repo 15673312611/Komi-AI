@@ -21,11 +21,11 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
-	"github.com/chattermate/chattermate/backend-go/internal/agent"
-	"github.com/chattermate/chattermate/backend-go/internal/aiconfig"
-	"github.com/chattermate/chattermate/backend-go/internal/config"
-	"github.com/chattermate/chattermate/backend-go/internal/storage"
-	"github.com/chattermate/chattermate/backend-go/internal/user"
+	"github.com/komi/komi/backend-go/internal/agent"
+	"github.com/komi/komi/backend-go/internal/aiconfig"
+	"github.com/komi/komi/backend-go/internal/config"
+	"github.com/komi/komi/backend-go/internal/storage"
+	"github.com/komi/komi/backend-go/internal/user"
 )
 
 type createAgentRequest struct {

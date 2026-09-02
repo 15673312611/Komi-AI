@@ -11,9 +11,9 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
-	"github.com/chattermate/chattermate/backend-go/internal/chat"
-	"github.com/chattermate/chattermate/backend-go/internal/shopify"
-	"github.com/chattermate/chattermate/backend-go/internal/user"
+	"github.com/komi/komi/backend-go/internal/chat"
+	"github.com/komi/komi/backend-go/internal/shopify"
+	"github.com/komi/komi/backend-go/internal/user"
 )
 
 var shopifyOrderIDPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{1,80}$`)

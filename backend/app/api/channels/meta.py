@@ -1,5 +1,5 @@
 """
-Copyright 2024-2026 ChatterMate
+Copyright 2024-2026 Komi AI
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -480,7 +480,7 @@ async def list_messenger_signup_pages(
     pages = await _list_manageable_pages(user_token, "id,name,access_token")
     if not pages:
         raise HTTPException(status_code=400, detail=(
-            "No Facebook Pages were shared with ChatterMate. Run the connect "
+            "No Facebook Pages were shared with Komi AI. Run the connect "
             "again and tick the Page you want to use."))
 
     return MessengerSignupPagesOut(

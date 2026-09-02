@@ -7,7 +7,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
-	"github.com/chattermate/chattermate/backend-go/internal/ticketdb"
+	"github.com/komi/komi/backend-go/internal/ticketdb"
 )
 
 type ticketDBCreateRequest struct {

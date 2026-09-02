@@ -1,5 +1,5 @@
 """
-Copyright 2024-2026 ChatterMate
+Copyright 2024-2026 Komi AI
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -60,7 +60,7 @@ class WidgetDisplaySide(str, enum.Enum):
 class WidgetDisplayConfig(BaseModel):
     """Dashboard "Widget placement" defaults, stored in customization_metadata.
 
-    The embed loader (chattermate.js) merges these under any options the
+    The embed loader (komi.js) merges these under any options the
     installing developer set on the page. Bounds keep saved values renderable
     on any reasonable screen; the loader clamps again client-side.
     """

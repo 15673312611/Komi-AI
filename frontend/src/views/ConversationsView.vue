@@ -1,5 +1,5 @@
 <!--
-Copyright 2024-2026 ChatterMate
+Copyright 2024-2026 Komi AI
 多渠道跨境电商 AI + 人工客服三栏工作台核心视图 (ConversationsView.vue)
 -->
 
@@ -532,11 +532,11 @@ watch(activeSessionId, () => {
 
 <template>
   <DashboardLayout :hide-header="true">
-    <div class="h-full w-full bg-[#080B11] text-slate-100 antialiased overflow-hidden flex select-none font-sans relative">
+    <div class="h-full w-full bg-[#F8F9FC] text-[#0F172A] antialiased overflow-hidden flex select-none font-sans relative">
       <!-- AI 状态极简诊断提示横幅 -->
       <div
         v-if="showAiConfigWarning && !dismissedAiBanner"
-        class="absolute top-3 left-1/2 -translate-x-1/2 z-30 flex items-center gap-3 px-4 py-2 rounded-xl bg-amber-950/90 border border-amber-500/30 text-amber-200 text-xs shadow-2xl backdrop-blur-md transition-all animate-in fade-in slide-in-from-top-2 duration-300"
+        class="absolute top-3 left-1/2 -translate-x-1/2 z-30 flex items-center gap-3 px-4 py-2 rounded-xl bg-white/95 border border-amber-300 text-amber-900 shadow-md text-xs shadow-2xl backdrop-blur-md transition-all animate-in fade-in slide-in-from-top-2 duration-300"
       >
         <span class="flex items-center gap-2">
           <i class="fa-solid fa-triangle-exclamation text-amber-400 text-sm"></i>
@@ -637,15 +637,18 @@ watch(activeSessionId, () => {
           v-for="t in toasts"
           :key="t.id"
           :class="[
-            'px-3.5 py-2 rounded-xl bg-[#141B2E]/95 backdrop-blur-md border shadow-2xl text-xs text-slate-100 flex items-center gap-2.5 transition-all duration-300 pointer-events-auto transform animate-in fade-in slide-in-from-top-2',
+            'px-4 py-2.5 rounded-xl bg-white border border-slate-200 shadow-xl text-xs text-[#0F172A] flex items-center gap-2.5 transition-all duration-300 pointer-events-auto transform animate-in fade-in slide-in-from-top-2',
             t.type === 'success'
-              ? 'border-emerald-500/40 text-emerald-300'
+              ? 'border-emerald-200 text-emerald-800'
               : t.type === 'error'
-              ? 'border-rose-500/40 text-rose-300'
-              : 'border-blue-500/40 text-blue-300',
+              ? 'border-rose-200 text-rose-800'
+              : 'border-slate-200 text-slate-800',
           ]"
         >
-          <span class="font-medium text-slate-100">{{ t.text }}</span>
+          <i v-if="t.type === 'success'" class="fa-solid fa-circle-check text-emerald-600"></i>
+          <i v-else-if="t.type === 'error'" class="fa-solid fa-circle-exclamation text-rose-600"></i>
+          <i v-else class="fa-solid fa-circle-info text-blue-600"></i>
+          <span class="font-medium">{{ t.text }}</span>
         </div>
       </div>
     </div>

@@ -467,7 +467,7 @@ func testSTDIO(ctx context.Context, tool *Tool) TestResult {
 	}
 	defer command.Process.Kill()
 	for _, message := range []map[string]any{
-		{"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": map[string]any{"protocolVersion": "2024-11-05", "capabilities": map[string]any{}, "clientInfo": map[string]string{"name": "chattermate-go", "version": "1"}}},
+		{"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": map[string]any{"protocolVersion": "2024-11-05", "capabilities": map[string]any{}, "clientInfo": map[string]string{"name": "komi-go", "version": "1"}}},
 		{"jsonrpc": "2.0", "method": "notifications/initialized", "params": map[string]any{}},
 		{"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": map[string]any{}},
 	} {

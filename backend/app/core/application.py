@@ -1,5 +1,5 @@
 """
-Copyright 2024-2026 ChatterMate
+Copyright 2024-2026 Komi AI
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -21,7 +21,7 @@ logger = get_logger(__name__)
 
 # Create FastAPI app instance
 app = FastAPI(
-    title="ChatterMate API",
+    title="Komi AI API",
     description="AI-Powered Customer Support Platform",
     version="1.0.0"
 )

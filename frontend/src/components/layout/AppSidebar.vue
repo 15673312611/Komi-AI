@@ -1,5 +1,5 @@
 <!--
-Copyright 2024-2026 ChatterMate
+Copyright 2024-2026 Komi AI
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -43,121 +43,168 @@ const handleNavigation = () => {
 
 <template>
     <aside class="sidebar" :class="{ 'collapsed': isCollapsed }">
-        <!-- Logo -->
+        <!-- Logo & Brand Header -->
         <div class="sidebar-header">
-            <div class="logo-container">
+            <router-link to="/" class="logo-container" title="Komi AI">
                 <div class="logo-mark" aria-hidden="true">
-                    <div class="dot"></div>
-                    <div class="dot"></div>
-                    <div class="dot"></div>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="url(#prism-g1)" stroke-width="2" stroke-linejoin="round"/>
+                        <path d="M2 17L12 22L22 17" stroke="url(#prism-g2)" stroke-width="2" stroke-linejoin="round"/>
+                        <path d="M2 12L12 17L22 12" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        <defs>
+                            <linearGradient id="prism-g1" x1="2" y1="2" x2="22" y2="12" gradientUnits="userSpaceOnUse">
+                                <stop stop-color="#38BDF8"/>
+                                <stop offset="1" stop-color="#818CF8"/>
+                            </linearGradient>
+                            <linearGradient id="prism-g2" x1="2" y1="12" x2="22" y2="22" gradientUnits="userSpaceOnUse">
+                                <stop stop-color="#C084FC"/>
+                                <stop offset="1" stop-color="#38BDF8"/>
+                            </linearGradient>
+                        </defs>
+                    </svg>
                 </div>
-                <span v-if="!isCollapsed" class="logo-text">ChatterMate</span>
-            </div>
+                <div v-if="!isCollapsed" class="brand-title-wrap">
+                    <span class="logo-text">Komi AI</span>
+                </div>
+            </router-link>
             <SidebarToggle :isCollapsed="isCollapsed" @toggle="emit('toggle')" />
         </div>
 
-        <!-- Navigation -->
+        <!-- Navigation Scroll Area -->
         <nav class="sidebar-nav">
-            <div v-for="(item, index) in navItems" :key="index">
+            <div v-for="(item, index) in navItems" :key="index" class="nav-entry">
                 <!-- Section Header -->
-                <div v-if="item.section" class="nav-section nav-section-heading" :class="{ 'collapsed': isCollapsed }">
-                    <span v-if="!isCollapsed">{{ item.section }}</span>
+                <div v-if="item.section" class="nav-section" :class="{ 'collapsed': isCollapsed }">
+                    <span v-if="!isCollapsed" class="section-label">{{ item.section }}</span>
+                    <span v-else class="section-divider" aria-hidden="true"></span>
                 </div>
 
-                <!-- Nav Item -->
+                <!-- Nav Item Link -->
                 <router-link v-else-if="item.to" :to="item.to" class="nav-item"
                     :class="{ 'active': isActiveRoute(item.to) }"
                     :title="isCollapsed ? item.label : undefined"
                     @click="handleNavigation">
-                    <span class="nav-bar" aria-hidden="true"></span>
-                    <span class="nav-icon" v-html="navIconSvg(item.icon)"></span>
+                    <span class="nav-icon" v-html="navIconSvg(item.icon, 17)"></span>
                     <span v-if="!isCollapsed" class="nav-label">{{ item.label }}</span>
+                    <span v-if="!isCollapsed && isActiveRoute(item.to)" class="active-dot"></span>
                 </router-link>
             </div>
         </nav>
+
+        <!-- Bottom Model Engine Shortcut -->
+        <div v-if="!isCollapsed" class="sidebar-bottom">
+            <router-link to="/settings/ai-config" class="engine-card" title="模型设置">
+                <div class="engine-meta">
+                    <div class="engine-title-row">
+                        <span class="engine-indicator"></span>
+                        <span class="engine-name">模型与 API 配置</span>
+                    </div>
+                </div>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="engine-arrow">
+                    <polyline points="9 18 15 12 9 6"></polyline>
+                </svg>
+            </router-link>
+        </div>
     </aside>
 </template>
 
 <style scoped>
+/* ─── Sidebar Layout & Surface ──────────────────────────────────── */
 .sidebar {
-    width: 252px;
-    background: var(--bg2);
-    border-right: 1px solid var(--o07);
+    width: 250px;
+    background: rgba(255, 255, 255, 0.92);
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    border-right: 1px solid rgba(15, 23, 42, 0.06);
     display: flex;
     flex-direction: column;
-    transition: width .22s ease;
+    transition: width 0.22s cubic-bezier(0.4, 0, 0.2, 1);
     overflow: hidden;
     position: relative;
     height: 100vh;
+    height: 100dvh;
     z-index: 100;
+    user-select: none;
+    box-shadow: 1px 0 0 0 rgba(15, 23, 42, 0.02);
 }
 
 .sidebar.collapsed {
-    width: 76px;
+    width: 68px;
 }
 
 .sidebar-header {
-    padding: 20px 14px;
-    border-bottom: 1px solid var(--o06);
+    height: 60px;
+    padding: 0 16px;
+    border-bottom: 1px solid rgba(15, 23, 42, 0.06);
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 8px;
+    flex-shrink: 0;
 }
 
-/* Collapsed header: stack logo above the toggle, both centered */
+/* Collapsed header */
 .sidebar.collapsed .sidebar-header {
     flex-direction: column;
     justify-content: center;
-    gap: 14px;
-    padding: 18px 0;
+    gap: 12px;
+    height: auto;
+    padding: 14px 0;
 }
 
 .logo-container {
     display: flex;
     align-items: center;
-    gap: 9px;
+    gap: 10px;
     min-width: 0;
+    text-decoration: none;
+    cursor: pointer;
 }
 
-/* 3-dot logo mark */
+/* High-end Hologram Prism Logo Mark */
 .logo-mark {
-    width: 32px;
-    height: 32px;
-    background: var(--accent-solid);
-    border-radius: 10px 10px 10px 2px;
+    width: 34px;
+    height: 34px;
+    background: linear-gradient(135deg, #090A0F 0%, #1E1B4B 50%, #0F172A 100%);
+    border-radius: 10px;
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 3px;
     flex-shrink: 0;
+    box-shadow: 0 3px 10px rgba(15, 23, 42, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+    transition: transform var(--transition-fast), box-shadow var(--transition-fast);
 }
 
-.dot {
-    width: 4.5px;
-    height: 4.5px;
-    background: var(--on-accent);
-    border-radius: 50%;
+.logo-container:hover .logo-mark {
+    transform: translateY(-1px) scale(1.02);
+    box-shadow: 0 6px 16px rgba(99, 102, 241, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+
+.brand-title-wrap {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
+    min-width: 0;
 }
 
 .logo-text {
     font-family: var(--font-display);
-    font-weight: var(--font-weight-bold);
-    letter-spacing: var(--tracking-display);
-    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: -0.025em;
+    font-size: 16px;
     color: var(--text);
     white-space: nowrap;
-    flex-shrink: 0;
 }
 
 .sidebar-nav {
     flex: 1;
-    padding: 18px 14px;
+    padding: 12px 10px;
     display: flex;
     flex-direction: column;
+    gap: 1px;
     overflow-y: auto;
     overflow-x: hidden;
-    /* Hide the scrollbar so it doesn't squeeze the centered icons when collapsed */
     scrollbar-width: none;
     -ms-overflow-style: none;
 }
@@ -166,50 +213,74 @@ const handleNavigation = () => {
     display: none;
 }
 
-/* Collapsed: tighten side padding so icons sit dead-centre in the 76px rail */
 .sidebar.collapsed .sidebar-nav {
-    padding: 18px 8px;
+    padding: 12px 6px;
 }
 
-/* Typography comes from the shared .nav-section-heading (components.css) */
+.nav-entry {
+    display: flex;
+    flex-direction: column;
+}
+
+/* Section Header */
 .nav-section {
-    padding: 0 13px;
-    margin: 4px 0 12px;
+    padding: 14px 10px 4px;
 }
 
-/* Collapsed: section label becomes an invisible spacer, no divider line */
+.section-label {
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    color: var(--muted2);
+    text-transform: uppercase;
+    font-family: var(--font-sans);
+}
+
+.section-divider {
+    display: block;
+    height: 1px;
+    background: rgba(15, 23, 42, 0.06);
+    margin: 8px 6px;
+}
+
 .nav-section.collapsed {
-    height: 16px;
-    margin: 0;
-    padding: 0;
+    padding: 6px 0;
 }
 
+/* Nav Item Link — Linear/Raycast Minimalist Style */
 .nav-item {
     position: relative;
     display: flex;
     align-items: center;
-    gap: 13px;
-    padding: 11px 13px;
-    margin-bottom: 4px;
-    color: var(--muted);
+    gap: 10px;
+    padding: 8px 11px;
+    color: var(--text3);
     font-family: var(--font-sans);
-    font-size: 14.5px;
-    font-weight: var(--font-weight-medium);
+    font-size: 13.5px;
+    font-weight: 500;
     text-decoration: none;
-    border-radius: var(--radius-btn);
-    transition: background-color var(--transition-fast), color var(--transition-fast);
+    border-radius: 8px;
+    transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* Collapsed: center the icon, drop the gap */
+/* Collapsed touch target */
 .sidebar.collapsed .nav-item {
-    padding: 11px;
+    padding: 9px 0;
+    width: 40px;
+    height: 40px;
+    margin: 0 auto 3px;
     gap: 0;
     justify-content: center;
 }
 
 .nav-item:hover:not(.active) {
-    background: var(--o04);
-    color: var(--text2);
+    background: rgba(15, 23, 42, 0.04);
+    color: var(--text);
+    transform: translateX(1.5px);
+}
+
+.sidebar.collapsed .nav-item:hover:not(.active) {
+    transform: scale(1.05);
 }
 
 .nav-item:focus-visible {
@@ -217,68 +288,136 @@ const handleNavigation = () => {
     box-shadow: var(--ring-focus);
 }
 
+/* Active State — Obsidian Minimalist Pill */
 .nav-item.active {
-    background: var(--accent-bg-12);
-    color: var(--accent-ink);
-    font-weight: var(--font-weight-semibold);
+    background: #0F172A;
+    color: #FFFFFF;
+    font-weight: 600;
+    box-shadow: 0 2px 6px rgba(15, 23, 42, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.12);
 }
 
-/* Lime accent bar on the active item */
-.nav-bar {
-    position: absolute;
-    left: 0;
-    top: 9px;
-    bottom: 9px;
-    width: 3px;
-    border-radius: 3px;
-    background: var(--accent-solid);
-    opacity: 0;
-}
-
-.nav-item.active .nav-bar {
-    opacity: 1;
-}
-
-/* Hide the active bar when collapsed */
-.sidebar.collapsed .nav-item.active .nav-bar {
-    opacity: 0;
+.active-dot {
+    margin-left: auto;
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: #38BDF8;
+    box-shadow: 0 0 6px #38BDF8;
 }
 
 .nav-icon {
-    width: 22px;
-    height: 22px;
+    width: 18px;
+    height: 18px;
     display: flex;
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
     color: inherit;
+    transition: transform var(--transition-fast);
 }
 
 .nav-icon :deep(svg) {
-    width: 19px;
-    height: 19px;
+    width: 16px;
+    height: 16px;
     display: block;
+    stroke-width: 1.8;
 }
 
 .nav-label {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    letter-spacing: -0.01em;
 }
 
-/* Small laptops (1025px - 1280px) */
-@media (max-width: 1280px) and (min-width: 1025px) {
-    .sidebar {
-        width: 248px;
-        position: relative;
-    }
-
-    .sidebar.collapsed {
-        width: 76px;
-    }
+/* Bottom AI Engine Card */
+.sidebar-bottom {
+    padding: 10px 12px;
+    border-top: 1px solid rgba(15, 23, 42, 0.06);
+    background: rgba(255, 255, 255, 0.6);
 }
 
-/* Tablets and below - Overlay mode */
+.engine-card {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 9px 11px;
+    background: #FFFFFF;
+    border: 1px solid rgba(15, 23, 42, 0.08);
+    border-radius: 9px;
+    text-decoration: none;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
+    transition: all 0.15s ease;
+}
+
+.engine-card:hover {
+    border-color: rgba(15, 23, 42, 0.18);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
+    transform: translateY(-0.5px);
+}
+
+.engine-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.engine-title-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.engine-indicator {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #10B981;
+    box-shadow: 0 0 5px rgba(16, 185, 129, 0.6);
+}
+
+.engine-name {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text);
+}
+
+.engine-arrow {
+    color: var(--muted2);
+    transition: transform var(--transition-fast);
+}
+
+.engine-card:hover .engine-arrow {
+    transform: translateX(2px);
+    color: var(--text);
+}
+
+/* Dark mode overrides */
+[data-theme="dark"] .sidebar {
+    background: var(--bg2);
+    box-shadow: 1px 0 0 0 rgba(255, 255, 255, 0.04);
+}
+
+[data-theme="dark"] .sidebar-bottom {
+    background: var(--bg);
+}
+
+[data-theme="dark"] .engine-card {
+    background: var(--surface);
+}
+
+[data-theme="dark"] .nav-item.active {
+    background: #FFFFFF;
+    color: #090A0F;
+}
+
+[data-theme="dark"] .active-dot {
+    background: #6366F1;
+    box-shadow: 0 0 6px #6366F1;
+}
+
+/* Responsive Overrides */
 @media (max-width: 1024px) {
     .sidebar {
         position: fixed;
@@ -286,37 +425,33 @@ const handleNavigation = () => {
         top: 0;
         bottom: 0;
         z-index: 1000;
-        box-shadow: 8px 0 32px rgba(0,0,0,.4);
+        box-shadow: 8px 0 32px rgba(15, 23, 42, 0.12);
         transform: translateX(0);
     }
 
     .sidebar.collapsed {
         transform: translateX(-100%);
-        width: 252px;
-        /* An off-canvas panel must not keep painting its shadow over the page.
-           Sliding it out moves the box, not the shadow's reach: with an 8px
-           offset and 32px blur, roughly 24px of it still lands on the page's
-           left edge, above the content at z-index 1000. On the dark theme that
-           is black on near-black and invisible, which is why it went unnoticed;
-           on the light theme it reads as a grey band down the side. */
+        width: 256px;
         box-shadow: none;
     }
 
-    /* In overlay mode the panel is full-width — restore expanded layout */
     .sidebar.collapsed .sidebar-header {
         flex-direction: row;
         justify-content: space-between;
-        padding: 22px 20px;
+        padding: 0 16px;
+        height: 64px;
     }
 
     .sidebar.collapsed .nav-item {
-        padding: 11px 13px;
-        gap: 13px;
+        padding: 9px 12px;
+        width: auto;
+        height: auto;
+        margin-bottom: 2px;
+        gap: 11px;
         justify-content: flex-start;
     }
 }
 
-/* Mobile */
 @media (max-width: 768px) {
     .sidebar {
         width: 280px;
@@ -328,25 +463,5 @@ const handleNavigation = () => {
         max-width: 85vw;
     }
 }
-
-/* Very small mobile */
-@media (max-width: 480px) {
-    .sidebar {
-        width: 100%;
-        max-width: 100vw;
-    }
-
-    .sidebar.collapsed {
-        width: 100%;
-        max-width: 100vw;
-    }
-
-    .nav-item {
-        padding: var(--space-md) var(--space-lg);
-    }
-
-    .nav-section {
-        padding: var(--space-md) var(--space-lg) var(--space-xs);
-    }
-}
 </style>
+

@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/chattermate/chattermate/backend-go/internal/config"
+	"github.com/komi/komi/backend-go/internal/config"
 )
 
 type fakeConversationStore struct {

@@ -1,5 +1,5 @@
 <!--
-Copyright 2024-2026 ChatterMate
+Copyright 2024-2026 Komi AI
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -37,11 +37,11 @@ const timezones = ref(listTz())
 
 // Danger zone — no destructive API yet; route the user to support.
 const onTransferOwnership = () => {
-  window.alert('如需转让企业组织所有权，请联系管理员或技术支持 support@chattermate.chat。')
+  window.alert('如需转让企业组织所有权，请联系管理员或技术支持 support@komi.ai。')
 }
 const onDeleteOrganization = () => {
   if (window.confirm('永久注销并删除当前企业组织及其所有数据？该操作不可撤回。')) {
-    window.alert('企业组织注销需由技术支持核验处理 — 请联系 support@chattermate.chat。')
+    window.alert('企业组织注销需由技术支持核验处理 — 请联系 support@komi.ai。')
   }
 }
 
@@ -300,14 +300,14 @@ onMounted(async () => {
 .org-title {
   font-family: var(--font-display);
   font-weight: 700;
-  font-size: 30px;
+  font-size: 22px;
   letter-spacing: -0.02em;
   color: var(--text);
   margin: 0 0 6px;
 }
 
 .org-subtitle {
-  font-size: 15px;
+  font-size: 13.5px;
   color: var(--muted);
   margin: 0;
 }
@@ -321,9 +321,9 @@ onMounted(async () => {
 }
 
 .stat-card {
-  background: var(--surface);
-  border: 1px solid var(--o08);
-  border-radius: 16px;
+  background: #FFFFFF;
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
   padding: 18px 20px;
   display: flex;
   flex-direction: column;
@@ -338,7 +338,7 @@ onMounted(async () => {
 
 .stat-value {
   font-family: var(--font-display);
-  font-size: 28px;
+  font-size: 24px;
   font-weight: 700;
   color: var(--text);
   letter-spacing: -0.02em;
@@ -368,9 +368,9 @@ onMounted(async () => {
 
 /* Section cards */
 .card {
-  background: var(--surface);
-  border: 1px solid var(--o08);
-  border-radius: 18px;
+  background: #FFFFFF;
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
   padding: 26px;
   margin: 0 0 18px;
   max-width: none;
@@ -488,7 +488,7 @@ onMounted(async () => {
   width: 62px;
   height: 62px;
   flex-shrink: 0;
-  border-radius: 16px;
+  border-radius: 12px;
   background: var(--grad-lime-teal);
   display: flex;
   align-items: center;
@@ -501,7 +501,7 @@ onMounted(async () => {
 }
 
 .org-logo.has-image {
-  background: var(--surface);
+  background: #FFFFFF;
   border: 1px solid var(--o10);
 }
 
@@ -580,8 +580,8 @@ onMounted(async () => {
 .select {
   width: 100%;
   padding: 13px 15px;
-  background: var(--bg);
-  border: 1px solid var(--o12);
+  background: #FFFFFF;
+  border: 1px solid var(--border-color);
   border-radius: var(--radius-input);
   color: var(--text);
   font-size: 14.5px;
@@ -630,7 +630,7 @@ onMounted(async () => {
 .preset {
   padding: 8px 13px;
   background: var(--o05);
-  border: 1px solid var(--o12);
+  border: 1px solid var(--border-color);
   border-radius: 9px;
   color: var(--text3);
   font-size: 12.5px;
@@ -720,8 +720,8 @@ onMounted(async () => {
 /* Time selects */
 .time-select {
   padding: 8px 10px;
-  background: var(--bg);
-  border: 1px solid var(--o12);
+  background: #FFFFFF;
+  border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
   color: var(--text);
   font-size: 13.5px;
@@ -786,7 +786,7 @@ onMounted(async () => {
   padding: 12px 14px 12px 22px;
   background: color-mix(in srgb, var(--surface) 96%, transparent);
   backdrop-filter: blur(12px);
-  border: 1px solid var(--o12);
+  border: 1px solid var(--border-color);
   border-radius: 14px;
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
 }
@@ -820,8 +820,7 @@ onMounted(async () => {
 
 .btn-save {
   padding: 10px 20px;
-  background: var(--accent-solid);
-  color: var(--on-accent-solid);
+  background: #0F172A; color: #FFFFFF; border: 1px solid rgba(15, 23, 42, 0.9);
   border: none;
   border-radius: 10px;
   font-size: 13.5px;

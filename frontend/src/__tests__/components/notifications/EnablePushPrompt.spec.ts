@@ -1,5 +1,5 @@
 /*
-Copyright 2024-2026 ChatterMate
+Copyright 2024-2026 Komi AI
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -95,7 +95,7 @@ describe('EnablePushPrompt', () => {
     setNotificationPermission(null)
     vi.stubGlobal('navigator', { userAgent: 'iPhone Safari' })
     const wrapper = await mountPrompt()
-    expect(wrapper.text()).toContain('将 ChatterMate 添加到主屏幕')
+    expect(wrapper.text()).toContain('将 Komi AI 添加到主屏幕')
     expect(wrapper.find('.primary-btn').exists()).toBe(false)
   })
 })

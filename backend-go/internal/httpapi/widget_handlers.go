@@ -16,11 +16,11 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
-	"github.com/chattermate/chattermate/backend-go/internal/agent"
-	"github.com/chattermate/chattermate/backend-go/internal/auth"
-	"github.com/chattermate/chattermate/backend-go/internal/customer"
-	"github.com/chattermate/chattermate/backend-go/internal/session"
-	"github.com/chattermate/chattermate/backend-go/internal/widget"
+	"github.com/komi/komi/backend-go/internal/agent"
+	"github.com/komi/komi/backend-go/internal/auth"
+	"github.com/komi/komi/backend-go/internal/customer"
+	"github.com/komi/komi/backend-go/internal/session"
+	"github.com/komi/komi/backend-go/internal/widget"
 )
 
 type createWidgetRequest struct {

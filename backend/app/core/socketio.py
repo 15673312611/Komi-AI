@@ -1,5 +1,5 @@
 """
-Copyright 2024-2026 ChatterMate
+Copyright 2024-2026 Komi AI
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -63,7 +63,7 @@ def configure_socketio(cors_origins=None):
             sio.client_manager = socketio.AsyncRedisManager(
                 redis_url,
                 write_only=False,
-                channel='chattermate',
+                channel='komi',
                 redis_options={
                     'retry_on_timeout': True,
                     'health_check_interval': 30,

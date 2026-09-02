@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ChatterMate Widget Test</title>
+    <title>Komi AI Widget Test</title>
     <style>
         * {
             box-sizing: border-box;
@@ -307,12 +307,12 @@
 </head>
 
 <body>
-    <h1>ChatterMate Widget Test Page</h1>
+    <h1>Komi AI Widget Test Page</h1>
 
     <div class="content">
-        <h2>About ChatterMate</h2>
+        <h2>About Komi AI</h2>
         <p>
-            This is a test page demonstrating the ChatterMate chat widget integration.
+            This is a test page demonstrating the Komi AI chat widget integration.
             The widget provides real-time chat functionality with AI-powered responses
             and seamless human handoff capabilities.
         </p>
@@ -366,7 +366,7 @@
 
     <div class="content">
         <h2>Integration Code</h2>
-        <p>To add the ChatterMate widget to your website, add the following code before the closing
+        <p>To add the Komi AI widget to your website, add the following code before the closing
             <code>&lt;/body&gt;</code> tag:
         </p>
 
@@ -378,7 +378,7 @@
     // into the build (the cloud API for a production build).
     window.chattermateBaseUrl = 'http://localhost:8000/api/v1';
 &lt;/script&gt;
-&lt;script src="http://localhost:5173/webclient/chattermate.min.js"&gt;&lt;/script&gt;
+&lt;script src="http://localhost:5173/webclient/komi.min.js"&gt;&lt;/script&gt;
         </code></pre>
 
         <h3 style="margin-top: 20px; font-size: 1rem;">With Token Authentication</h3>
@@ -406,11 +406,11 @@ const { data } = await response.json();
     window.chattermateToken = 'TOKEN_FROM_SERVER';
     window.chattermateBaseUrl = 'http://localhost:8000/api/v1';
 &lt;/script&gt;
-&lt;script src="http://localhost:5173/webclient/chattermate.min.js"&gt;&lt;/script&gt;
+&lt;script src="http://localhost:5173/webclient/komi.min.js"&gt;&lt;/script&gt;
         </code></pre>
     </div>
 
-    <!-- ChatterMate Widget Integration -->
+    <!-- Komi AI Widget Integration -->
     <script>
         // Constants for localStorage keys
         const WIDGET_ID_KEY = 'chattermate_widget_id';
@@ -418,7 +418,7 @@ const { data } = await response.json();
 
         // Where the widget talks to. WITHOUT this the loader falls back to the URL
         // baked in at build time — which for a :prod build is the cloud API, so a
-        // local test would silently chat with api.chattermate.chat.
+        // local test would silently chat with api.komi.ai.
         // Override in the console: localStorage.setItem('chattermate_api_base', '...')
         const CM_API_BASE = localStorage.getItem('chattermate_api_base') || 'http://localhost:8000/api/v1';
         // The loader is served by the FRONTEND (vite in dev, the dashboard origin in
@@ -429,7 +429,7 @@ const { data } = await response.json();
         // https this page would otherwise pull executable code over an unencrypted
         // connection, which the browser blocks as mixed content anyway.
         const CM_LOADER_URL = localStorage.getItem('chattermate_loader_url')
-            || `${window.location.protocol}//localhost:5173/webclient/chattermate.min.js`;
+            || `${window.location.protocol}//localhost:5173/webclient/komi.min.js`;
         
         // Load saved widget ID and initialize on page load
         document.addEventListener('DOMContentLoaded', function() {
@@ -491,7 +491,7 @@ const { data } = await response.json();
             window.chattermateBaseUrl = CM_API_BASE;
 
             // Remove existing script if any
-            const existingScript = document.getElementById('chattermate-script');
+            const existingScript = document.getElementById('komi-script');
             if (existingScript) {
                 existingScript.remove();
             }
@@ -500,12 +500,12 @@ const { data } = await response.json();
             setTimeout(() => {
                 // Create and add new script
                 const script = document.createElement('script');
-                script.id = 'chattermate-script';
+                script.id = 'komi-script';
                 script.src = CM_LOADER_URL;
                 script.onload = function() {
                     // Initialize the widget once script loads
-                    if (window.ChatterMate) {
-                        window.ChatterMate.init({ id: widgetId });
+                    if (window.Komi AI) {
+                        window.Komi AI.init({ id: widgetId });
                         console.log('Widget initialized with ID:', widgetId);
                     }
                 };
@@ -515,7 +515,7 @@ const { data } = await response.json();
         
         function clearWidget() {
             // Remove widget script first to prevent it from recreating storage items
-            const existingScript = document.getElementById('chattermate-script');
+            const existingScript = document.getElementById('komi-script');
             if (existingScript) {
                 existingScript.remove();
             }
@@ -524,12 +524,12 @@ const { data } = await response.json();
             if (window.chattermateId) {
                 delete window.chattermateId;
             }
-            if (window.ChatterMate) {
+            if (window.Komi AI) {
                 // Call destroy method if it exists
-                if (typeof window.ChatterMate.destroy === 'function') {
-                    window.ChatterMate.destroy();
+                if (typeof window.Komi AI.destroy === 'function') {
+                    window.Komi AI.destroy();
                 }
-                delete window.ChatterMate;
+                delete window.Komi AI;
             }
             
             // Function to clear storage items with specific patterns
@@ -540,7 +540,7 @@ const { data } = await response.json();
                 for (let i = 0; i < storage.length; i++) {
                     const key = storage.key(i);
                     if (key && (
-                        key.includes('chattermate') || 
+                        key.includes('komi') || 
                         key.includes('widget') || 
                         key === 'ctid' ||
                         key.includes('chat') ||
@@ -577,7 +577,7 @@ const { data } = await response.json();
             let cookiesCleared = 0;
             document.cookie.split(";").forEach(function(c) { 
                 const cookie = c.trim();
-                if (cookie.includes('chattermate') || 
+                if (cookie.includes('komi') || 
                     cookie.includes('widget') || 
                     cookie.includes('ctid') ||
                     cookie.includes('chat')) {
@@ -726,36 +726,36 @@ const { data } = await response.json();
             window.chattermateBaseUrl = CM_API_BASE;
 
             // Remove existing script if any
-            const existingScript = document.getElementById('chattermate-script');
+            const existingScript = document.getElementById('komi-script');
             if (existingScript) {
                 existingScript.remove();
             }
 
             // Also remove any existing widget elements to ensure fresh initialization
-            const existingContainer = document.getElementById('chattermate-container');
-            const existingButton = document.getElementById('chattermate-button');
-            const existingClose = document.getElementById('chattermate-mobile-close');
-            const existingTopbar = document.getElementById('chattermate-mobile-topbar');
+            const existingContainer = document.getElementById('komi-container');
+            const existingButton = document.getElementById('komi-button');
+            const existingClose = document.getElementById('komi-mobile-close');
+            const existingTopbar = document.getElementById('komi-mobile-topbar');
             if (existingContainer) existingContainer.remove();
             if (existingButton) existingButton.remove();
             if (existingClose) existingClose.remove();
             if (existingTopbar) existingTopbar.remove();
 
-            // Clear ChatterMate instance
-            if (window.ChatterMate) {
-                delete window.ChatterMate;
+            // Clear Komi AI instance
+            if (window.Komi AI) {
+                delete window.Komi AI;
             }
 
             // Wait a moment for cleanup
             setTimeout(() => {
                 // Create and add new script
                 const script = document.createElement('script');
-                script.id = 'chattermate-script';
+                script.id = 'komi-script';
                 script.src = CM_LOADER_URL;
 
                 script.onload = function() {
-                    if (window.ChatterMate) {
-                        window.ChatterMate.init({
+                    if (window.Komi AI) {
+                        window.Komi AI.init({
                             id: widgetId
                         });
                     }

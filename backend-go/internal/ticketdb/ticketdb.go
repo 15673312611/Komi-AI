@@ -17,7 +17,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	_ "github.com/jackc/pgx/v5/stdlib"
 
-	"github.com/chattermate/chattermate/backend-go/internal/encryption"
+	"github.com/komi/komi/backend-go/internal/encryption"
 )
 
 var (

@@ -12,7 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/chattermate/chattermate/backend-go/internal/encryption"
+	"github.com/komi/komi/backend-go/internal/encryption"
 )
 
 var ErrNotFound = errors.New("analytics resource not found")

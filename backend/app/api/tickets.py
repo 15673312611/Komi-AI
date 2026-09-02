@@ -1,5 +1,5 @@
 """
-Copyright 2024-2026 ChatterMate
+Copyright 2024-2026 Komi AI
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -130,7 +130,7 @@ def _activity_out(activity) -> TicketActivityOut:
     if activity.actor_user is not None:
         out.actor_name = activity.actor_user.full_name
     elif str(activity.actor_type) == TicketActorType.AI.value:
-        out.actor_name = "ChatterMate AI"
+        out.actor_name = "Komi AI"
     return out
 
 

@@ -73,22 +73,22 @@ const apply = () => {
 
 <template>
   <div v-if="open" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-in fade-in duration-200" @click.self="emit('close')">
-    <div class="w-full max-w-lg bg-[#0F1523] border border-white/10 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
+    <div class="w-full max-w-lg bg-[#FFFFFF] border border-slate-200 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
       <!-- 头部 -->
-      <div class="px-5 py-4 border-b border-white/[0.08] flex items-center justify-between bg-[#141B2E]">
+      <div class="px-5 py-4 border-b border-slate-200 flex items-center justify-between bg-[#F8FAFC]">
         <div class="flex items-center gap-3">
           <div class="w-9 h-9 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 flex items-center justify-center text-sm shadow-[0_0_12px_rgba(16,185,129,0.3)]">
             <i class="fa-solid fa-wand-magic-sparkles"></i>
           </div>
           <div>
-            <h3 class="font-bold text-slate-100 text-sm">AI 智能润色与多语言助理</h3>
+            <h3 class="font-bold text-[#0F172A] text-sm">AI 智能润色与多语言助理</h3>
             <p class="text-[11px] text-slate-400 mt-0.5">智能改写语气、精简表达或翻译为母语级地道英文</p>
           </div>
         </div>
         <button
           type="button"
           @click="emit('close')"
-          class="w-7 h-7 rounded-lg hover:bg-white/10 text-slate-400 hover:text-slate-100 flex items-center justify-center transition-colors"
+          class="w-7 h-7 rounded-lg hover:bg-white/10 text-slate-400 hover:text-[#0F172A] flex items-center justify-center transition-colors"
         >
           <i class="fa-solid fa-xmark text-sm"></i>
         </button>
@@ -97,7 +97,7 @@ const apply = () => {
       <!-- 主体 -->
       <div class="p-5 space-y-4 overflow-y-auto flex-1">
         <div class="space-y-1.5">
-          <label class="text-xs font-semibold text-slate-200 flex items-center gap-1.5">
+          <label class="text-xs font-semibold text-slate-800 flex items-center gap-1.5">
             <i class="fa-solid fa-pen-to-square text-emerald-400 text-[11px]"></i>
             <span>输入待处理草稿 / 核心要点</span>
           </label>
@@ -107,7 +107,7 @@ const apply = () => {
             :disabled="loading"
             rows="3"
             placeholder="例如：给客户说明由于天气原因物流延误2天，赠送10美元优惠券表示歉意…"
-            class="w-full bg-[#161E31] border border-white/10 rounded-xl p-3 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-emerald-500/50 resize-none font-sans"
+            class="w-full bg-[#FFFFFF] border border-slate-200 rounded-xl p-3 text-xs text-[#0F172A] placeholder-slate-500 focus:outline-none focus:border-emerald-500/50 resize-none font-sans"
           ></textarea>
         </div>
 
@@ -121,7 +121,7 @@ const apply = () => {
               @click="generate('polite')"
               :class="[
                 'py-2 px-2 rounded-xl text-xs font-medium border flex flex-col items-center gap-1 transition-all',
-                mode === 'polite' ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-300 shadow-[0_0_10px_rgba(16,185,129,0.2)]' : 'bg-[#141B2E] border-white/[0.06] text-slate-300 hover:bg-[#1A233A]'
+                mode === 'polite' ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-300 shadow-[0_0_10px_rgba(16,185,129,0.2)]' : 'bg-[#F8FAFC] border-slate-100 text-slate-700 hover:bg-[#F1F5F9]'
               ]"
             >
               <i class="fa-solid fa-heart text-xs text-pink-400"></i>
@@ -133,7 +133,7 @@ const apply = () => {
               @click="generate('concise')"
               :class="[
                 'py-2 px-2 rounded-xl text-xs font-medium border flex flex-col items-center gap-1 transition-all',
-                mode === 'concise' ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-300 shadow-[0_0_10px_rgba(16,185,129,0.2)]' : 'bg-[#141B2E] border-white/[0.06] text-slate-300 hover:bg-[#1A233A]'
+                mode === 'concise' ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-300 shadow-[0_0_10px_rgba(16,185,129,0.2)]' : 'bg-[#F8FAFC] border-slate-100 text-slate-700 hover:bg-[#F1F5F9]'
               ]"
             >
               <i class="fa-solid fa-feather-pointed text-xs text-blue-400"></i>
@@ -145,7 +145,7 @@ const apply = () => {
               @click="generate('translate_en')"
               :class="[
                 'py-2 px-2 rounded-xl text-xs font-medium border flex flex-col items-center gap-1 transition-all',
-                mode === 'translate_en' ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-300 shadow-[0_0_10px_rgba(16,185,129,0.2)]' : 'bg-[#141B2E] border-white/[0.06] text-slate-300 hover:bg-[#1A233A]'
+                mode === 'translate_en' ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-300 shadow-[0_0_10px_rgba(16,185,129,0.2)]' : 'bg-[#F8FAFC] border-slate-100 text-slate-700 hover:bg-[#F1F5F9]'
               ]"
             >
               <i class="fa-solid fa-language text-xs text-purple-400"></i>
@@ -157,7 +157,7 @@ const apply = () => {
               @click="generate('apology')"
               :class="[
                 'py-2 px-2 rounded-xl text-xs font-medium border flex flex-col items-center gap-1 transition-all',
-                mode === 'apology' ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-300 shadow-[0_0_10px_rgba(16,185,129,0.2)]' : 'bg-[#141B2E] border-white/[0.06] text-slate-300 hover:bg-[#1A233A]'
+                mode === 'apology' ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-300 shadow-[0_0_10px_rgba(16,185,129,0.2)]' : 'bg-[#F8FAFC] border-slate-100 text-slate-700 hover:bg-[#F1F5F9]'
               ]"
             >
               <i class="fa-solid fa-hands-praying text-xs text-amber-400"></i>
@@ -167,7 +167,7 @@ const apply = () => {
         </div>
 
         <!-- 生成结果 -->
-        <div class="p-3.5 rounded-xl bg-[#141B2E] border border-white/[0.08] min-h-[100px] flex flex-col justify-between">
+        <div class="p-3.5 rounded-xl bg-[#F8FAFC] border border-slate-200 min-h-[100px] flex flex-col justify-between">
           <div class="flex items-center justify-between text-[11px] font-semibold text-emerald-400 mb-1">
             <span class="flex items-center gap-1.5">
               <i class="fa-solid fa-sparkles text-xs"></i>
@@ -178,17 +178,17 @@ const apply = () => {
             </span>
           </div>
           <div v-if="error" class="text-xs text-rose-400 py-2">{{ error }}</div>
-          <div v-else-if="result" class="text-xs text-slate-100 leading-relaxed py-1 whitespace-pre-wrap select-text">{{ result }}</div>
+          <div v-else-if="result" class="text-xs text-[#0F172A] leading-relaxed py-1 whitespace-pre-wrap select-text">{{ result }}</div>
           <div v-else class="text-xs text-slate-500 py-3 text-center">输入要点并点击上方任一模式开始生成</div>
         </div>
       </div>
 
       <!-- 底部栏 -->
-      <div class="px-5 py-3.5 border-t border-white/[0.08] bg-[#141B2E] flex items-center justify-between gap-2">
+      <div class="px-5 py-3.5 border-t border-slate-200 bg-[#F8FAFC] flex items-center justify-between gap-2">
         <button
           type="button"
           @click="emit('close')"
-          class="px-3.5 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 text-xs font-medium transition-all"
+          class="px-3.5 py-1.5 rounded-lg bg-slate-100 hover:bg-white/10 border border-slate-200 text-slate-700 text-xs font-medium transition-all"
         >
           取消
         </button>

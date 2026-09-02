@@ -1,5 +1,5 @@
 """
-Copyright 2024-2026 ChatterMate
+Copyright 2024-2026 Komi AI
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -74,7 +74,7 @@ logger.debug(f"CORS origins: {cors_origins}")
 app.router.lifespan_context = lifespan
 
 # Add CORS middleware to FastAPI app. The regex covers every help-center
-# subdomain (*.chattermate.help) so a newly-created slug is allowed without a
+# subdomain (*.komi.help) so a newly-created slug is allowed without a
 # cache refresh; explicit origins still cover org domains + custom domains.
 app.add_middleware(
     CORSMiddleware,
@@ -304,7 +304,7 @@ async def root():
     return {
         "name": settings.PROJECT_NAME,
         "version": settings.VERSION,
-        "description": "Welcome to ChatterMate API"
+        "description": "Welcome to Komi AI API"
     }
 
 @app.api_route("/health", methods=["GET"], operation_id="get_health_check")

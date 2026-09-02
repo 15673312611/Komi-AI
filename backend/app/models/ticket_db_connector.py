@@ -1,5 +1,5 @@
 """
-Copyright 2024-2026 ChatterMate
+Copyright 2024-2026 Komi AI
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -32,7 +32,7 @@ class DBConnectorEngine(_ValueStrEnum):
 
 # Which value of the ticket's customer is matched against the scope column.
 # Email is the default because it is the identifier a support database is most
-# likely to share with ChatterMate; phone suits channel-first businesses.
+# likely to share with Komi AI; phone suits channel-first businesses.
 ROW_SCOPE_KEYS = ("email", "phone")
 
 

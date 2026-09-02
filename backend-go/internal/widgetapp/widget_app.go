@@ -14,7 +14,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/chattermate/chattermate/backend-go/internal/auth"
+	"github.com/komi/komi/backend-go/internal/auth"
 )
 
 type App struct {

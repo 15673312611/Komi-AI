@@ -12,7 +12,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
-	"github.com/chattermate/chattermate/backend-go/internal/ticketing"
+	"github.com/komi/komi/backend-go/internal/ticketing"
 )
 
 const alertDedupSimilarity = 0.95

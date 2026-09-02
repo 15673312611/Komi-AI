@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/chattermate/chattermate/backend-go/internal/config"
+	"github.com/komi/komi/backend-go/internal/config"
 )
 
 func TestSocketIOHandlerCompletesEngineHandshake(t *testing.T) {

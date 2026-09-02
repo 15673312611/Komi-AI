@@ -1,5 +1,5 @@
 """
-Copyright 2024-2026 ChatterMate
+Copyright 2024-2026 Komi AI
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -714,22 +714,22 @@ async def generate_instructions(
         except ImportError:
             HAS_ENTERPRISE = False
         
-        # Get API key and model - first check for ChatterMate config if enterprise is available
+        # Get API key and model - first check for Komi AI config if enterprise is available
         api_key = ""
         model_name = ""
         model_type = ""
         
         if HAS_ENTERPRISE:
-            # Use Groq/OpenAI with keys from env for ChatterMate model
+            # Use Groq/OpenAI with keys from env for Komi AI model
             model_type = 'OPENAI'
-            model_name = os.getenv('CHATTERMATE_MODEL_NAME', 'gpt-4o-mini')
-            api_key = os.getenv('CHATTERMATE_API_KEY', '')
+            model_name = os.getenv('KOMI_AI_MODEL_NAME', 'gpt-4o-mini')
+            api_key = os.getenv('KOMI_AI_API_KEY', '')
             
             if not api_key:
-                logger.error("ChatterMate API key not found in environment")
+                logger.error("Komi AI API key not found in environment")
                 raise HTTPException(
                     status_code=500,
-                    detail="ChatterMate API configuration missing"
+                    detail="Komi AI API configuration missing"
                 )
         else:
             # Get from organization's AI config

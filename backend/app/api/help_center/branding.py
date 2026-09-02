@@ -1,5 +1,5 @@
 """
-Copyright 2024-2026 ChatterMate
+Copyright 2024-2026 Komi AI
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -100,7 +100,7 @@ async def settings_response(
         .all()
     )
     response = HelpCenterSettingsResponse.model_validate(row)
-    # Absolute (api-origin) URL: the admin runs on app.chattermate.chat, whose
+    # Absolute (api-origin) URL: the admin runs on app.komi.ai, whose
     # nginx serves any *.png path as a static asset — a host-relative
     # /api/v1/uploads/*.png would 404 there. Anchor to the backend origin.
     response.logo_url = (

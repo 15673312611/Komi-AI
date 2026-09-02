@@ -1,5 +1,5 @@
 <!--
-Copyright 2024-2026 ChatterMate
+Copyright 2024-2026 Komi AI
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -257,7 +257,7 @@ const closeKnowledgeModal = () => {
         <div class="knowledge-header">
             <div class="header-left">
                 <h3>知识库源</h3>
-                <p class="header-subtitle">关联文档与网页 — ChatterMate 将自动构建索引，让智能体的每次回复都有据可循。</p>
+                <p class="header-subtitle">关联文档与网页 — Komi AI 将自动构建索引，让智能体的每次回复都有据可循。</p>
             </div>
             <div class="header-actions">
                 <button class="action-button action-button--primary" @click="showKnowledgeModal = true">

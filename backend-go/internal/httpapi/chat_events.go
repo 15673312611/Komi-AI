@@ -6,10 +6,10 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/chattermate/chattermate/backend-go/internal/chat"
-	"github.com/chattermate/chattermate/backend-go/internal/notification"
-	"github.com/chattermate/chattermate/backend-go/internal/session"
-	"github.com/chattermate/chattermate/backend-go/internal/user"
+	"github.com/komi/komi/backend-go/internal/chat"
+	"github.com/komi/komi/backend-go/internal/notification"
+	"github.com/komi/komi/backend-go/internal/session"
+	"github.com/komi/komi/backend-go/internal/user"
 )
 
 const (

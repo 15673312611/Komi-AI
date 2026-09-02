@@ -1,5 +1,5 @@
 """
-Copyright 2024-2026 ChatterMate
+Copyright 2024-2026 Komi AI
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -25,6 +25,7 @@ from app.api.channels.email import router as email_router
 from app.api.channels.sms import router as sms_router
 from app.api.channels.line import router as line_router
 from app.api.channels.agent_config import router as agent_config_router
+from app.api.channels.simulator import router as simulator_router
 
 # Aggregates channel onboarding/management routes under /channels
 router = APIRouter()
@@ -38,3 +39,4 @@ router.include_router(email_router, prefix="/email", tags=["channels"])
 router.include_router(sms_router, prefix="/sms", tags=["channels"])
 router.include_router(line_router, prefix="/line", tags=["channels"])
 router.include_router(agent_config_router, prefix="/agent-config", tags=["channels"])
+router.include_router(simulator_router, prefix="/simulator", tags=["channels"])

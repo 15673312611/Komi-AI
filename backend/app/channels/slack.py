@@ -1,5 +1,5 @@
 """
-Copyright 2024-2026 ChatterMate
+Copyright 2024-2026 Komi AI
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -50,8 +50,8 @@ WELCOME_WITH_AGENT = (
     "knowledge and can bring in a human when you need one."
 )
 WELCOME_NO_AGENT = (
-    "Hi! I'm ChatterMate. 👋\n\n"
-    "No agent is connected to this workspace yet. Set one up in ChatterMate and "
+    "Hi! I'm Komi AI. 👋\n\n"
+    "No agent is connected to this workspace yet. Set one up in Komi AI and "
     "I'll start answering here."
 )
 SUGGESTED_PROMPTS_TITLE = "Try asking:"
@@ -132,15 +132,15 @@ HOME_INTRO = (
 )
 HOME_HOW_TO = (
     "*How to use me*\n"
-    "• @mention *ChatterMate* in any channel — I reply in the thread\n"
+    "• @mention *Komi AI* in any channel — I reply in the thread\n"
     "• Send me a *direct message* for a private conversation\n"
     "• Open me from the *assistant* in the top bar for a side-by-side chat"
 )
 HOME_NO_AGENT = (
     "*No agent connected yet*\nConnect an agent to this workspace from the "
-    "ChatterMate dashboard and I'll start answering here."
+    "Komi AI dashboard and I'll start answering here."
 )
-DASHBOARD_LINK_LABEL = "Open the ChatterMate dashboard →"
+DASHBOARD_LINK_LABEL = "Open the Komi AI dashboard →"
 
 
 def build_home_view(agent_card: Optional[dict], dashboard_url: str) -> dict:
@@ -151,7 +151,7 @@ def build_home_view(agent_card: Optional[dict], dashboard_url: str) -> dict:
     "instruction", "photo_url" | None}.
     """
     blocks: List[dict] = [
-        {"type": "header", "text": {"type": "plain_text", "text": "ChatterMate", "emoji": True}},
+        {"type": "header", "text": {"type": "plain_text", "text": "Komi AI", "emoji": True}},
         {"type": "section", "text": {"type": "mrkdwn", "text": HOME_INTRO}},
         {"type": "divider"},
     ]

@@ -22,9 +22,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/chattermate/chattermate/backend-go/internal/channel"
-	"github.com/chattermate/chattermate/backend-go/internal/config"
-	"github.com/chattermate/chattermate/backend-go/internal/guardrail"
+	"github.com/komi/komi/backend-go/internal/channel"
+	"github.com/komi/komi/backend-go/internal/config"
+	"github.com/komi/komi/backend-go/internal/guardrail"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )

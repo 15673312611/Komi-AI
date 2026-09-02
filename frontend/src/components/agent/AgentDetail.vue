@@ -1,5 +1,5 @@
 <!--
-Copyright 2024-2026 ChatterMate
+Copyright 2024-2026 Komi AI
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -1281,6 +1281,7 @@ const isWorkflowFullscreen = ref(false)
                                 :widget-url="widgetUrl"
                                 :widget-loading="widgetLoading"
                                 :agent="agentData"
+                                @create-widget="initializeWidget"
                                 @copy-widget-code="copyWidgetCode"
                                 @copy-iframe-code="copyIframeCode"
                                 @copy-backend-code="copyBackendCode"

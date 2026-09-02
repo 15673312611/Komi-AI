@@ -16,7 +16,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/chattermate/chattermate/backend-go/internal/config"
+	"github.com/komi/komi/backend-go/internal/config"
 )
 
 var ErrRemoteRequest = errors.New("remote channel request failed")

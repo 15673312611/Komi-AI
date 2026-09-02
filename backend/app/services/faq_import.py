@@ -1,5 +1,5 @@
 """
-Copyright 2024-2026 ChatterMate
+Copyright 2024-2026 Komi AI
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -55,7 +55,7 @@ _BLOCK_TAGS = (
 )
 _BOILERPLATE_TAGS = ("script", "style", "noscript", "nav", "footer", "header", "form")
 
-_FETCH_HEADERS = {"User-Agent": "ChatterMate-FAQ-Import/1.0 (+https://chattermate.chat)"}
+_FETCH_HEADERS = {"User-Agent": "Komi AI-FAQ-Import/1.0 (+https://komi.ai)"}
 
 
 def _soup_to_text(soup: BeautifulSoup) -> str:

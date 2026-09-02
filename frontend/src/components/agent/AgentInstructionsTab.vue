@@ -1,5 +1,5 @@
 <!--
-Copyright 2024-2026 ChatterMate
+Copyright 2024-2026 Komi AI
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -392,7 +392,7 @@ const handleSave = () => {
         <div class="routing-mode-selector mb-6">
           <div class="flex items-center justify-between mb-2">
             <div>
-              <h4 class="section-title text-sm font-bold text-slate-100 flex items-center gap-2">
+              <h4 class="section-title text-sm font-bold text-[#0F172A] flex items-center gap-2">
                 <span>会话默认接待模式</span>
                 <span class="text-[11px] font-normal text-slate-400">（新会话进入时的默认接待方）</span>
               </h4>
@@ -410,8 +410,8 @@ const handleSave = () => {
                 'p-3.5 rounded-xl border transition-all flex items-start gap-3',
                 isEditing ? 'cursor-pointer' : 'cursor-default opacity-80',
                 localAiRepliesEnabled
-                  ? 'bg-emerald-500/10 border-emerald-500/50 text-slate-100 shadow-[0_0_15px_rgba(16,185,129,0.15)] ring-1 ring-emerald-500/30'
-                  : 'bg-[#141B2E] border-white/[0.08] text-slate-400 hover:border-white/20'
+                  ? 'bg-emerald-500/10 border-emerald-500/50 text-[#0F172A] shadow-[0_0_15px_rgba(16,185,129,0.15)] ring-1 ring-emerald-500/30'
+                  : 'bg-[#141B2E] border-slate-200 text-slate-400 hover:border-white/20'
               ]"
             >
               <div :class="[
@@ -422,7 +422,7 @@ const handleSave = () => {
               </div>
               <div class="flex-1 min-w-0">
                 <div class="flex items-center justify-between">
-                  <span class="text-xs font-bold" :class="localAiRepliesEnabled ? 'text-emerald-300' : 'text-slate-200'">
+                  <span class="text-xs font-bold" :class="localAiRepliesEnabled ? 'text-emerald-300' : 'text-slate-800'">
                     🤖 AI 智能客服优先 (推荐)
                   </span>
                   <font-awesome-icon v-if="localAiRepliesEnabled" icon="fa-solid fa-circle-check" class="text-emerald-400 text-sm" />
@@ -440,8 +440,8 @@ const handleSave = () => {
                 'p-3.5 rounded-xl border transition-all flex items-start gap-3',
                 isEditing ? 'cursor-pointer' : 'cursor-default opacity-80',
                 !localAiRepliesEnabled
-                  ? 'bg-blue-500/10 border-blue-500/50 text-slate-100 shadow-[0_0_15px_rgba(59,130,246,0.15)] ring-1 ring-blue-500/30'
-                  : 'bg-[#141B2E] border-white/[0.08] text-slate-400 hover:border-white/20'
+                  ? 'bg-blue-500/10 border-blue-500/50 text-[#0F172A] shadow-[0_0_15px_rgba(59,130,246,0.15)] ring-1 ring-blue-500/30'
+                  : 'bg-[#141B2E] border-slate-200 text-slate-400 hover:border-white/20'
               ]"
             >
               <div :class="[
@@ -452,7 +452,7 @@ const handleSave = () => {
               </div>
               <div class="flex-1 min-w-0">
                 <div class="flex items-center justify-between">
-                  <span class="text-xs font-bold" :class="!localAiRepliesEnabled ? 'text-blue-300' : 'text-slate-200'">
+                  <span class="text-xs font-bold" :class="!localAiRepliesEnabled ? 'text-blue-300' : 'text-slate-800'">
                     👤 真人客服优先 (纯人工接待)
                   </span>
                   <font-awesome-icon v-if="!localAiRepliesEnabled" icon="fa-solid fa-circle-check" class="text-blue-400 text-sm" />
@@ -466,10 +466,10 @@ const handleSave = () => {
         </div>
 
         <!-- 拟人化回复间隔与打字仿真 (AI模式下可用) -->
-        <div v-if="localAiRepliesEnabled" class="response-delay-box p-4 rounded-xl bg-[#0F1523] border border-white/[0.08] mb-6">
+        <div v-if="localAiRepliesEnabled" class="response-delay-box p-4 rounded-xl bg-[#FFFFFF] border border-slate-200 mb-6">
           <div class="flex items-center justify-between mb-2">
             <div class="flex items-center gap-2">
-              <span class="text-xs font-bold text-slate-100">⏱️ AI 拟人化回复间隔与输入仿真</span>
+              <span class="text-xs font-bold text-[#0F172A]">⏱️ AI 拟人化回复间隔与输入仿真</span>
               <span class="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-medium">防机器感辨识</span>
             </div>
             <label class="switch">
@@ -490,7 +490,7 @@ const handleSave = () => {
                 'p-2.5 rounded-xl border text-left transition-all',
                 localResponseDelayMode === 'human_like'
                   ? 'bg-emerald-500/15 border-emerald-500/50 text-emerald-300 shadow-[0_0_10px_rgba(16,185,129,0.15)]'
-                  : 'bg-[#161E31] border-white/[0.06] text-slate-400 hover:border-white/20'
+                  : 'bg-[#161E31] border-slate-100 text-slate-400 hover:border-white/20'
               ]"
             >
               <div class="text-xs font-bold flex items-center gap-1.5">
@@ -508,7 +508,7 @@ const handleSave = () => {
                 'p-2.5 rounded-xl border text-left transition-all',
                 localResponseDelayMode === 'instant'
                   ? 'bg-emerald-500/15 border-emerald-500/50 text-emerald-300 shadow-[0_0_10px_rgba(16,185,129,0.15)]'
-                  : 'bg-[#161E31] border-white/[0.06] text-slate-400 hover:border-white/20'
+                  : 'bg-[#161E31] border-slate-100 text-slate-400 hover:border-white/20'
               ]"
             >
               <div class="text-xs font-bold flex items-center gap-1.5">
@@ -526,7 +526,7 @@ const handleSave = () => {
                 'p-2.5 rounded-xl border text-left transition-all',
                 localResponseDelayMode === 'custom'
                   ? 'bg-emerald-500/15 border-emerald-500/50 text-emerald-300 shadow-[0_0_10px_rgba(16,185,129,0.15)]'
-                  : 'bg-[#161E31] border-white/[0.06] text-slate-400 hover:border-white/20'
+                  : 'bg-[#161E31] border-slate-100 text-slate-400 hover:border-white/20'
               ]"
             >
               <div class="text-xs font-bold flex items-center gap-1.5">
@@ -537,7 +537,7 @@ const handleSave = () => {
             </button>
           </div>
 
-          <div v-if="localResponseDelayMode === 'custom'" class="flex items-center gap-3 p-2.5 rounded-xl bg-[#161E31] border border-white/[0.06]">
+          <div v-if="localResponseDelayMode === 'custom'" class="flex items-center gap-3 p-2.5 rounded-xl bg-[#161E31] border border-slate-100">
             <span class="text-xs text-slate-300 shrink-0">回复延迟时间：</span>
             <input
               type="range"
@@ -553,10 +553,10 @@ const handleSave = () => {
         </div>
 
         <!-- 未知问题与知识库未命中应对策略 -->
-        <div v-if="localAiRepliesEnabled" class="unknown-fallback-section p-4 rounded-xl bg-[#0F1523] border border-white/[0.08] mb-6">
+        <div v-if="localAiRepliesEnabled" class="unknown-fallback-section p-4 rounded-xl bg-[#FFFFFF] border border-slate-200 mb-6">
           <div class="flex items-center justify-between mb-2">
             <div class="flex items-center gap-2">
-              <span class="text-xs font-bold text-slate-100">🛡️ 知识库未覆盖与未知问题应对策略</span>
+              <span class="text-xs font-bold text-[#0F172A]">🛡️ 知识库未覆盖与未知问题应对策略</span>
               <span class="text-[10px] px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300 border border-blue-500/30 font-medium">防幻觉与胡编</span>
             </div>
           </div>
@@ -574,12 +574,12 @@ const handleSave = () => {
                 'p-3 rounded-xl border text-left transition-all flex flex-col justify-between',
                 localUnknownFallbackStrategy === 'transfer_human'
                   ? 'bg-blue-500/15 border-blue-500/50 text-blue-200 shadow-[0_0_12px_rgba(59,130,246,0.15)] ring-1 ring-blue-500/30'
-                  : 'bg-[#161E31] border-white/[0.06] text-slate-400 hover:border-white/20'
+                  : 'bg-[#161E31] border-slate-100 text-slate-400 hover:border-white/20'
               ]"
             >
               <div>
                 <div class="text-xs font-bold flex items-center justify-between">
-                  <span class="flex items-center gap-1.5" :class="localUnknownFallbackStrategy === 'transfer_human' ? 'text-blue-300' : 'text-slate-200'">
+                  <span class="flex items-center gap-1.5" :class="localUnknownFallbackStrategy === 'transfer_human' ? 'text-blue-300' : 'text-slate-800'">
                     <font-awesome-icon icon="fa-solid fa-headset" />
                     <span>自动转交人工 (推荐)</span>
                   </span>
@@ -600,12 +600,12 @@ const handleSave = () => {
                 'p-3 rounded-xl border text-left transition-all flex flex-col justify-between',
                 localUnknownFallbackStrategy === 'create_ticket'
                   ? 'bg-blue-500/15 border-blue-500/50 text-blue-200 shadow-[0_0_12px_rgba(59,130,246,0.15)] ring-1 ring-blue-500/30'
-                  : 'bg-[#161E31] border-white/[0.06] text-slate-400 hover:border-white/20'
+                  : 'bg-[#161E31] border-slate-100 text-slate-400 hover:border-white/20'
               ]"
             >
               <div>
                 <div class="text-xs font-bold flex items-center justify-between">
-                  <span class="flex items-center gap-1.5" :class="localUnknownFallbackStrategy === 'create_ticket' ? 'text-blue-300' : 'text-slate-200'">
+                  <span class="flex items-center gap-1.5" :class="localUnknownFallbackStrategy === 'create_ticket' ? 'text-blue-300' : 'text-slate-800'">
                     <font-awesome-icon icon="fa-solid fa-ticket" />
                     <span>引导留资 / 建立工单</span>
                   </span>
@@ -626,12 +626,12 @@ const handleSave = () => {
                 'p-3 rounded-xl border text-left transition-all flex flex-col justify-between',
                 localUnknownFallbackStrategy === 'clarify'
                   ? 'bg-blue-500/15 border-blue-500/50 text-blue-200 shadow-[0_0_12px_rgba(59,130,246,0.15)] ring-1 ring-blue-500/30'
-                  : 'bg-[#161E31] border-white/[0.06] text-slate-400 hover:border-white/20'
+                  : 'bg-[#161E31] border-slate-100 text-slate-400 hover:border-white/20'
               ]"
             >
               <div>
                 <div class="text-xs font-bold flex items-center justify-between">
-                  <span class="flex items-center gap-1.5" :class="localUnknownFallbackStrategy === 'clarify' ? 'text-blue-300' : 'text-slate-200'">
+                  <span class="flex items-center gap-1.5" :class="localUnknownFallbackStrategy === 'clarify' ? 'text-blue-300' : 'text-slate-800'">
                     <font-awesome-icon icon="fa-solid fa-comments" />
                     <span>礼貌答复并引导澄清</span>
                   </span>

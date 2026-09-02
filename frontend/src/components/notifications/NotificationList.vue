@@ -1,5 +1,5 @@
 <!--
-Copyright 2024-2026 ChatterMate
+Copyright 2024-2026 Komi AI
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -290,7 +290,6 @@ onBeforeUnmount(() => {
                         <div class="notification-message">{{ notification.message }}</div>
                     </div>
                     <span class="unread-dot" :class="{ on: !notification.is_read }"></span>
-                    <!-- .stop: the row itself deep-links to the conversation -->
                     <button
                         class="delete-notification"
                         :aria-label="`删除通知: ${notification.title}`"
@@ -312,9 +311,9 @@ onBeforeUnmount(() => {
     width: 380px;
     max-width: 90vw;
     height: 100vh;
-    background: var(--bg2);
-    border-left: 1px solid var(--o08);
-    transition: right 0.3s ease;
+    background: #FFFFFF;
+    border-left: 1px solid var(--border-color);
+    transition: right 0.28s cubic-bezier(0.4, 0, 0.2, 1);
     z-index: var(--z-drawer);
     display: flex;
     flex-direction: column;
@@ -322,29 +321,25 @@ onBeforeUnmount(() => {
 
 .notification-drawer.open {
     right: 0;
-    /* Only while open. Parked at right:-380px the panel is off-screen, but a
-       shadow cast 20px leftward with a 50px blur still reaches ~45px back onto
-       the page, above the content — and this drawer is mounted by
-       DashboardLayout on every screen, so the band followed you everywhere.
-       Invisible on the dark theme, a grey edge on the light one. */
-    box-shadow: -20px 0 50px rgba(0, 0, 0, 0.4);
+    box-shadow: -12px 0 40px rgba(15, 23, 42, 0.12);
 }
 
 .drawer-header {
-    padding: 20px 20px 16px;
-    border-bottom: 1px solid var(--o07);
+    padding: 18px 20px;
+    border-bottom: 1px solid var(--border-color);
     display: flex;
     justify-content: space-between;
     align-items: center;
-    background: var(--bg2);
+    background: #FFFFFF;
 }
 
 .drawer-header h3 {
     margin: 0;
-    font-family: var(--font-display);
-    font-size: 18px;
-    font-weight: var(--font-weight-bold);
+    font-family: var(--font-sans);
+    font-size: 16px;
+    font-weight: 700;
     color: var(--text);
+    letter-spacing: -0.01em;
 }
 
 .header-actions {
@@ -354,22 +349,24 @@ onBeforeUnmount(() => {
 }
 
 .refresh-button {
-    background: transparent;
-    border: 1px solid var(--o12);
-    border-radius: 8px;
+    background: #FFFFFF;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-btn);
     cursor: pointer;
-    width: 30px;
-    height: 30px;
+    width: 32px;
+    height: 32px;
     color: var(--muted);
-    transition: background-color 0.2s ease, color 0.2s ease;
+    transition: all var(--transition-fast);
     display: flex;
     align-items: center;
     justify-content: center;
+    box-shadow: var(--shadow-xs);
 }
 
 .refresh-button:hover {
-    background: var(--o06);
+    background: var(--bg-deep);
     color: var(--text);
+    border-color: var(--border-color-hover);
 }
 
 .refresh-button:disabled {
@@ -387,23 +384,25 @@ onBeforeUnmount(() => {
 }
 
 .close-button {
-    background: transparent;
-    border: 1px solid var(--o12);
-    font-size: 15px;
+    background: #FFFFFF;
+    border: 1px solid var(--border-color);
+    font-size: 16px;
     cursor: pointer;
     color: var(--muted);
-    transition: background-color 0.2s ease, color 0.2s ease;
-    width: 30px;
-    height: 30px;
+    transition: all var(--transition-fast);
+    width: 32px;
+    height: 32px;
     display: flex;
     align-items: center;
     justify-content: center;
-    border-radius: 8px;
+    border-radius: var(--radius-btn);
+    box-shadow: var(--shadow-xs);
 }
 
 .close-button:hover {
-    background: var(--o06);
+    background: var(--bg-deep);
     color: var(--text);
+    border-color: var(--border-color-hover);
 }
 
 /* Filter row */
@@ -412,79 +411,79 @@ onBeforeUnmount(() => {
     align-items: center;
     justify-content: space-between;
     gap: 12px;
-    padding: 12px 18px;
-    border-bottom: 1px solid var(--o07);
+    padding: 10px 18px;
+    border-bottom: 1px solid var(--border-color);
+    background: #F8FAFC;
 }
 
 .filter-tabs {
     display: flex;
-    gap: 4px;
+    gap: 3px;
     padding: 3px;
-    background: var(--surface);
-    border: 1px solid var(--o08);
-    border-radius: 9px;
+    background: #FFFFFF;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
 }
 
 .filter-tab {
     background: transparent;
     border: none;
     cursor: pointer;
-    padding: 5px 13px;
+    padding: 4px 12px;
     border-radius: 6px;
     color: var(--muted);
     font-family: var(--font-sans);
-    font-size: 13px;
-    font-weight: var(--font-weight-medium);
-    transition: background-color 0.15s ease, color 0.15s ease;
+    font-size: 12.5px;
+    font-weight: 500;
+    transition: all var(--transition-fast);
 }
 
 .filter-tab.active {
-    background: var(--accent-bg-12);
-    color: var(--accent-ink);
+    background: var(--accent-solid);
+    color: #FFFFFF;
+    font-weight: 600;
+    box-shadow: var(--shadow-xs);
 }
 
 .filter-actions {
     display: flex;
     align-items: center;
-    gap: 14px;
+    gap: 12px;
 }
 
-/* Sits over the row; the row itself is the deep-link, so the button stops
-   propagation. 32px keeps it thumb-reachable without crowding the text. */
 .delete-notification {
     flex-shrink: 0;
-    width: 32px;
-    height: 32px;
+    width: 28px;
+    height: 28px;
     border: none;
     background: none;
     border-radius: var(--radius-sm);
-    color: var(--text-muted);
-    font-size: 20px;
+    color: var(--muted2);
+    font-size: 18px;
     line-height: 1;
     cursor: pointer;
-    opacity: 0.55;
-    transition: opacity 0.15s ease, background-color 0.15s ease;
+    transition: all var(--transition-fast);
 }
 
 .delete-notification:hover,
 .delete-notification:focus-visible {
-    opacity: 1;
-    background: var(--o07);
+    color: var(--c-danger);
+    background: rgba(239, 68, 68, 0.08);
 }
 
 .mark-all {
     background: none;
     border: none;
     cursor: pointer;
-    color: var(--accent-ink);
+    color: var(--accent-solid);
     font-family: var(--font-sans);
-    font-size: 13px;
-    font-weight: var(--font-weight-medium);
-    transition: filter 0.15s ease, opacity 0.15s ease;
+    font-size: 12.5px;
+    font-weight: 600;
+    transition: opacity var(--transition-fast);
 }
 
 .mark-all:hover:not(:disabled) {
-    filter: brightness(1.1);
+    opacity: 0.8;
 }
 
 .mark-all:disabled {
@@ -496,6 +495,7 @@ onBeforeUnmount(() => {
     flex: 1;
     overflow-y: auto;
     min-height: 0;
+    background: #FFFFFF;
 }
 
 .notification-item {
@@ -503,30 +503,29 @@ onBeforeUnmount(() => {
     align-items: flex-start;
     gap: 12px;
     padding: 14px 18px;
-    border-bottom: 1px solid var(--o05);
+    border-bottom: 1px solid var(--border-color);
     cursor: pointer;
-    transition: background-color 0.2s ease;
+    transition: background-color var(--transition-fast);
 }
 
 .notification-item:hover {
-    background: var(--o03);
+    background: #F8FAFC;
 }
 
-/* Chat notifications deep-link to their conversation — hint it on hover. */
 .notification-item.linkable {
     position: relative;
 }
 
 .notification-item.linkable::after {
-    content: 'Open ›';
+    content: '查看 ›';
     position: absolute;
     right: 18px;
     bottom: 10px;
-    font-size: 11px;
-    font-weight: var(--font-weight-medium);
-    color: var(--accent-ink);
+    font-size: 11.5px;
+    font-weight: 600;
+    color: var(--accent-solid);
     opacity: 0;
-    transition: opacity 0.15s ease;
+    transition: opacity var(--transition-fast);
 }
 
 .notification-item.linkable:hover::after {
@@ -534,7 +533,7 @@ onBeforeUnmount(() => {
 }
 
 .notification-item.unread {
-    background: var(--accent-bg-06);
+    background: rgba(37, 99, 235, 0.04);
 }
 
 .notification-icon-wrap {
@@ -550,8 +549,7 @@ onBeforeUnmount(() => {
     width: 18px;
     height: 18px;
     flex-shrink: 0;
-    filter: var(--icon-filter, brightness(0) invert(1));
-    opacity: var(--icon-opacity, 0.55);
+    opacity: 0.6;
 }
 
 .notification-body {
@@ -567,9 +565,9 @@ onBeforeUnmount(() => {
 }
 
 .notification-title {
-    font-size: 14px;
-    font-weight: var(--font-weight-semibold);
-    color: var(--text2);
+    font-size: 13.5px;
+    font-weight: 600;
+    color: var(--text);
     word-break: break-word;
 }
 
@@ -582,7 +580,7 @@ onBeforeUnmount(() => {
 
 .notification-message {
     font-size: 12.5px;
-    color: var(--muted);
+    color: var(--text3);
     line-height: 1.5;
     margin-top: 3px;
     word-break: break-word;
@@ -599,6 +597,7 @@ onBeforeUnmount(() => {
 
 .unread-dot.on {
     background: var(--accent-solid);
+    box-shadow: 0 0 6px rgba(37, 99, 235, 0.6);
 }
 
 .state-message {
@@ -614,16 +613,41 @@ onBeforeUnmount(() => {
 
 .empty-title {
     font-size: 14px;
-    color: var(--muted2);
+    font-weight: 600;
+    color: var(--text2);
     margin-bottom: 4px;
 }
 
 .empty-sub {
     font-size: 12.5px;
-    color: var(--faint);
+    color: var(--muted);
 }
 
-/* Mobile: full-screen panel per design */
+/* Dark theme overrides */
+[data-theme="dark"] .notification-drawer {
+    background: var(--surface);
+}
+
+[data-theme="dark"] .drawer-header,
+[data-theme="dark"] .drawer-content {
+    background: var(--surface);
+}
+
+[data-theme="dark"] .drawer-filter {
+    background: var(--bg2);
+}
+
+[data-theme="dark"] .refresh-button,
+[data-theme="dark"] .close-button,
+[data-theme="dark"] .filter-tabs {
+    background: var(--bg2);
+}
+
+[data-theme="dark"] .notification-item:hover {
+    background: var(--o04);
+}
+
+/* Mobile: full-screen panel */
 @media (max-width: 768px) {
     .notification-drawer {
         width: 100%;

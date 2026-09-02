@@ -1,5 +1,5 @@
 """
-Copyright 2024-2026 ChatterMate
+Copyright 2024-2026 Komi AI
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -75,7 +75,7 @@ def test_configure_socketio_with_redis_enabled(mock_redis_manager, mock_settings
     mock_redis_manager.assert_called_once_with(
         "redis://localhost:6379",
         write_only=False,
-        channel='chattermate',
+        channel='komi',
         redis_options={
             'retry_on_timeout': True,
             'health_check_interval': 30,
@@ -106,7 +106,7 @@ def test_configure_socketio_with_elasticache(mock_redis_manager, mock_settings):
     mock_redis_manager.assert_called_once_with(
         "rediss://my-cluster.cache.amazonaws.com:6379",
         write_only=False,
-        channel='chattermate',
+        channel='komi',
         redis_options={
             'retry_on_timeout': True,
             'health_check_interval': 30,

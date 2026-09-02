@@ -4,9 +4,13 @@ export interface Store {
   id: string
   organization_id: string
   name: string
-  platform: 'shopify' | 'woocommerce' | 'amazon' | 'tiktok' | 'email_custom' | 'other'
+  platform: 'shopify' | 'woocommerce' | 'amazon' | 'tiktok' | 'email_custom' | 'web_widget' | 'other'
   shop_domain?: string
   email_account_id?: string
+  channel_account_id?: string
+  channel_type?: string
+  channel_display_name?: string
+  channel_external_id?: string
   email_address?: string
   email_display_name?: string
   agent_id?: string
@@ -25,6 +29,9 @@ export interface CreateStorePayload {
   platform: string
   shop_domain?: string
   email_account_id?: string
+  channel_account_id?: string
+  channel_type?: string
+  channel_config?: Record<string, any>
   agent_id?: string
   knowledge_tag?: string
   currency?: string
@@ -37,6 +44,9 @@ export interface UpdateStorePayload {
   platform?: string
   shop_domain?: string
   email_account_id?: string
+  channel_account_id?: string
+  channel_type?: string
+  channel_config?: Record<string, any>
   agent_id?: string
   knowledge_tag?: string
   currency?: string

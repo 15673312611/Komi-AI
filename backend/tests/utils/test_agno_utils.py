@@ -1,5 +1,5 @@
 """
-Copyright 2024-2026 ChatterMate
+Copyright 2024-2026 Komi AI
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -68,20 +68,20 @@ class TestCreateModel:
             assert result == mock_model
 
     def test_create_model_chattermate(self):
-        """Test creating CHATTERMATE model (should use OpenAI)"""
+        """Test creating KOMI_AI model (should use OpenAI)"""
         with patch("app.utils.agno_utils.OpenAIChat") as mock_openai:
             mock_model = MagicMock()
             mock_openai.return_value = mock_model
             
             result = agno_utils.create_model(
-                model_type="CHATTERMATE",
+                model_type="KOMI_AI",
                 api_key="test-api-key",
-                model_name="chattermate-model"
+                model_name="komi-model"
             )
             
             mock_openai.assert_called_once_with(
                 api_key="test-api-key", 
-                id="chattermate-model", 
+                id="komi-model", 
                 max_tokens=1000
             )
             assert result == mock_model

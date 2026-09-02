@@ -1,5 +1,5 @@
 """
-Copyright 2024-2026 ChatterMate
+Copyright 2024-2026 Komi AI
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -88,25 +88,25 @@ async def setup_ai(
         # Validate model selection based on provider
         validate_model_selection(config_data.model_type, config_data.model_name)
         
-        # Check if this is a custom model setup (not ChatterMate)
-        is_custom_model = not (config_data.model_type.lower() == 'chattermate' and config_data.model_name.lower() == 'chattermate')
+        # Check if this is a custom model setup (not Komi AI)
+        is_custom_model = not (config_data.model_type.lower() == 'komi' and config_data.model_name.lower() == 'komi')
         
         # Check feature access for custom models
         if is_custom_model:
             check_custom_models_feature_access(current_user, db)
         
-        # Check if using ChatterMate model
-        if HAS_ENTERPRISE and config_data.model_type.lower() == 'chattermate' and config_data.model_name.lower() == 'chattermate':
+        # Check if using Komi AI model
+        if HAS_ENTERPRISE and config_data.model_type.lower() == 'komi' and config_data.model_name.lower() == 'komi':
             # Use Groq as provider with keys from env
-            model_type = AIModelType.CHATTERMATE
-            model_name = os.getenv('CHATTERMATE_MODEL_NAME', 'gpt-4o-mini')
-            api_key = os.getenv('CHATTERMATE_API_KEY', '')
+            model_type = AIModelType.KOMI_AI
+            model_name = os.getenv('KOMI_AI_MODEL_NAME', 'gpt-4o-mini')
+            api_key = os.getenv('KOMI_AI_API_KEY', '')
         
             if not api_key:
-                logger.error("ChatterMate API key not found in environment")
+                logger.error("Komi AI API key not found in environment")
                 raise HTTPException(
                         status_code=500,
-                        detail="ChatterMate API configuration missing"
+                        detail="Komi AI API configuration missing"
                 )
                 
             # Create AI configuration
@@ -132,7 +132,7 @@ async def setup_ai(
             )
             
             logger.debug(
-                f"ChatterMate AI setup completed for org {current_user.organization_id}")
+                f"Komi AI setup completed for org {current_user.organization_id}")
             return response
         
         # Regular custom model setup
@@ -255,8 +255,8 @@ async def update_ai_config(
         # Validate model selection based on provider
         validate_model_selection(config_data.model_type, config_data.model_name)
         
-        # Check if this is a custom model setup (not ChatterMate)
-        is_custom_model = not (config_data.model_type.lower() == 'chattermate' and config_data.model_name.lower() == 'chattermate')
+        # Check if this is a custom model setup (not Komi AI)
+        is_custom_model = not (config_data.model_type.lower() == 'komi' and config_data.model_name.lower() == 'komi')
         
         # Check feature access for custom models
         if is_custom_model:
@@ -272,18 +272,18 @@ async def update_ai_config(
                 detail="No active AI configuration found to update"
             )
         
-        # Check if using ChatterMate model
-        if HAS_ENTERPRISE and config_data.model_type.lower() == 'chattermate' and config_data.model_name.lower() == 'chattermate':
+        # Check if using Komi AI model
+        if HAS_ENTERPRISE and config_data.model_type.lower() == 'komi' and config_data.model_name.lower() == 'komi':
             # Use Groq as provider with keys from env
-            model_type = AIModelType.CHATTERMATE
-            model_name = os.getenv('CHATTERMATE_MODEL_NAME', 'gpt-4o-mini')
-            api_key = os.getenv('CHATTERMATE_API_KEY', '')
+            model_type = AIModelType.KOMI_AI
+            model_name = os.getenv('KOMI_AI_MODEL_NAME', 'gpt-4o-mini')
+            api_key = os.getenv('KOMI_AI_API_KEY', '')
             
             if not api_key:
-                logger.error("ChatterMate API key not found in environment")
+                logger.error("Komi AI API key not found in environment")
                 raise HTTPException(
                     status_code=500,
-                    detail="ChatterMate API configuration missing"
+                    detail="Komi AI API configuration missing"
                 )
                 
             # Update AI configuration
@@ -294,7 +294,7 @@ async def update_ai_config(
                 api_key=api_key
             )
             
-            logger.info(f"ChatterMate AI config updated for org {current_user.organization_id}")
+            logger.info(f"Komi AI config updated for org {current_user.organization_id}")
         else:
             # For custom model, validate API key first if provided
             if config_data.api_key:
@@ -374,8 +374,8 @@ def validate_model_selection(model_type: str, model_name: str):
     is what actually rejects a bad model ID.
     """
 
-    # ChatterMate is a special case handled separately
-    if model_type.upper() == "CHATTERMATE" and model_name.lower() == "chattermate":
+    # Komi AI is a special case handled separately
+    if model_type.upper() == "KOMI_AI" and model_name.lower() == "komi":
         return True
 
     if not is_known_provider(model_type):

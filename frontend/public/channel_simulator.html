@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Komi AI · 全渠道电商客户交互沙盒与模拟测试器</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <script src="/config.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    body { font-family: 'Plus Jakarta Sans', system-ui, sans-serif; }
+    .mono { font-family: 'JetBrains Mono', monospace; }
+    
+    /* WhatsApp Theme */
+    .theme-whatsapp .phone-header { background: #075E54; color: #FFFFFF; }
+    .theme-whatsapp .chat-area { background: #EFEAE2; }
+    .theme-whatsapp .msg-customer { background: #D9FDD3; color: #111B21; }
+    .theme-whatsapp .msg-ai { background: #FFFFFF; color: #111B21; }
+    .theme-whatsapp .send-btn { background: #00A884; color: #FFFFFF; }
+
+    /* Instagram Theme */
+    .theme-instagram .phone-header { background: #FFFFFF; color: #000000; border-bottom: 1px solid #E2E8F0; }
+    .theme-instagram .chat-area { background: #FAFAFA; }
+    .theme-instagram .msg-customer { background: linear-gradient(135deg, #7F00FF 0%, #E100FF 100%); color: #FFFFFF; }
+    .theme-instagram .msg-ai { background: #EFEFEF; color: #000000; }
+    .theme-instagram .send-btn { background: #0095F6; color: #FFFFFF; }
+
+    /* Telegram Theme */
+    .theme-telegram .phone-header { background: #2AABEE; color: #FFFFFF; }
+    .theme-telegram .chat-area { background: #E4E9ED; }
+    .theme-telegram .msg-customer { background: #EEFFDE; color: #000000; }
+    .theme-telegram .msg-ai { background: #FFFFFF; color: #000000; }
+    .theme-telegram .send-btn { background: #2AABEE; color: #FFFFFF; }
+
+    /* TikTok Shop Theme */
+    .theme-tiktok .phone-header { background: #121212; color: #FFFFFF; }
+    .theme-tiktok .chat-area { background: #1E1E1E; }
+    .theme-tiktok .msg-customer { background: #FE2C55; color: #FFFFFF; }
+    .theme-tiktok .msg-ai { background: #2A2A2A; color: #FFFFFF; }
+    .theme-tiktok .send-btn { background: #FE2C55; color: #FFFFFF; }
+
+    /* Messenger Theme */
+    .theme-messenger .phone-header { background: #FFFFFF; color: #0084FF; border-bottom: 1px solid #E2E8F0; }
+    .theme-messenger .chat-area { background: #F0F2F5; }
+    .theme-messenger .msg-customer { background: #0084FF; color: #FFFFFF; }
+    .theme-messenger .msg-ai { background: #E4E6EB; color: #050505; }
+    .theme-messenger .send-btn { background: #0084FF; color: #FFFFFF; }
+
+    /* LINE Theme */
+    .theme-line .phone-header { background: #06C755; color: #FFFFFF; }
+    .theme-line .chat-area { background: #849EB7; }
+    .theme-line .msg-customer { background: #58E879; color: #000000; }
+    .theme-line .msg-ai { background: #FFFFFF; color: #000000; }
+    .theme-line .send-btn { background: #06C755; color: #FFFFFF; }
+
+    /* SMS Theme */
+    .theme-sms .phone-header { background: #F8FAFC; color: #0F172A; border-bottom: 1px solid #E2E8F0; }
+    .theme-sms .chat-area { background: #FFFFFF; }
+    .theme-sms .msg-customer { background: #007AFF; color: #FFFFFF; }
+    .theme-sms .msg-ai { background: #E5E5EA; color: #000000; }
+    .theme-sms .send-btn { background: #007AFF; color: #FFFFFF; }
+  </style>
+</head>
+<body class="bg-[#0F172A] text-slate-100 min-h-screen flex flex-col">
+
+  <!-- Top Navigation -->
+  <header class="h-16 border-b border-slate-800 bg-[#1E293B] px-6 flex items-center justify-between shrink-0">
+    <div class="flex items-center gap-3">
+      <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-500 to-purple-600 flex items-center justify-center font-bold text-white shadow-md shadow-indigo-500/20">
+        K
+      </div>
+      <div>
+        <h1 class="font-bold text-sm text-white flex items-center gap-2">
+          <span>Komi AI · 全渠道电商客户交互沙盒与模拟器</span>
+          <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
+            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block animate-pulse mr-1"></span>实时管道就绪
+          </span>
+        </h1>
+        <p class="text-xs text-slate-400">模拟海外买家通过 WhatsApp / Instagram / Telegram / LINE / TikTok 发送咨询，并在会话中心实时协同</p>
+      </div>
+    </div>
+    
+    <div class="flex items-center gap-3">
+      <a href="/conversations" target="_blank" class="px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs flex items-center gap-1.5 shadow-md shadow-indigo-500/25 transition-all">
+        <i class="fa-solid fa-comments"></i>
+        <span>在另外标签页打开【会话中心】联动</span>
+        <i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i>
+      </a>
+      <a href="/stores" target="_blank" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs border border-slate-700 transition-colors">
+        <i class="fa-solid fa-store mr-1 text-slate-400"></i> 店铺管理
+      </a>
+    </div>
+  </header>
+
+  <!-- Main Sandbox Layout -->
+  <main class="flex-1 max-w-7xl w-full mx-auto p-6 grid grid-cols-12 gap-6 overflow-hidden">
+    
+    <!-- Left Configuration Panel (Col 5) -->
+    <div class="col-span-5 flex flex-col gap-4 overflow-y-auto pr-1">
+      
+      <!-- 1. Channel Selector -->
+      <div class="p-5 rounded-2xl bg-[#1E293B] border border-slate-800 space-y-3">
+        <label class="text-xs font-bold text-slate-300 flex items-center gap-2">
+          <i class="fa-solid fa-globe text-indigo-400"></i>
+          <span>第一步：选择模拟的海外沟通渠道</span>
+        </label>
+        
+        <div class="grid grid-cols-3 gap-2" id="channel-picker">
+          <button onclick="setChannel('whatsapp')" class="channel-tab active flex flex-col items-center gap-1.5 p-2.5 rounded-xl border border-emerald-500/40 bg-emerald-500/10 text-emerald-300 font-bold text-xs transition-all">
+            <i class="fa-brands fa-whatsapp text-lg text-[#25D366]"></i>
+            <span>WhatsApp</span>
+          </button>
+          <button onclick="setChannel('instagram')" class="channel-tab flex flex-col items-center gap-1.5 p-2.5 rounded-xl border border-slate-700 bg-slate-800/60 text-slate-400 hover:text-white font-medium text-xs transition-all">
+            <i class="fa-brands fa-instagram text-lg text-pink-400"></i>
+            <span>Instagram</span>
+          </button>
+          <button onclick="setChannel('tiktok')" class="channel-tab flex flex-col items-center gap-1.5 p-2.5 rounded-xl border border-slate-700 bg-slate-800/60 text-slate-400 hover:text-white font-medium text-xs transition-all">
+            <i class="fa-brands fa-tiktok text-lg text-rose-400"></i>
+            <span>TikTok Shop</span>
+          </button>
+          <button onclick="setChannel('line')" class="channel-tab flex flex-col items-center gap-1.5 p-2.5 rounded-xl border border-slate-700 bg-slate-800/60 text-slate-400 hover:text-white font-medium text-xs transition-all">
+            <i class="fa-brands fa-line text-lg text-[#06C755]"></i>
+            <span>LINE</span>
+          </button>
+          <button onclick="setChannel('messenger')" class="channel-tab flex flex-col items-center gap-1.5 p-2.5 rounded-xl border border-slate-700 bg-slate-800/60 text-slate-400 hover:text-white font-medium text-xs transition-all">
+            <i class="fa-brands fa-facebook-messenger text-lg text-[#0084FF]"></i>
+            <span>Messenger</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- 2. Store & Persona Binding -->
+      <div class="p-5 rounded-2xl bg-[#1E293B] border border-slate-800 space-y-4">
+        <label class="text-xs font-bold text-slate-300 flex items-center gap-2">
+          <i class="fa-solid fa-store text-indigo-400"></i>
+          <span>第二步：关联店铺与买家身份模拟</span>
+        </label>
+
+        <div class="space-y-3 text-xs">
+          <div>
+            <span class="block text-slate-400 mb-1 font-medium">所属电商店铺 (Store Name)：</span>
+            <select id="store-select" class="w-full bg-[#0F172A] border border-slate-700 rounded-lg p-2.5 text-white font-semibold focus:border-indigo-500 focus:outline-none">
+              <option value="欧美自营旗舰店 (Shopify)">欧美自营旗舰店 (Shopify 独立站)</option>
+              <option value="日本美妆站 (LINE/Web)">日本美妆站 (LINE / 独立站)</option>
+              <option value="TikTok UK 潮流店">TikTok UK 潮流店 (社交电商)</option>
+              <option value="Amazon 欧美自营站">Amazon 欧美自营站 (跨境直营)</option>
+            </select>
+          </div>
+
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <span class="block text-slate-400 mb-1 font-medium">海外买家姓名：</span>
+              <input id="customer-name" type="text" value="Sarah Jenkins" class="w-full bg-[#0F172A] border border-slate-700 rounded-lg p-2 text-white font-medium focus:border-indigo-500 focus:outline-none" />
+            </div>
+            <div>
+              <span class="block text-slate-400 mb-1 font-medium">手机号 / 账号：</span>
+              <input id="customer-phone" type="text" value="+1 (415) 555-2671" class="w-full bg-[#0F172A] border border-slate-700 rounded-lg p-2 text-white font-medium focus:border-indigo-500 focus:outline-none" />
+            </div>
+          </div>
+
+          <div>
+            <span class="block text-slate-400 mb-1 font-medium">买家邮箱 (选填，用于匹配 Shopify 订单画像)：</span>
+            <input id="customer-email" type="email" value="sarah.jenkins@example.com" class="w-full bg-[#0F172A] border border-slate-700 rounded-lg p-2 text-white font-medium focus:border-indigo-500 focus:outline-none" />
+          </div>
+        </div>
+      </div>
+
+      <!-- 3. Scenario Prompts Injection -->
+      <div class="p-5 rounded-2xl bg-[#1E293B] border border-slate-800 space-y-3">
+        <label class="text-xs font-bold text-slate-300 flex items-center justify-between">
+          <span class="flex items-center gap-2">
+            <i class="fa-solid fa-bolt text-amber-400"></i>
+            <span>第三步：快速注入电商高频咨询场景</span>
+          </span>
+          <span class="text-[10px] text-slate-500">点击自动填入</span>
+        </label>
+
+        <div class="grid grid-cols-2 gap-2 text-xs">
+          <button onclick="injectPrompt('Hi, I ordered 2 items yesterday (Order #1002). Can I change my shipping address to 456 Market St, San Francisco, CA?')" class="p-2.5 text-left rounded-xl bg-slate-800/80 hover:bg-indigo-600/20 border border-slate-700 hover:border-indigo-500/50 text-slate-300 transition-all">
+            <span class="block font-bold text-white text-[11.5px]">📍 修改收货地址</span>
+            <span class="text-[10.5px] text-slate-400 line-clamp-1">Hi, I want to change address...</span>
+          </button>
+          <button onclick="injectPrompt('When will my order #1002 be delivered? Could you provide the latest logistics tracking updates?')" class="p-2.5 text-left rounded-xl bg-slate-800/80 hover:bg-indigo-600/20 border border-slate-700 hover:border-indigo-500/50 text-slate-300 transition-all">
+            <span class="block font-bold text-white text-[11.5px]">📦 查询物流轨迹</span>
+            <span class="text-[10.5px] text-slate-400 line-clamp-1">When will order #1002 arrive?</span>
+          </button>
+          <button onclick="injectPrompt('The hoodie I received has size issues. Can I get a full refund or exchange for size L?')" class="p-2.5 text-left rounded-xl bg-slate-800/80 hover:bg-indigo-600/20 border border-slate-700 hover:border-indigo-500/50 text-slate-300 transition-all">
+            <span class="block font-bold text-white text-[11.5px]">💳 售后全额退款</span>
+            <span class="text-[10.5px] text-slate-400 line-clamp-1">Size issues, want refund...</span>
+          </button>
+          <button onclick="injectPrompt('Hi! Do you have any active discount codes for first-time buyers? I have 2 hoodies in my cart.')" class="p-2.5 text-left rounded-xl bg-slate-800/80 hover:bg-indigo-600/20 border border-slate-700 hover:border-indigo-500/50 text-slate-300 transition-all">
+            <span class="block font-bold text-white text-[11.5px]">🏷️ 售前优惠导购</span>
+            <span class="text-[10.5px] text-slate-400 line-clamp-1">Any active discount code?</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- 4. Channel to Store & Conversation Architecture Guide -->
+      <div class="p-5 rounded-2xl bg-gradient-to-br from-indigo-950/40 to-slate-900 border border-indigo-500/20 space-y-3">
+        <label class="text-xs font-bold text-indigo-300 flex items-center gap-2">
+          <i class="fa-solid fa-diagram-project text-indigo-400"></i>
+          <span>💡 系统交互逻辑：外部平台如何精准流转进会话中心？</span>
+        </label>
+        
+        <div class="space-y-2 text-[11px] text-slate-300 leading-relaxed">
+          <div class="flex items-start gap-2 p-2 rounded-lg bg-slate-900/60 border border-slate-800">
+            <span class="w-4 h-4 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold text-[9px] shrink-0 mt-0.5">1</span>
+            <div><strong>渠道账号监听</strong>：在【渠道集成】中绑定 WhatsApp/IG/Telegram/LINE，每个平台生成唯一的 <code>ChannelAccount</code>。</div>
+          </div>
+          <div class="flex items-start gap-2 p-2 rounded-lg bg-slate-900/60 border border-slate-800">
+            <span class="w-4 h-4 rounded-full bg-indigo-500/20 text-indigo-400 flex items-center justify-center font-bold text-[9px] shrink-0 mt-0.5">2</span>
+            <div><strong>店铺与智能体绑定</strong>：在【店铺管理】中，每个店铺绑定专属渠道账号与负责的 <code>AI 智能体</code>。</div>
+          </div>
+          <div class="flex items-start gap-2 p-2 rounded-lg bg-slate-900/60 border border-slate-800">
+            <span class="w-4 h-4 rounded-full bg-purple-500/20 text-purple-400 flex items-center justify-center font-bold text-[9px] shrink-0 mt-0.5">3</span>
+            <div><strong>会话中心统一收件箱</strong>：买家在海外发消息 ➔ 会话中心实时弹出，带有<strong>【对应平台专属徽标】</strong>与<strong>【店铺标签】</strong>。</div>
+          </div>
+          <div class="flex items-start gap-2 p-2 rounded-lg bg-slate-900/60 border border-slate-800">
+            <span class="w-4 h-4 rounded-full bg-amber-500/20 text-amber-400 flex items-center justify-center font-bold text-[9px] shrink-0 mt-0.5">4</span>
+            <div><strong>AI 自动秒答 / 人工接管</strong>：AI 调取该店铺知识库自动秒回；客服也可在会话中心直接人工打字，原路推送给买家！</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Right Phone Device Frame (Col 7) -->
+    <div class="col-span-7 flex flex-col items-center justify-center">
+      
+      <!-- Phone Mockup Container -->
+      <div id="phone-frame" class="theme-whatsapp w-[380px] h-[660px] bg-[#000000] rounded-[42px] p-3 shadow-[0_25px_60px_rgba(0,0,0,0.8)] border-4 border-slate-700 relative flex flex-col overflow-hidden">
+        
+        <!-- Notch / Dynamic Island -->
+        <div class="absolute top-4 left-1/2 -translate-x-1/2 w-28 h-4.5 bg-black rounded-full z-30 flex items-center justify-center">
+          <div class="w-2.5 h-2.5 rounded-full bg-slate-900 border border-slate-800"></div>
+        </div>
+
+        <!-- Phone Inner Display Screen -->
+        <div class="w-full h-full rounded-[32px] overflow-hidden flex flex-col bg-white text-slate-900 relative">
+          
+          <!-- Phone Chat App Header -->
+          <div class="phone-header h-16 px-4 pt-4 flex items-center justify-between shrink-0 shadow-sm transition-colors duration-300">
+            <div class="flex items-center gap-2.5">
+              <i class="fa-solid fa-arrow-left text-xs opacity-70 cursor-pointer"></i>
+              <div class="w-8 h-8 rounded-full bg-slate-200 border border-white/40 flex items-center justify-center font-bold text-xs text-slate-700">
+                <span id="header-avatar">K</span>
+              </div>
+              <div class="leading-tight">
+                <div class="font-bold text-xs flex items-center gap-1.5" id="header-brand-title">
+                  Komi Support · Official
+                </div>
+                <div class="text-[10px] opacity-80" id="header-status">
+                  7×24H 在线 · AI 自动回复中
+                </div>
+              </div>
+            </div>
+            
+            <div class="flex items-center gap-3 text-xs opacity-80">
+              <i class="fa-solid fa-video"></i>
+              <i class="fa-solid fa-phone"></i>
+              <i class="fa-solid fa-ellipsis-vertical"></i>
+            </div>
+          </div>
+
+          <!-- Chat Stream Area -->
+          <div id="chat-stream" class="chat-area flex-1 overflow-y-auto p-3.5 space-y-3 transition-colors duration-300 text-xs">
+            
+            <!-- Welcome Notice -->
+            <div class="text-center my-2">
+              <span class="px-3 py-1 rounded-full bg-black/10 backdrop-blur-sm text-[10px] text-slate-600 font-mono">
+                已接入 Komi AI 智能体通道 · 7×24H 秒级应答
+              </span>
+            </div>
+
+            <!-- Preloaded Welcome Bot Bubble -->
+            <div class="flex items-start gap-2 max-w-[85%]">
+              <div class="p-3 rounded-2xl rounded-tl-none msg-ai shadow-sm leading-relaxed space-y-1">
+                <p>Hello! Welcome to our store. How can I assist you with your order, shipping, or product sizing today?</p>
+                <span class="text-[9px] opacity-50 block text-right font-mono">刚刚</span>
+              </div>
+            </div>
+
+          </div>
+
+          <!-- Phone Composer Footer -->
+          <div class="p-2.5 bg-white border-t border-slate-100 flex items-center gap-2 shrink-0">
+            <button class="w-7 h-7 rounded-full text-slate-400 hover:text-slate-600 flex items-center justify-center">
+              <i class="fa-solid fa-paperclip text-xs"></i>
+            </button>
+            <input
+              id="message-input"
+              type="text"
+              placeholder="以海外买家身份输入咨询消息..."
+              class="flex-1 bg-slate-100 rounded-full px-3.5 py-2 text-xs text-slate-900 focus:outline-none focus:ring-1 focus:ring-indigo-500 font-sans"
+              onkeydown="handleInputKeydown(event)"
+            />
+            <button
+              id="send-button"
+              onclick="sendMessage()"
+              class="send-btn w-8 h-8 rounded-full flex items-center justify-center text-xs shadow-sm active:scale-95 transition-all"
+            >
+              <i class="fa-solid fa-paper-plane"></i>
+            </button>
+          </div>
+
+        </div>
+
+      </div>
+
+      <!-- Sync Hint -->
+      <div class="mt-3 text-center text-xs text-slate-400 flex items-center gap-2">
+        <i class="fa-solid fa-arrows-rotate text-emerald-400 animate-spin"></i>
+        <span>发送后消息将自动流转至<strong>【会话中心】</strong>，AI 智能体将读取知识库自动答复。</span>
+      </div>
+
+    </div>
+
+  </main>
+
+  <script>
+    let currentChannel = 'whatsapp';
+
+    const CHANNEL_CONFIG = {
+      whatsapp: { name: 'WhatsApp Business', brand: 'Komi Store · WhatsApp', theme: 'theme-whatsapp', avatar: 'W' },
+      instagram: { name: 'Instagram Direct', brand: '@komi_store · Direct', theme: 'theme-instagram', avatar: 'IG' },
+      telegram: { name: 'Telegram Bot', brand: '@KomiSupportBot', theme: 'theme-telegram', avatar: 'TG' },
+      tiktok: { name: 'TikTok Shop', brand: 'Komi Shop UK · IM', theme: 'theme-tiktok', avatar: 'TT' },
+      messenger: { name: 'Facebook Messenger', brand: 'Komi Commerce Page', theme: 'theme-messenger', avatar: 'FB' },
+      line: { name: 'LINE Official', brand: 'Komi Official · LINE', theme: 'theme-line', avatar: 'LN' },
+      sms: { name: 'SMS Mobile', brand: '+1 (800) 555-0199', theme: 'theme-sms', avatar: 'SMS' },
+    };
+
+    function setChannel(channel) {
+      currentChannel = channel;
+      const conf = CHANNEL_CONFIG[channel] || CHANNEL_CONFIG.whatsapp;
+
+      // Update phone theme
+      const frame = document.getElementById('phone-frame');
+      frame.className = `w-[380px] h-[660px] bg-[#000000] rounded-[42px] p-3 shadow-[0_25px_60px_rgba(0,0,0,0.8)] border-4 border-slate-700 relative flex flex-col overflow-hidden ${conf.theme}`;
+
+      document.getElementById('header-brand-title').innerText = conf.brand;
+      document.getElementById('header-avatar').innerText = conf.avatar;
+
+      // Update active tab button style
+      document.querySelectorAll('.channel-tab').forEach(btn => {
+        btn.className = 'channel-tab flex flex-col items-center gap-1.5 p-2.5 rounded-xl border border-slate-700 bg-slate-800/60 text-slate-400 hover:text-white font-medium text-xs transition-all';
+      });
+      event.currentTarget.className = 'channel-tab active flex flex-col items-center gap-1.5 p-2.5 rounded-xl border border-indigo-500/50 bg-indigo-500/20 text-white font-bold text-xs transition-all';
+    }
+
+    function injectPrompt(text) {
+      document.getElementById('message-input').value = text;
+      document.getElementById('message-input').focus();
+    }
+
+    function handleInputKeydown(e) {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendMessage();
+      }
+    }
+
+    async function sendMessage() {
+      const input = document.getElementById('message-input');
+      const text = input.value.trim();
+      if (!text) return;
+
+      const storeName = document.getElementById('store-select').value;
+      const customerName = document.getElementById('customer-name').value;
+      const customerPhone = document.getElementById('customer-phone').value;
+      const customerEmail = document.getElementById('customer-email').value;
+
+      input.value = '';
+
+      // 1. Render customer bubble immediately
+      const chatStream = document.getElementById('chat-stream');
+      const timeStr = new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false });
+      
+      const custHtml = `
+        <div class="flex flex-col items-end max-w-[85%] ml-auto animate-in fade-in duration-200">
+          <div class="p-3 rounded-2xl rounded-tr-none msg-customer shadow-sm leading-relaxed">
+            <p>${escapeHtml(text)}</p>
+            <span class="text-[9px] opacity-70 block text-right font-mono mt-0.5">${timeStr} · 已发送</span>
+          </div>
+        </div>
+      `;
+      chatStream.insertAdjacentHTML('beforeend', custHtml);
+
+      // 2. Render typing indicator
+      const typingId = `typing-${Date.now()}`;
+      const typingHtml = `
+        <div id="${typingId}" class="flex items-start gap-2 max-w-[85%] animate-in fade-in duration-200">
+          <div class="p-3 rounded-2xl rounded-tl-none msg-ai shadow-sm flex items-center gap-2">
+            <span class="text-xs text-slate-500 font-medium">AI 正在构思回答…</span>
+            <span class="flex gap-1 items-center">
+              <span class="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-bounce" style="animation-delay: 0ms;"></span>
+              <span class="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-bounce" style="animation-delay: 150ms;"></span>
+              <span class="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-bounce" style="animation-delay: 300ms;"></span>
+            </span>
+          </div>
+        </div>
+      `;
+      chatStream.insertAdjacentHTML('beforeend', typingHtml);
+      chatStream.scrollTop = chatStream.scrollHeight;
+
+      // 3. Post to backend simulator API
+      try {
+        const token = localStorage.getItem('token') || localStorage.getItem('auth_token') || '';
+        const headers = { 'Content-Type': 'application/json' };
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+
+        const payload = JSON.stringify({
+          channel_type: currentChannel,
+          store_name: storeName,
+          customer_name: customerName,
+          customer_phone: customerPhone,
+          customer_email: customerEmail,
+          message: text
+        });
+
+        let apiBase = (window.APP_CONFIG && window.APP_CONFIG.API_URL) ? window.APP_CONFIG.API_URL : 'http://localhost:8001/api/v1';
+        let url = `${apiBase}/channels/simulator/simulate`;
+
+        let response = await fetch(url, {
+          method: 'POST',
+          headers,
+          body: payload
+        }).catch(() => null);
+
+        if (!response || !response.ok) {
+          // Fallback direct to port 8001
+          response = await fetch('http://localhost:8001/api/v1/channels/simulator/simulate', {
+            method: 'POST',
+            headers,
+            body: payload
+          }).catch(() => null);
+        }
+
+        if (!response || !response.ok) {
+          const errData = response ? await response.json().catch(() => ({})) : {};
+          throw new Error(errData.detail || errData.message || `HTTP ${response ? response.status : 'Network Error'}`);
+        }
+
+        const data = await response.json();
+        const typingEl = document.getElementById(typingId);
+        if (typingEl) typingEl.remove();
+
+        const aiText = data.ai_response || 'Thank you for contacting us! Our AI agent has logged your inquiry and synchronized it with the team.';
+        
+        const aiHtml = `
+          <div class="flex items-start gap-2 max-w-[85%] animate-in fade-in duration-200">
+            <div class="p-3 rounded-2xl rounded-tl-none msg-ai shadow-sm leading-relaxed space-y-1">
+              <div class="flex items-center gap-1.5 text-[10px] text-indigo-600 font-bold mb-1">
+                <i class="fa-solid fa-sparkles"></i>
+                <span>${data.agent_name || 'Komi AI 智能体'}</span>
+              </div>
+              <p>${escapeHtml(aiText)}</p>
+              <span class="text-[9px] opacity-50 block text-right font-mono">${timeStr}</span>
+            </div>
+          </div>
+        `;
+        chatStream.insertAdjacentHTML('beforeend', aiHtml);
+        chatStream.scrollTop = chatStream.scrollHeight;
+
+      } catch (err) {
+        console.error('Simulator send error:', err);
+        const typingEl = document.getElementById(typingId);
+        if (typingEl) typingEl.remove();
+
+        const errorHtml = `
+          <div class="flex items-start gap-2 max-w-[85%]">
+            <div class="p-2.5 rounded-xl msg-ai text-rose-600 border border-rose-200 text-xs">
+              <i class="fa-solid fa-circle-exclamation mr-1"></i> 发送模拟消息失败: ${escapeHtml(err.message || '请确保后台服务正在运行')}
+            </div>
+          </div>
+        `;
+        chatStream.insertAdjacentHTML('beforeend', errorHtml);
+        chatStream.scrollTop = chatStream.scrollHeight;
+      }
+    }
+
+    function escapeHtml(string) {
+      return String(string).replace(/[&<>"'`=\/]/g, function (s) {
+        return {
+          '&': '&amp;',
+          '<': '&lt;',
+          '>': '&gt;',
+          '"': '&quot;',
+          "'": '&#39;',
+          '/': '&#x2F;',
+          '`': '&#x60;',
+          '=': '&#x3D;'
+        }[s];
+      });
+    }
+  </script>
+</body>
+</html>

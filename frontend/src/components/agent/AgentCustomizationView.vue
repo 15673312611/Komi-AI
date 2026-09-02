@@ -1,5 +1,5 @@
 <!--
-Copyright 2024-2026 ChatterMate
+Copyright 2024-2026 Komi AI
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -195,7 +195,7 @@ const selectChatStyle = (value: ChatStyle) => {
 
 // ---- Widget placement (stored in customization_metadata.widget_display) ----
 // The embed loader reads these as site-wide defaults; options set in the install
-// snippet (window.chattermateConfig / ChatterMate.init) override them per page.
+// snippet (window.chattermateConfig / Komi AI.init) override them per page.
 const displayModeOptions = [
     { value: 'floating', label: '悬浮气泡按钮', description: '网页右下角经典悬浮按钮，点击弹出独立聊天窗口。' },
     { value: 'sidebar-right', label: '右侧滑出抽屉', description: '从网页右侧边缘展开的全高交互侧边栏。' },
@@ -752,7 +752,7 @@ const isSectionExpanded = (sectionId: string) => {
                     <span class="citations-toggle-track"><span class="citations-toggle-thumb"></span></span>
                     <span class="citations-toggle-text">
                         <span class="citations-toggle-title">隐藏默认悬浮气泡 — 使用网站自定义按钮唤起</span>
-                        <span class="citations-toggle-desc">给网页任意元素添加 <code>data-chattermate-open</code> 属性，或通过 JS 调用 <code>ChatterMate.open()</code> 唤起。</span>
+                        <span class="citations-toggle-desc">给网页任意元素添加 <code>data-komi-open</code> 属性，或通过 JS 调用 <code>Komi AI.open()</code> 唤起。</span>
                     </span>
                 </label>
             </div>

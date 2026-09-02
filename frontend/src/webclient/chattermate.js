@@ -5,8 +5,8 @@ window.chattermateId;
 /** @type {string} */
 window.chattermateBaseUrl;
 /** @type {object} Public widget API — see the assignment at the bottom of this file. */
-window.ChatterMate;
-/** @type {object|undefined} Declarative options, same shape as ChatterMate.init(options). */
+window.KomiAI;
+/** @type {object|undefined} Declarative options, same shape as Komi AI.init(options). */
 window.chattermateConfig;
 
 ;(function () {
@@ -15,13 +15,13 @@ window.chattermateConfig;
     return /^#[0-9A-F]{6}$/i.test(color);
   }
 
-  // Resolve the backend base URL at RUNTIME so a single built chattermate.min.js
+  // Resolve the backend base URL at RUNTIME so a single built komi.min.js
   // works for every deployment without a rebuild. Priority:
   //   1. window.chattermateBaseUrl — set by the install snippet the dashboard
   //      generates, so a self-hosted embed reaches the right backend even though
   //      this script runs on the customer's own site (where config.js is absent).
   //   2. window.APP_CONFIG.API_URL — present when embedded inside our own SPA.
-  //   3. __CHATTERMATE_API_URL__ — the default baked at build time (see the
+  //   3. __KOMI_AI_API_URL__ — the default baked at build time (see the
   //      build-webclient scripts). Only this default changes per build; the
   //      resolution logic above stays runtime, so env changes need no rebuild.
   function getBaseUrl() {
@@ -33,22 +33,22 @@ window.chattermateConfig;
       return window.APP_CONFIG.API_URL;
     }
 
-    if (typeof __CHATTERMATE_API_URL__ !== 'undefined') {
-      return __CHATTERMATE_API_URL__;
+    if (typeof __KOMI_AI_API_URL__ !== 'undefined') {
+      return __KOMI_AI_API_URL__;
     }
 
     // Final fallback — default to production so a plain build ships working.
-    return 'https://api.chattermate.chat/api/v1';
+    return 'https://api.komi.ai/api/v1';
   }
 
   // Configuration object
   const config = {
     baseUrl: getBaseUrl(),
-    containerId: 'chattermate-container',
-    backdropId: 'chattermate-backdrop',
-    buttonId: 'chattermate-button',
+    containerId: 'komi-container',
+    backdropId: 'komi-backdrop',
+    buttonId: 'komi-button',
     chatBubbleColor: '#f34611', // Default color
-    loadingContainerId: 'chattermate-loading',
+    loadingContainerId: 'komi-loading',
     tokenKey: 'ctid', // Key for localStorage
     containerBottom: 100, // Default bottom position
     containerRight: 20, // Default right position
@@ -68,7 +68,7 @@ window.chattermateConfig;
     surfaceIsPalette: null, // Reported by the widget (WIDGET_SURFACE); null until then
     chatStyle: null, // Reported by the widget; decides whether it draws its own close
     chatInitiationMessages: [], // Will be populated from widget data
-    initiationMessageId: 'chattermate-initiation',
+    initiationMessageId: 'komi-initiation',
     initiationShownKey: 'ctim_shown', // Key for tracking if initiation was shown
     unreadCount: 0, // unread agent messages (reported by the iframe) once chat opened
     hasOpened: false, // whether the visitor has opened the chat at least once
@@ -220,7 +220,7 @@ window.chattermateConfig;
     return lum > 0.6 ? '#0B0C10' : '#FFFFFF'
   }
 
-  // The launcher stays invisible (`.chattermate-pending`, see updateStyles) until
+  // The launcher stays invisible (`.komi-pending`, see updateStyles) until
   // revealButton() runs, so the correct brand color is applied before it's ever seen —
   // no orange-then-green flash on a cold cache. Reveal fires on whichever happens
   // first: the real color arrives (CUSTOMIZATION_UPDATE), the widget fails to load
@@ -237,7 +237,7 @@ window.chattermateConfig;
       revealTimeoutId = null
     }
     const btn = document.getElementById(config.buttonId)
-    if (btn) btn.classList.remove('chattermate-pending')
+    if (btn) btn.classList.remove('komi-pending')
     onRevealCallbacks.splice(0).forEach((cb) => {
       try { cb() } catch (e) { /* no-op */ }
     })
@@ -276,7 +276,7 @@ window.chattermateConfig;
     const palette = paletteSize()
 
     const style = document.createElement('style')
-    style.id = 'chattermate-styles'
+    style.id = 'komi-styles'
     style.textContent = `
       /* ===== Rounded-square launcher (design comp) ===== */
       #${config.buttonId} {
@@ -295,12 +295,12 @@ window.chattermateConfig;
         align-items: center;
         justify-content: center;
         transition: transform 0.3s cubic-bezier(.34,1.3,.5,1), opacity 320ms ease;
-        animation: chattermate-float 4s ease-in-out infinite;
+        animation: komi-float 4s ease-in-out infinite;
       }
       #${config.buttonId}.active { animation: none; }
       /* Stay fully invisible until the org's real brand color is known (or the
          widget errors out / times out) — avoids ever flashing the wrong color. */
-      #${config.buttonId}.chattermate-pending {
+      #${config.buttonId}.komi-pending {
         opacity: 0;
         pointer-events: none;
       }
@@ -312,7 +312,7 @@ window.chattermateConfig;
         inset: 0;
         border-radius: 20px 20px 20px 6px;
         border: 1.5px solid ${config.chatBubbleColor};
-        animation: chattermate-ring 2.4s ease-out infinite;
+        animation: komi-ring 2.4s ease-out infinite;
         pointer-events: none;
       }
       #${config.buttonId} .cm-ring.r2 { animation-delay: 1.2s; }
@@ -334,7 +334,7 @@ window.chattermateConfig;
         height: 7px;
         border-radius: 50%;
         background: currentColor;
-        animation: chattermate-pulse 1.5s ease-in-out infinite;
+        animation: komi-pulse 1.5s ease-in-out infinite;
       }
       #${config.buttonId} .cm-dot:nth-child(2) { animation-delay: .18s; }
       #${config.buttonId} .cm-dot:nth-child(3) { animation-delay: .36s; }
@@ -387,7 +387,7 @@ window.chattermateConfig;
         border: 2px solid rgba(255,255,255,0.3);
         border-radius: 50%;
         border-top-color: #fff;
-        animation: chattermate-spin 0.6s linear infinite;
+        animation: komi-spin 0.6s linear infinite;
       }
 
       /* Search-bar trigger content: hidden unless search-bar mode (below) shows it. */
@@ -441,10 +441,10 @@ window.chattermateConfig;
       }
       ` : ''}
 
-      @keyframes chattermate-spin { to { transform: rotate(360deg); } }
-      @keyframes chattermate-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
-      @keyframes chattermate-ring { 0% { transform: scale(.85); opacity: .5; } 100% { transform: scale(1.6); opacity: 0; } }
-      @keyframes chattermate-pulse { 0%, 100% { opacity: .45; } 50% { opacity: 1; } }
+      @keyframes komi-spin { to { transform: rotate(360deg); } }
+      @keyframes komi-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
+      @keyframes komi-ring { 0% { transform: scale(.85); opacity: .5; } 100% { transform: scale(1.6); opacity: 0; } }
+      @keyframes komi-pulse { 0%, 100% { opacity: .45; } 50% { opacity: 1; } }
 
       @media (prefers-reduced-motion: reduce) {
         #${config.buttonId},
@@ -456,7 +456,7 @@ window.chattermateConfig;
       #${config.containerId} {
         position: fixed;
         /* The window sits above the launcher; when the launcher is moved (via
-           ChatterMate.init position / setPosition) the window shifts by the same
+           Komi AI.init position / setPosition) the window shifts by the same
            delta so the two stay together. Mobile is full-screen (media query below)
            and is unaffected. */
         bottom: ${(config.containerBottom || 100) + ((config.launcherBottom || 20) - 20)}px;
@@ -526,7 +526,7 @@ window.chattermateConfig;
                     transform 420ms cubic-bezier(0.22, 1, 0.36, 1),
                     height 200ms cubic-bezier(0.22, 1, 0.36, 1);
       }
-      #${config.containerId} .chattermate-iframe {
+      #${config.containerId} .komi-iframe {
         border-radius: 16px;
       }
       #${config.backdropId} {
@@ -575,7 +575,7 @@ window.chattermateConfig;
       #${config.containerId}.active {
         transform: translateX(0);
       }
-      #${config.containerId} .chattermate-iframe {
+      #${config.containerId} .komi-iframe {
         border-radius: 0;
       }
       ${hasInPanelClose ? `
@@ -603,7 +603,7 @@ window.chattermateConfig;
       /* The widget panel (inside the iframe) draws its own theme-aware border, so the
          container no longer adds one — avoids a double border (and a white line on dark themes). */
 
-        .chattermate-iframe {
+        .komi-iframe {
                 width: 100%;
         height: 100%;
         border: none;
@@ -615,7 +615,7 @@ window.chattermateConfig;
         box-shadow: none;
       }
 
-      #chattermate-mobile-close {
+      #komi-mobile-close {
         display: none;
         position: fixed;
         top: 20px;
@@ -631,7 +631,7 @@ window.chattermateConfig;
         transition: all 0.3s ease;
       }
 
-      #chattermate-mobile-topbar {
+      #komi-mobile-topbar {
         display: none;
         position: fixed;
         top: 0;
@@ -648,11 +648,11 @@ window.chattermateConfig;
         box-sizing: border-box;
       }
 
-      #chattermate-mobile-topbar.active {
+      #komi-mobile-topbar.active {
         display: flex;
       }
 
-      #chattermate-mobile-topbar .topbar-title {
+      #komi-mobile-topbar .topbar-title {
         font-size: 16px;
         font-weight: 600;
         color: #333;
@@ -661,7 +661,7 @@ window.chattermateConfig;
 
       /* Only ASK_ANYTHING (which has no in-panel header chevron) uses the floating
          mobile-close; other styles close via the header chevron, so don't double up. */
-      .ask-anything-mobile #chattermate-mobile-close.active {
+      .ask-anything-mobile #komi-mobile-close.active {
         display: flex;
       }
 
@@ -690,7 +690,7 @@ window.chattermateConfig;
           bottom: 0 !important;
         }
 
-        .chattermate-iframe {
+        .komi-iframe {
           border-radius: 0 !important;
           width: 100vw !important;
           height: 100vh !important;
@@ -718,27 +718,27 @@ window.chattermateConfig;
           ${side}: ${config.launcherRight}px !important;
         }
 
-        .ask-anything-mobile #chattermate-mobile-close.active {
+        .ask-anything-mobile #komi-mobile-close.active {
           display: flex !important;
         }
 
-        #chattermate-mobile-close:hover {
+        #komi-mobile-close:hover {
           opacity: 0.7;
         }
 
         /* ASK_ANYTHING style specific mobile topbar */
-        .ask-anything-mobile #chattermate-mobile-topbar.active {
+        .ask-anything-mobile #komi-mobile-topbar.active {
           display: flex !important;
         }
 
-        .ask-anything-mobile #chattermate-mobile-close.active {
+        .ask-anything-mobile #komi-mobile-close.active {
           top: 15px !important;
           right: 15px !important;
           z-index: ${config.zIndex + 2} !important;
         }
 
         /* When topbar is visible, push iframe down to avoid overlap */
-        .ask-anything-mobile .chattermate-iframe {
+        .ask-anything-mobile .komi-iframe {
           top: 60px !important;
           height: calc(100vh - 60px) !important;
           height: calc(100dvh - 60px) !important;
@@ -746,7 +746,7 @@ window.chattermateConfig;
       }
 
       @media (min-width: 769px) {
-        #chattermate-mobile-close {
+        #komi-mobile-close {
           display: none !important;
         }
       }
@@ -806,10 +806,10 @@ window.chattermateConfig;
         border-radius: 50% !important;
         background: conic-gradient(from 0deg, #C9F24E, #9D8CFF, #5FE3D6, #FF8A73, #C9F24E) !important;
         box-shadow: 0 4px 14px rgba(157, 140, 255, 0.4) !important;
-        animation: chattermate-orb-spin 6s linear infinite !important;
+        animation: komi-orb-spin 6s linear infinite !important;
         z-index: 1 !important;
       }
-      @keyframes chattermate-orb-spin { to { transform: rotate(360deg); } }
+      @keyframes komi-orb-spin { to { transform: rotate(360deg); } }
       ${side === 'left' ? `
       /* On the left edge the orb (which protrudes 34px past the bubble) would clip
          off-screen — mirror it to the bubble's page-facing side. */
@@ -823,10 +823,10 @@ window.chattermateConfig;
         opacity: 1;
         visibility: visible;
         transform: translateY(0) scale(1);
-        animation: chattermate-bounce-in 0.6s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+        animation: komi-bounce-in 0.6s cubic-bezier(0.68, -0.55, 0.265, 1.55);
       }
 
-      @keyframes chattermate-bounce-in {
+      @keyframes komi-bounce-in {
         0% {
           opacity: 0;
           transform: translateY(20px) scale(0.8);
@@ -987,7 +987,7 @@ window.chattermateConfig;
       }
 
       /* Error UI Styles */
-      .chattermate-error-ui {
+      .komi-error-ui {
         width: 100%;
         height: 100%;
         display: flex;
@@ -1000,7 +1000,7 @@ window.chattermateConfig;
         position: relative;
       }
 
-      .chattermate-error-ui::before {
+      .komi-error-ui::before {
         content: '';
         position: absolute;
         top: 0;
@@ -1013,7 +1013,7 @@ window.chattermateConfig;
         pointer-events: none;
       }
 
-      .chattermate-error-card {
+      .komi-error-card {
         display: flex;
         flex-direction: column;
         align-items: center;
@@ -1025,7 +1025,7 @@ window.chattermateConfig;
         max-width: 90%;
       }
 
-      .chattermate-error-close {
+      .komi-error-close {
         position: absolute;
         top: 12px;
         right: 12px;
@@ -1044,11 +1044,11 @@ window.chattermateConfig;
         cursor: pointer;
         transition: background 0.15s ease;
       }
-      .chattermate-error-close:hover {
+      .komi-error-close:hover {
         background: rgba(120, 120, 140, 0.22);
       }
 
-      .chattermate-error-icon-wrapper {
+      .komi-error-icon-wrapper {
         display: flex;
         align-items: center;
         justify-content: center;
@@ -1060,13 +1060,13 @@ window.chattermateConfig;
         box-shadow: 0 8px 24px rgba(99, 102, 241, 0.15);
       }
 
-      .chattermate-error-icon {
+      .komi-error-icon {
         width: 36px;
         height: 36px;
         color: #6366f1;
       }
 
-      .chattermate-error-title {
+      .komi-error-title {
         font-size: 20px;
         font-weight: 600;
         color: #1e293b;
@@ -1075,7 +1075,7 @@ window.chattermateConfig;
         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
       }
 
-      .chattermate-error-message {
+      .komi-error-message {
         font-size: 14px;
         line-height: 1.6;
         color: #64748b;
@@ -1084,7 +1084,7 @@ window.chattermateConfig;
         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
       }
 
-      .chattermate-error-footer {
+      .komi-error-footer {
         display: flex;
         align-items: center;
         justify-content: center;
@@ -1094,40 +1094,40 @@ window.chattermateConfig;
         opacity: 0.8;
         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
       }
-      .chattermate-error-footer-link {
+      .komi-error-footer-link {
         color: inherit;
         text-decoration: none;
         cursor: pointer;
       }
-      .chattermate-error-footer-link:hover {
+      .komi-error-footer-link:hover {
         text-decoration: underline;
       }
 
       @media (max-width: 768px) {
-        .chattermate-error-ui {
+        .komi-error-ui {
           border-radius: 0;
         }
 
-        .chattermate-error-card {
+        .komi-error-card {
           padding: 24px 20px;
         }
 
-        .chattermate-error-icon-wrapper {
+        .komi-error-icon-wrapper {
           width: 64px;
           height: 64px;
           border-radius: 16px;
         }
 
-        .chattermate-error-icon {
+        .komi-error-icon {
           width: 32px;
           height: 32px;
         }
 
-        .chattermate-error-title {
+        .komi-error-title {
           font-size: 18px;
         }
 
-        .chattermate-error-message {
+        .komi-error-message {
           font-size: 13px;
           max-width: 260px;
         }
@@ -1141,7 +1141,7 @@ window.chattermateConfig;
       `}
     `
     // Remove existing style if it exists
-    const existingStyle = document.getElementById('chattermate-styles')
+    const existingStyle = document.getElementById('komi-styles')
     if (existingStyle) {
       existingStyle.remove()
     }
@@ -1338,7 +1338,7 @@ window.chattermateConfig;
     // Create chat button with icon
     const button = document.createElement('div')
     button.id = config.buttonId
-    button.classList.add('chattermate-pending')
+    button.classList.add('komi-pending')
     button.innerHTML = `
       <span class="cm-ring"></span>
       <span class="cm-ring r2"></span>
@@ -1361,7 +1361,7 @@ window.chattermateConfig;
 
     // Create mobile minimize button
     const mobileCloseButton = document.createElement('div')
-    mobileCloseButton.id = 'chattermate-mobile-close'
+    mobileCloseButton.id = 'komi-mobile-close'
     mobileCloseButton.innerHTML = `
       <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
         <path d="M5 12H19" stroke="#666" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -1370,7 +1370,7 @@ window.chattermateConfig;
 
     // Create mobile topbar for ASK_ANYTHING style
     const mobileTopbar = document.createElement('div')
-    mobileTopbar.id = 'chattermate-mobile-topbar'
+    mobileTopbar.id = 'komi-mobile-topbar'
     mobileTopbar.innerHTML = `
       <h3 class="topbar-title">Chat</h3>
       <div style="width: 44px;"></div>
@@ -1430,7 +1430,7 @@ window.chattermateConfig;
           // When closing on mobile, show the button
           button.classList.add('mobile-closed')
           // Add subtle idle bounce when closed
-          button.style.animation = 'chattermate-float 4s ease-in-out infinite'
+          button.style.animation = 'komi-float 4s ease-in-out infinite'
           // Hide topbar when closing
           mobileTopbar.classList.remove('active')
           document.body.classList.remove('ask-anything-mobile')
@@ -1449,7 +1449,7 @@ window.chattermateConfig;
       emitEvent(isOpen ? 'open' : 'close')
     }
 
-    // Prefill (don't send) the chat input, e.g. ChatterMate.open({ message: '...' }).
+    // Prefill (don't send) the chat input, e.g. Komi AI.open({ message: '...' }).
     // Queued until the iframe has loaded so an early open({message}) isn't lost.
     let pendingPrefill = null
     let iframeReady = false
@@ -1466,16 +1466,16 @@ window.chattermateConfig;
     // Create error UI for authentication failures using safe DOM methods
     function createErrorUI(message) {
       const errorDiv = document.createElement('div');
-      errorDiv.className = 'chattermate-error-ui';
+      errorDiv.className = 'komi-error-ui';
 
       const card = document.createElement('div');
-      card.className = 'chattermate-error-card';
+      card.className = 'komi-error-card';
 
       // Close button (top-right). Without this there's no way to dismiss the error on
       // mobile, where the launcher is hidden while the widget is open.
       const closeBtn = document.createElement('button');
       closeBtn.type = 'button';
-      closeBtn.className = 'chattermate-error-close';
+      closeBtn.className = 'komi-error-close';
       closeBtn.setAttribute('aria-label', 'Close chat');
       closeBtn.textContent = '×';
       closeBtn.addEventListener('click', function () {
@@ -1487,9 +1487,9 @@ window.chattermateConfig;
 
       // Icon wrapper
       const iconWrapper = document.createElement('div');
-      iconWrapper.className = 'chattermate-error-icon-wrapper';
+      iconWrapper.className = 'komi-error-icon-wrapper';
       const iconSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-      iconSvg.setAttribute('class', 'chattermate-error-icon');
+      iconSvg.setAttribute('class', 'komi-error-icon');
       iconSvg.setAttribute('viewBox', '0 0 24 24');
       iconSvg.setAttribute('fill', 'none');
       iconSvg.setAttribute('stroke', 'currentColor');
@@ -1504,17 +1504,17 @@ window.chattermateConfig;
 
       // Title
       const title = document.createElement('h2');
-      title.className = 'chattermate-error-title';
+      title.className = 'komi-error-title';
       title.textContent = 'Chat Unavailable';
 
       // Message
       const messageEl = document.createElement('p');
-      messageEl.className = 'chattermate-error-message';
+      messageEl.className = 'komi-error-message';
       messageEl.textContent = message;
 
       // Footer
       const footer = document.createElement('div');
-      footer.className = 'chattermate-error-footer';
+      footer.className = 'komi-error-footer';
       const logoSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
       logoSvg.setAttribute('width', '14');
       logoSvg.setAttribute('height', '14');
@@ -1527,11 +1527,11 @@ window.chattermateConfig;
       logoPath.setAttribute('opacity', '0.6');
       logoSvg.appendChild(logoPath);
       const footerText = document.createElement('a');
-      footerText.href = 'https://chattermate.chat';
+      footerText.href = 'https://komi.ai';
       footerText.target = '_blank';
       footerText.rel = 'noopener noreferrer';
-      footerText.className = 'chattermate-error-footer-link';
-      footerText.textContent = 'Powered by ChatterMate';
+      footerText.className = 'komi-error-footer-link';
+      footerText.textContent = 'Powered by Komi AI';
       footer.appendChild(logoSvg);
       footer.appendChild(footerText);
 
@@ -1596,7 +1596,7 @@ window.chattermateConfig;
             if (html === null) return; // Error was already handled
 
             iframe = document.createElement('iframe')
-            iframe.className = 'chattermate-iframe'
+            iframe.className = 'komi-iframe'
             iframe.srcdoc = html;
             iframe.addEventListener('load', function () {
               iframeReady = true
@@ -1629,8 +1629,8 @@ window.chattermateConfig;
             const host = window.location.hostname || 'this domain';
             const isLocal = /^(localhost|127\.0\.0\.1|0\.0\.0\.0|\[?::1\]?)$/i.test(host) || /\.local$/i.test(host);
             const message = isLocal
-              ? 'Chat can’t load on “' + host + '”. To test locally, set your organization’s domain to “' + host + '” in the ChatterMate dashboard (Organization settings).'
-              : 'Chat can’t load on “' + host + '”. Add this domain to your organization in the ChatterMate dashboard (Organization settings) to enable chat here.';
+              ? 'Chat can’t load on “' + host + '”. To test locally, set your organization’s domain to “' + host + '” in the Komi AI dashboard (Organization settings).'
+              : 'Chat can’t load on “' + host + '”. Add this domain to your organization in the Komi AI dashboard (Organization settings) to enable chat here.';
             const errorUI = createErrorUI(message);
             container.appendChild(errorUI);
             // Reveal (with the default color) so this error is reachable — it'll
@@ -1701,7 +1701,7 @@ window.chattermateConfig;
     if (isMobileDevice() && !isOpen) {
       button.classList.add('mobile-closed')
       // Idle bounce animation when initially closed
-      button.style.animation = 'chattermate-float 4s ease-in-out infinite'
+      button.style.animation = 'komi-float 4s ease-in-out infinite'
     }
 
     // Handle window resize to update mobile behavior
@@ -1711,7 +1711,7 @@ window.chattermateConfig;
       if (isMobile && !isOpen) {
         // On mobile when closed, show the button
         button.classList.add('mobile-closed')
-        button.style.animation = 'chattermate-float 4s ease-in-out infinite'
+        button.style.animation = 'komi-float 4s ease-in-out infinite'
         // Ensure mobile close button is hidden when widget is closed
         mobileCloseButton.classList.remove('active')
       } else if (!isMobile) {
@@ -1749,7 +1749,7 @@ window.chattermateConfig;
   }
 
   // Declarative options: the install snippet may set window.chattermateConfig with the
-  // same shape as ChatterMate.init(options). Applied before the widget is built.
+  // same shape as Komi AI.init(options). Applied before the widget is built.
   applyOptions(window.chattermateConfig)
 
   // Wait for DOM to be fully loaded
@@ -1779,12 +1779,12 @@ window.chattermateConfig;
   })
 
   // No-code custom launcher: any element matching the developer's `trigger` selector or
-  // carrying data-chattermate-open toggles the chat. Delegated, so elements added after
+  // carrying data-komi-open toggles the chat. Delegated, so elements added after
   // page load work too.
   document.addEventListener('click', function (e) {
     const el = e.target
     if (!el || !el.closest) return
-    let match = el.closest('[data-chattermate-open]')
+    let match = el.closest('[data-komi-open]')
     if (!match && config.trigger) {
       try {
         match = el.closest(config.trigger)
@@ -1862,7 +1862,7 @@ window.chattermateConfig;
         // Handle mobile ASK_ANYTHING style. This handler is outside initialize(), so
         // reach the open-state and topbar through the controller/DOM, not closures.
         const chatOpen = controller ? controller.isOpen() : false
-        const topbar = document.getElementById('chattermate-mobile-topbar')
+        const topbar = document.getElementById('komi-mobile-topbar')
         if (customData.chat_style === 'ASK_ANYTHING' && chatOpen) {
           document.body.classList.add('ask-anything-mobile')
           if (topbar) topbar.classList.add('active')
@@ -1895,7 +1895,7 @@ window.chattermateConfig;
   // Re-inject styles so an already-rendered widget updates immediately; before the
   // first render this is a no-op (initialize() injects them).
   function refreshStylesIfRendered() {
-    if (document.getElementById('chattermate-styles')) {
+    if (document.getElementById('komi-styles')) {
       updateStyles()
     }
   }
@@ -1921,7 +1921,7 @@ window.chattermateConfig;
     if (!deferRefresh) refreshStylesIfRendered()
   }
 
-  // Apply developer options — shared by ChatterMate.init(options) and the declarative
+  // Apply developer options — shared by Komi AI.init(options) and the declarative
   // window.chattermateConfig. Every recognized key counts as a developer override, so
   // dashboard defaults arriving later never fight it. Loose sanity clamps only; the
   // page owner is configuring their own page.
@@ -1980,10 +1980,10 @@ window.chattermateConfig;
 
   // Public widget API. Open/close/toggle work from any point after the script loads;
   // calls that land before the DOM is ready are queued and run on init.
-  window.ChatterMate = {
+  window.KomiAI = {
     // Configure, e.g. init({ id, launcher: false, position: { side: 'left', bottom: 24, offset: 24 } })
     init: applyOptions,
-    // Runtime reposition, e.g. ChatterMate.setPosition({ bottom: 100, right: 24 })
+    // Runtime reposition, e.g. Komi AI.setPosition({ bottom: 100, right: 24 })
     // Wrapped so stray extra arguments never hit applyPosition's internal param.
     setPosition: function (position) { applyPosition(position) },
     // open() accepts an optional { message } to prefill (not send) the chat input.

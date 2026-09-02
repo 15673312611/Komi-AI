@@ -11,13 +11,13 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/chattermate/chattermate/backend-go/internal/agent"
-	"github.com/chattermate/chattermate/backend-go/internal/channel"
-	"github.com/chattermate/chattermate/backend-go/internal/jira"
-	"github.com/chattermate/chattermate/backend-go/internal/mcptool"
-	"github.com/chattermate/chattermate/backend-go/internal/session"
-	"github.com/chattermate/chattermate/backend-go/internal/shopify"
-	"github.com/chattermate/chattermate/backend-go/internal/ticketing"
+	"github.com/komi/komi/backend-go/internal/agent"
+	"github.com/komi/komi/backend-go/internal/channel"
+	"github.com/komi/komi/backend-go/internal/jira"
+	"github.com/komi/komi/backend-go/internal/mcptool"
+	"github.com/komi/komi/backend-go/internal/session"
+	"github.com/komi/komi/backend-go/internal/shopify"
+	"github.com/komi/komi/backend-go/internal/ticketing"
 )
 
 type aiToolDefinition struct {

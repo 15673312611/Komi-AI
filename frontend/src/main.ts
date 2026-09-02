@@ -1,5 +1,5 @@
 /*
-Copyright 2024-2026 ChatterMate
+Copyright 2024-2026 Komi AI
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -39,11 +39,12 @@ import { fab } from '@fortawesome/free-brands-svg-icons'
 library.add(fas, far, fab)
 dom.watch()
 
-const savedTheme = localStorage.getItem('cm-theme') ?? 'dark'
+const savedTheme = localStorage.getItem('cm-theme') ?? 'light'
 const resolvedTheme = savedTheme === 'system'
   ? (window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
   : savedTheme
 document.documentElement.setAttribute('data-theme', resolvedTheme)
+
 
 const app = createApp(App)
 

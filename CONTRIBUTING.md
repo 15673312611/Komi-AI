@@ -1,11 +1,11 @@
-# Contributing to ChatterMate
+# Contributing to Komi AI
 
 Thanks for your interest in contributing! This document explains how to get
 your changes accepted.
 
 ## License
 
-The ChatterMate open-source core is licensed under the
+The Komi AI open-source core is licensed under the
 [Apache License 2.0](LICENSE). By contributing, you agree that your
 contributions will be licensed under Apache-2.0.
 

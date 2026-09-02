@@ -1,5 +1,5 @@
 """
-Copyright 2024-2026 ChatterMate
+Copyright 2024-2026 Komi AI
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -88,7 +88,7 @@ def test_set_domain_generates_token_and_resets_state(db, row):
 
 def test_set_domain_rejects_base_domain_hosts(db, row):
     with pytest.raises(ValueError):
-        dv.set_custom_domain(db, row, "acme.chattermate.help")
+        dv.set_custom_domain(db, row, "acme.komi.help")
 
 
 def test_verify_partial_records_stay_pending(db, row):
@@ -151,7 +151,7 @@ def test_domain_endpoints_flow(client, db, test_organization):
     assert body["custom_domain"] == "help.customer.com"
     assert body["domain_status"] == "pending"
     assert [r["type"] for r in body["records"]] == ["CNAME", "TXT"]
-    assert body["records"][1]["host"] == "_chattermate.help.customer.com"
+    assert body["records"][1]["host"] == "_komi.help.customer.com"
 
     with patch.object(dv, "check_txt_record", return_value=True), \
          patch.object(dv, "check_cname_record", return_value=True), \
@@ -174,4 +174,4 @@ def test_verify_without_domain_400(client):
 
 def test_set_domain_rejects_invalid_hostnames(client):
     assert client.post(f"{BASE}/domain", json={"domain": "not a domain"}).status_code == 422
-    assert client.post(f"{BASE}/domain", json={"domain": "x.chattermate.help"}).status_code == 400
+    assert client.post(f"{BASE}/domain", json={"domain": "x.komi.help"}).status_code == 400

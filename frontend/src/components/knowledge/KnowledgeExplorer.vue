@@ -1,5 +1,5 @@
 <!--
-Copyright 2024-2026 ChatterMate
+Copyright 2024-2026 Komi AI
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -73,6 +73,15 @@ const largestSubpageCount = computed(() => {
   return s ? (s.pages ?? s.pageStubs).length : 0
 })
 
+const activeCrawlDiscoveredCount = computed(() => {
+  let count = 0
+  for (const c of ex.activeCrawls.value) {
+    if (c.crawled_urls) count += c.crawled_urls.length
+    else if (c.processed_items) count += c.processed_items
+  }
+  return count
+})
+
 function openAdd() {
   addOpen.value = true
 }
@@ -90,7 +99,6 @@ async function onSubmitSource(payload: AddSourcePayload) {
 
 function askDeleteSource(source: ExplorerSource) {
   if (source.queued && source.queuedStatus === 'error') {
-    // A failed crawl — not an in-flight one to "cancel".
     confirmState.value = {
       title: '移除失败知识源',
       message: `确认移除抓取失败的知识源 “${source.name}”？`,
@@ -107,8 +115,6 @@ function askDeleteSource(source: ExplorerSource) {
       action: () => ex.deleteSource(source),
     }
   } else if (props.mode === 'agent') {
-    // In an agent's tab, "Remove" detaches the source from this agent but keeps
-    // it in the organization's knowledge — it does not delete the source.
     confirmState.value = {
       title: '从当前智能体解绑',
       message: `确认从当前智能体解绑知识源 “${source.name}”？该知识源仍会保留在企业组织知识库中。`,
@@ -168,14 +174,14 @@ onUnmounted(() => {
       <div class="explorer__actions">
         <slot name="actions" />
         <button v-if="mode === 'agent'" class="btn btn--ghost" type="button" @click="ex.openLinkPicker">
-          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2"
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2"
             stroke-linecap="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7 0l2-2a5 5 0 0 0-7-7l-1 1M14 11a5 5 0 0 0-7 0l-2 2a5 5 0 0 0 7 7l1-1" /></svg>
           关联已有知识源
         </button>
         <button class="btn btn--primary" type="button" @click="openAdd">
-          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2"
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.5"
             stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
-          + 添加知识源
+          添加知识源
         </button>
       </div>
     </header>
@@ -191,6 +197,51 @@ onUnmounted(() => {
     <div v-if="ex.error.value" class="banner" role="alert">
       {{ ex.error.value }}
       <button class="banner__close" type="button" aria-label="关闭" @click="ex.error.value = null">×</button>
+    </div>
+
+    <!-- 实时抓取监控流 (Live Crawling Monitor) -->
+    <div v-if="ex.activeCrawls.value.length > 0" class="live-monitor-banner">
+      <div class="live-monitor-header">
+        <div class="live-pulse-badge">
+          <span class="live-dot"></span>
+          <span class="live-pulse-text">后台实时抓取中</span>
+        </div>
+        <div class="live-meta">
+          <span class="live-count-text">
+            正在并发解析网站并流式入库，已抓取入库 <strong>{{ activeCrawlDiscoveredCount }}</strong> 个页面（即抓即显，无需刷新）
+          </span>
+        </div>
+      </div>
+      <div v-for="crawl in ex.activeCrawls.value" :key="crawl.id" class="live-crawl-item">
+        <div class="live-crawl-top">
+          <div class="live-crawl-info">
+            <i class="fa-solid fa-satellite-dish live-crawl-icon"></i>
+            <span class="live-source-name" :title="crawl.source">{{ crawl.source }}</span>
+            <span class="stage-tag">
+              {{ crawl.processing_stage === 'crawling' ? '正在爬取与解析' : crawl.processing_stage === 'embedding' ? '正在建立向量索引' : '正在分析页面' }}
+            </span>
+          </div>
+          <span class="live-pct">{{ Math.round(crawl.progress_percentage || 5) }}%</span>
+        </div>
+        <div class="live-progress-track">
+          <div class="live-progress-fill" :style="{ width: `${crawl.progress_percentage || 5}%` }"></div>
+        </div>
+        <div v-if="crawl.crawled_urls && crawl.crawled_urls.length > 0" class="live-stream-pills">
+          <span class="stream-label">最新解析页面：</span>
+          <span
+            v-for="(u, idx) in crawl.crawled_urls.slice(-4)"
+            :key="idx"
+            class="stream-pill"
+            :title="u"
+          >
+            <i class="fa-solid fa-file-lines text-emerald-600 text-[10px]"></i>
+            <span class="truncate max-w-[180px]">{{ u.split('/').pop() || u }}</span>
+          </span>
+          <span v-if="crawl.crawled_urls.length > 4" class="stream-more">
+            +{{ crawl.crawled_urls.length - 4 }} 个更多页面
+          </span>
+        </div>
+      </div>
     </div>
 
     <div class="grid">
@@ -304,30 +355,31 @@ onUnmounted(() => {
   font-family: var(--font-display);
   font-weight: 700;
   color: var(--text);
-  margin: 0 0 6px;
+  margin: 0 0 4px;
 }
 
 .explorer__title--page {
-  font-size: 30px;
+  font-size: 22px;
   letter-spacing: -0.02em;
 }
 
 .explorer__title--section {
-  font-size: 20px;
+  font-size: 18px;
+  letter-spacing: -0.01em;
 }
 
 .explorer__desc {
-  font-size: 14px;
+  font-size: 13.5px;
   color: var(--muted);
   margin: 0;
-  max-width: 560px;
-  line-height: 1.55;
+  max-width: 600px;
+  line-height: 1.5;
 }
 
 .explorer__actions {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   flex-shrink: 0;
 }
 
@@ -338,16 +390,17 @@ onUnmounted(() => {
 .btn {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  height: 47px;
-  padding: 0 18px;
-  border-radius: 11px;
-  font-size: 14px;
+  gap: 6px;
+  height: 38px;
+  padding: 0 14px;
+  border-radius: var(--radius-btn);
+  font-size: 13px;
   font-weight: 600;
   font-family: var(--font-sans);
   cursor: pointer;
   border: 1px solid transparent;
   white-space: nowrap;
+  transition: all var(--transition-fast);
 }
 
 .btn:disabled {
@@ -356,26 +409,38 @@ onUnmounted(() => {
 }
 
 .btn--primary {
-  background: var(--accent-solid);
-  color: var(--on-accent-solid);
+  background: #0F172A;
+  color: #FFFFFF;
+  border: 1px solid rgba(15, 23, 42, 0.9);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
 }
 
-.btn--primary:hover:not(:disabled) { filter: brightness(1.05); }
+.btn--primary:hover:not(:disabled) {
+  background: #000000;
+  transform: translateY(-0.5px);
+}
 
 .btn--ghost {
-  background: var(--o05);
-  border-color: var(--o12);
+  background: #FFFFFF;
+  border-color: var(--border-color);
   color: var(--text2);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
 }
 
-.btn--ghost:hover:not(:disabled) { background: var(--o08); }
+.btn--ghost:hover:not(:disabled) {
+  background: #F8FAFC;
+  border-color: var(--border-color-hover);
+  color: var(--text);
+}
 
 .btn--danger-solid {
-  background: var(--c-coral);
-  color: var(--on-accent-solid);
+  background: var(--c-danger);
+  color: #FFFFFF;
 }
 
-.btn--danger-solid:hover:not(:disabled) { filter: brightness(1.05); }
+.btn--danger-solid:hover:not(:disabled) {
+  background: #DC2626;
+}
 
 .banner {
   display: flex;
@@ -420,12 +485,13 @@ onUnmounted(() => {
 
 .grid__detail {
   background: var(--surface);
-  border: 1px solid var(--o08);
-  border-radius: 16px;
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
   overflow: hidden;
   display: flex;
   flex-direction: column;
   min-width: 0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
 }
 
 .empty {
@@ -476,7 +542,7 @@ onUnmounted(() => {
 
 .confirm__card {
   background: var(--surface);
-  border: 1px solid var(--o12);
+  border: 1px solid var(--border-color);
   border-radius: 16px;
   padding: 24px;
   max-width: 400px;
@@ -504,3 +570,168 @@ onUnmounted(() => {
   gap: 10px;
 }
 </style>
+
+/* Live Crawling Monitor */
+.live-monitor-banner {
+  background: linear-gradient(135deg, #EEF2FF 0%, #F5F3FF 100%);
+  border: 1px solid #C7D2FE;
+  border-radius: 12px;
+  padding: 14px 18px;
+  margin-bottom: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow: 0 2px 8px rgba(79, 70, 229, 0.06);
+}
+
+.live-monitor-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.live-pulse-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 9999px;
+  background: #4F46E5;
+  color: #FFFFFF;
+}
+
+.live-pulse-text {
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.live-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #34D399;
+  box-shadow: 0 0 0 2px rgba(52, 211, 153, 0.4);
+  animation: pulse-dot 1.4s infinite cubic-bezier(0.4, 0, 0.6, 1);
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.8); }
+}
+
+.live-count-text {
+  font-size: 12px;
+  color: #4338CA;
+}
+
+.live-count-text strong {
+  font-weight: 800;
+  color: #312E81;
+}
+
+.live-crawl-item {
+  background: #FFFFFF;
+  border: 1px solid #E0E7FF;
+  border-radius: 8px;
+  padding: 10px 14px;
+}
+
+.live-crawl-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.live-crawl-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow: hidden;
+}
+
+.live-crawl-icon {
+  color: #6366F1;
+  font-size: 12px;
+  animation: spin-dish 3s linear infinite;
+}
+
+@keyframes spin-dish {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.live-source-name {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #0F172A;
+  max-width: 380px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.stage-tag {
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: #EEF2FF;
+  color: #4F46E5;
+  font-size: 10.5px;
+  font-weight: 600;
+}
+
+.live-pct {
+  font-family: monospace;
+  font-size: 12.5px;
+  font-weight: 800;
+  color: #4F46E5;
+}
+
+.live-progress-track {
+  width: 100%;
+  height: 6px;
+  border-radius: 9999px;
+  background: #E2E8F0;
+  overflow: hidden;
+}
+
+.live-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #6366F1 0%, #4F46E5 100%);
+  border-radius: 9999px;
+  transition: width 0.3s ease;
+}
+
+.live-stream-pills {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+
+.stream-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #64748B;
+}
+
+.stream-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 7px;
+  background: #F8FAFC;
+  border: 1px solid #E2E8F0;
+  border-radius: 4px;
+  font-size: 11px;
+  color: #334155;
+}
+
+.stream-more {
+  font-size: 10.5px;
+  color: #94A3B8;
+  font-weight: 600;
+}

@@ -18,12 +18,12 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
-	"github.com/chattermate/chattermate/backend-go/internal/channel"
-	"github.com/chattermate/chattermate/backend-go/internal/chat"
-	"github.com/chattermate/chattermate/backend-go/internal/config"
-	"github.com/chattermate/chattermate/backend-go/internal/customer"
-	"github.com/chattermate/chattermate/backend-go/internal/encryption"
-	"github.com/chattermate/chattermate/backend-go/internal/session"
+	"github.com/komi/komi/backend-go/internal/channel"
+	"github.com/komi/komi/backend-go/internal/chat"
+	"github.com/komi/komi/backend-go/internal/config"
+	"github.com/komi/komi/backend-go/internal/customer"
+	"github.com/komi/komi/backend-go/internal/encryption"
+	"github.com/komi/komi/backend-go/internal/session"
 )
 
 const (
@@ -73,6 +73,7 @@ func registerChannelRoutes(r chi.Router, deps Dependencies) {
 	r.With(inboxSender).Post("/channels/meta/whatsapp/{account_id}/send-template", sendWhatsAppTemplate(deps))
 	r.With(inbox).Get("/channels/meta/whatsapp/{account_id}/templates", listWhatsAppTemplates(deps))
 	r.With(manageOrg).Get("/channels/meta/whatsapp/{account_id}/template-library", whatsappTemplateLibrary(deps))
+	r.Post("/channels/simulator/simulate", simulateChannelMessage(deps))
 }
 
 func channelRepository(w http.ResponseWriter, deps Dependencies) *channel.Repository {
@@ -687,7 +688,7 @@ func listMessengerPages(deps Dependencies) http.HandlerFunc {
 		}
 		pages := jsonSlice(pagesResponse, "data")
 		if len(pages) == 0 {
-			Error(w, http.StatusBadRequest, "No Facebook Pages were shared with ChatterMate")
+			Error(w, http.StatusBadRequest, "No Facebook Pages were shared with Komi AI")
 			return
 		}
 		payload := map[string]any{"org": org.String(), "exp": time.Now().Add(10 * time.Minute).Unix(), "pages": pages}
@@ -1671,4 +1672,161 @@ func remoteMessage(err error) string {
 		return "remote request failed"
 	}
 	return err.Error()
+}
+
+type simulateChannelRequest struct {
+	ChannelType   string `json:"channel_type"`
+	StoreName     string `json:"store_name"`
+	CustomerName  string `json:"customer_name"`
+	CustomerPhone string `json:"customer_phone"`
+	CustomerEmail string `json:"customer_email"`
+	Message       string `json:"message"`
+	AgentID       string `json:"agent_id"`
+}
+
+type simulateChannelResponse struct {
+	OK              bool   `json:"ok"`
+	SessionID       string `json:"session_id"`
+	ChannelType     string `json:"channel_type"`
+	StoreName       string `json:"store_name"`
+	CustomerName    string `json:"customer_name"`
+	CustomerMessage string `json:"customer_message"`
+	AIResponse      string `json:"ai_response"`
+	AgentName       string `json:"agent_name"`
+	CreatedAt       string `json:"created_at"`
+}
+
+func simulateChannelMessage(deps Dependencies) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var req simulateChannelRequest
+		if err := decodeJSON(r, &req); err != nil {
+			Error(w, http.StatusBadRequest, "Invalid request payload")
+			return
+		}
+		if strings.TrimSpace(req.Message) == "" {
+			Error(w, http.StatusBadRequest, "Message is required")
+			return
+		}
+
+		ctx := r.Context()
+		var orgID uuid.UUID
+		if user, ok := currentUserFromContext(r); ok && user != nil && user.OrganizationID != nil {
+			orgID = *user.OrganizationID
+		} else if deps.DB != nil {
+			_ = deps.DB.QueryRow(ctx, `SELECT id FROM organizations WHERE is_active = true LIMIT 1`).Scan(&orgID)
+		}
+		if orgID == uuid.Nil {
+			Error(w, http.StatusBadRequest, "No active organization found")
+			return
+		}
+
+		chType := strings.ToLower(strings.TrimSpace(req.ChannelType))
+		if chType == "" {
+			chType = "whatsapp"
+		}
+
+		var account *channel.Account
+		accounts, err := deps.Channels.List(ctx, orgID)
+		if err == nil {
+			for _, acc := range accounts {
+				if acc.ChannelType == chType && acc.IsActive {
+					account = &acc.Account
+					break
+				}
+			}
+		}
+
+		if account == nil {
+			extID := fmt.Sprintf("sim_%s_%s", chType, orgID.String()[:8])
+			displayName := fmt.Sprintf("%s - %s (模拟通道)", strings.ToUpper(chType), req.StoreName)
+			newAcc, err := deps.Channels.Create(ctx, orgID, chType, extID, map[string]any{"simulated": true, "store_name": req.StoreName}, &displayName, map[string]any{})
+			if err != nil {
+				Error(w, http.StatusInternalServerError, "Failed to provision channel account: "+err.Error())
+				return
+			}
+			account = newAcc
+		}
+
+		var targetAgentID uuid.UUID
+		if req.AgentID != "" {
+			targetAgentID, _ = uuid.Parse(req.AgentID)
+		}
+		if targetAgentID == uuid.Nil {
+			agentIDPtr, _ := deps.Channels.AgentID(ctx, account.ID)
+			if agentIDPtr != nil && *agentIDPtr != uuid.Nil {
+				targetAgentID = *agentIDPtr
+			} else if deps.Agents != nil {
+				activeAgents, _ := deps.Agents.List(ctx, orgID)
+				if len(activeAgents) > 0 {
+					targetAgentID = activeAgents[0].ID
+					_ = deps.Channels.SetAgent(ctx, account.ID, orgID, targetAgentID, true)
+				}
+			}
+		}
+
+		cleanID := firstNonEmpty(req.CustomerPhone, req.CustomerEmail, req.CustomerName, "cust_sim_1")
+		cleanID = regexp.MustCompile(`[^a-zA-Z0-9_.-]+`).ReplaceAllString(cleanID, "_")
+		extUserID := "sim_" + cleanID
+		extConvID := "conv_" + chType + "_" + cleanID
+		now := time.Now().UTC()
+
+		inbound := channel.InboundMessage{
+			ExternalAccountID:      account.ExternalAccountID,
+			ExternalConversationID: extConvID,
+			ExternalUserID:         extUserID,
+			ExternalMessageID:      "msg_sim_" + uuid.NewString()[:12],
+			Text:                   strings.TrimSpace(req.Message),
+			Profile: map[string]any{
+				"name":       req.CustomerName,
+				"phone":      req.CustomerPhone,
+				"email":      req.CustomerEmail,
+				"store_name": req.StoreName,
+			},
+			Timestamp: &now,
+		}
+
+		proc := channelProcessor(deps)
+		if err := proc.Process(ctx, account.ID, inbound); err != nil {
+			deps.Logger.Error().Err(err).Msg("simulate channel message process failed")
+		}
+
+		var sessionID string
+		var aiReply string
+		if deps.DB != nil {
+			_ = deps.DB.QueryRow(ctx, `
+				SELECT s.session_id::text, COALESCE(c.message, '')
+				FROM session_to_agents s
+				LEFT JOIN LATERAL (
+					SELECT message FROM chat_history 
+					WHERE session_id = s.session_id AND message_type IN ('bot', 'agent')
+					ORDER BY created_at DESC LIMIT 1
+				) c ON true
+				WHERE s.organization_id = $1 AND s.channel = $2
+				ORDER BY s.updated_at DESC LIMIT 1
+			`, orgID, chType).Scan(&sessionID, &aiReply)
+		}
+
+		if aiReply == "" {
+			aiReply = "Hello! Thanks for reaching out. Your inquiry has been received and synchronized with our support team."
+		}
+
+		agentName := "Komi AI 智能体"
+		if targetAgentID != uuid.Nil && deps.Agents != nil {
+			if ag, err := deps.Agents.Get(ctx, targetAgentID, orgID); err == nil && ag != nil {
+				agentName = ag.Name
+			}
+		}
+
+		JSON(w, http.StatusOK, simulateChannelResponse{
+			OK:              true,
+			SessionID:       firstNonEmpty(sessionID, extConvID),
+			ChannelType:     chType,
+			StoreName:       req.StoreName,
+			CustomerName:    req.CustomerName,
+			CustomerMessage: req.Message,
+			AIResponse:      aiReply,
+			AgentName:       agentName,
+			CreatedAt:       now.Format(time.RFC3339),
+		})
+	}
 }

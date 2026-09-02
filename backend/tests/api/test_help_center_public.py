@@ -1,5 +1,5 @@
 """
-Copyright 2024-2026 ChatterMate
+Copyright 2024-2026 Komi AI
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -34,7 +34,7 @@ from app.models.help_center import HelpCenterSettings
 from app.repositories.faq import FAQRepository
 from app.services.help_center_public import contrast_ink, resolve_help_center, slug_for_host
 
-HOST = "test-org.chattermate.help"
+HOST = "test-org.komi.help"
 
 
 @pytest.fixture(autouse=True)
@@ -108,9 +108,9 @@ def path_client(db, monkeypatch):
 # ---------- helpers ----------
 
 def test_slug_for_host():
-    assert slug_for_host("acme.chattermate.help") == "acme"
-    assert slug_for_host("a.b.chattermate.help") is None
-    assert slug_for_host("chattermate.help") is None
+    assert slug_for_host("acme.komi.help") == "acme"
+    assert slug_for_host("a.b.komi.help") is None
+    assert slug_for_host("komi.help") is None
     assert slug_for_host("help.acme.com") is None
 
 
@@ -336,7 +336,7 @@ def test_search_filters_results(client, db, test_organization, help_center):
 
 
 def test_disabled_or_unknown_hosts_404(client, db, test_organization, help_center):
-    assert client.get("/", headers={"host": "nope.chattermate.help"}).status_code == 404
+    assert client.get("/", headers={"host": "nope.komi.help"}).status_code == 404
     help_center.enabled = False
     db.commit()
     assert client.get("/", headers={"host": HOST}).status_code == 404
@@ -450,9 +450,9 @@ def test_ask_unanswerable_503(client, db, test_organization, help_center, test_a
 # ---------- host dispatch ----------
 
 def test_is_help_center_host_matches_subdomains_only():
-    assert is_help_center_host("acme.chattermate.help") is True
-    assert is_help_center_host("chattermate.help") is False
-    assert is_help_center_host("api.chattermate.chat") is False
+    assert is_help_center_host("acme.komi.help") is True
+    assert is_help_center_host("komi.help") is False
+    assert is_help_center_host("api.komi.ai") is False
     assert is_help_center_host("") is False
 
 
@@ -536,7 +536,7 @@ def test_preserved_path_drives_canonical_and_json_ld(
 
     r = client.get(MIGRATED_PATH, headers={"host": HOST})
 
-    expected = f"https://test-org.chattermate.help{MIGRATED_PATH}"
+    expected = f"https://test-org.komi.help{MIGRATED_PATH}"
     assert f'<link rel="canonical" href="{expected}">' in r.text
     assert f'<meta property="og:url" content="{expected}">' in r.text
     graph = json.loads(re.search(
@@ -553,7 +553,7 @@ def test_sitemap_lists_the_preserved_path(client, db, test_organization, help_ce
 
     r = client.get("/sitemap.xml", headers={"host": HOST})
 
-    assert f"<loc>https://test-org.chattermate.help{MIGRATED_PATH}</loc>" in r.text
+    assert f"<loc>https://test-org.komi.help{MIGRATED_PATH}</loc>" in r.text
     assert "/a/how-do-i-reset-my-password" not in r.text
 
 

@@ -1,5 +1,5 @@
 """
-Copyright 2024-2026 ChatterMate
+Copyright 2024-2026 Komi AI
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -52,7 +52,7 @@ _TICKET_MSGID_RE = re.compile(r"ticket-([0-9a-f]{32})(?:\.[^@\s>]+)?@", re.I)
 _ROOT_SUFFIX = "root"
 _SUBJECT_TOKEN_RE = re.compile(rf"\[{TICKET_NUMBER_PREFIX}-(\d+)\]", re.I)
 
-DEFAULT_MSGID_DOMAIN = "chattermate.chat"
+DEFAULT_MSGID_DOMAIN = "komi.ai"
 
 
 def _msgid_domain(from_email: Optional[str] = None) -> str:

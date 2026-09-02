@@ -3,9 +3,9 @@ package realtime
 import (
 	"context"
 
-	"github.com/chattermate/chattermate/backend-go/internal/agent"
-	"github.com/chattermate/chattermate/backend-go/internal/config"
-	"github.com/chattermate/chattermate/backend-go/internal/guardrail"
+	"github.com/komi/komi/backend-go/internal/agent"
+	"github.com/komi/komi/backend-go/internal/config"
+	"github.com/komi/komi/backend-go/internal/guardrail"
 )
 
 func guardrailSettings(cfg config.Config) guardrail.Settings {

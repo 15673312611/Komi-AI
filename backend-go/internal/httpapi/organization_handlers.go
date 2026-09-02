@@ -8,7 +8,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5"
 
-	"github.com/chattermate/chattermate/backend-go/internal/organization"
+	"github.com/komi/komi/backend-go/internal/organization"
 )
 
 type createOrganizationRequest struct {

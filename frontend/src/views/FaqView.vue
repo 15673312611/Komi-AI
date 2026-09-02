@@ -1,5 +1,5 @@
 <!--
-Copyright 2024-2026 ChatterMate
+Copyright 2024-2026 Komi AI
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -119,46 +119,47 @@ const handleSyncToKnowledge = async () => {
 .page-header__title {
   font-family: var(--font-display);
   font-weight: 700;
-  font-size: 30px;
+  font-size: 22px;
   letter-spacing: -0.02em;
   color: var(--text);
-  margin: 0 0 8px;
+  margin: 0 0 4px;
 }
 
 .page-header__subtitle {
-  font-size: 15px;
+  font-size: 13.5px;
   color: var(--muted);
   margin: 0;
-  max-width: 560px;
-  line-height: 1.55;
+  max-width: 600px;
+  line-height: 1.5;
 }
 
 .header-actions-group {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   flex-wrap: wrap;
 }
 
 .sync-kb-btn {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 10px 16px;
-  background: rgba(201, 242, 78, 0.12);
-  border: 1px solid rgba(201, 242, 78, 0.3);
-  border-radius: 11px;
-  color: var(--accent-ink, #C9F24E);
-  font-size: 13.5px;
-  font-weight: 700;
+  gap: 7px;
+  padding: 8px 15px;
+  background: #0F172A;
+  border: 1px solid rgba(15, 23, 42, 0.9);
+  border-radius: var(--radius-btn);
+  color: #FFFFFF;
+  font-size: 13px;
+  font-weight: 600;
   cursor: pointer;
   white-space: nowrap;
-  transition: all 0.15s ease;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+  transition: all var(--transition-fast);
 }
 
 .sync-kb-btn:hover:not(:disabled) {
-  background: var(--accent-ink, #C9F24E);
-  color: #0b0f14;
+  background: #000000;
+  transform: translateY(-0.5px);
 }
 
 .sync-kb-btn:disabled {
@@ -169,79 +170,81 @@ const handleSyncToKnowledge = async () => {
 .page-header__link {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 10px 16px;
-  background: var(--o05);
-  border: 1px solid var(--o14);
-  border-radius: 11px;
+  gap: 6px;
+  padding: 8px 14px;
+  background: #FFFFFF;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-btn);
   color: var(--text2);
+  font-size: 13px;
+  font-weight: 500;
   text-decoration: none;
-  font-size: 13.5px;
-  font-weight: 600;
-  white-space: nowrap;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
+  transition: all var(--transition-fast);
 }
 
 .page-header__link:hover {
-  background: var(--o08);
+  background: #F8FAFC;
+  border-color: var(--border-color-hover);
+  color: var(--text);
 }
 
 .faq-kb-banner {
-  background: rgba(201, 242, 78, 0.04);
-  border: 1px solid rgba(201, 242, 78, 0.18);
-  border-radius: 14px;
-  padding: 16px 20px;
-  margin-bottom: 24px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 16px;
+  gap: 14px;
+  background: #F8FAFC;
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 14px 18px;
+  margin-bottom: 24px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
 }
 
 .banner-icon {
-  width: 40px;
-  height: 40px;
-  border-radius: 10px;
-  background: rgba(201, 242, 78, 0.12);
-  color: var(--accent-ink, #C9F24E);
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  background: rgba(99, 102, 241, 0.1);
+  color: #6366F1;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 18px;
+  font-size: 15px;
   flex-shrink: 0;
 }
 
 .banner-content {
   flex: 1;
+  min-width: 0;
 }
 
 .banner-title {
-  font-size: 13.5px;
-  font-weight: 700;
-  color: #fff;
-  margin-bottom: 4px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 2px;
 }
 
 .banner-desc {
   font-size: 12.5px;
-  color: var(--muted, #94A3B8);
+  color: var(--muted);
+  line-height: 1.45;
   margin: 0;
-  line-height: 1.5;
 }
 
 .banner-link {
-  color: var(--accent-ink, #C9F24E);
   font-size: 12.5px;
   font-weight: 600;
+  color: #4F46E5;
   text-decoration: none;
   white-space: nowrap;
-  padding: 6px 12px;
+  padding: 4px 8px;
   border-radius: 6px;
-  background: rgba(201, 242, 78, 0.08);
-  border: 1px solid rgba(201, 242, 78, 0.2);
-  transition: all 0.15s ease;
+  transition: all var(--transition-fast);
 }
 
 .banner-link:hover {
-  background: rgba(201, 242, 78, 0.18);
+  background: rgba(99, 102, 241, 0.08);
 }
 </style>

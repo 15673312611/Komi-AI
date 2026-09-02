@@ -1,5 +1,5 @@
 /*
-Copyright 2024-2026 ChatterMate
+Copyright 2024-2026 Komi AI
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -16,7 +16,7 @@ limitations under the License.
 
 import { getApiUrl } from '@/config/api'
 
-// The loader (chattermate.min.js) is served by THIS frontend, so resolve its
+// The loader (komi.min.js) is served by THIS frontend, so resolve its
 // origin at snippet-generation time from where the dashboard is running — no
 // build-time VITE_WIDGET_URL bake, so a self-hosted install just works.
 function getLoaderOrigin(): string {
@@ -42,7 +42,7 @@ export function buildWidgetEmbed(widgetId: string, requireTokenAuth?: boolean): 
 <!-- Security Note: Widget ID and token are cryptographically bound in the JWT. -->
     <script>
     (function() {
-    fetch('/api/chattermate')
+    fetch('/api/komi')
         .then(r => r.json())
         .then(d => {
         let token, widget_id;
@@ -61,10 +61,10 @@ export function buildWidgetEmbed(widgetId: string, requireTokenAuth?: boolean): 
         window.chattermateBaseUrl = '${apiUrl}';
         localStorage.setItem('ctid', token);
         const script = document.createElement('script');
-        script.src = '${loaderOrigin}/webclient/chattermate.min.js';
+        script.src = '${loaderOrigin}/webclient/komi.min.js';
         document.head.appendChild(script);
         })
-        .catch(e => console.error('[ChatterMate] Initialization failed:', e));
+        .catch(e => console.error('[Komi AI] Initialization failed:', e));
     })();
     <\/script>`
   }
@@ -72,5 +72,5 @@ export function buildWidgetEmbed(widgetId: string, requireTokenAuth?: boolean): 
   window.chattermateId = '${widgetId}';
   window.chattermateBaseUrl = '${apiUrl}';
 <\/script>
-<script src="${loaderOrigin}/webclient/chattermate.min.js"><\/script>`
+<script src="${loaderOrigin}/webclient/komi.min.js"><\/script>`
 }

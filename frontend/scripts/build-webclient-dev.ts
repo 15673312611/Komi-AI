@@ -28,13 +28,13 @@ async function buildWebClientDev() {
     const apiUrl = process.env.VITE_API_URL || 'http://localhost:8000/api/v1'
     console.log('Using API URL:', apiUrl)
 
-    const sourceFile = resolve(dirname(__dirname), 'src/webclient/chattermate.js')
+    const sourceFile = resolve(dirname(__dirname), 'src/webclient/komi.js')
 
     await build({
       entryPoints: [sourceFile],
       bundle: true,
       minify: false, // Don't minify for development
-      outfile: resolve(dirname(__dirname), 'public/webclient/chattermate.min.js'),
+      outfile: resolve(dirname(__dirname), 'public/webclient/komi.min.js'),
       format: 'iife',
       target: ['es2015'],
       loader: {
@@ -42,17 +42,17 @@ async function buildWebClientDev() {
       },
       define: {
         'process.env.NODE_ENV': '"development"',
-        '__CHATTERMATE_API_URL__': JSON.stringify(apiUrl),
+        '__KOMI_AI_API_URL__': JSON.stringify(apiUrl),
       },
       sourcemap: true, // Add sourcemap for development
     })
 
     // Copy output to dist/webclient directory
-    const publicWebclientPath = resolve(dirname(__dirname), 'public/webclient/chattermate.min.js')
-    const publicSourcemapPath = resolve(dirname(__dirname), 'public/webclient/chattermate.min.js.map')
+    const publicWebclientPath = resolve(dirname(__dirname), 'public/webclient/komi.min.js')
+    const publicSourcemapPath = resolve(dirname(__dirname), 'public/webclient/komi.min.js.map')
     const distWebclientDir = resolve(dirname(__dirname), 'dist/webclient')
-    const distWebclientPath = resolve(distWebclientDir, 'chattermate.min.js')
-    const distSourcemapPath = resolve(distWebclientDir, 'chattermate.min.js.map')
+    const distWebclientPath = resolve(distWebclientDir, 'komi.min.js')
+    const distSourcemapPath = resolve(distWebclientDir, 'komi.min.js.map')
     
     // Ensure dist/webclient directory exists
     if (!fs.existsSync(distWebclientDir)) {

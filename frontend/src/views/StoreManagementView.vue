@@ -23,7 +23,29 @@ const showModal = ref(false)
 const isEditing = ref(false)
 const currentStoreId = ref<string | null>(null)
 
-// Email configuration fields directly inside store modal
+// Multi-Channel tab state inside store modal (default to email, TG removed)
+const channelTypeTab = ref<'email' | 'whatsapp' | 'instagram' | 'line' | 'messenger' | 'web'>('email')
+
+// Form fields for WhatsApp
+const waPhoneNumber = ref('')
+const waPhoneId = ref('')
+const waAccessToken = ref('')
+const waWabaId = ref('')
+
+// Form fields for Instagram
+const igId = ref('')
+const igAccessToken = ref('')
+
+// Form fields for LINE
+const lineChannelId = ref('')
+const lineChannelSecret = ref('')
+const lineAccessToken = ref('')
+
+// Form fields for Messenger
+const messengerPageId = ref('')
+const messengerAccessToken = ref('')
+
+// Form fields for Email (Default)
 const storeEmailAddress = ref('')
 const smtpHost = ref('')
 const smtpPort = ref('587')
@@ -32,7 +54,7 @@ const smtpPassword = ref('')
 const fromEmailName = ref('')
 const showSmtpAdvanced = ref(false)
 
-// Webhook helper modal state
+// Webhook / Channel guide modal state
 const showWebhookModal = ref(false)
 const activeStoreForWebhook = ref<Store | null>(null)
 const activeWebhookUrl = ref('')
@@ -47,7 +69,6 @@ const formData = ref<{
   name: string
   platform: string
   shop_domain: string
-  email_account_id: string
   agent_id: string
   knowledge_tag: string
   currency: string
@@ -57,7 +78,6 @@ const formData = ref<{
   name: '',
   platform: 'shopify',
   shop_domain: '',
-  email_account_id: '',
   agent_id: '',
   knowledge_tag: '',
   currency: 'USD',
@@ -66,13 +86,22 @@ const formData = ref<{
 })
 
 const platformList = [
-  { value: 'shopify', label: 'Shopify 独立站', icon: 'fa-brands fa-shopify', color: 'text-emerald-400' },
-  { value: 'woocommerce', label: 'WooCommerce', icon: 'fa-brands fa-wordpress', color: 'text-purple-400' },
-  { value: 'amazon', label: 'Amazon 亚马逊', icon: 'fa-brands fa-amazon', color: 'text-amber-400' },
-  { value: 'tiktok', label: 'TikTok Shop', icon: 'fa-brands fa-tiktok', color: 'text-rose-400' },
-  { value: 'email_custom', label: '独立站 / 邮箱定制', icon: 'fa-solid fa-envelope', color: 'text-blue-400' },
-  { value: 'other', label: '其它平台', icon: 'fa-solid fa-store', color: 'text-slate-400' },
+  { value: 'web_widget', label: '独立站网页挂件', icon: 'fa-solid fa-comments', color: 'text-violet-800 bg-violet-50 border-violet-200' },
+  { value: 'shopify', label: 'Shopify 独立站', icon: 'fa-brands fa-shopify', color: 'text-emerald-800 bg-emerald-50 border-emerald-200' },
+  { value: 'woocommerce', label: 'WooCommerce', icon: 'fa-brands fa-wordpress', color: 'text-purple-800 bg-purple-50 border-purple-200' },
+  { value: 'amazon', label: 'Amazon 亚马逊', icon: 'fa-brands fa-amazon', color: 'text-amber-900 bg-amber-50 border-amber-200' },
+  { value: 'tiktok', label: 'TikTok Shop', icon: 'fa-brands fa-tiktok', color: 'text-rose-800 bg-rose-50 border-rose-200' },
+  { value: 'email_custom', label: '自建站 / 定制站', icon: 'fa-solid fa-store', color: 'text-blue-800 bg-blue-50 border-blue-200' },
+  { value: 'other', label: '其它平台', icon: 'fa-solid fa-cube', color: 'text-slate-700 bg-slate-100 border-slate-200' },
 ]
+
+const channelTypeList = [
+  { value: 'email', label: '专属客服邮箱', icon: 'fa-solid fa-envelope', color: 'text-blue-600', activeClass: 'border-blue-500 bg-blue-50 text-blue-700' },
+  { value: 'whatsapp', label: 'WhatsApp 商业号', icon: 'fa-brands fa-whatsapp', color: 'text-emerald-600', activeClass: 'border-emerald-500 bg-emerald-50 text-emerald-700' },
+  { value: 'instagram', label: 'Instagram Direct', icon: 'fa-brands fa-instagram', color: 'text-pink-600', activeClass: 'border-pink-500 bg-pink-50 text-pink-700' },
+  { value: 'line', label: 'LINE Official', icon: 'fa-brands fa-line', color: 'text-green-600', activeClass: 'border-green-500 bg-green-50 text-green-700' },
+  { value: 'messenger', label: 'Messenger', icon: 'fa-brands fa-facebook-messenger', color: 'text-indigo-600', activeClass: 'border-indigo-500 bg-indigo-50 text-indigo-700' },
+] as const
 
 const currencyList = [
   { code: 'USD', label: 'USD ($) - 美元' },
@@ -99,7 +128,7 @@ const loadData = async () => {
     isLoading.value = true
     const [storeList, opts] = await Promise.all([
       storeService.getStores(),
-      storeService.getOptions()
+      storeService.getOptions(),
     ])
     if (requestVersion !== dataRequestVersion) return
     stores.value = storeList || []
@@ -131,7 +160,9 @@ const filteredStores = computed(() => {
       !searchQuery.value ||
       store.name.toLowerCase().includes(searchQuery.value.toLowerCase()) ||
       (store.shop_domain && store.shop_domain.toLowerCase().includes(searchQuery.value.toLowerCase())) ||
-      (store.email_address && store.email_address.toLowerCase().includes(searchQuery.value.toLowerCase()))
+      (store.email_address && store.email_address.toLowerCase().includes(searchQuery.value.toLowerCase())) ||
+      (store.channel_display_name && store.channel_display_name.toLowerCase().includes(searchQuery.value.toLowerCase())) ||
+      (store.channel_external_id && store.channel_external_id.toLowerCase().includes(searchQuery.value.toLowerCase()))
 
     const matchesPlatform =
       selectedPlatformFilter.value === 'all' || store.platform === selectedPlatformFilter.value
@@ -141,12 +172,30 @@ const filteredStores = computed(() => {
 })
 
 const activeCount = computed(() => stores.value.filter(s => s.is_active).length)
-const channelBoundCount = computed(() => stores.value.filter(s => s.email_account_id).length)
+const channelBoundCount = computed(() => stores.value.filter(s => s.email_account_id || s.channel_account_id).length)
 const agentBoundCount = computed(() => stores.value.filter(s => s.agent_id).length)
 
 const openCreateModal = () => {
   isEditing.value = false
   currentStoreId.value = null
+  channelTypeTab.value = 'email' // Default to email
+
+  // Reset fields
+  waPhoneNumber.value = ''
+  waPhoneId.value = ''
+  waAccessToken.value = ''
+  waWabaId.value = ''
+
+  igId.value = ''
+  igAccessToken.value = ''
+
+  lineChannelId.value = ''
+  lineChannelSecret.value = ''
+  lineAccessToken.value = ''
+
+  messengerPageId.value = ''
+  messengerAccessToken.value = ''
+
   showSmtpAdvanced.value = false
   storeEmailAddress.value = ''
   smtpHost.value = ''
@@ -159,7 +208,6 @@ const openCreateModal = () => {
     name: '',
     platform: 'shopify',
     shop_domain: options.value.shopify.length > 0 ? options.value.shopify[0].shop_domain : '',
-    email_account_id: '',
     agent_id: options.value.agents.length > 0 ? options.value.agents[0].id : '',
     knowledge_tag: '',
     currency: 'USD',
@@ -172,6 +220,16 @@ const openCreateModal = () => {
 const openEditModal = (store: Store) => {
   isEditing.value = true
   currentStoreId.value = store.id
+  
+  if (store.channel_type) {
+    channelTypeTab.value = (store.channel_type as any) || 'email'
+  } else if (store.email_address) {
+    channelTypeTab.value = 'email'
+    storeEmailAddress.value = store.email_address || ''
+  } else {
+    channelTypeTab.value = 'email'
+  }
+
   showSmtpAdvanced.value = false
   storeEmailAddress.value = store.email_address || store.email_display_name || ''
   smtpHost.value = ''
@@ -184,7 +242,6 @@ const openEditModal = (store: Store) => {
     name: store.name,
     platform: store.platform,
     shop_domain: store.shop_domain || '',
-    email_account_id: store.email_account_id || '',
     agent_id: store.agent_id || '',
     knowledge_tag: store.knowledge_tag || '',
     currency: store.currency || 'USD',
@@ -201,48 +258,99 @@ const handleSaveStore = async () => {
     return
   }
 
-  const emailAddr = storeEmailAddress.value.trim().toLowerCase()
-  if (!emailAddr || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailAddr)) {
-    toast.error('请输入此店铺的专属客服接收邮箱 (如: support@yourstore.com)')
-    return
-  }
-
   try {
     isSubmitting.value = true
 
-    // 1. Direct inline email creation / update
-    const emailPayload: any = {
-      inbound_address: emailAddr,
-      display_name: emailAddr,
-    }
-    if (smtpHost.value.trim()) {
-      if (!smtpUsername.value.trim() || !smtpPassword.value) {
-        toast.error('配置了 SMTP 服务器时，用户名与密码为必填项')
+    let directChannelType: string = channelTypeTab.value
+    let directChannelConfig: Record<string, any> = {}
+
+    // Build config directly if provided
+    if (channelTypeTab.value === 'email') {
+      const emailAddr = storeEmailAddress.value.trim().toLowerCase()
+      if (emailAddr) {
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailAddr)) {
+          toast.error('请输入有效的客服邮箱地址 (如: support@yourstore.com)')
+          isSubmitting.value = false
+          return
+        }
+        directChannelConfig = {
+          email: emailAddr,
+          inbound_address: emailAddr,
+          display_name: emailAddr,
+        }
+      } else {
+        // No email configured yet - store can still be created directly!
+        directChannelType = ''
+      }
+      if (smtpHost.value.trim()) {
+        if (!smtpUsername.value.trim() || !smtpPassword.value) {
+          toast.error('配置了 SMTP 服务器时，用户名与密码为必填项')
+          isSubmitting.value = false
+          return
+        }
+        directChannelConfig.smtp_host = smtpHost.value.trim()
+        directChannelConfig.smtp_port = Number(smtpPort.value.trim()) || 587
+        directChannelConfig.smtp_username = smtpUsername.value.trim()
+        directChannelConfig.smtp_password = smtpPassword.value
+        if (fromEmailName.value.trim()) {
+          directChannelConfig.from_email = fromEmailName.value.trim()
+        }
+      }
+    } else if (channelTypeTab.value === 'whatsapp') {
+      if (!waPhoneId.value.trim() || !waAccessToken.value.trim()) {
+        toast.error('请填写 WhatsApp 电话号码 ID 与 Access Token')
+        isSubmitting.value = false
         return
       }
-      const smtpPortNumber = Number(smtpPort.value.trim())
-      if (!Number.isInteger(smtpPortNumber) || smtpPortNumber < 1 || smtpPortNumber > 65535) {
-        toast.error('请输入有效的 SMTP 端口（1-65535）')
+      directChannelConfig = {
+        phone_number_id: waPhoneId.value.trim(),
+        access_token: waAccessToken.value.trim(),
+        waba_id: waWabaId.value.trim() || undefined,
+        display_name: waPhoneNumber.value.trim() || (formData.value.name.trim() + ' (WhatsApp)'),
+      }
+    } else if (channelTypeTab.value === 'instagram') {
+      if (!igId.value.trim() || !igAccessToken.value.trim()) {
+        toast.error('请填写 Instagram 账号 ID 与 Page Access Token')
+        isSubmitting.value = false
         return
       }
-      emailPayload.smtp_host = smtpHost.value.trim()
-      emailPayload.smtp_port = smtpPortNumber
-      emailPayload.smtp_username = smtpUsername.value.trim()
-      emailPayload.smtp_password = smtpPassword.value
-      if (fromEmailName.value.trim()) {
-        emailPayload.from_email = fromEmailName.value.trim()
+      directChannelConfig = {
+        ig_id: igId.value.trim(),
+        page_access_token: igAccessToken.value.trim(),
+        display_name: formData.value.name.trim() + ' (Instagram)',
+      }
+    } else if (channelTypeTab.value === 'line') {
+      if (!lineChannelId.value.trim() || !lineAccessToken.value.trim()) {
+        toast.error('请填写 LINE Channel ID 与 Access Token')
+        isSubmitting.value = false
+        return
+      }
+      directChannelConfig = {
+        channel_id: lineChannelId.value.trim(),
+        channel_secret: lineChannelSecret.value.trim(),
+        channel_access_token: lineAccessToken.value.trim(),
+        display_name: formData.value.name.trim() + ' (LINE)',
+      }
+    } else if (channelTypeTab.value === 'messenger') {
+      if (!messengerPageId.value.trim() || !messengerAccessToken.value.trim()) {
+        toast.error('请填写 Messenger Page ID 与 Access Token')
+        isSubmitting.value = false
+        return
+      }
+      directChannelConfig = {
+        page_id: messengerPageId.value.trim(),
+        page_access_token: messengerAccessToken.value.trim(),
+        display_name: formData.value.name.trim() + ' (Messenger)',
       }
     }
 
-    // Connect / ensure email channel
-    const channelAccount = await channelsService.connectEmail(emailPayload)
-    const boundEmailAccountId = channelAccount.id
 
     const payload: CreateStorePayload = {
       name: formData.value.name.trim(),
       platform: formData.value.platform,
       shop_domain: formData.value.shop_domain.trim() || undefined,
-      email_account_id: boundEmailAccountId,
+      channel_type: directChannelType,
+      channel_config: directChannelConfig,
       agent_id: formData.value.agent_id || undefined,
       knowledge_tag: formData.value.knowledge_tag.trim() || undefined,
       currency: formData.value.currency,
@@ -252,10 +360,10 @@ const handleSaveStore = async () => {
 
     if (isEditing.value && currentStoreId.value) {
       await storeService.updateStore(currentStoreId.value, payload as UpdateStorePayload)
-      toast.success('店铺及专属邮箱配置已更新！')
+      toast.success('店铺及专属渠道配置已成功更新！')
     } else {
       await storeService.createStore(payload)
-      toast.success(`店铺创建成功！已绑定专属邮箱 ${emailAddr}`)
+      toast.success(`店铺「${payload.name}」已创建，专属渠道已就绪！`)
     }
 
     showModal.value = false
@@ -286,7 +394,7 @@ const handleToggleStatus = async (store: Store) => {
 
 const handleDeleteStore = async (store: Store) => {
   if (deletingStoreIds.value.has(store.id)) return
-  if (!confirm(`确定要删除店铺「${store.name}」吗？\n删除后该店铺绑定的邮箱渠道将被解绑。`)) {
+  if (!confirm(`确定要删除店铺「${store.name}」吗？\n删除后该店铺绑定的专属渠道将被解绑。`)) {
     return
   }
 
@@ -310,9 +418,10 @@ const openWebhookModal = async (store: Store) => {
   activeWebhookUrl.value = ''
   isLoadingWebhook.value = true
 
+  const boundId = store.channel_account_id || store.email_account_id
   try {
-    if (store.email_account_id) {
-      const url = await channelsService.getEmailWebhookUrl(store.email_account_id)
+    if (boundId) {
+      const url = await channelsService.getEmailWebhookUrl(boundId)
       if (requestVersion === webhookRequestVersion && activeStoreForWebhook.value?.id === store.id) {
         activeWebhookUrl.value = url
       }
@@ -322,7 +431,7 @@ const openWebhookModal = async (store: Store) => {
   } catch (err: any) {
     console.error('Failed to get webhook url:', err)
     if (requestVersion === webhookRequestVersion && activeStoreForWebhook.value?.id === store.id) {
-      activeWebhookUrl.value = `${window.location.origin}/api/v1/webhooks/email/${store.email_account_id || ''}`
+      activeWebhookUrl.value = `${window.location.origin}/api/v1/webhooks/email/${boundId || ''}`
     }
   } finally {
     if (requestVersion === webhookRequestVersion && activeStoreForWebhook.value?.id === store.id) {
@@ -355,7 +464,61 @@ const copyToClipboard = async (text: string, label = '内容') => {
 
 const getPlatformBadge = (platform: string) => {
   const item = platformList.find(p => p.value === platform)
-  return item || { label: platform, icon: 'fa-solid fa-store', color: 'text-slate-300' }
+  return item || { label: platform, icon: 'fa-solid fa-store', color: 'text-slate-300 bg-slate-100 border-slate-200' }
+}
+
+const getChannelBadge = (channelType?: string) => {
+  switch (channelType?.toLowerCase()) {
+    case 'whatsapp':
+      return {
+        label: 'WhatsApp 专线',
+        icon: 'fa-brands fa-whatsapp',
+        iconColor: 'text-emerald-600',
+        badgeClass: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+        dotClass: 'bg-emerald-500',
+      }
+    case 'instagram':
+      return {
+        label: 'Instagram Direct',
+        icon: 'fa-brands fa-instagram',
+        iconColor: 'text-pink-600',
+        badgeClass: 'bg-pink-50 text-pink-700 border-pink-200',
+        dotClass: 'bg-pink-500',
+      }
+    case 'line':
+      return {
+        label: 'LINE Official',
+        icon: 'fa-brands fa-line',
+        iconColor: 'text-green-600',
+        badgeClass: 'bg-green-50 text-green-700 border-green-200',
+        dotClass: 'bg-green-500',
+      }
+    case 'messenger':
+      return {
+        label: 'Messenger',
+        icon: 'fa-brands fa-facebook-messenger',
+        iconColor: 'text-indigo-600',
+        badgeClass: 'bg-indigo-50 text-indigo-700 border-indigo-200',
+        dotClass: 'bg-indigo-500',
+      }
+    case 'web':
+      return {
+        label: '独立站挂件',
+        icon: 'fa-solid fa-comments',
+        iconColor: 'text-violet-600',
+        badgeClass: 'bg-violet-50 text-violet-700 border-violet-200',
+        dotClass: 'bg-violet-500',
+      }
+    case 'email':
+    default:
+      return {
+        label: '专属客服邮箱',
+        icon: 'fa-solid fa-envelope',
+        iconColor: 'text-blue-600',
+        badgeClass: 'bg-blue-50 text-blue-700 border-blue-200',
+        dotClass: 'bg-blue-500',
+      }
+  }
 }
 </script>
 
@@ -371,10 +534,19 @@ const getPlatformBadge = (platform: string) => {
           </div>
           <h1 class="page-title">店铺管理</h1>
           <p class="page-desc">
-            统一管理您的多平台网店与独立站。直接在店铺中配置专属客服邮箱与 AI 智能体，实现店铺会话物理隔离与自动化应答。
+            以店铺为中心统一管理多平台网店与自建站。每个店铺可独立配置客服邮箱、WhatsApp、Instagram、LINE、Messenger 或独立站挂件，并指定专属 AI 智能体接待！
           </p>
         </div>
-        <div class="header-actions">
+        <div class="header-actions flex items-center gap-3">
+          <a
+            href="/channel_simulator.html"
+            target="_blank"
+            class="px-3.5 py-2 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-xs flex items-center gap-2 border border-indigo-200 shadow-sm transition-all"
+          >
+            <i class="fa-solid fa-flask-vial text-indigo-600"></i>
+            <span>全渠道沙盒模拟器</span>
+            <i class="fa-solid fa-arrow-up-right-from-square text-[10px] opacity-70"></i>
+          </a>
           <button class="create-btn" @click="openCreateModal">
             <i class="fa-solid fa-plus"></i>
             <span>新建店铺</span>
@@ -385,7 +557,7 @@ const getPlatformBadge = (platform: string) => {
       <!-- Stats Bar -->
       <div class="stats-row">
         <div class="stat-card">
-          <div class="stat-icon-wrapper bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+          <div class="stat-icon-wrapper bg-indigo-50 text-indigo-600 border border-indigo-200">
             <i class="fa-solid fa-shop"></i>
           </div>
           <div class="stat-meta">
@@ -395,7 +567,7 @@ const getPlatformBadge = (platform: string) => {
         </div>
 
         <div class="stat-card">
-          <div class="stat-icon-wrapper bg-lime-500/10 text-[#C9F24E] border border-lime-500/20">
+          <div class="stat-icon-wrapper bg-emerald-50 text-emerald-600 border border-emerald-200">
             <i class="fa-solid fa-circle-check"></i>
           </div>
           <div class="stat-meta">
@@ -405,17 +577,17 @@ const getPlatformBadge = (platform: string) => {
         </div>
 
         <div class="stat-card">
-          <div class="stat-icon-wrapper bg-blue-500/10 text-blue-400 border border-blue-500/20">
-            <i class="fa-solid fa-envelope"></i>
+          <div class="stat-icon-wrapper bg-blue-50 text-blue-600 border border-blue-200">
+            <i class="fa-solid fa-satellite-dish"></i>
           </div>
           <div class="stat-meta">
-            <span class="stat-label">已绑定专属邮箱</span>
+            <span class="stat-label">已绑定买家渠道</span>
             <span class="stat-value">{{ channelBoundCount }}</span>
           </div>
         </div>
 
         <div class="stat-card">
-          <div class="stat-icon-wrapper bg-purple-500/10 text-purple-400 border border-purple-500/20">
+          <div class="stat-icon-wrapper bg-purple-50 text-purple-600 border border-purple-200">
             <i class="fa-solid fa-robot"></i>
           </div>
           <div class="stat-meta">
@@ -432,7 +604,7 @@ const getPlatformBadge = (platform: string) => {
           <input
             v-model="searchQuery"
             type="text"
-            placeholder="搜索店铺名称、官网域名或专属邮箱..."
+            placeholder="搜索店铺名称、官网域名、渠道账号或专属邮箱..."
             class="search-input"
           />
           <button v-if="searchQuery" class="clear-btn" @click="searchQuery = ''">
@@ -480,7 +652,7 @@ const getPlatformBadge = (platform: string) => {
           没有找到符合筛选条件的店铺，请尝试重置搜索或筛选。
         </p>
         <p v-else>
-          您尚未添加任何店铺，点击下方按钮一站式接入您的网店与专属客服邮箱。
+          您尚未添加任何店铺，点击下方按钮一站式接入您的网店与专属客服渠道。
         </p>
         <button v-if="!searchQuery && selectedPlatformFilter === 'all'" class="create-btn" @click="openCreateModal">
           <i class="fa-solid fa-plus"></i>
@@ -540,29 +712,29 @@ const getPlatformBadge = (platform: string) => {
 
           <!-- Bindings Meta -->
           <div class="binding-section">
-            <!-- Email Channel Binding -->
+            <!-- Channel Binding -->
             <div class="binding-item">
-              <div class="binding-icon text-blue-400 bg-blue-500/10">
-                <i class="fa-solid fa-envelope"></i>
+              <div class="binding-icon" :class="getChannelBadge(store.channel_type).badgeClass">
+                <i :class="getChannelBadge(store.channel_type).icon"></i>
               </div>
               <div class="binding-info flex-1">
                 <div class="flex items-center justify-between">
-                  <span class="binding-title">专属客服邮箱</span>
+                  <span class="binding-title">{{ getChannelBadge(store.channel_type).label }}</span>
                   <button
-                    v-if="store.email_account_id"
+                    v-if="store.email_account_id || store.channel_account_id"
                     class="webhook-pill-btn"
                     @click="openWebhookModal(store)"
-                    title="查看该邮箱的收件 Webhook 配置与指引"
+                    title="查看该渠道的 Webhook 回调指引"
                   >
                     <i class="fa-solid fa-satellite-dish"></i>
-                    <span>收件配置</span>
+                    <span>接入信息</span>
                   </button>
                 </div>
-                <span v-if="store.email_address || store.email_display_name" class="binding-val text-blue-300">
-                  {{ store.email_display_name || store.email_address }}
+                <span v-if="store.channel_display_name || store.channel_external_id || store.email_display_name || store.email_address" class="binding-val font-bold" :class="getChannelBadge(store.channel_type).iconColor">
+                  {{ store.channel_display_name || store.channel_external_id || store.email_display_name || store.email_address }}
                 </span>
                 <div v-else class="flex items-center gap-2">
-                  <span class="binding-val unassigned">未配置专属邮箱</span>
+                  <span class="binding-val unassigned">未绑定专属渠道</span>
                   <button class="quick-bind-btn" @click="openEditModal(store)">+ 去配置</button>
                 </div>
               </div>
@@ -570,12 +742,12 @@ const getPlatformBadge = (platform: string) => {
 
             <!-- AI Agent Binding -->
             <div class="binding-item">
-              <div class="binding-icon text-[#C9F24E] bg-lime-500/10">
+              <div class="binding-icon text-indigo-600 bg-indigo-50 border border-indigo-100">
                 <i class="fa-solid fa-robot"></i>
               </div>
               <div class="binding-info flex-1">
                 <span class="binding-title">负责 AI 智能体</span>
-                <span v-if="store.agent_name || store.agent_display_name" class="binding-val text-[#C9F24E]">
+                <span v-if="store.agent_name || store.agent_display_name" class="binding-val text-indigo-700 font-bold">
                   {{ store.agent_display_name || store.agent_name }}
                 </span>
                 <div v-else class="flex items-center gap-2">
@@ -627,7 +799,7 @@ const getPlatformBadge = (platform: string) => {
               </div>
               <div>
                 <h2>{{ isEditing ? '编辑店铺配置' : '新建电商店铺' }}</h2>
-                <p class="modal-subtitle">直接配置店铺基本信息、专属客服邮箱与负责的 AI 智能体</p>
+                <p class="modal-subtitle">一站式配置店铺基础信息、专属联络渠道（客服邮箱/WhatsApp/IG/LINE）与 AI 智能体</p>
               </div>
             </div>
             <button class="modal-close" @click="showModal = false">
@@ -649,7 +821,7 @@ const getPlatformBadge = (platform: string) => {
                   <input
                     v-model="formData.name"
                     type="text"
-                    placeholder="如：欧美品牌旗舰店、日本自营站、TikTok UK 小店"
+                    placeholder="如：欧美品牌旗舰店、日本自营美妆站、TikTok UK 小店"
                     class="form-input"
                   />
                 </div>
@@ -693,93 +865,225 @@ const getPlatformBadge = (platform: string) => {
               </div>
             </div>
 
-            <!-- Exclusive Email Direct Config Section -->
+            <!-- Dynamic Multi-Channel Section -->
             <div class="form-section">
               <h3 class="section-title">
-                <i class="fa-solid fa-envelope-open-text text-blue-400"></i>
-                <span>2. 专属客服邮箱配置（1:1 独立归属）</span>
+                <i class="fa-solid fa-satellite-dish text-[#C9F24E]"></i>
+                <span>2. 配置专属买家联络渠道</span>
               </h3>
               <p class="section-desc">
-                直接填写该店铺专用的客服邮箱。买家发往此邮箱的所有邮件，系统将精准归集为此店铺并调用专属 AI 答复。
+                选择承接该店铺买家咨询的渠道（默认客服邮箱，也可切换 WhatsApp、Instagram 等）。买家发送消息后系统将自动归集为此店铺并调用专属 AI 答复。
               </p>
 
-              <div class="inline-email-card">
-                <div class="form-grid">
-                  <div class="form-item full">
-                    <label class="form-label required">专属客服接收邮箱地址</label>
-                    <input
-                      v-model="storeEmailAddress"
-                      type="email"
-                      placeholder="如：support@yourstore.com 或 service@brand.com"
-                      class="form-input"
-                    />
-                    <span class="field-hint">
-                      买家发送咨询邮件的目标邮箱。创建后系统将自动生成该邮箱的专用收件 Webhook URL。
-                    </span>
+              <!-- Channel Type Tabs -->
+              <div class="channel-tabs-container">
+                <button
+                  v-for="ct in channelTypeList"
+                  :key="ct.value"
+                  type="button"
+                  class="channel-tab-pill"
+                  :class="channelTypeTab === ct.value ? ct.activeClass : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'"
+                  @click="channelTypeTab = ct.value"
+                >
+                  <i :class="ct.icon" class="text-base"></i>
+                  <span>{{ ct.label }}</span>
+                </button>
+              </div>
+
+              <!-- Dynamic Inline Channel Form -->
+              <div class="channel-form-box mt-3">
+                <!-- Email (Default) -->
+                <div v-if="channelTypeTab === 'email'" class="space-y-3">
+                  <div class="form-grid">
+                    <div class="form-item full">
+                      <label class="form-label required">专属客服接收邮箱地址</label>
+                      <input
+                        v-model="storeEmailAddress"
+                        type="email"
+                        placeholder="如：support@yourstore.com 或 service@brand.com"
+                        class="form-input"
+                      />
+                    </div>
                   </div>
-                </div>
 
-                <!-- Toggle SMTP Config -->
-                <div class="mt-2">
-                  <button
-                    type="button"
-                    class="smtp-toggle-btn"
-                    @click="showSmtpAdvanced = !showSmtpAdvanced"
-                  >
-                    <i :class="showSmtpAdvanced ? 'fa-solid fa-chevron-up' : 'fa-solid fa-chevron-down'"></i>
-                    <span>{{ showSmtpAdvanced ? '收起 SMTP 外发服务器配置' : '+ 配置自备 SMTP 发信服务器（选填，留空默认使用系统外发）' }}</span>
-                  </button>
+                  <div>
+                    <button
+                      type="button"
+                      class="smtp-toggle-btn"
+                      @click="showSmtpAdvanced = !showSmtpAdvanced"
+                    >
+                      <i :class="showSmtpAdvanced ? 'fa-solid fa-chevron-up' : 'fa-solid fa-chevron-down'"></i>
+                      <span>{{ showSmtpAdvanced ? '收起 SMTP 外发服务器配置' : '+ 配置自备 SMTP 发信服务器（选填）' }}</span>
+                    </button>
 
-                  <div v-if="showSmtpAdvanced" class="smtp-fields-box">
-                    <div class="form-grid">
-                      <div class="form-item">
-                        <label class="form-label">SMTP 主机地址</label>
-                        <input
-                          v-model="smtpHost"
-                          type="text"
-                          placeholder="如：smtp.sendgrid.net 或 smtp.office365.com"
-                          class="form-input"
-                        />
-                      </div>
-                      <div class="form-item">
-                        <label class="form-label">SMTP 端口</label>
-                        <input
-                          v-model="smtpPort"
-                          type="text"
-                          placeholder="587 或 465"
-                          class="form-input"
-                        />
-                      </div>
-                      <div class="form-item">
-                        <label class="form-label">SMTP 用户名 / API Key</label>
-                        <input
-                          v-model="smtpUsername"
-                          type="text"
-                          placeholder="apikey 或 登录邮箱"
-                          class="form-input"
-                        />
-                      </div>
-                      <div class="form-item">
-                        <label class="form-label">SMTP 密码 / 密钥</label>
-                        <input
-                          v-model="smtpPassword"
-                          type="password"
-                          placeholder="••••••••••••"
-                          class="form-input"
-                        />
-                      </div>
-                      <div class="form-item full">
-                        <label class="form-label">发件人别名 (选填)</label>
-                        <input
-                          v-model="fromEmailName"
-                          type="text"
-                          placeholder="如：Brand Support <support@yourstore.com>"
-                          class="form-input"
-                        />
+                    <div v-if="showSmtpAdvanced" class="smtp-fields-box mt-2">
+                      <div class="form-grid">
+                        <div class="form-item">
+                          <label class="form-label">SMTP 主机地址</label>
+                          <input
+                            v-model="smtpHost"
+                            type="text"
+                            placeholder="如：smtp.sendgrid.net 或 smtp.office365.com"
+                            class="form-input"
+                          />
+                        </div>
+                        <div class="form-item">
+                          <label class="form-label">SMTP 端口</label>
+                          <input
+                            v-model="smtpPort"
+                            type="text"
+                            placeholder="587 或 465"
+                            class="form-input"
+                          />
+                        </div>
+                        <div class="form-item">
+                          <label class="form-label">SMTP 用户名 / API Key</label>
+                          <input
+                            v-model="smtpUsername"
+                            type="text"
+                            placeholder="apikey 或 登录邮箱"
+                            class="form-input"
+                          />
+                        </div>
+                        <div class="form-item">
+                          <label class="form-label">SMTP 密码 / 密钥</label>
+                          <input
+                            v-model="smtpPassword"
+                            type="password"
+                            placeholder="••••••••••••"
+                            class="form-input"
+                          />
+                        </div>
+                        <div class="form-item full">
+                          <label class="form-label">发件人别名 (选填)</label>
+                          <input
+                            v-model="fromEmailName"
+                            type="text"
+                            placeholder="如：Brand Support <support@yourstore.com>"
+                            class="form-input"
+                          />
+                        </div>
                       </div>
                     </div>
                   </div>
                 </div>
+
+                <!-- WhatsApp -->
+                <div v-else-if="channelTypeTab === 'whatsapp'" class="form-grid">
+                  <div class="form-item full">
+                    <label class="form-label required">WhatsApp 商业号码备注 / 专线名称</label>
+                    <input
+                      v-model="waPhoneNumber"
+                      type="text"
+                      placeholder="如：美东独立站专属客服 (+1 555-892-3401)"
+                      class="form-input"
+                    />
+                  </div>
+                  <div class="form-item">
+                    <label class="form-label required">电话号码 ID (Phone Number ID)</label>
+                    <input
+                      v-model="waPhoneId"
+                      type="text"
+                      placeholder="从 Meta 开发者后台复制的数字 ID"
+                      class="form-input"
+                    />
+                  </div>
+                  <div class="form-item">
+                    <label class="form-label required">永久访问令牌 (Access Token)</label>
+                    <input
+                      v-model="waAccessToken"
+                      type="password"
+                      placeholder="EAAG..."
+                      class="form-input"
+                    />
+                  </div>
+                  <div class="form-item full">
+                    <label class="form-label">WABA ID 商业账号 ID（选填）</label>
+                    <input
+                      v-model="waWabaId"
+                      type="text"
+                      placeholder="选填，用于自动订阅 Webhook"
+                      class="form-input"
+                    />
+                  </div>
+                </div>
+
+                <!-- Instagram -->
+                <div v-else-if="channelTypeTab === 'instagram'" class="form-grid">
+                  <div class="form-item full">
+                    <label class="form-label required">Instagram 账号 ID / 主页 ID</label>
+                    <input
+                      v-model="igId"
+                      type="text"
+                      placeholder="如：@komi_official_us 或 Instagram 数字 ID"
+                      class="form-input"
+                    />
+                  </div>
+                  <div class="form-item full">
+                    <label class="form-label required">关联主页访问令牌 (Page Access Token)</label>
+                    <input
+                      v-model="igAccessToken"
+                      type="password"
+                      placeholder="EAAG..."
+                      class="form-input"
+                    />
+                  </div>
+                </div>
+
+                <!-- LINE -->
+                <div v-else-if="channelTypeTab === 'line'" class="form-grid">
+                  <div class="form-item">
+                    <label class="form-label required">LINE Channel ID</label>
+                    <input
+                      v-model="lineChannelId"
+                      type="text"
+                      placeholder="从 LINE Developers 复制 Channel ID"
+                      class="form-input"
+                    />
+                  </div>
+                  <div class="form-item">
+                    <label class="form-label required">LINE Channel Secret</label>
+                    <input
+                      v-model="lineChannelSecret"
+                      type="password"
+                      placeholder="Channel Secret"
+                      class="form-input"
+                    />
+                  </div>
+                  <div class="form-item full">
+                    <label class="form-label required">Channel Access Token</label>
+                    <input
+                      v-model="lineAccessToken"
+                      type="password"
+                      placeholder="Channel Access Token (Long-lived)"
+                      class="form-input"
+                    />
+                  </div>
+                </div>
+
+                <!-- Messenger -->
+                <div v-else-if="channelTypeTab === 'messenger'" class="form-grid">
+                  <div class="form-item">
+                    <label class="form-label required">公共主页 ID (Page ID)</label>
+                    <input
+                      v-model="messengerPageId"
+                      type="text"
+                      placeholder="1234567890"
+                      class="form-input"
+                    />
+                  </div>
+                  <div class="form-item">
+                    <label class="form-label required">主页访问令牌 (Page Access Token)</label>
+                    <input
+                      v-model="messengerAccessToken"
+                      type="password"
+                      placeholder="EAAG..."
+                      class="form-input"
+                    />
+                  </div>
+                </div>
+
+
               </div>
             </div>
 
@@ -871,12 +1175,12 @@ const getPlatformBadge = (platform: string) => {
         <div class="modal-card !max-w-2xl">
           <div class="modal-header">
             <div class="modal-title-group">
-              <div class="modal-icon bg-blue-500/10 text-blue-400">
+              <div class="modal-icon bg-indigo-50 text-indigo-600">
                 <i class="fa-solid fa-satellite-dish"></i>
               </div>
               <div>
-                <h2>「{{ activeStoreForWebhook.name }}」专属收件 Webhook 配置</h2>
-                <p class="modal-subtitle">专属客服邮箱：{{ activeStoreForWebhook.email_address || activeStoreForWebhook.email_display_name }}</p>
+                <h2>「{{ activeStoreForWebhook.name }}」专属渠道接入配置</h2>
+                <p class="modal-subtitle">绑定渠道：{{ activeStoreForWebhook.channel_display_name || activeStoreForWebhook.email_address || activeStoreForWebhook.name }}</p>
               </div>
             </div>
             <button class="modal-close" @click="closeWebhookModal">
@@ -886,15 +1190,15 @@ const getPlatformBadge = (platform: string) => {
 
           <div class="modal-body space-y-4">
             <div class="webhook-display-box">
-              <label class="text-xs font-semibold text-slate-300 block mb-1.5">
-                专属 HTTP Webhook 收件回调 URL（包含完整安全验证 Token）
+              <label class="text-xs font-semibold text-slate-700 block mb-1.5">
+                专属 Webhook 回调 URL（安全验证 Token）
               </label>
               <div class="flex items-center gap-2">
                 <input
                   type="text"
                   readonly
                   :value="isLoadingWebhook ? '正在获取安全 Webhook 链接...' : activeWebhookUrl"
-                  class="form-input flex-1 !font-mono !text-xs !bg-slate-900 !text-lime-400"
+                  class="form-input flex-1 !font-mono !text-xs !bg-slate-50 !text-indigo-700 !border-slate-300"
                 />
                 <button
                   class="copy-btn"
@@ -905,36 +1209,15 @@ const getPlatformBadge = (platform: string) => {
                   <span>复制</span>
                 </button>
               </div>
-              <p class="text-[11.5px] text-slate-400 mt-2">
-                提示：复制此完整 URL 粘贴至您的邮件服务商收件回调中，或粘贴到系统配套的 <code class="text-blue-300">email_tester.html</code> 中即可直接模拟买家发信测试！
+              <p class="text-[11.5px] text-slate-500 mt-2">
+                提示：复制此完整 URL 粘贴至您的平台 Webhook 设置中，或在配套的 <code class="text-indigo-600 bg-indigo-50 px-1 py-0.5 rounded">channel_simulator.html</code> 中直接模拟买家发信测试！
               </p>
-            </div>
-
-            <div class="guide-steps-card">
-              <h4 class="text-xs font-bold text-white mb-2 flex items-center gap-2">
-                <i class="fa-solid fa-lightbulb text-amber-400"></i>
-                <span>如何配置邮件自动入站转发？（支持主流服务商）</span>
-              </h4>
-              <ul class="text-xs text-slate-400 space-y-2.5 leading-relaxed pl-4 list-disc">
-                <li>
-                  <strong class="text-slate-200">本地与仿真测试（最快）</strong>：直接打开项目根目录下的 <code class="text-lime-300">email_tester.html</code>，在顶部粘贴上述完整 Webhook URL，点击【发送邮件】即可在会话收件箱中看到 AI 智能体的秒级响应！
-                </li>
-                <li>
-                  <strong class="text-slate-200">Cloudflare Email Routing（完全免费）</strong>：在 Cloudflare 域名控制台开启 Email Routing，将 <code class="text-blue-300">{{ activeStoreForWebhook.email_address }}</code> 绑定至 Cloudflare Worker 并转发至上方 Webhook。
-                </li>
-                <li>
-                  <strong class="text-slate-200">SendGrid Inbound Parse</strong>：在 SendGrid 添加 Host & Inbound Parse Webhook，填入上方 URL。
-                </li>
-                <li>
-                  <strong class="text-slate-200">Mailgun Routes / Postmark</strong>：在 Routes 中配置 Forward to HTTP endpoint 并填入上方 URL。
-                </li>
-              </ul>
             </div>
           </div>
 
           <div class="modal-footer">
-            <button class="btn-save" @click="closeWebhookModal">
-              完成并关闭
+            <button class="btn-cancel" @click="closeWebhookModal">
+              关闭
             </button>
           </div>
         </div>
@@ -945,19 +1228,17 @@ const getPlatformBadge = (platform: string) => {
 
 <style scoped>
 .store-view-container {
-  padding: 24px 32px;
-  max-width: 1440px;
+  padding: 24px;
+  max-width: 1400px;
   margin: 0 auto;
-  min-height: calc(100vh - 70px);
-  color: var(--text, #F5F6F8);
+  font-family: inherit;
 }
 
 /* Header */
 .view-header {
   display: flex;
-  align-items: flex-start;
   justify-content: space-between;
-  gap: 20px;
+  align-items: flex-start;
   margin-bottom: 24px;
 }
 
@@ -966,54 +1247,53 @@ const getPlatformBadge = (platform: string) => {
   align-items: center;
   gap: 6px;
   padding: 4px 10px;
-  background: rgba(201, 242, 78, 0.12);
-  border: 1px solid rgba(201, 242, 78, 0.25);
-  color: var(--accent-ink, #C9F24E);
-  border-radius: 999px;
+  border-radius: 9999px;
+  background: #EEF2FF;
+  color: #4F46E5;
   font-size: 12px;
   font-weight: 600;
-  margin-bottom: 10px;
+  margin-bottom: 8px;
 }
 
 .page-title {
   font-size: 26px;
-  font-weight: 700;
-  color: #fff;
+  font-weight: 800;
+  color: #0F172A;
+  margin: 0 0 6px 0;
   letter-spacing: -0.02em;
-  margin: 0 0 8px 0;
 }
 
 .page-desc {
   font-size: 13.5px;
-  color: var(--muted, #94A3B8);
-  max-width: 720px;
-  line-height: 1.6;
+  color: #64748B;
   margin: 0;
+  max-width: 680px;
+  line-height: 1.5;
 }
 
 .create-btn {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  background: var(--accent-ink, #C9F24E);
-  color: #0b0f14;
-  font-weight: 700;
-  font-size: 13.5px;
   padding: 10px 18px;
-  border-radius: 8px;
+  background: #0F172A;
+  color: #FFFFFF;
   border: none;
+  border-radius: 10px;
+  font-size: 13.5px;
+  font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 0 4px 14px rgba(201, 242, 78, 0.2);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.12);
 }
 
 .create-btn:hover {
-  background: #d8fa67;
+  background: #1E293B;
   transform: translateY(-1px);
-  box-shadow: 0 6px 20px rgba(201, 242, 78, 0.35);
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.18);
 }
 
-/* Stats Row */
+/* Stats */
 .stats-row {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
@@ -1022,13 +1302,14 @@ const getPlatformBadge = (platform: string) => {
 }
 
 .stat-card {
-  background: var(--bg2, #131922);
-  border: 1px solid var(--o08, rgba(255, 255, 255, 0.08));
+  background: #FFFFFF;
+  border: 1px solid #E2E8F0;
   border-radius: 12px;
   padding: 16px 20px;
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 14px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
 }
 
 .stat-icon-wrapper {
@@ -1039,7 +1320,6 @@ const getPlatformBadge = (platform: string) => {
   align-items: center;
   justify-content: center;
   font-size: 18px;
-  flex-shrink: 0;
 }
 
 .stat-meta {
@@ -1048,33 +1328,35 @@ const getPlatformBadge = (platform: string) => {
 }
 
 .stat-label {
-  font-size: 12px;
-  color: var(--muted, #94A3B8);
+  font-size: 12.5px;
+  color: #64748B;
   font-weight: 500;
-  margin-bottom: 2px;
 }
 
 .stat-value {
   font-size: 22px;
-  font-weight: 700;
-  color: #fff;
+  font-weight: 800;
+  color: #0F172A;
+  line-height: 1.2;
 }
 
-/* Search & Toolbar */
+/* Toolbar */
 .toolbar-card {
-  background: var(--bg2, #131922);
-  border: 1px solid var(--o08, rgba(255, 255, 255, 0.08));
+  background: #FFFFFF;
+  border: 1px solid #E2E8F0;
   border-radius: 12px;
-  padding: 16px 20px;
-  margin-bottom: 24px;
+  padding: 14px 18px;
   display: flex;
-  flex-direction: column;
-  gap: 14px;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 24px;
 }
 
 .search-box {
   position: relative;
-  width: 100%;
+  flex: 1;
+  max-width: 420px;
 }
 
 .search-icon {
@@ -1082,24 +1364,26 @@ const getPlatformBadge = (platform: string) => {
   left: 14px;
   top: 50%;
   transform: translateY(-50%);
-  color: var(--muted, #64748B);
-  font-size: 14px;
+  color: #94A3B8;
+  font-size: 13.5px;
 }
 
 .search-input {
   width: 100%;
-  background: var(--bg1, #0B0F14);
-  border: 1px solid var(--o12, rgba(255, 255, 255, 0.12));
+  padding: 9px 36px 9px 36px;
+  background: #F8FAFC;
+  border: 1px solid #CBD5E1;
   border-radius: 8px;
-  padding: 10px 38px;
   font-size: 13.5px;
-  color: #fff;
-  transition: border-color 0.15s;
+  color: #0F172A;
+  outline: none;
+  transition: all 0.15s ease;
 }
 
 .search-input:focus {
-  outline: none;
-  border-color: var(--accent-ink, #C9F24E);
+  background: #FFFFFF;
+  border-color: #6366F1;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.12);
 }
 
 .clear-btn {
@@ -1107,116 +1391,86 @@ const getPlatformBadge = (platform: string) => {
   right: 12px;
   top: 50%;
   transform: translateY(-50%);
-  background: transparent;
+  color: #94A3B8;
+  background: none;
   border: none;
-  color: var(--muted, #64748B);
   cursor: pointer;
-  padding: 4px;
 }
 
 .filter-group {
   display: flex;
   align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .filter-label {
   font-size: 12.5px;
-  color: var(--muted, #94A3B8);
-  font-weight: 500;
+  font-weight: 600;
+  color: #64748B;
 }
 
 .filter-pills {
   display: flex;
-  align-items: center;
-  gap: 8px;
+  gap: 6px;
   flex-wrap: wrap;
 }
 
 .pill-btn {
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 12.5px;
+  font-weight: 600;
+  background: #F8FAFC;
+  border: 1px solid #E2E8F0;
+  color: #475569;
+  cursor: pointer;
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  background: var(--bg1, #0B0F14);
-  border: 1px solid var(--o08, rgba(255, 255, 255, 0.08));
-  color: var(--muted, #94A3B8);
-  padding: 6px 12px;
-  border-radius: 6px;
-  font-size: 12.5px;
-  cursor: pointer;
   transition: all 0.15s ease;
 }
 
 .pill-btn:hover {
-  background: rgba(255, 255, 255, 0.04);
-  color: #fff;
-  border-color: rgba(255, 255, 255, 0.15);
+  background: #F1F5F9;
+  color: #0F172A;
 }
 
 .pill-btn.active {
-  background: rgba(201, 242, 78, 0.12);
-  color: var(--accent-ink, #C9F24E);
-  border-color: rgba(201, 242, 78, 0.35);
-  font-weight: 600;
+  background: #0F172A;
+  border-color: #0F172A;
+  color: #FFFFFF;
 }
 
-/* Loading & Empty States */
+/* Loading & Empty */
 .loading-state, .empty-state {
-  background: var(--bg2, #131922);
-  border: 1px solid var(--o08, rgba(255, 255, 255, 0.08));
-  border-radius: 12px;
-  padding: 60px 20px;
+  background: #FFFFFF;
+  border: 1px solid #E2E8F0;
+  border-radius: 14px;
+  padding: 60px 24px;
   text-align: center;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
-}
-
-.loading-spinner {
-  width: 32px;
-  height: 32px;
-  border: 3px solid rgba(201, 242, 78, 0.2);
-  border-top-color: var(--accent-ink, #C9F24E);
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
-}
-
-@keyframes spin {
-  to { transform: rotate(360deg); }
 }
 
 .empty-icon {
-  width: 56px;
-  height: 56px;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px dashed rgba(255, 255, 255, 0.15);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 22px;
-  color: var(--muted, #64748B);
-  margin-bottom: 6px;
+  font-size: 42px;
+  color: #94A3B8;
+  margin-bottom: 14px;
 }
 
 .empty-state h3 {
   font-size: 17px;
-  font-weight: 600;
-  color: #fff;
-  margin: 0;
+  font-weight: 700;
+  color: #0F172A;
+  margin: 0 0 6px 0;
 }
 
 .empty-state p {
   font-size: 13.5px;
-  color: var(--muted, #94A3B8);
-  max-width: 440px;
-  line-height: 1.5;
-  margin: 0;
+  color: #64748B;
+  max-width: 460px;
+  margin: 0 auto 20px auto;
 }
 
-/* Stores Grid */
+/* Grid & Cards */
 .stores-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
@@ -1224,140 +1478,123 @@ const getPlatformBadge = (platform: string) => {
 }
 
 .store-card {
-  background: var(--bg2, #131922);
-  border: 1px solid var(--o08, rgba(255, 255, 255, 0.08));
-  border-radius: 12px;
+  background: #FFFFFF;
+  border: 1px solid #E2E8F0;
+  border-radius: 14px;
   padding: 20px;
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.02);
 }
 
 .store-card:hover {
-  border-color: rgba(255, 255, 255, 0.18);
+  border-color: #CBD5E1;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.05);
   transform: translateY(-2px);
-  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.25);
 }
 
 .store-card.inactive {
-  opacity: 0.7;
-  border-color: rgba(255, 255, 255, 0.04);
+  opacity: 0.65;
+  background: #FAFAFA;
 }
 
 .card-top {
   display: flex;
-  align-items: center;
   justify-content: space-between;
+  align-items: center;
+  margin-bottom: 14px;
 }
 
 .platform-badge {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: 12px;
-  font-weight: 600;
-  background: rgba(255, 255, 255, 0.05);
   padding: 4px 10px;
   border-radius: 6px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 12px;
+  font-weight: 700;
+  border: 1px solid transparent;
 }
 
 .status-btn {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  background: transparent;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  padding: 3px 8px;
-  border-radius: 999px;
+  padding: 4px 10px;
+  border-radius: 9999px;
   font-size: 11.5px;
+  font-weight: 600;
+  border: 1px solid transparent;
   cursor: pointer;
-  transition: all 0.15s;
-}
-
-.status-btn .status-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
+  transition: all 0.15s ease;
 }
 
 .status-btn.active {
-  color: #34D399;
-  border-color: rgba(52, 211, 153, 0.3);
-  background: rgba(52, 211, 153, 0.08);
-}
-
-.status-btn.active .status-dot {
-  background: #34D399;
-  box-shadow: 0 0 6px rgba(52, 211, 153, 0.8);
+  background: #ECFDF5;
+  color: #059669;
+  border-color: #A7F3D0;
 }
 
 .status-btn.inactive {
-  color: #94A3B8;
-  border-color: rgba(148, 163, 184, 0.2);
-  background: rgba(148, 163, 184, 0.05);
+  background: #F1F5F9;
+  color: #64748B;
+  border-color: #CBD5E1;
 }
 
-.status-btn.inactive .status-dot {
-  background: #94A3B8;
+.status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
 }
 
 .store-main {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
+  margin-bottom: 16px;
 }
 
 .store-name {
-  font-size: 18px;
-  font-weight: 700;
-  color: #fff;
-  margin: 0;
+  font-size: 17px;
+  font-weight: 800;
+  color: #0F172A;
+  margin: 0 0 6px 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 .store-domain {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   gap: 6px;
   font-size: 12.5px;
-  color: #38BDF8;
+  color: #475569;
 }
 
 .store-domain.muted {
-  color: #64748B;
+  color: #94A3B8;
 }
 
 .domain-text {
-  max-width: 240px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  font-family: monospace;
+  font-size: 12px;
 }
 
 .open-link {
-  color: inherit;
-  opacity: 0.6;
-  transition: opacity 0.15s;
+  color: #6366F1;
+  font-size: 11px;
 }
 
-.open-link:hover {
-  opacity: 1;
-}
-
-/* Bindings Section */
+/* Binding section */
 .binding-section {
+  background: #F8FAFC;
+  border: 1px solid #F1F5F9;
+  border-radius: 10px;
+  padding: 12px;
   display: flex;
   flex-direction: column;
   gap: 10px;
-  background: var(--bg1, #0B0F14);
-  border: 1px solid var(--o08, rgba(255, 255, 255, 0.06));
-  border-radius: 8px;
-  padding: 12px;
+  margin-bottom: 16px;
 }
 
 .binding-item {
@@ -1367,99 +1604,88 @@ const getPlatformBadge = (platform: string) => {
 }
 
 .binding-icon {
-  width: 30px;
-  height: 30px;
-  border-radius: 6px;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 13px;
-  flex-shrink: 0;
-}
-
-.binding-info {
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
+  font-size: 14px;
 }
 
 .binding-title {
   font-size: 11px;
+  font-weight: 600;
   color: #64748B;
-  font-weight: 500;
 }
 
 .binding-val {
   font-size: 12.5px;
-  font-weight: 600;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  color: #1E293B;
+  display: block;
 }
 
 .binding-val.unassigned {
-  color: #64748B;
-  font-weight: 400;
+  color: #94A3B8;
+  font-style: italic;
 }
 
 .quick-bind-btn {
-  background: transparent;
-  border: none;
-  color: var(--accent-ink, #C9F24E);
-  font-size: 11px;
+  padding: 1px 6px;
+  background: #FFFFFF;
+  border: 1px solid #CBD5E1;
+  border-radius: 4px;
+  font-size: 10.5px;
   font-weight: 600;
+  color: #4F46E5;
   cursor: pointer;
-  padding: 0;
-}
-
-.quick-bind-btn:hover {
-  text-decoration: underline;
 }
 
 .webhook-pill-btn {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  font-size: 10.5px;
-  background: rgba(56, 189, 248, 0.1);
-  border: 1px solid rgba(56, 189, 248, 0.25);
-  color: #38BDF8;
-  padding: 2px 6px;
+  padding: 2px 7px;
+  background: #FFFFFF;
+  border: 1px solid #CBD5E1;
   border-radius: 4px;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: #475569;
   cursor: pointer;
-  transition: all 0.15s;
+  transition: all 0.15s ease;
 }
 
 .webhook-pill-btn:hover {
-  background: rgba(56, 189, 248, 0.2);
-  border-color: #38BDF8;
+  background: #F1F5F9;
+  color: #0F172A;
 }
 
-/* Card Footer */
+/* Footer */
 .card-footer {
   display: flex;
-  align-items: center;
   justify-content: space-between;
-  border-top: 1px solid var(--o08, rgba(255, 255, 255, 0.06));
-  padding-top: 12px;
+  align-items: center;
   margin-top: auto;
+  padding-top: 14px;
+  border-top: 1px solid #F1F5F9;
 }
 
 .footer-pills {
   display: flex;
-  align-items: center;
   gap: 6px;
 }
 
 .meta-pill {
+  padding: 3px 8px;
+  background: #F1F5F9;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #475569;
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  font-size: 11.5px;
-  color: var(--muted, #94A3B8);
-  background: rgba(255, 255, 255, 0.04);
-  padding: 2px 7px;
-  border-radius: 4px;
 }
 
 .card-actions {
@@ -1469,115 +1695,109 @@ const getPlatformBadge = (platform: string) => {
 }
 
 .action-btn {
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid transparent;
+  cursor: pointer;
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid var(--o08, rgba(255, 255, 255, 0.08));
-  color: var(--muted, #94A3B8);
-  padding: 5px 9px;
-  border-radius: 6px;
-  font-size: 12px;
-  cursor: pointer;
-  transition: all 0.15s;
+  transition: all 0.15s ease;
 }
 
-.action-btn:hover {
-  background: rgba(255, 255, 255, 0.08);
-  color: #fff;
-  border-color: rgba(255, 255, 255, 0.2);
+.action-btn.edit {
+  background: #F8FAFC;
+  border-color: #E2E8F0;
+  color: #334155;
+}
+
+.action-btn.edit:hover {
+  background: #F1F5F9;
+  color: #0F172A;
+}
+
+.action-btn.delete {
+  background: #FEF2F2;
+  color: #DC2626;
+  border-color: #FECACA;
 }
 
 .action-btn.delete:hover {
-  background: rgba(239, 68, 68, 0.15);
-  color: #F87171;
-  border-color: rgba(239, 68, 68, 0.3);
+  background: #FEE2E2;
 }
 
-/* Modal Styling */
+/* Modal */
 .modal-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.75);
+  background: rgba(15, 23, 42, 0.45);
   backdrop-filter: blur(4px);
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 999;
+  z-index: 9999;
   padding: 20px;
 }
 
 .modal-card {
-  background: var(--bg2, #131922);
-  border: 1px solid var(--o12, rgba(255, 255, 255, 0.12));
+  background: #FFFFFF;
   border-radius: 16px;
   width: 100%;
   max-width: 680px;
   max-height: 90vh;
   display: flex;
   flex-direction: column;
-  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
-  animation: modalEnter 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-@keyframes modalEnter {
-  from { opacity: 0; transform: scale(0.96) translateY(8px); }
-  to { opacity: 1; transform: scale(1) translateY(0); }
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
+  overflow: hidden;
 }
 
 .modal-header {
   padding: 20px 24px;
-  border-bottom: 1px solid var(--o08, rgba(255, 255, 255, 0.08));
+  border-bottom: 1px solid #E2E8F0;
   display: flex;
-  align-items: center;
   justify-content: space-between;
+  align-items: center;
 }
 
 .modal-title-group {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 12px;
 }
 
 .modal-icon {
   width: 40px;
   height: 40px;
   border-radius: 10px;
-  background: rgba(201, 242, 78, 0.12);
-  color: var(--accent-ink, #C9F24E);
+  background: #F1F5F9;
+  color: #0F172A;
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 18px;
 }
 
-.modal-header h2 {
+.modal-title-group h2 {
   font-size: 18px;
-  font-weight: 700;
-  color: #fff;
-  margin: 0;
+  font-weight: 800;
+  color: #0F172A;
+  margin: 0 0 2px 0;
 }
 
 .modal-subtitle {
   font-size: 12.5px;
-  color: var(--muted, #94A3B8);
-  margin: 2px 0 0 0;
+  color: #64748B;
+  margin: 0;
 }
 
 .modal-close {
-  background: transparent;
+  background: none;
   border: none;
-  color: var(--muted, #64748B);
-  font-size: 16px;
+  color: #94A3B8;
+  font-size: 18px;
   cursor: pointer;
-  padding: 6px;
-  border-radius: 6px;
-  transition: all 0.15s;
-}
-
-.modal-close:hover {
-  color: #fff;
-  background: rgba(255, 255, 255, 0.06);
 }
 
 .modal-body {
@@ -1585,39 +1805,30 @@ const getPlatformBadge = (platform: string) => {
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 22px;
+  gap: 20px;
 }
 
-.modal-footer {
-  padding: 16px 24px;
-  border-top: 1px solid var(--o08, rgba(255, 255, 255, 0.08));
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 12px;
-}
-
-/* Form Styles */
 .form-section {
-  display: flex;
-  flex-direction: column;
+  background: #F8FAFC;
+  border: 1px solid #E2E8F0;
+  border-radius: 12px;
+  padding: 16px;
 }
 
 .section-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #0F172A;
+  margin: 0 0 4px 0;
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 14px;
-  font-weight: 700;
-  color: #fff;
-  margin: 0 0 4px 0;
 }
 
 .section-desc {
   font-size: 12px;
-  color: var(--muted, #94A3B8);
+  color: #64748B;
   margin: 0 0 14px 0;
-  line-height: 1.5;
 }
 
 .form-grid {
@@ -1626,157 +1837,150 @@ const getPlatformBadge = (platform: string) => {
   gap: 14px;
 }
 
-.form-item {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
 .form-item.full {
-  grid-column: span 2;
+  grid-column: 1 / -1;
 }
 
 .form-label {
-  font-size: 12.5px;
+  display: block;
+  font-size: 12px;
   font-weight: 600;
-  color: #CBD5E1;
+  color: #334155;
+  margin-bottom: 6px;
 }
 
 .form-label.required::after {
   content: ' *';
-  color: #F87171;
+  color: #EF4444;
 }
 
 .form-input, .form-select {
-  background: var(--bg1, #0B0F14);
-  border: 1px solid var(--o12, rgba(255, 255, 255, 0.12));
-  border-radius: 8px;
+  width: 100%;
   padding: 9px 12px;
+  background: #FFFFFF;
+  border: 1px solid #CBD5E1;
+  border-radius: 8px;
   font-size: 13px;
-  color: #fff;
+  color: #0F172A;
+  outline: none;
   transition: all 0.15s ease;
 }
 
 .form-input:focus, .form-select:focus {
-  outline: none;
-  border-color: var(--accent-ink, #C9F24E);
-  box-shadow: 0 0 0 2px rgba(201, 242, 78, 0.15);
+  border-color: #6366F1;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.12);
 }
 
 .field-hint {
   font-size: 11px;
-  color: var(--muted, #64748B);
-  line-height: 1.4;
+  color: #64748B;
+  margin-top: 4px;
+  display: block;
+}
+
+.channel-tabs-container {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.channel-tab-pill {
+  padding: 8px 14px;
+  border-radius: 8px;
+  font-size: 12.5px;
+  font-weight: 700;
+  border: 1px solid #CBD5E1;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.15s ease;
+}
+
+.channel-form-box {
+  background: #FFFFFF;
+  border: 1px solid #E2E8F0;
+  border-radius: 10px;
+  padding: 14px;
+}
+
+.widget-intro-card {
+  padding: 14px;
+  background: #F5F3FF;
+  border: 1px dashed #DDD6FE;
+  border-radius: 8px;
+}
+
+.smtp-toggle-btn {
+  background: none;
+  border: none;
+  font-size: 12px;
+  font-weight: 600;
+  color: #4F46E5;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 0;
+}
+
+.smtp-fields-box {
+  background: #FFFFFF;
+  border: 1px solid #E2E8F0;
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.jump-link {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #4F46E5;
+  text-decoration: none;
 }
 
 .field-hint-flex {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  font-size: 11.5px;
-  color: var(--muted, #64748B);
+  justify-content: flex-end;
   margin-top: 4px;
 }
 
-.jump-link {
-  color: var(--accent-ink, #C9F24E);
-  text-decoration: none;
-  font-weight: 500;
-}
-
-.jump-link:hover {
-  text-decoration: underline;
-}
-
-/* Email Card */
-.inline-email-card {
-  background: var(--bg1, #0B0F14);
-  border: 1px solid rgba(56, 189, 248, 0.25);
-  border-radius: 10px;
-  padding: 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.smtp-toggle-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  background: transparent;
-  border: none;
-  color: #38BDF8;
-  font-size: 12px;
-  font-weight: 500;
-  cursor: pointer;
-  padding: 0;
-}
-
-.smtp-toggle-btn:hover {
-  text-decoration: underline;
-}
-
-.smtp-fields-box {
-  background: rgba(255, 255, 255, 0.02);
-  border: 1px dashed rgba(255, 255, 255, 0.1);
-  border-radius: 8px;
-  padding: 14px;
-  margin-top: 10px;
-}
-
-/* Channel Empty Box */
 .channel-empty-box {
-  background: rgba(245, 158, 11, 0.06);
-  border: 1px dashed rgba(245, 158, 11, 0.3);
+  background: #FFFFFF;
+  border: 1px dashed #CBD5E1;
   border-radius: 8px;
-  padding: 14px 16px;
+  padding: 12px 14px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 14px;
 }
 
 .channel-jump-btn {
-  background: rgba(245, 158, 11, 0.15);
-  border: 1px solid rgba(245, 158, 11, 0.35);
-  color: #FCD34D;
-  font-size: 12px;
-  font-weight: 600;
-  padding: 6px 12px;
-  border-radius: 6px;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #4F46E5;
   text-decoration: none;
-  white-space: nowrap;
-  transition: all 0.15s;
 }
 
-.channel-jump-btn:hover {
-  background: rgba(245, 158, 11, 0.25);
-  border-color: #FCD34D;
-}
-
-/* Switch */
 .switch-row {
   display: flex;
-  align-items: center;
   justify-content: space-between;
-  padding: 12px 14px;
-  background: var(--bg1, #0B0F14);
-  border: 1px solid var(--o08, rgba(255, 255, 255, 0.06));
-  border-radius: 8px;
+  align-items: center;
 }
 
 .switch-title {
-  font-size: 13.5px;
-  font-weight: 600;
-  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  color: #0F172A;
 }
 
 .switch-desc {
   font-size: 11.5px;
-  color: var(--muted, #64748B);
+  color: #64748B;
   margin: 2px 0 0 0;
 }
 
+/* Toggle Switch */
 .toggle-switch {
   position: relative;
   display: inline-block;
@@ -1793,10 +1997,10 @@ const getPlatformBadge = (platform: string) => {
 .slider {
   position: absolute;
   cursor: pointer;
-  top: 0; left: 0; right: 0; bottom: 0;
-  background-color: #334155;
-  transition: .2s;
-  border-radius: 24px;
+  inset: 0;
+  background-color: #CBD5E1;
+  transition: 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  border-radius: 9999px;
 }
 
 .slider:before {
@@ -1807,93 +2011,63 @@ const getPlatformBadge = (platform: string) => {
   left: 3px;
   bottom: 3px;
   background-color: white;
-  transition: .2s;
+  transition: 0.2s cubic-bezier(0.16, 1, 0.3, 1);
   border-radius: 50%;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
 }
 
 input:checked + .slider {
-  background-color: #10B981;
+  background-color: #0F172A;
 }
 
 input:checked + .slider:before {
   transform: translateX(20px);
 }
 
-/* Buttons */
-.btn-cancel {
-  background: transparent;
-  border: 1px solid var(--o12, rgba(255, 255, 255, 0.12));
-  color: var(--muted, #94A3B8);
-  font-size: 13px;
-  font-weight: 600;
-  padding: 9px 18px;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: all 0.15s;
+.modal-footer {
+  padding: 16px 24px;
+  border-top: 1px solid #E2E8F0;
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
 }
 
-.btn-cancel:hover {
-  background: rgba(255, 255, 255, 0.05);
-  color: #fff;
+.btn-cancel {
+  padding: 9px 16px;
+  background: #FFFFFF;
+  border: 1px solid #CBD5E1;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #475569;
+  cursor: pointer;
 }
 
 .btn-save {
+  padding: 9px 20px;
+  background: #0F172A;
+  border: none;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #FFFFFF;
+  cursor: pointer;
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  background: var(--accent-ink, #C9F24E);
-  color: #0b0f14;
-  font-size: 13px;
-  font-weight: 700;
-  padding: 9px 20px;
-  border-radius: 8px;
-  border: none;
-  cursor: pointer;
-  transition: all 0.15s;
-}
-
-.btn-save:hover {
-  background: #d8fa67;
-}
-
-.btn-save:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-/* Webhook Modal Display */
-.webhook-display-box {
-  background: var(--bg1, #0B0F14);
-  border: 1px solid rgba(56, 189, 248, 0.25);
-  border-radius: 10px;
-  padding: 14px;
 }
 
 .copy-btn {
+  padding: 8px 14px;
+  background: #0F172A;
+  color: #FFFFFF;
+  border: none;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  background: rgba(201, 242, 78, 0.15);
-  border: 1px solid rgba(201, 242, 78, 0.35);
-  color: var(--accent-ink, #C9F24E);
-  font-size: 12px;
-  font-weight: 600;
-  padding: 8px 14px;
-  border-radius: 6px;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: all 0.15s;
-}
-
-.copy-btn:hover {
-  background: var(--accent-ink, #C9F24E);
-  color: #0b0f14;
-}
-
-.guide-steps-card {
-  background: rgba(255, 255, 255, 0.02);
-  border: 1px solid var(--o08, rgba(255, 255, 255, 0.08));
-  border-radius: 10px;
-  padding: 16px;
 }
 </style>

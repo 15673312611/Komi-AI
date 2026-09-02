@@ -8,10 +8,10 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/chattermate/chattermate/backend-go/internal/agent"
-	"github.com/chattermate/chattermate/backend-go/internal/channel"
-	"github.com/chattermate/chattermate/backend-go/internal/knowledge"
-	"github.com/chattermate/chattermate/backend-go/internal/leadcapture"
+	"github.com/komi/komi/backend-go/internal/agent"
+	"github.com/komi/komi/backend-go/internal/channel"
+	"github.com/komi/komi/backend-go/internal/knowledge"
+	"github.com/komi/komi/backend-go/internal/leadcapture"
 )
 
 const widgetRatingNotice = "\n\nThank you for chatting with us! Would you please take a moment to rate your experience? Your feedback helps us improve our service."

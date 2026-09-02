@@ -1,5 +1,5 @@
 <!--
-Copyright 2024-2026 ChatterMate
+Copyright 2024-2026 Komi AI
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -34,7 +34,7 @@ const handleClick = () => {
   <button v-if="visible" type="button" class="install-hint" @click="handleClick">
     <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="install-icon" aria-hidden="true"><path d="M12 15V3m0 0L8 7m4-4l4 4"/><path d="M5 13v5a3 3 0 003 3h8a3 3 0 003-3v-5"/></svg>
     <span class="install-text">
-      安装 ChatterMate 客户端 —
+      安装 Komi AI 客户端 —
       <span v-if="needsManualInstall" class="install-sub">点击分享 → 添加到主屏幕</span>
       <span v-else class="install-sub">享受原生桌面/移动应用体验</span>
     </span>

@@ -1,5 +1,5 @@
 """
-Copyright 2024-2026 ChatterMate
+Copyright 2024-2026 Komi AI
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -30,7 +30,7 @@ ASK = "/health/help-center-domain"
 
 def test_allows_slug_subdomain():
     # {slug}.HELP_CENTER_BASE_DOMAIN is a help-center host without any DB lookup.
-    assert client.get(ASK, params={"domain": "acme.chattermate.help"}).status_code == 200
+    assert client.get(ASK, params={"domain": "acme.komi.help"}).status_code == 200
 
 
 def test_allows_verified_custom_domain():
@@ -53,4 +53,4 @@ def test_rejects_missing_or_empty_domain():
 def test_normalizes_host_with_port_and_uppercase():
     # SNI can arrive with a port / mixed case; normalize_host must canonicalize
     # it so the slug match still succeeds.
-    assert client.get(ASK, params={"domain": "ACME.chattermate.help:443"}).status_code == 200
+    assert client.get(ASK, params={"domain": "ACME.komi.help:443"}).status_code == 200

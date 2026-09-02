@@ -25,13 +25,13 @@ uploads/
 *.csr.crt
 /shopify/
 
-# WordPress plugin source lives in its own repo (chattermate-wordpress-plugin);
+# WordPress plugin source lives in its own repo (komi-wordpress-plugin);
 # only the built, installable zip is tracked here for manual download.
 /wordpress/*
-!/wordpress/chattermate-chat.zip
+!/wordpress/komi-chat.zip
 
 # Firebase service account key (contains sensitive credentials)
-chattermate-13e0a-firebase-adminsdk-7dqo6-57f3de88cb.json
+komi-13e0a-firebase-adminsdk-7dqo6-57f3de88cb.json
 
 test.db
 *.db
@@ -71,8 +71,16 @@ config/
 frontend/.env.*.bak*
 
 # Stale loader copies — server.js serves the current build from frontend/public/webclient
-chattermate-test/chattermate.min.js
+komi-test/komi.min.js
 
 # Only the :dev webclient build emits a sourcemap, and the committed loader is
 # the :prod one, which does not reference it. Keeps a stray dev artifact out.
 frontend/public/webclient/*.map
+
+# Local binaries, DB directories, and temporary screenshots
+pgsql/
+*.exe
+*.exe~
+*.tmp*
+.tmp*
+

@@ -11,9 +11,9 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5"
 
-	"github.com/chattermate/chattermate/backend-go/internal/auth"
-	"github.com/chattermate/chattermate/backend-go/internal/customer"
-	"github.com/chattermate/chattermate/backend-go/internal/widgetapp"
+	"github.com/komi/komi/backend-go/internal/auth"
+	"github.com/komi/komi/backend-go/internal/customer"
+	"github.com/komi/komi/backend-go/internal/widgetapp"
 )
 
 const (

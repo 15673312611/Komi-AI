@@ -1,4 +1,4 @@
-# ChatterMate Go backend
+# Komi AI Go backend
 
 This directory is the Go implementation of the existing `backend` service.
 The migration is deliberately incremental: both services use the existing

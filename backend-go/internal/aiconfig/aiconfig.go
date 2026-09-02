@@ -12,7 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/chattermate/chattermate/backend-go/internal/encryption"
+	"github.com/komi/komi/backend-go/internal/encryption"
 )
 
 var (
@@ -275,7 +275,7 @@ func (r *Repository) GetActiveByID(ctx context.Context, id int64, organizationID
 
 func ValidateModelSelection(modelType, modelName string) error {
 	modelType = strings.ToUpper(strings.TrimSpace(modelType))
-	if modelType == "CHATTERMATE" && strings.EqualFold(strings.TrimSpace(modelName), "chattermate") {
+	if modelType == "KOMI_AI" && strings.EqualFold(strings.TrimSpace(modelName), "komi") {
 		return nil
 	}
 	if !IsKnownProvider(modelType) {

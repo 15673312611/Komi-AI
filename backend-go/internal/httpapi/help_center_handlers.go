@@ -28,10 +28,10 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
-	"github.com/chattermate/chattermate/backend-go/internal/config"
-	"github.com/chattermate/chattermate/backend-go/internal/guardrail"
-	"github.com/chattermate/chattermate/backend-go/internal/helpcenter"
-	"github.com/chattermate/chattermate/backend-go/internal/knowledge"
+	"github.com/komi/komi/backend-go/internal/config"
+	"github.com/komi/komi/backend-go/internal/guardrail"
+	"github.com/komi/komi/backend-go/internal/helpcenter"
+	"github.com/komi/komi/backend-go/internal/knowledge"
 )
 
 const (

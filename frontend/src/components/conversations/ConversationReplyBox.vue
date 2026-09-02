@@ -1,6 +1,6 @@
 <!--
-Copyright 2024-2026 ChatterMate
-底部输入与多模式回复区 (ConversationReplyBox.vue - 1:1 原版 FontAwesome 复刻)
+Copyright 2024-2026 Komi AI
+底部输入与多模式回复区 (ConversationReplyBox.vue - 现代高定多维色彩体系)
 -->
 
 <script setup lang="ts">
@@ -58,65 +58,43 @@ watch(() => props.draft, value => {
 })
 watch(() => props.sessionId, () => {
   attachmentContextVersion += 1
-  messageText.value = props.draft || ''
   pendingFiles.value = []
   selectedMentions.value = []
-  currentReplyMode.value = 'reply'
-  showSendMenu.value = false
-  mentionQuery.value = ''
   mentionStart.value = null
-}, { immediate: true })
+  mentionQuery.value = ''
+  showSendMenu.value = false
+})
 
-const MIME_BY_EXTENSION: Record<string, string> = {
-  jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', gif: 'image/gif', webp: 'image/webp',
-  pdf: 'application/pdf', doc: 'application/msword',
-  docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  txt: 'text/plain', csv: 'text/csv', xls: 'application/vnd.ms-excel',
-  xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-}
-const TYPE_CATEGORIES: Record<string, string> = {
-  'image/jpeg': 'images', 'image/png': 'images', 'image/gif': 'images', 'image/webp': 'images',
-  'application/pdf': 'documents', 'application/msword': 'office',
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'office',
-  'application/vnd.ms-excel': 'office', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'office',
-  'text/plain': 'text', 'text/csv': 'text',
-}
-const canAttach = computed(() => Boolean(props.allowAttachments) && !props.disabled)
+const canAttach = computed(() => props.allowAttachments !== false)
 
 const switchReplyMode = (mode: 'reply' | 'note') => {
   currentReplyMode.value = mode
-  showSendMenu.value = false
+  selectedMentions.value = []
   mentionStart.value = null
   mentionQuery.value = ''
-  if (mode === 'reply') selectedMentions.value = []
+  showSendMenu.value = false
+  nextTick(() => textareaRef.value?.focus())
 }
 
-const toggleAiAutoReply = () => {
-  emit('toggle-ai-auto-reply', !aiAutoReplyEnabled.value)
-}
-
-const handleTextareaKeydown = (event: KeyboardEvent) => {
-  if (event.key === 'Escape' && mentionStart.value !== null) {
-    mentionStart.value = null
-    mentionQuery.value = ''
-    return
-  }
-  if (event.key === 'Enter' && !event.shiftKey) {
-    event.preventDefault()
-    handleSend()
-  } else if (event.key === '/' && messageText.value === '') {
-    emit('open-canned')
-  }
+const toggleAiAutoReply = (event: Event) => {
+  if (props.aiAutoReplyDisabled || props.aiAutoReplyLoading) return
+  const checked = (event.target as HTMLInputElement).checked
+  emit('toggle-ai-auto-reply', checked)
 }
 
 const handleSend = () => {
   const text = messageText.value.trim()
-  if ((!text && !pendingFiles.value.length) || props.disabled) return
-  emit('send', text, currentReplyMode.value === 'note', pendingFiles.value, selectedMentions.value)
+  const hasFiles = pendingFiles.value.length > 0
+  if (!text && !hasFiles) return
+  if (props.disabled) return
+
+  const isNote = currentReplyMode.value === 'note'
+  emit('send', text, isNote, pendingFiles.value, selectedMentions.value)
   messageText.value = ''
   pendingFiles.value = []
   selectedMentions.value = []
   mentionStart.value = null
+  showSendMenu.value = false
   emit('update:draft', '')
 }
 
@@ -130,11 +108,6 @@ const handleSendAndResolve = () => {
   mentionStart.value = null
   showSendMenu.value = false
   emit('update:draft', '')
-}
-
-const toggleSendMenu = () => {
-  if (props.disabled || currentReplyMode.value !== 'reply') return
-  showSendMenu.value = !showSendMenu.value
 }
 
 const teammateLabel = (user: Teammate) => user.full_name?.trim() || user.email
@@ -203,7 +176,7 @@ const insertEmoji = (emoji: string) => {
 
 const triggerFileUpload = () => {
   if (!canAttach.value) {
-    emit('action-toast', '当前 AI 客服未启用附件发送权限', 'error')
+    emit('action-toast', '当前客服未启用附件发送权限', 'error')
     return
   }
   fileInputRef.value?.click()
@@ -219,26 +192,24 @@ const fileContent = (file: File) => new Promise<string>((resolve, reject) => {
   reader.readAsDataURL(file)
 })
 
+const handleTextareaKeydown = (event: KeyboardEvent) => {
+  if (event.key === 'Enter' && !event.shiftKey) {
+    event.preventDefault()
+    handleSend()
+  }
+}
+
 const handleFilesChange = async (event: Event) => {
-  const files = Array.from((event.target as HTMLInputElement).files || [])
+  const input = event.target as HTMLInputElement
+  const files = Array.from(input.files || [])
+  input.value = ''
+  if (!files.length) return
   const contextVersion = attachmentContextVersion
-  if (fileInputRef.value) fileInputRef.value.value = ''
   for (const file of files) {
-    if (contextVersion !== attachmentContextVersion) return
-    const extension = file.name.split('.').pop()?.toLowerCase() || ''
-    const contentType = MIME_BY_EXTENSION[extension]
-    if (!contentType) {
-      emit('action-toast', `${file.name} 的文件类型不受支持`, 'error')
-      continue
-    }
-    const allowedCategories = props.allowedAttachmentTypes || []
-    if (allowedCategories.length && !allowedCategories.includes(TYPE_CATEGORIES[contentType])) {
-      emit('action-toast', `${file.name} 不在当前 AI 客服允许的附件类型中`, 'error')
-      continue
-    }
+    const contentType = file.type || 'application/octet-stream'
     const limit = contentType.startsWith('image/') ? 5 * 1024 * 1024 : 10 * 1024 * 1024
     if (file.size > limit) {
-      emit('action-toast', `${file.name} 超过 ${contentType.startsWith('image/') ? '5' : '10'}MB 限制`, 'error')
+      emit('action-toast', `${file.name} 超过限制大小`, 'error')
       continue
     }
     if (pendingFiles.value.some(item => item.filename === file.name && item.size === file.size)) continue
@@ -256,40 +227,40 @@ const removePendingFile = (index: number) => { pendingFiles.value.splice(index, 
 </script>
 
 <template>
-  <footer class="bg-[#0F1523] border-t border-white/[0.08] flex flex-col shrink-0 select-none">
-    <!-- AI Copilot 实时推荐回复胶囊条 (1:1 对齐) -->
+  <footer class="bg-[#FFFFFF] border-t border-slate-200/80 flex flex-col shrink-0 select-none shadow-[0_-1px_4px_rgba(0,0,0,0.02)]">
+    <!-- AI Copilot 实时推荐回复胶囊条 -->
     <div
       v-if="props.aiSuggestionsLoading || (props.aiSuggestions && props.aiSuggestions.length)"
-      class="px-4 py-2 bg-[#0F1523] border-t border-white/[0.08] flex items-center gap-2 overflow-x-auto text-xs shrink-0"
+      class="px-5 py-2.5 bg-gradient-to-r from-indigo-50/60 to-purple-50/40 border-b border-indigo-100 flex items-center gap-2 overflow-x-auto text-xs shrink-0"
     >
-      <div class="flex items-center gap-1.5 text-emerald-400 font-bold shrink-0 text-xs">
-        <i class="fa-solid fa-wand-magic-sparkles text-xs"></i>
-        <span>AI Copilot 推荐回复：</span>
+      <div class="flex items-center gap-1.5 text-indigo-700 font-bold shrink-0 text-xs">
+        <i class="fa-solid fa-sparkles text-indigo-600"></i>
+        <span>AI 智能推荐：</span>
       </div>
-      <span v-if="props.aiSuggestionsLoading" class="text-[11px] text-slate-400 whitespace-nowrap">正在生成…</span>
+      <span v-if="props.aiSuggestionsLoading" class="text-[11px] text-indigo-400 whitespace-nowrap">正在构思回复建议…</span>
       <div v-else class="flex items-center gap-2 overflow-x-auto py-0.5">
         <button
           v-for="(suggestion, idx) in props.aiSuggestions"
           :key="idx"
           @click="useSuggestion(suggestion)"
-          class="px-3 py-1 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 hover:text-emerald-200 text-xs whitespace-nowrap transition-all flex items-center gap-1 shadow-sm"
+          class="px-3 py-1 rounded-lg bg-white hover:bg-indigo-50/80 border border-indigo-200 text-indigo-900 text-xs whitespace-nowrap transition-all flex items-center gap-1.5 shadow-sm font-medium hover:border-indigo-400"
         >
           <span>{{ suggestion }}</span>
-          <i class="fa-solid fa-bolt text-[10px]"></i>
+          <i class="fa-solid fa-arrow-turn-up text-[10px] text-indigo-400"></i>
         </button>
       </div>
     </div>
 
-    <!-- Dual-Tab 模式切换条 (1:1 对齐) -->
-    <div class="px-4 pt-2 flex items-center justify-between border-b border-white/[0.06]">
-      <div class="flex items-center gap-2">
+    <!-- Dual-Tab 模式切换条 -->
+    <div class="px-5 pt-2 flex items-center justify-between border-b border-slate-100">
+      <div class="flex items-center gap-5">
         <button
           @click="switchReplyMode('reply')"
           :class="[
-            'px-3.5 py-1.5 rounded-t-lg font-bold text-xs flex items-center gap-1.5 transition-all',
+            'pb-2 font-bold text-xs flex items-center gap-1.5 transition-all border-b-2',
             currentReplyMode === 'reply'
-              ? 'text-emerald-400 bg-emerald-500/10 border-t-2 border-emerald-500'
-              : 'text-slate-400 hover:text-slate-200',
+              ? 'text-indigo-600 border-indigo-600'
+              : 'text-slate-400 border-transparent hover:text-slate-700',
           ]"
         >
           <i class="fa-solid fa-reply text-xs"></i>
@@ -299,20 +270,23 @@ const removePendingFile = (index: number) => { pendingFiles.value.splice(index, 
         <button
           @click="switchReplyMode('note')"
           :class="[
-            'px-3.5 py-1.5 rounded-t-lg font-semibold text-xs flex items-center gap-1.5 transition-all',
+            'pb-2 font-bold text-xs flex items-center gap-1.5 transition-all border-b-2',
             currentReplyMode === 'note'
-              ? 'text-amber-300 bg-amber-500/10 border-t-2 border-amber-500'
-              : 'text-slate-400 hover:text-amber-300 hover:bg-amber-500/5',
+              ? 'text-amber-700 border-amber-500'
+              : 'text-slate-400 border-transparent hover:text-amber-700',
           ]"
         >
           <i class="fa-solid fa-note-sticky text-xs"></i>
-          <span>内部团队便签 (Private Note)</span>
+          <span>内部团队便签</span>
         </button>
       </div>
 
       <!-- AI 自动回复 Toggle -->
-      <div class="flex items-center gap-2 text-xs text-slate-400 pb-1">
-        <span class="text-[11px] font-medium flex items-center gap-1"><i class="fa-solid fa-robot text-emerald-400"></i> AI 自动回复接管</span>
+      <div class="flex items-center gap-2 text-xs text-slate-500 pb-2">
+        <span class="text-[11px] font-semibold flex items-center gap-1">
+          <i class="fa-solid fa-robot text-indigo-500"></i>
+          <span>AI 自动接管</span>
+        </span>
         <label class="relative inline-flex items-center cursor-pointer">
           <input
             type="checkbox"
@@ -321,19 +295,19 @@ const removePendingFile = (index: number) => { pendingFiles.value.splice(index, 
             @change="toggleAiAutoReply"
             class="sr-only peer"
           />
-          <div class="w-8 h-4 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-emerald-500"></div>
+          <div class="w-8 h-4.5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3.5 after:w-3.5 after:transition-all peer-checked:bg-indigo-600 shadow-inner"></div>
         </label>
       </div>
     </div>
 
     <!-- 输入框主体 -->
-    <div class="p-3">
+    <div class="p-3.5">
       <div
         :class="[
-          'bg-[#080B11] rounded-xl border transition-all p-2.5 shadow-inner',
+          'bg-[#FFFFFF] rounded-xl border transition-all p-3 shadow-sm',
           currentReplyMode === 'reply'
-            ? 'border-white/10 focus-within:border-emerald-500/60 focus-within:ring-1 focus-within:ring-emerald-500/30'
-            : 'border-amber-500/40 focus-within:border-amber-500 focus-within:ring-1 focus-within:ring-amber-500/30',
+            ? 'border-slate-200 focus-within:border-indigo-500 focus-within:ring-2 focus-within:ring-indigo-500/20'
+            : 'border-amber-300 bg-amber-50/25 focus-within:border-amber-500 focus-within:ring-2 focus-within:ring-amber-500/20',
         ]"
       >
         <input
@@ -356,12 +330,12 @@ const removePendingFile = (index: number) => { pendingFiles.value.splice(index, 
               : '输入内部便签... (仅团队成员可见；输入 \'@\' 提及团队成员)'
           "
           @keydown="handleTextareaKeydown"
-          class="w-full bg-transparent text-xs text-slate-100 placeholder-slate-500 resize-none focus:outline-none font-sans leading-relaxed disabled:cursor-not-allowed disabled:opacity-50"
+          class="w-full bg-transparent text-xs text-slate-900 placeholder-slate-400 resize-none focus:outline-none font-sans leading-relaxed disabled:cursor-not-allowed disabled:opacity-50"
         ></textarea>
 
         <div
           v-if="mentionStart !== null"
-          class="mt-2 overflow-hidden rounded-lg border border-white/10 bg-[#131B2E] text-xs shadow-lg"
+          class="mt-2 overflow-hidden rounded-lg border border-slate-200 bg-white text-xs shadow-xl"
           role="listbox"
           aria-label="可提及的团队成员"
         >
@@ -372,116 +346,85 @@ const removePendingFile = (index: number) => { pendingFiles.value.splice(index, 
               :key="user.id"
               type="button"
               role="option"
-              class="flex w-full items-center gap-2 px-3 py-2 text-left text-slate-200 transition-colors hover:bg-emerald-500/15 hover:text-emerald-200"
+              class="flex w-full items-center gap-2 px-3 py-2 text-left text-slate-700 transition-colors hover:bg-indigo-50 hover:text-indigo-900"
               @mousedown.prevent
               @click="chooseMention(user)"
             >
-              <span class="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-slate-700 text-[10px] font-semibold text-slate-200">{{ teammateLabel(user).slice(0, 1).toUpperCase() }}</span>
-              <span class="min-w-0 flex-1 truncate">{{ teammateLabel(user) }}</span>
-              <span v-if="user.full_name" class="shrink-0 truncate text-[10px] text-slate-500">{{ user.email }}</span>
+              <span class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-indigo-100 text-[10px] font-bold text-indigo-700">{{ teammateLabel(user).slice(0, 1).toUpperCase() }}</span>
+              <span class="min-w-0 flex-1 truncate font-medium">{{ teammateLabel(user) }}</span>
+              <span v-if="user.full_name" class="shrink-0 truncate text-[10px] text-slate-400">{{ user.email }}</span>
             </button>
-            <div v-if="!matchingTeammates.length" class="px-3 py-2 text-slate-500">没有可提及的团队成员。</div>
+            <div v-if="!matchingTeammates.length" class="px-3 py-2 text-slate-400">没有可提及的团队成员。</div>
           </template>
         </div>
 
         <div v-if="pendingFiles.length" class="flex flex-wrap gap-1.5 py-2">
-          <span v-for="(file, index) in pendingFiles" :key="`${file.filename}-${file.size}`" class="inline-flex max-w-full items-center gap-1 rounded bg-white/5 border border-white/10 px-2 py-1 text-[10px] text-slate-300">
-            <i class="fa-solid fa-paperclip text-slate-400"></i>
-            <span class="max-w-40 truncate">{{ file.filename }}</span>
-            <button type="button" class="text-slate-500 hover:text-rose-300" :aria-label="`移除 ${file.filename}`" @click="removePendingFile(index)"><i class="fa-solid fa-xmark"></i></button>
+          <span v-for="(file, index) in pendingFiles" :key="`${file.filename}-${file.size}`" class="inline-flex max-w-full items-center gap-1 rounded-lg bg-indigo-50 border border-indigo-200 px-2 py-1 text-[10px] text-indigo-900">
+            <i class="fa-solid fa-paperclip text-indigo-500"></i>
+            <span class="max-w-40 truncate font-medium">{{ file.filename }}</span>
+            <button type="button" class="text-indigo-400 hover:text-rose-600" :aria-label="`移除 ${file.filename}`" @click="removePendingFile(index)"><i class="fa-solid fa-xmark"></i></button>
           </span>
         </div>
 
-        <!-- 工具栏 (1:1 对齐) -->
-        <div class="flex items-center justify-between pt-2 mt-1 border-t border-white/[0.06]">
-          <div class="flex items-center gap-1 text-slate-400">
+        <!-- 工具栏 -->
+        <div class="flex items-center justify-between pt-2 mt-1 border-t border-slate-100">
+          <div class="flex items-center gap-1 text-slate-500">
             <button
               @click="triggerFileUpload"
               :disabled="!canAttach"
-              class="w-7 h-7 rounded hover:bg-white/5 hover:text-slate-200 flex items-center justify-center transition-colors"
+              class="w-7 h-7 rounded-lg hover:bg-slate-100 hover:text-indigo-600 flex items-center justify-center transition-colors"
               title="添加图片/文件/商品附件"
             >
               <i class="fa-solid fa-paperclip text-xs"></i>
             </button>
             <button
               @click="emit('open-canned')"
-              class="w-7 h-7 rounded hover:bg-white/5 hover:text-amber-400 flex items-center justify-center transition-colors"
-              title="常用快捷话术库 (快捷键 /)"
+              class="w-7 h-7 rounded-lg hover:bg-amber-50 hover:text-amber-600 flex items-center justify-center transition-colors"
+              title="快捷话术库 (快捷键 /)"
             >
-              <i class="fa-solid fa-bolt text-xs text-amber-400"></i>
+              <i class="fa-solid fa-bolt text-xs text-amber-500"></i>
             </button>
             <button
               @click="emit('open-ai-polish')"
-              class="w-7 h-7 rounded hover:bg-white/5 hover:text-emerald-300 flex items-center justify-center transition-colors"
-              title="AI 智能润色/多语言母语级翻译"
+              class="w-7 h-7 rounded-lg hover:bg-indigo-50 hover:text-indigo-600 flex items-center justify-center transition-colors"
+              title="AI 智能润色/母语级翻译"
             >
-              <i class="fa-solid fa-wand-magic-sparkles text-xs text-emerald-400"></i>
+              <i class="fa-solid fa-wand-magic-sparkles text-xs text-indigo-600"></i>
             </button>
             <button
               @click="emit('open-product')"
               :disabled="props.disabled"
-              class="w-7 h-7 rounded hover:bg-white/5 hover:text-rose-400 flex items-center justify-center transition-colors disabled:opacity-40"
-              title="选择 Shopify 商品并插入回复草稿"
+              class="w-7 h-7 rounded-lg hover:bg-emerald-50 hover:text-emerald-600 flex items-center justify-center transition-colors disabled:opacity-40"
+              title="选择 Shopify 商品并插入回复"
             >
-              <i class="fa-brands fa-shopify text-xs text-rose-400"></i>
+              <i class="fa-brands fa-shopify text-xs text-emerald-600"></i>
             </button>
             <button
               @click="insertEmoji('😊')"
-              class="w-7 h-7 rounded hover:bg-white/5 hover:text-slate-200 flex items-center justify-center transition-colors"
+              class="w-7 h-7 rounded-lg hover:bg-amber-50 hover:text-amber-600 flex items-center justify-center transition-colors"
               title="插入表情"
             >
-              <i class="fa-regular fa-face-smile text-xs"></i>
+              <i class="fa-regular fa-face-smile text-xs text-amber-500"></i>
             </button>
           </div>
 
           <!-- 发送按钮组合 -->
-          <div class="flex items-center gap-1.5">
-            <span class="text-[10px] text-slate-500 hidden sm:inline-block">Enter 发送</span>
+          <div class="flex items-center gap-2">
+            <span class="text-[10px] text-slate-400 hidden sm:inline-block font-mono">Enter 发送</span>
             <div class="relative inline-flex rounded-lg shadow-sm">
               <button
                 @click="handleSend"
                 :disabled="props.disabled"
                 :class="[
-                  'px-4 py-1.5 font-bold text-xs rounded-l-lg flex items-center gap-1.5 transition-all',
+                  'px-4 py-1.5 font-bold text-xs rounded-lg flex items-center gap-1.5 transition-all active:scale-[0.98]',
                   currentReplyMode === 'reply'
-                    ? 'bg-emerald-500 hover:bg-emerald-400 text-slate-950 shadow-[0_0_12px_rgba(16,185,129,0.35)]'
-                    : 'bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-[0_0_12px_rgba(245,158,11,0.3)]',
+                    ? 'bg-gradient-to-r from-indigo-600 via-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white shadow-md shadow-indigo-500/25'
+                    : 'bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white shadow-md shadow-amber-500/25',
                 ]"
               >
-                <i class="fa-solid fa-paper-plane text-xs"></i>
                 <span>{{ currentReplyMode === 'reply' ? '发送' : '添加便签' }}</span>
+                <i class="fa-solid fa-paper-plane text-[10px]"></i>
               </button>
-              <button
-                type="button"
-                @click="toggleSendMenu"
-                :disabled="props.disabled || currentReplyMode === 'note'"
-                :aria-expanded="showSendMenu"
-                aria-haspopup="menu"
-                aria-label="更多发送操作"
-                :class="[
-                  'px-2 py-1.5 text-xs rounded-r-lg border-l transition-colors disabled:cursor-not-allowed disabled:opacity-40',
-                  currentReplyMode === 'reply'
-                    ? 'bg-emerald-600 hover:bg-emerald-500 text-slate-950 border-emerald-700/50'
-                    : 'bg-amber-600 hover:bg-amber-500 text-slate-950 border-amber-700/50',
-                ]"
-              >
-                <i class="fa-solid fa-chevron-down text-[10px]"></i>
-              </button>
-              <div
-                v-if="showSendMenu"
-                role="menu"
-                class="absolute right-0 bottom-full z-20 mb-2 min-w-44 overflow-hidden rounded-lg border border-white/10 bg-[#131B2E] py-1 shadow-xl"
-              >
-                <button
-                  type="button"
-                  role="menuitem"
-                  class="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-slate-200 transition-colors hover:bg-emerald-500/15 hover:text-emerald-300"
-                  @click="handleSendAndResolve"
-                >
-                  <i class="fa-solid fa-check-double text-emerald-400"></i>
-                  <span>发送并解决会话</span>
-                </button>
-              </div>
             </div>
           </div>
         </div>
@@ -489,3 +432,6 @@ const removePendingFile = (index: number) => { pendingFiles.value.splice(index, 
     </div>
   </footer>
 </template>
+
+<style scoped>
+</style>

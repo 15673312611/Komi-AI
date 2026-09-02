@@ -78,15 +78,15 @@ watch(() => props.open, (open) => {
 
 <template>
   <div v-if="open" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-in fade-in duration-200" @click.self="emit('close')">
-    <div class="w-full max-w-xl bg-[#0F1523] border border-white/10 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
+    <div class="w-full max-w-xl bg-[#FFFFFF] border border-slate-200 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
       <!-- 头部 -->
-      <div class="px-5 py-4 border-b border-white/[0.08] flex items-center justify-between bg-[#141B2E]">
+      <div class="px-5 py-4 border-b border-slate-200 flex items-center justify-between bg-[#F8FAFC]">
         <div class="flex items-center gap-3">
           <div class="w-9 h-9 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-400 flex items-center justify-center text-sm shadow-[0_0_12px_rgba(245,158,11,0.3)]">
             <i class="fa-solid fa-bolt"></i>
           </div>
           <div>
-            <h3 class="font-bold text-slate-100 text-sm">常用快捷话术库</h3>
+            <h3 class="font-bold text-[#0F172A] text-sm">常用快捷话术库</h3>
             <p class="text-[11px] text-slate-400 mt-0.5">选取官方与团队标准化话术模板，支持变量自动填充</p>
           </div>
         </div>
@@ -95,14 +95,14 @@ watch(() => props.open, (open) => {
             v-if="canManageResponses"
             type="button"
             @click="router.push('/settings/canned-responses'); emit('close')"
-            class="px-2.5 py-1 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 text-xs font-medium transition-all"
+            class="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-white/10 border border-slate-200 text-slate-700 text-xs font-medium transition-all"
           >
             <i class="fa-solid fa-gear text-[11px] mr-1"></i>管理
           </button>
           <button
             type="button"
             @click="emit('close')"
-            class="w-7 h-7 rounded-lg hover:bg-white/10 text-slate-400 hover:text-slate-100 flex items-center justify-center transition-colors"
+            class="w-7 h-7 rounded-lg hover:bg-white/10 text-slate-400 hover:text-[#0F172A] flex items-center justify-center transition-colors"
           >
             <i class="fa-solid fa-xmark text-sm"></i>
           </button>
@@ -110,20 +110,20 @@ watch(() => props.open, (open) => {
       </div>
 
       <!-- 搜索与分类过滤 -->
-      <div class="p-3.5 border-b border-white/[0.06] bg-[#0C111C] flex gap-2">
+      <div class="p-3.5 border-b border-slate-100 bg-[#0C111C] flex gap-2">
         <div class="relative flex-1">
           <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-slate-500 text-xs"></i>
           <input
             v-model="query"
             type="search"
             placeholder="搜索话术标题、内容或 /快捷指令…"
-            class="w-full bg-[#161E31] border border-white/10 rounded-xl pl-8 pr-3 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-amber-500/50"
+            class="w-full bg-[#FFFFFF] border border-slate-200 rounded-xl pl-8 pr-3 py-1.5 text-xs text-slate-800 placeholder-slate-500 focus:outline-none focus:border-amber-500/50"
             autofocus
           />
         </div>
         <select
           v-model="category"
-          class="bg-[#161E31] border border-white/10 rounded-xl px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-amber-500/50"
+          class="bg-[#FFFFFF] border border-slate-200 rounded-xl px-3 py-1.5 text-xs text-slate-800 focus:outline-none focus:border-amber-500/50"
         >
           <option v-for="item in categories" :key="item" :value="item">{{ item === 'all' ? '全部分类' : item }}</option>
         </select>
@@ -144,19 +144,19 @@ watch(() => props.open, (open) => {
             v-for="item in filtered"
             :key="item.id"
             @click="select(item)"
-            class="p-3 rounded-xl border border-white/[0.06] bg-[#141B2E] hover:bg-[#1A233A] hover:border-amber-500/40 cursor-pointer transition-all space-y-1.5 group"
+            class="p-3 rounded-xl border border-slate-100 bg-[#F8FAFC] hover:bg-[#F1F5F9] hover:border-amber-500/40 cursor-pointer transition-all space-y-1.5 group"
           >
             <div class="flex items-center justify-between">
-              <span class="text-xs font-bold text-slate-100 group-hover:text-amber-300 transition-colors flex items-center gap-1.5">
+              <span class="text-xs font-bold text-[#0F172A] group-hover:text-amber-300 transition-colors flex items-center gap-1.5">
                 <i class="fa-solid fa-comment-dots text-amber-400 text-[11px]"></i>
                 {{ item.title }}
               </span>
               <div class="flex items-center gap-1.5">
-                <span v-if="item.shortcut" class="px-1.5 py-0.5 rounded bg-white/5 border border-white/10 text-[10px] font-mono text-slate-400">/{{ item.shortcut.replace(/^\//, '') }}</span>
+                <span v-if="item.shortcut" class="px-1.5 py-0.5 rounded bg-slate-100 border border-slate-200 text-[10px] font-mono text-slate-400">/{{ item.shortcut.replace(/^\//, '') }}</span>
                 <span class="px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-400 text-[10px] font-medium">{{ item.category }}</span>
               </div>
             </div>
-            <p class="text-xs text-slate-300 leading-relaxed line-clamp-2">{{ item.content }}</p>
+            <p class="text-xs text-slate-700 leading-relaxed line-clamp-2">{{ item.content }}</p>
           </div>
           <div v-if="!filtered.length" class="p-8 text-center text-slate-500 text-xs">
             没有找到匹配的话术

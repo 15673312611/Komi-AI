@@ -1,5 +1,5 @@
 """
-Copyright 2024-2026 ChatterMate
+Copyright 2024-2026 Komi AI
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -79,7 +79,7 @@ def _widget_runtime_config() -> dict:
 
     Derived from ``BACKEND_URL`` so a self-hosted widget talks to the configured
     backend instead of the vendor cloud. On the hosted deployment BACKEND_URL is
-    ``https://api.chattermate.chat``, which yields exactly the widget's baked-in
+    ``https://api.komi.ai``, which yields exactly the widget's baked-in
     defaults, so injecting this is a no-op there.
     """
     api_base = settings.BACKEND_URL.rstrip("/")

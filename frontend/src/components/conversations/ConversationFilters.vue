@@ -1,5 +1,5 @@
 <!--
-Copyright 2024-2026 ChatterMate
+Copyright 2024-2026 Komi AI
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -216,57 +216,52 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-.filter-header-section {
+.conversation-filters {
   position: relative;
 }
 
 .filter-toggle-btn {
-  position: relative;
   display: flex;
   align-items: center;
-  justify-content: center;
-  width: 40px;
-  height: 40px;
+  gap: 6px;
+  padding: 6px 10px;
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  background: var(--background-color);
-  color: var(--text-muted);
+  border-radius: var(--radius-btn);
+  background: #FFFFFF;
+  color: var(--text2);
+  font-size: 12px;
+  font-weight: 500;
   cursor: pointer;
+  position: relative;
   transition: all var(--transition-fast);
 }
 
 .filter-toggle-btn:hover {
-  background: var(--background-soft);
-  color: var(--text-primary);
-  border-color: var(--primary-color-soft);
-}
-
-.filter-toggle-btn.active {
-  background: var(--accent-solid);
-  color: var(--on-accent-solid);
-  border-color: var(--primary-color);
+  background: #F8FAFC;
+  border-color: var(--border-color-hover);
+  color: var(--text);
 }
 
 .filter-toggle-btn.has-filters {
-  background: var(--primary-color-soft);
-  color: var(--primary-color);
-  border-color: var(--primary-color);
+  background: rgba(16, 185, 129, 0.08);
+  color: #059669;
+  border-color: rgba(16, 185, 129, 0.3);
 }
 
 .filter-count {
   position: absolute;
-  top: -6px;
-  right: -6px;
-  background: var(--error-color);
+  top: -5px;
+  right: -5px;
+  background: #EF4444;
   color: white;
   border-radius: 50%;
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 10px;
-  font-weight: 600;
+  font-size: 9px;
+  font-weight: 700;
 }
 
 .filters-container {
@@ -274,19 +269,19 @@ onBeforeUnmount(() => {
   top: 100%;
   right: 0;
   z-index: 1000;
-  background: var(--background-soft);
+  background: #FFFFFF;
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-lg);
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
   animation: slideDown 0.2s ease-out;
-  min-width: 600px;
+  min-width: 580px;
   max-width: 90vw;
 }
 
 @keyframes slideDown {
   from {
     opacity: 0;
-    transform: translateY(-10px);
+    transform: translateY(-8px);
   }
   to {
     opacity: 1;
@@ -295,70 +290,68 @@ onBeforeUnmount(() => {
 }
 
 .filters-dropdown {
-  padding: var(--space-lg);
+  padding: 20px;
 }
 
 .filters-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: var(--space-md);
+  margin-bottom: 16px;
 }
 
 .filters-header h3 {
   margin: 0;
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 600;
-  color: var(--text-primary);
+  color: var(--text);
 }
 
 .close-btn {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  width: 28px;
+  height: 28px;
   border: none;
-  border-radius: var(--radius-sm);
+  border-radius: 6px;
   background: transparent;
-  color: var(--text-muted);
+  color: var(--muted);
   cursor: pointer;
   transition: all var(--transition-fast);
 }
 
 .close-btn:hover {
-  background: var(--background-color);
-  color: var(--text-primary);
+  background: #F1F5F9;
+  color: var(--text);
 }
 
 .filters-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  gap: var(--space-md);
-  margin-bottom: var(--space-lg);
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 14px;
+  margin-bottom: 18px;
 }
 
 .filter-group {
   display: flex;
   flex-direction: column;
-  gap: var(--space-xs);
+  gap: 6px;
 }
 
 .filter-group label {
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--muted);
 }
 
 .filter-input {
-  padding: 10px 12px;
+  padding: 8px 12px;
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
-  background: var(--background-color);
-  color: var(--text-primary);
-  font-size: 14px;
+  border-radius: var(--radius-btn);
+  background: #FFFFFF;
+  color: var(--text);
+  font-size: 13px;
   transition: all var(--transition-fast);
 }
 
@@ -368,63 +361,62 @@ onBeforeUnmount(() => {
   background-position: right 8px center;
   background-repeat: no-repeat;
   background-size: 16px;
-  padding-right: 40px;
+  padding-right: 32px;
   cursor: pointer;
 }
 
 .filter-input:focus {
   outline: none;
-  border-color: var(--primary-color);
-  box-shadow: 0 0 0 2px var(--primary-color-soft);
+  border-color: #0F172A;
+  box-shadow: 0 0 0 2px rgba(15, 23, 42, 0.08);
 }
 
 .filter-input::placeholder {
-  color: var(--text-muted);
+  color: var(--muted2);
 }
 
 .filter-actions {
   display: flex;
-  gap: var(--space-sm);
+  gap: 10px;
   justify-content: flex-end;
-  padding-top: var(--space-md);
+  padding-top: 14px;
   border-top: 1px solid var(--border-color);
 }
 
 .apply-btn, .clear-btn {
-  padding: 10px 20px;
-  border-radius: var(--radius-sm);
-  font-size: 14px;
-  font-weight: 500;
+  padding: 8px 16px;
+  border-radius: var(--radius-btn);
+  font-size: 13px;
+  font-weight: 600;
   cursor: pointer;
   transition: all var(--transition-fast);
   border: 1px solid transparent;
-  min-width: 100px;
+  min-width: 80px;
 }
 
 .apply-btn {
-  background: var(--accent-solid);
-  color: var(--on-accent-solid);
+  background: #0F172A;
+  color: #FFFFFF;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
 }
 
 .apply-btn:hover {
-  background: var(--primary-color-hover);
-  transform: translateY(-1px);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  background: #000000;
+  transform: translateY(-0.5px);
 }
 
 .clear-btn {
-  background: var(--background-color);
-  color: var(--text-muted);
-  border-color: var(--border-color);
+  background: #FFFFFF;
+  color: var(--text2);
+  border: 1px solid var(--border-color);
 }
 
 .clear-btn:hover {
-  background: var(--background-soft);
-  color: var(--text-primary);
-  border-color: var(--text-muted);
+  background: #F8FAFC;
+  border-color: var(--border-color-hover);
+  color: var(--text);
 }
 
-/* Responsive design */
 @media (max-width: 768px) {
   .filters-container {
     position: fixed;
@@ -438,12 +430,12 @@ onBeforeUnmount(() => {
     display: flex;
     align-items: center;
     justify-content: center;
-    background: rgba(0, 0, 0, 0.5);
+    background: rgba(0, 0, 0, 0.4);
   }
   
   .filters-dropdown {
-    background: var(--background-color);
-    border-radius: var(--radius-lg);
+    background: #FFFFFF;
+    border-radius: 12px;
     max-width: 90vw;
     max-height: 90vh;
     overflow-y: auto;

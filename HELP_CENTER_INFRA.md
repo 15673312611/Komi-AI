@@ -6,10 +6,10 @@ deploy-time pieces that live **outside** the repo: DNS, TLS and the host
 nginx on the production VPS. `frontend/nginx.conf` and the docker-compose
 files need **no changes**.
 
-> **As deployed on the ChatterMate cloud VPS (2026-07-14):** the base domain is
-> **`help.chattermate.chat`** (orgs serve at `{slug}.help.chattermate.chat`), not
-> the `chattermate.help` this doc originally planned — that domain was never
-> registered, and the org only owns `chattermate.chat`. DNS is **Route53**, so the
+> **As deployed on the Komi AI cloud VPS (2026-07-14):** the base domain is
+> **`help.komi.ai`** (orgs serve at `{slug}.help.komi.ai`), not
+> the `komi.help` this doc originally planned — that domain was never
+> registered, and the org only owns `komi.ai`. DNS is **Route53**, so the
 > wildcard cert is issued and auto-renewed with the `dns-route53` plugin.
 > Placeholders (`<VPS_IPV4>`, `<ZONE_ID>`, …) stand in for the live values; the
 > real ones live on the VPS and in ops notes, not in this public repo.
@@ -18,9 +18,9 @@ files need **no changes**.
 
 ### DNS (Route53)
 Point a wildcard under the domain you own at the VPS. On the cloud box this is
-the `chattermate.chat` hosted zone (`<ZONE_ID>`):
-- `*.help.chattermate.chat.  A     <VPS_IPV4>`
-- `*.help.chattermate.chat.  AAAA  <VPS_IPV6>`
+the `komi.ai` hosted zone (`<ZONE_ID>`):
+- `*.help.komi.ai.  A     <VPS_IPV4>`
+- `*.help.komi.ai.  AAAA  <VPS_IPV6>`
 
 One wildcard record covers every org — no per-org DNS. Create them via the API:
 ```bash
@@ -30,7 +30,7 @@ aws route53 change-resource-record-sets --hosted-zone-id <ZONE_ID> \
 
 Backend env (`backend.env` on the VPS):
 ```
-HELP_CENTER_BASE_DOMAIN=help.chattermate.chat
+HELP_CENTER_BASE_DOMAIN=help.komi.ai
 HELP_CENTER_TARGET_IPS=["<VPS_IPV4>"]   # JSON array — see gotcha below
 ```
 > **Gotcha:** `HELP_CENTER_TARGET_IPS` is a `frozenset` setting, so
@@ -46,11 +46,11 @@ Route53 policy (`route53:ListHostedZones` + `GetChange` on `*`,
 (mode 600) on the box. Issue once:
 ```bash
 docker run --rm \
-  -v ~/chattermate/certbot/conf:/etc/letsencrypt \
+  -v ~/komi/certbot/conf:/etc/letsencrypt \
   -v ~/.aws:/root/.aws:ro \
   certbot/dns-route53 certonly --dns-route53 \
-  -d '*.help.chattermate.chat' -d 'help.chattermate.chat' \
-  --cert-name help.chattermate.chat \
+  -d '*.help.komi.ai' -d 'help.komi.ai' \
+  --cert-name help.komi.ai \
   --non-interactive --agree-tos -m <ops-email>
 ```
 
@@ -63,7 +63,7 @@ docker compose -f docker-compose.hostinger.yml \
 # ...then, if the flag file appeared: rm it && docker compose exec -T nginx nginx -s reload
 ```
 It uses the `certbot/dns-route53` image and mounts
-`/home/chattermate/.aws:/root/.aws:ro`, so the wildcard renews unattended (the
+`/home/komi/.aws:/root/.aws:ro`, so the wildcard renews unattended (the
 renewal conf remembers `authenticator = dns-route53`). Existing HTTP-01 webroot
 certs still renew — the dns-route53 image is a superset of `certbot/certbot`.
 `renew` covers every cert in the shared `certbot/conf`, not just the wildcard.
@@ -95,19 +95,19 @@ certs still renew — the dns-route53 image is a superset of `certbot/certbot`.
 > ```
 
 ### Host nginx server block
-Lives at `~/chattermate/nginx/conf.d/help-center.conf` (mounted read-only into
-the `chattermate-nginx-1` container). `proxy_set_header Host $host` is what
+Lives at `~/komi/nginx/conf.d/help-center.conf` (mounted read-only into
+the `komi-nginx-1` container). `proxy_set_header Host $host` is what
 makes backend host-dispatch resolve the org. Upstream is the compose service
-name `backend:8000` (nginx shares the `chattermate-network`), not a published
+name `backend:8000` (nginx shares the `komi-network`), not a published
 host port.
 
 ```nginx
-# {slug}.help.chattermate.chat
+# {slug}.help.komi.ai
 server {
     listen 443 ssl http2;
-    server_name *.help.chattermate.chat help.chattermate.chat;
-    ssl_certificate     /etc/letsencrypt/live/help.chattermate.chat/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/help.chattermate.chat/privkey.pem;
+    server_name *.help.komi.ai help.komi.ai;
+    ssl_certificate     /etc/letsencrypt/live/help.komi.ai/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/help.komi.ai/privkey.pem;
     include /etc/nginx/conf.d/ssl-params.conf;
 
     location / {
@@ -121,7 +121,7 @@ server {
 
 server {
     listen 80;
-    server_name *.help.chattermate.chat help.chattermate.chat;
+    server_name *.help.komi.ai help.komi.ai;
     location /.well-known/acme-challenge/ { root /var/www/certbot; }
     location / { return 301 https://$host$request_uri; }
 }
@@ -130,11 +130,11 @@ server {
 ## 2. Per-customer custom domain (runbook step per domain)
 
 Customers add two records (shown in their FAQ admin UI). On the cloud box the
-CNAME target `cname.chattermate.chat` is **not** provisioned, so verification
+CNAME target `cname.komi.ai` is **not** provisioned, so verification
 falls back to an A record pointing at `HELP_CENTER_TARGET_IPS` — either form
 works:
-- `CNAME  help.customer.com  →  cname.chattermate.chat`  *(or)*  `A  help.customer.com  →  <VPS_IPV4>`
-- `TXT    _chattermate.help.customer.com  →  cm-verify=<token>`
+- `CNAME  help.customer.com  →  cname.komi.ai`  *(or)*  `A  help.customer.com  →  <VPS_IPV4>`
+- `TXT    _komi.help.customer.com  →  cm-verify=<token>`
 
 After they click **Verify domain** (DNS checks pass, `ssl_status` becomes
 `pending`), issue the certificate on the VPS — HTTP-01 works because the
@@ -161,10 +161,10 @@ admin endpoint for verified-but-unprovisioned domains and runs
 whole VPS.
 
 ## 3. Verification checklist after deploy
-1. `curl -sS -o /dev/null -w '%{http_code}\n' https://<slug>.help.chattermate.chat/` → `200` (and `http://` → `301`).
-2. `https://<slug>.help.chattermate.chat` in a browser → published FAQs render, widget loads; an article at `/a/<faq-slug>` returns `200`.
-3. `docker exec chattermate-backend-1 printenv HELP_CENTER_BASE_DOMAIN` → `help.chattermate.chat` (and the backend is `healthy`, not crash-looping on `HELP_CENTER_TARGET_IPS`).
-4. API unaffected: `https://app.chattermate.chat` / `https://api.chattermate.chat/api/v1/...` still route normally.
+1. `curl -sS -o /dev/null -w '%{http_code}\n' https://<slug>.help.komi.ai/` → `200` (and `http://` → `301`).
+2. `https://<slug>.help.komi.ai` in a browser → published FAQs render, widget loads; an article at `/a/<faq-slug>` returns `200`.
+3. `docker exec komi-backend-1 printenv HELP_CENTER_BASE_DOMAIN` → `help.komi.ai` (and the backend is `healthy`, not crash-looping on `HELP_CENTER_TARGET_IPS`).
+4. API unaffected: `https://app.komi.ai` / `https://api.komi.ai/api/v1/...` still route normally.
 5. `POST /ask` from the page returns an answer and appears in `help_center_queries`.
 6. `docker ps -a --filter name=certbot` → **empty**. `compose up -d` must not start a
    certbot container; one that sticks around means the long-running loop entrypoint is
@@ -180,7 +180,7 @@ The feature is gated by the `help_center` plan flag, which lives in the
 - backfill existing plan rows' `features` JSON with the same values;
 - extend the message-limit check to add the org's period
   `help_center_queries` count (`HelpCenterQueryRepository.count_for_period`)
-  to the bot-message count when the org runs on the ChatterMate-hosted model.
+  to the bot-message count when the org runs on the Komi AI-hosted model.
 
 Until that PR deploys, cloud orgs see the upgrade lock (`plan_allowed:
 false`); self-hosted/OSS installs are unrestricted immediately.

@@ -3,13 +3,15 @@ package httpapi
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
+	"regexp"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
-	"github.com/chattermate/chattermate/backend-go/internal/store"
+	"github.com/komi/komi/backend-go/internal/store"
 )
 
 func registerStoreRoutes(r chi.Router, deps Dependencies) {
@@ -126,6 +128,29 @@ func createStore(deps Dependencies) http.HandlerFunc {
 			return
 		}
 
+		if input.ChannelAccountID != nil && input.EmailAccountID == nil {
+			input.EmailAccountID = input.ChannelAccountID
+		}
+
+		if input.ChannelType != nil && strings.TrimSpace(*input.ChannelType) != "" && len(input.ChannelConfig) > 0 && deps.Channels != nil {
+			chType := strings.ToLower(strings.TrimSpace(*input.ChannelType))
+			extID := fmt.Sprintf("%s_%s_%s", chType, strings.ToLower(regexp.MustCompile(`[^a-zA-Z0-9]+`).ReplaceAllString(input.Name, "_")), (*current.OrganizationID).String()[:6])
+			for _, k := range []string{"phone_number_id", "email", "bot_username", "ig_id", "channel_id", "page_id", "phone"} {
+				if val, ok := input.ChannelConfig[k].(string); ok && strings.TrimSpace(val) != "" {
+					extID = strings.TrimSpace(val)
+					break
+				}
+			}
+			dispName := fmt.Sprintf("%s (%s)", input.Name, strings.ToUpper(chType))
+			if customDisp, ok := input.ChannelConfig["display_name"].(string); ok && strings.TrimSpace(customDisp) != "" {
+				dispName = strings.TrimSpace(customDisp)
+			}
+			acc, err := deps.Channels.Create(r.Context(), *current.OrganizationID, chType, extID, input.ChannelConfig, &dispName, map[string]any{"store_name": input.Name})
+			if err == nil && acc != nil {
+				input.EmailAccountID = &acc.ID
+			}
+		}
+
 		s, err := deps.Stores.Create(r.Context(), *current.OrganizationID, input)
 		if err != nil {
 			deps.Logger.Error().Err(err).Msg("failed to create store")
@@ -164,6 +189,33 @@ func updateStore(deps Dependencies) http.HandlerFunc {
 		if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
 			Error(w, http.StatusBadRequest, "Invalid JSON payload")
 			return
+		}
+
+		if input.ChannelAccountID != nil && input.EmailAccountID == nil {
+			input.EmailAccountID = input.ChannelAccountID
+		}
+
+		if input.ChannelType != nil && strings.TrimSpace(*input.ChannelType) != "" && len(input.ChannelConfig) > 0 && deps.Channels != nil {
+			chType := strings.ToLower(strings.TrimSpace(*input.ChannelType))
+			storeName := "Store"
+			if input.Name != nil {
+				storeName = *input.Name
+			}
+			extID := fmt.Sprintf("%s_%s_%s", chType, strings.ToLower(regexp.MustCompile(`[^a-zA-Z0-9]+`).ReplaceAllString(storeName, "_")), (*current.OrganizationID).String()[:6])
+			for _, k := range []string{"phone_number_id", "email", "bot_username", "ig_id", "channel_id", "page_id", "phone"} {
+				if val, ok := input.ChannelConfig[k].(string); ok && strings.TrimSpace(val) != "" {
+					extID = strings.TrimSpace(val)
+					break
+				}
+			}
+			dispName := fmt.Sprintf("%s (%s)", storeName, strings.ToUpper(chType))
+			if customDisp, ok := input.ChannelConfig["display_name"].(string); ok && strings.TrimSpace(customDisp) != "" {
+				dispName = strings.TrimSpace(customDisp)
+			}
+			acc, err := deps.Channels.Create(r.Context(), *current.OrganizationID, chType, extID, input.ChannelConfig, &dispName, map[string]any{"store_name": storeName})
+			if err == nil && acc != nil {
+				input.EmailAccountID = &acc.ID
+			}
 		}
 
 		s, err := deps.Stores.Update(r.Context(), id, *current.OrganizationID, input)

@@ -1,5 +1,5 @@
 <!--
-Copyright 2024-2026 ChatterMate
+Copyright 2024-2026 Komi AI
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -302,7 +302,7 @@ onBeforeUnmount(() => {
 
         <div class="askai__foot">
             <span v-if="disclaimer">{{ disclaimer }}</span>
-            <a class="askai__brand" href="https://chattermate.chat" target="_blank" rel="noopener noreferrer">Powered by ChatterMate</a>
+            <a class="askai__brand" href="https://komi.ai" target="_blank" rel="noopener noreferrer">Powered by Komi AI</a>
         </div>
     </div>
 </template>

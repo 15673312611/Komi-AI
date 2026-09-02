@@ -1,5 +1,5 @@
 """
-Copyright 2024-2026 ChatterMate
+Copyright 2024-2026 Komi AI
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -21,7 +21,7 @@ Revises: drop_slack_tables_001
 Create Date: 2026-07-12
 
 New feature: AI-generated FAQs reviewed/published by the org and served as a
-public help center on {slug}.chattermate.help or a verified custom domain.
+public help center on {slug}.komi.help or a verified custom domain.
 
 Tables:
 - faq_generation_jobs: async generate/import jobs (worker + UI polling)

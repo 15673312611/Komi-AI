@@ -1,5 +1,5 @@
 """
-Copyright 2024-2026 ChatterMate
+Copyright 2024-2026 Komi AI
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -234,7 +234,7 @@ async def widget_connect(sid, environ, auth):
         
         message_limit_reached = False
         # Check message limits if enterprise module is available
-        if HAS_ENTERPRISE and ai_config.model_type == AIModelType.CHATTERMATE:
+        if HAS_ENTERPRISE and ai_config.model_type == AIModelType.KOMI_AI:
             if not await check_message_limit(db, org_id, sid, sio):
                 message_limit_reached = True
 

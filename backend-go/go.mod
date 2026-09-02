@@ -1,4 +1,4 @@
-module github.com/chattermate/chattermate/backend-go
+module github.com/komi/komi/backend-go
 
 go 1.24.1
 

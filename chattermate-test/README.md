@@ -1,6 +1,6 @@
-# ChatterMate Widget Test
+# Komi AI Widget Test
 
-This is a test project for the ChatterMate chat widget integration.
+This is a test project for the Komi AI chat widget integration.
 
 ## UI options gallery
 
@@ -9,11 +9,11 @@ custom size and offsets, sidebar drawers, search-bar trigger, hidden launcher + 
 button, custom z-index, dashboard defaults, page-overrides-beat-dashboard, mobile).
 Each opens `ui-test.html` with that configuration plus buttons for the whole JS API
 (`open/close/toggle/isOpen`, `open({message})`, `hide/showLauncher`, `setPosition`,
-`data-chattermate-open`, `trigger` selector) and an event log.
+`data-komi-open`, `trigger` selector) and an event log.
 
 Use it in **Stub** mode (fake widget, no backend needed) or **Real** mode (set your
 widget ID + API URL on the gallery page). The Loader URL setting controls where
-`chattermate.min.js` comes from — the frontend dev server by default.
+`komi.min.js` comes from — the frontend dev server by default.
 
 ## Setup
 
@@ -33,7 +33,7 @@ npm start
 
 ## Testing the Widget
 
-1. Make sure the ChatterMate frontend development server is running (usually at http://localhost:5173)
+1. Make sure the Komi AI frontend development server is running (usually at http://localhost:5173)
 2. Click the "Initialize Widget" button on the test page
 3. Use the chat widget that appears in the bottom-right corner
 
@@ -45,18 +45,18 @@ npm start
 
 ## Where things are served from
 
-- **Loader** (`chattermate.min.js`) — the **frontend** (`http://localhost:5173/webclient/…`),
+- **Loader** (`komi.min.js`) — the **frontend** (`http://localhost:5173/webclient/…`),
   the same origin the dashboard's embed snippet points at. The backend does **not**
   serve it, and no copy is kept in this folder: a copy goes stale and you end up
   testing an old widget while the source looks correct.
-  It is a build artifact — after editing `frontend/src/webclient/chattermate.js` run
+  It is a build artifact — after editing `frontend/src/webclient/komi.js` run
   `cd ../frontend && npm run build:webclient:prod`.
 - **Widget app** (`widget.js`) — the backend, from `backend/assets/`. Rebuild with
   `cd ../frontend && npm run build:widget:prod` after changing `WidgetBuilder.vue`
   or the widget composables.
 - **API** — set `window.chattermateBaseUrl`. Without it the loader falls back to the URL
   baked in at build time, which for a production build is the cloud API, so a "local"
-  test silently talks to api.chattermate.chat.
+  test silently talks to api.komi.ai.
 
 ## Troubleshooting
 

@@ -17,47 +17,57 @@ var (
 )
 
 type Store struct {
-	ID               uuid.UUID  `json:"id"`
-	OrganizationID   uuid.UUID  `json:"organization_id"`
-	Name             string     `json:"name"`
-	Platform         string     `json:"platform"`
-	ShopDomain       *string    `json:"shop_domain,omitempty"`
-	EmailAccountID   *uuid.UUID `json:"email_account_id,omitempty"`
-	EmailAddress     *string    `json:"email_address,omitempty"`
-	EmailDisplayName *string    `json:"email_display_name,omitempty"`
-	AgentID          *uuid.UUID `json:"agent_id,omitempty"`
-	AgentName        *string    `json:"agent_name,omitempty"`
-	AgentDisplayName *string    `json:"agent_display_name,omitempty"`
-	KnowledgeTag     *string    `json:"knowledge_tag,omitempty"`
-	Currency         string     `json:"currency"`
-	Timezone         string     `json:"timezone"`
-	IsActive         bool       `json:"is_active"`
-	CreatedAt        time.Time  `json:"created_at"`
-	UpdatedAt        time.Time  `json:"updated_at"`
+	ID                 uuid.UUID  `json:"id"`
+	OrganizationID     uuid.UUID  `json:"organization_id"`
+	Name               string     `json:"name"`
+	Platform           string     `json:"platform"`
+	ShopDomain         *string    `json:"shop_domain,omitempty"`
+	EmailAccountID     *uuid.UUID `json:"email_account_id,omitempty"`
+	ChannelAccountID   *uuid.UUID `json:"channel_account_id,omitempty"`
+	ChannelType        *string    `json:"channel_type,omitempty"`
+	ChannelDisplayName *string    `json:"channel_display_name,omitempty"`
+	ChannelExternalID  *string    `json:"channel_external_id,omitempty"`
+	EmailAddress       *string    `json:"email_address,omitempty"`
+	EmailDisplayName   *string    `json:"email_display_name,omitempty"`
+	AgentID            *uuid.UUID `json:"agent_id,omitempty"`
+	AgentName          *string    `json:"agent_name,omitempty"`
+	AgentDisplayName   *string    `json:"agent_display_name,omitempty"`
+	KnowledgeTag       *string    `json:"knowledge_tag,omitempty"`
+	Currency           string     `json:"currency"`
+	Timezone           string     `json:"timezone"`
+	IsActive           bool       `json:"is_active"`
+	CreatedAt          time.Time  `json:"created_at"`
+	UpdatedAt          time.Time  `json:"updated_at"`
 }
 
 type CreateInput struct {
-	Name           string     `json:"name"`
-	Platform       string     `json:"platform"`
-	ShopDomain     *string    `json:"shop_domain"`
-	EmailAccountID *uuid.UUID `json:"email_account_id"`
-	AgentID        *uuid.UUID `json:"agent_id"`
-	KnowledgeTag   *string    `json:"knowledge_tag"`
-	Currency       string     `json:"currency"`
-	Timezone       string     `json:"timezone"`
-	IsActive       bool       `json:"is_active"`
+	Name             string         `json:"name"`
+	Platform         string         `json:"platform"`
+	ShopDomain       *string        `json:"shop_domain"`
+	EmailAccountID   *uuid.UUID     `json:"email_account_id"`
+	ChannelAccountID *uuid.UUID     `json:"channel_account_id"`
+	ChannelType      *string        `json:"channel_type"`
+	ChannelConfig    map[string]any `json:"channel_config"`
+	AgentID          *uuid.UUID     `json:"agent_id"`
+	KnowledgeTag     *string        `json:"knowledge_tag"`
+	Currency         string         `json:"currency"`
+	Timezone         string         `json:"timezone"`
+	IsActive         bool           `json:"is_active"`
 }
 
 type UpdateInput struct {
-	Name           *string    `json:"name"`
-	Platform       *string    `json:"platform"`
-	ShopDomain     *string    `json:"shop_domain"`
-	EmailAccountID *uuid.UUID `json:"email_account_id"`
-	AgentID        *uuid.UUID `json:"agent_id"`
-	KnowledgeTag   *string    `json:"knowledge_tag"`
-	Currency       *string    `json:"currency"`
-	Timezone       *string    `json:"timezone"`
-	IsActive       *bool      `json:"is_active"`
+	Name             *string        `json:"name"`
+	Platform         *string        `json:"platform"`
+	ShopDomain       *string        `json:"shop_domain"`
+	EmailAccountID   *uuid.UUID     `json:"email_account_id"`
+	ChannelAccountID *uuid.UUID     `json:"channel_account_id"`
+	ChannelType      *string        `json:"channel_type"`
+	ChannelConfig    map[string]any `json:"channel_config"`
+	AgentID          *uuid.UUID     `json:"agent_id"`
+	KnowledgeTag     *string        `json:"knowledge_tag"`
+	Currency         *string        `json:"currency"`
+	Timezone         *string        `json:"timezone"`
+	IsActive         *bool          `json:"is_active"`
 }
 
 type ChannelOption struct {
@@ -149,7 +159,7 @@ func (r *Repository) List(ctx context.Context, orgID uuid.UUID) ([]Store, error)
 
 	query := `
 	SELECT s.id, s.organization_id, s.name, s.platform, s.shop_domain,
-	       s.email_account_id, ca.display_name, ca.external_account_id,
+	       s.email_account_id, ca.channel_type, ca.display_name, ca.external_account_id,
 	       s.agent_id, a.name, a.display_name,
 	       s.knowledge_tag, COALESCE(s.currency, 'USD'), COALESCE(s.timezone, 'America/New_York'),
 	       s.is_active, s.created_at, s.updated_at
@@ -168,16 +178,20 @@ func (r *Repository) List(ctx context.Context, orgID uuid.UUID) ([]Store, error)
 	var stores []Store
 	for rows.Next() {
 		var s Store
-		var emailDisplayName, emailAddress, agentName, agentDisplayName *string
+		var channelType, emailDisplayName, emailAddress, agentName, agentDisplayName *string
 		if err := rows.Scan(
 			&s.ID, &s.OrganizationID, &s.Name, &s.Platform, &s.ShopDomain,
-			&s.EmailAccountID, &emailDisplayName, &emailAddress,
+			&s.EmailAccountID, &channelType, &emailDisplayName, &emailAddress,
 			&s.AgentID, &agentName, &agentDisplayName,
 			&s.KnowledgeTag, &s.Currency, &s.Timezone,
 			&s.IsActive, &s.CreatedAt, &s.UpdatedAt,
 		); err != nil {
 			return nil, err
 		}
+		s.ChannelAccountID = s.EmailAccountID
+		s.ChannelType = channelType
+		s.ChannelDisplayName = emailDisplayName
+		s.ChannelExternalID = emailAddress
 		s.EmailDisplayName = emailDisplayName
 		s.EmailAddress = emailAddress
 		s.AgentName = agentName
@@ -197,7 +211,7 @@ func (r *Repository) GetByID(ctx context.Context, id uuid.UUID, orgID uuid.UUID)
 
 	query := `
 	SELECT s.id, s.organization_id, s.name, s.platform, s.shop_domain,
-	       s.email_account_id, ca.display_name, ca.external_account_id,
+	       s.email_account_id, ca.channel_type, ca.display_name, ca.external_account_id,
 	       s.agent_id, a.name, a.display_name,
 	       s.knowledge_tag, COALESCE(s.currency, 'USD'), COALESCE(s.timezone, 'America/New_York'),
 	       s.is_active, s.created_at, s.updated_at
@@ -209,10 +223,10 @@ func (r *Repository) GetByID(ctx context.Context, id uuid.UUID, orgID uuid.UUID)
 	row := r.pool.QueryRow(ctx, query, id, orgID)
 
 	var s Store
-	var emailDisplayName, emailAddress, agentName, agentDisplayName *string
+	var channelType, emailDisplayName, emailAddress, agentName, agentDisplayName *string
 	if err := row.Scan(
 		&s.ID, &s.OrganizationID, &s.Name, &s.Platform, &s.ShopDomain,
-		&s.EmailAccountID, &emailDisplayName, &emailAddress,
+		&s.EmailAccountID, &channelType, &emailDisplayName, &emailAddress,
 		&s.AgentID, &agentName, &agentDisplayName,
 		&s.KnowledgeTag, &s.Currency, &s.Timezone,
 		&s.IsActive, &s.CreatedAt, &s.UpdatedAt,
@@ -222,6 +236,10 @@ func (r *Repository) GetByID(ctx context.Context, id uuid.UUID, orgID uuid.UUID)
 		}
 		return nil, err
 	}
+	s.ChannelAccountID = s.EmailAccountID
+	s.ChannelType = channelType
+	s.ChannelDisplayName = emailDisplayName
+	s.ChannelExternalID = emailAddress
 	s.EmailDisplayName = emailDisplayName
 	s.EmailAddress = emailAddress
 	s.AgentName = agentName

@@ -1,5 +1,5 @@
 """
-Copyright 2024-2026 ChatterMate
+Copyright 2024-2026 Komi AI
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -54,7 +54,7 @@ def _m(value: str, label: str) -> CatalogModel:
     return {"value": value, "label": label}
 
 
-# Keyed by AIModelType value. CHATTERMATE (managed) is intentionally excluded — it
+# Keyed by AIModelType value. KOMI_AI (managed) is intentionally excluded — it
 # is handled as a special case in the setup flow and is not user-selectable here.
 MODEL_CATALOG: Dict[str, CatalogProvider] = {
     "OPENAI": {

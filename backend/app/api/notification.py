@@ -1,5 +1,5 @@
 """
-Copyright 2024-2026 ChatterMate
+Copyright 2024-2026 Komi AI
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -261,7 +261,7 @@ async def send_test_notification(
             user_id=current_user.id,
             type="CHAT",
             title="Test Notification",
-            message="This is a test notification from ChatterMate",
+            message="This is a test notification from Komi AI",
             notification_metadata={"test": True}
         )
         db.add(notification)

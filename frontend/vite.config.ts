@@ -87,9 +87,9 @@ export default defineConfig(({ command, mode }) => {
       // script stays the first script tag and embedded contexts never register.
       injectRegister: false,
       manifest: {
-        name: 'ChatterMate',
-        short_name: 'ChatterMate',
-        description: 'Agent console for ChatterMate — handle customer chats anywhere.',
+        name: 'Komi AI',
+        short_name: 'Komi AI',
+        description: 'Agent console for Komi AI — handle customer chats anywhere.',
         start_url: '/',
         scope: '/',
         display: 'standalone',
@@ -121,13 +121,24 @@ export default defineConfig(({ command, mode }) => {
     headers: {
       'Service-Worker-Allowed': '/',
     },
+    proxy: {
+      '/api': {
+        target: 'http://localhost:8001',
+        changeOrigin: true,
+      },
+      '/socket.io': {
+        target: 'http://localhost:8001',
+        ws: true,
+        changeOrigin: true,
+      },
+    },
     // Allow ngrok and other tunnel services for Shopify embedded app development
     allowedHosts: [
       'localhost',
       '.ngrok.app',
       '.ngrok.io',
       'frontendchat.ngrok.app',
-      '.chattermate.chat',
+      '.komi.ai',
     ],
   },
   publicDir: 'public',

@@ -20,7 +20,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/chattermate/chattermate/backend-go/internal/config"
+	"github.com/komi/komi/backend-go/internal/config"
 )
 
 const (
@@ -525,7 +525,7 @@ func (s *Service) pipedriveLead(ctx context.Context, domain, access, personID st
 	if existing, ok := body["data"].([]any); ok && len(existing) > 0 {
 		return "", PushResult{}
 	}
-	leadBody := map[string]any{"title": firstNonEmpty(payload.Name, payload.Email) + " - ChatterMate lead", "person_id": personID}
+	leadBody := map[string]any{"title": firstNonEmpty(payload.Name, payload.Email) + " - Komi AI lead", "person_id": personID}
 	if orgID != "" {
 		leadBody["organization_id"] = orgID
 	}
@@ -563,7 +563,7 @@ func classifyPushFailure(status int, data []byte) PushResult {
 }
 
 func buildNoteBody(payload LeadPayload) string {
-	lines := []string{"<b>Lead captured by ChatterMate</b>"}
+	lines := []string{"<b>Lead captured by Komi AI</b>"}
 	if payload.Summary != "" {
 		lines = append(lines, "<b>AI summary:</b> "+html.EscapeString(payload.Summary))
 	}

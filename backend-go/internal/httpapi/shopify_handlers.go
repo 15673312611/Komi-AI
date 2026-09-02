@@ -13,8 +13,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
-	"github.com/chattermate/chattermate/backend-go/internal/organization"
-	"github.com/chattermate/chattermate/backend-go/internal/shopify"
+	"github.com/komi/komi/backend-go/internal/organization"
+	"github.com/komi/komi/backend-go/internal/shopify"
 )
 
 const shopifyWebhookMaxBody = 4 << 20

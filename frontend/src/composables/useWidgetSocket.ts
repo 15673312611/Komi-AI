@@ -1,5 +1,5 @@
 /*
-Copyright 2024-2026 ChatterMate
+Copyright 2024-2026 Komi AI
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -150,7 +150,7 @@ export function useWidgetSocket() {
         }
         // Host page embedding the widget, recorded server-side on lead capture
         // (lead_source.page_url). The widget runs in a srcdoc iframe, so the parent
-        // page is same-origin when embedded via chattermate.js; fall back to referrer.
+        // page is same-origin when embedded via komi.js; fall back to referrer.
         try {
             auth.page_url = (window.parent !== window && window.parent.location?.href)
                 ? window.parent.location.href

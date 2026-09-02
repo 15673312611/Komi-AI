@@ -1,5 +1,5 @@
 <!--
-Copyright 2024-2026 ChatterMate
+Copyright 2024-2026 Komi AI
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -45,7 +45,7 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['copy-widget-code', 'copy-iframe-code', 'copy-backend-code'])
+const emit = defineEmits(['create-widget', 'copy-widget-code', 'copy-iframe-code', 'copy-backend-code'])
 
 // Check if token authentication is required
 const requiresTokenAuth = computed(() => {
@@ -88,14 +88,14 @@ const configExampleCode = `<script>
 <\/script>`
 
 const jsApiExampleCode = `// From your own code:
-ChatterMate.open();                  // open({ message: 'Hi!' }) prefills the input
-ChatterMate.close();
-ChatterMate.toggle();
-ChatterMate.on('unread', (count) => { /* badge your own button */ });
-ChatterMate.on('ready', () => { /* widget loaded */ });
+Komi AI.open();                  // open({ message: 'Hi!' }) prefills the input
+Komi AI.close();
+Komi AI.toggle();
+Komi AI.on('unread', (count) => { /* badge your own button */ });
+Komi AI.on('ready', () => { /* widget loaded */ });
 
 // Or with no JavaScript at all:
-<button data-chattermate-open>Chat with us</button>`
+<button data-komi-open>Chat with us</button>`
 
 const copyText = async (text: string) => {
   if (await copyTextToClipboard(text)) {
@@ -127,12 +127,52 @@ const iframeEmbedCode = computed(() => {
       </p>
 
       <div class="widget-info">
-        <h4 class="widget-section-title">挂件嵌入代码</h4>
+        <div class="flex items-center justify-between mb-3">
+          <h4 class="widget-section-title !mb-0">挂件嵌入代码与部署</h4>
+          <div v-if="widget" class="flex items-center gap-2">
+            <button
+              class="px-3 py-1.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-xs flex items-center gap-1.5 border border-indigo-200 transition-all shadow-sm"
+              @click="copyWidgetCode"
+            >
+              <i class="fa-solid fa-copy"></i>
+              <span>一键复制代码</span>
+            </button>
+            <a
+              v-if="iframeUrl"
+              :href="iframeUrl"
+              target="_blank"
+              class="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs flex items-center gap-1.5 border border-slate-300 transition-all"
+            >
+              <i class="fa-solid fa-arrow-up-right-from-square"></i>
+              <span>在线独立预览</span>
+            </a>
+          </div>
+        </div>
+
         <div v-if="widgetLoading" class="loading-indicator">
           <div class="loading-spinner"></div>
           正在加载挂件配置...
         </div>
-        <div v-else-if="widget" class="widget-code-section">
+
+        <!-- If widget not created yet, show Create Widget Button -->
+        <div v-else-if="!widget" class="empty-widget-card p-6 rounded-xl border border-dashed border-indigo-300 bg-indigo-50/50 flex flex-col items-center text-center">
+          <div class="w-12 h-12 rounded-xl bg-indigo-100 text-indigo-600 flex items-center justify-center text-xl mb-3 shadow-inner">
+            <i class="fa-solid fa-wand-magic-sparkles"></i>
+          </div>
+          <h4 class="text-sm font-bold text-slate-900 mb-1">尚未为此智能体生成挂件代码</h4>
+          <p class="text-xs text-slate-500 max-w-md mb-4">
+            点击下方按钮即可一键为「{{ agent.display_name || agent.name }}」初始化挂件，生成可嵌入任何独立站或 HTML 网页的对话脚本。
+          </p>
+          <button
+            class="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs flex items-center gap-2 shadow-md transition-all active:scale-95"
+            @click="emit('create-widget')"
+          >
+            <i class="fa-solid fa-bolt"></i>
+            <span>立即创建挂件并获取代码</span>
+          </button>
+        </div>
+
+        <div v-else class="widget-code-section">
           <!-- Token-based authentication (when require_token_auth is enabled) -->
           <template v-if="requiresTokenAuth">
             <div class="auth-badge">
@@ -143,7 +183,7 @@ const iframeEmbedCode = computed(() => {
             </div>
 
             <p class="code-description">
-              该智能体开启了安全认证。在前端加载挂件前，您的后端服务必须先调用 ChatterMate API 签发临时安全 Token。
+              该智能体开启了安全认证。在前端加载挂件前，您的后端服务必须先调用 Komi AI API 签发临时安全 Token。
             </p>
 
             <!-- Step 1: Get API Key -->
@@ -164,7 +204,7 @@ const iframeEmbedCode = computed(() => {
                 <h5 class="step-title">后端生成访问令牌 (服务端接口)</h5>
               </div>
               <p class="step-description">
-                在您的服务端创建一个接口，调用 ChatterMate 鉴权接口生成临时访问 Token：
+                在您的服务端创建一个接口，调用 Komi AI 鉴权接口生成临时访问 Token：
               </p>
               <div class="code-block">
                 <pre><code>// 您的后端接口 (例如 /api/chat-token)
@@ -199,7 +239,7 @@ const { data } = await response.json();
                 <h5 class="step-title">嵌入您的网站前端 (客户端)</h5>
               </div>
               <p class="step-description">
-                将以下代码添加到 HTML 页面中，并将 <code>/api/chattermate</code> 替换为您在第 2 步中创建的服务端鉴权接口路径：
+                将以下代码添加到 HTML 页面中，并将 <code>/api/komi</code> 替换为您在第 2 步中创建的服务端鉴权接口路径：
               </p>
               <div class="code-block">
                 <pre><code>{{ embedCode }}</code></pre>

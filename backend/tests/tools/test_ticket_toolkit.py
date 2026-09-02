@@ -1,5 +1,5 @@
 """
-Copyright 2024-2026 ChatterMate
+Copyright 2024-2026 Komi AI
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -26,7 +26,7 @@ from app.tools.ticket_toolkit import _clean_email, _clean_name
 
 class TestCleanEmail:
     def test_normalizes_and_lowercases(self):
-        assert _clean_email("  Admin@ChatterMate.Chat ") == "admin@chattermate.chat"
+        assert _clean_email("  Admin@Komi AI.Chat ") == "admin@komi.ai"
 
     def test_rejects_junk(self):
         for bad in (None, "", "not-an-email", "no@domain", "@no-local.com", "a b@c.com"):
@@ -61,10 +61,10 @@ class TestCustomerIdentitySection:
 
     def test_real_identity_included(self):
         section = self._section(
-            full_name="Arun Kumar", email="admin@chattermate.chat", phone="+441234567890"
+            full_name="Arun Kumar", email="admin@komi.ai", phone="+441234567890"
         )
         assert section is not None
-        assert "admin@chattermate.chat" in section
+        assert "admin@komi.ai" in section
         assert "Arun Kumar" in section
         assert "+441234567890" in section
 

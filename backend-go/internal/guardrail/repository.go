@@ -8,7 +8,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/chattermate/chattermate/backend-go/internal/encryption"
+	"github.com/komi/komi/backend-go/internal/encryption"
 )
 
 // Repository is the append-only persistence side of the runtime guardrail.

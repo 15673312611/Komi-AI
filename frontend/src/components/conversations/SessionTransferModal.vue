@@ -78,15 +78,15 @@ const confirm = () => {
 
 <template>
   <div v-if="show" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-in fade-in duration-200" @click.self="emit('close')">
-    <div class="w-full max-w-lg bg-[#0F1523] border border-white/10 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+    <div class="w-full max-w-lg bg-[#FAFAFC] border border-slate-200 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
       <!-- 头部 -->
-      <div class="px-5 py-4 border-b border-white/[0.08] flex items-center justify-between bg-[#141B2E]">
+      <div class="px-5 py-4 border-b border-slate-200 flex items-center justify-between bg-[#141B2E]">
         <div class="flex items-center gap-3">
           <div class="w-9 h-9 rounded-xl bg-blue-500/15 border border-blue-500/30 text-blue-400 flex items-center justify-center text-sm shadow-[0_0_12px_rgba(59,130,246,0.3)]">
             <i class="fa-solid fa-arrow-right-arrow-left"></i>
           </div>
           <div>
-            <h3 class="font-bold text-slate-100 text-sm flex items-center gap-2">
+            <h3 class="font-bold text-[#0F172A] text-sm flex items-center gap-2">
               <span>转交会话 / 团队分配</span>
               <span v-if="customerName" class="text-xs font-normal text-slate-400 font-sans">({{ customerName }})</span>
             </h3>
@@ -95,7 +95,7 @@ const confirm = () => {
         </div>
         <button
           @click="emit('close')"
-          class="w-7 h-7 rounded-lg hover:bg-white/10 text-slate-400 hover:text-slate-100 flex items-center justify-center transition-colors"
+          class="w-7 h-7 rounded-lg hover:bg-white/10 text-slate-400 hover:text-[#0F172A] flex items-center justify-center transition-colors"
         >
           <i class="fa-solid fa-xmark text-sm"></i>
         </button>
@@ -106,7 +106,7 @@ const confirm = () => {
         <!-- 成员选择 -->
         <div class="space-y-2">
           <div class="flex items-center justify-between">
-            <label class="text-xs font-semibold text-slate-200 flex items-center gap-1.5">
+            <label class="text-xs font-semibold text-slate-800 flex items-center gap-1.5">
               <i class="fa-solid fa-user-group text-blue-400 text-[11px]"></i>
               <span>选择接收成员</span>
             </label>
@@ -134,7 +134,7 @@ const confirm = () => {
                 v-model="searchQuery"
                 type="text"
                 placeholder="搜索成员姓名或邮箱…"
-                class="w-full bg-[#161E31] border border-white/10 rounded-xl pl-8 pr-3 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-blue-500/50"
+                class="w-full bg-[#161E31] border border-slate-200 rounded-xl pl-8 pr-3 py-1.5 text-xs text-slate-800 placeholder-slate-500 focus:outline-none focus:border-blue-500/50"
               />
             </div>
 
@@ -156,7 +156,7 @@ const confirm = () => {
                     {{ (user.full_name || user.email || '?').slice(0, 1).toUpperCase() }}
                   </div>
                   <div class="min-w-0">
-                    <div class="text-xs font-semibold text-slate-100 truncate flex items-center gap-1.5">
+                    <div class="text-xs font-semibold text-[#0F172A] truncate flex items-center gap-1.5">
                       <span>{{ user.full_name || user.email }}</span>
                       <span v-if="user.is_online" class="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" title="在线"></span>
                     </div>
@@ -176,7 +176,7 @@ const confirm = () => {
 
         <!-- 交接便签 -->
         <div class="space-y-1.5">
-          <label class="text-xs font-semibold text-slate-200 flex items-center gap-1.5">
+          <label class="text-xs font-semibold text-slate-800 flex items-center gap-1.5">
             <i class="fa-solid fa-note-sticky text-amber-400 text-[11px]"></i>
             <span>交接备注（可选，内部便签仅团队可见）</span>
           </label>
@@ -185,13 +185,13 @@ const confirm = () => {
             rows="2"
             :disabled="actionLoading"
             placeholder="例如：客户需要确认加急物流单号与退货单据，已完成初步核对…"
-            class="w-full bg-[#161E31] border border-white/10 rounded-xl p-3 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500/50 resize-none font-sans"
+            class="w-full bg-[#161E31] border border-slate-200 rounded-xl p-3 text-xs text-[#0F172A] placeholder-slate-500 focus:outline-none focus:border-blue-500/50 resize-none font-sans"
           ></textarea>
         </div>
       </div>
 
       <!-- 底部操作栏 -->
-      <div class="px-5 py-3.5 border-t border-white/[0.08] bg-[#141B2E] flex items-center justify-between gap-2">
+      <div class="px-5 py-3.5 border-t border-slate-200 bg-[#141B2E] flex items-center justify-between gap-2">
         <div class="flex items-center gap-2">
           <button
             type="button"
@@ -221,7 +221,7 @@ const confirm = () => {
             type="button"
             :disabled="actionLoading"
             @click="emit('close')"
-            class="px-3.5 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 text-xs font-medium transition-all"
+            class="px-3.5 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-slate-200 text-slate-300 text-xs font-medium transition-all"
           >
             取消
           </button>

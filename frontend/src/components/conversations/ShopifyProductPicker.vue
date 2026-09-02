@@ -80,36 +80,36 @@ watch(() => [props.open, props.sessionId], ([open]) => {
 
 <template>
   <div v-if="open" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-in fade-in duration-200" @click.self="emit('close')">
-    <div class="w-full max-w-lg bg-[#0F1523] border border-white/10 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
+    <div class="w-full max-w-lg bg-[#FFFFFF] border border-slate-200 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
       <!-- 头部 -->
-      <div class="px-5 py-4 border-b border-white/[0.08] flex items-center justify-between bg-[#141B2E]">
+      <div class="px-5 py-4 border-b border-slate-200 flex items-center justify-between bg-[#141B2E]">
         <div class="flex items-center gap-3">
           <div class="w-9 h-9 rounded-xl bg-purple-500/15 border border-purple-500/30 text-purple-400 flex items-center justify-center text-sm shadow-[0_0_12px_rgba(168,85,247,0.3)]">
             <i class="fa-solid fa-bag-shopping"></i>
           </div>
           <div>
-            <h3 class="font-bold text-slate-100 text-sm">选择 Shopify 商品卡片</h3>
+            <h3 class="font-bold text-[#0F172A] text-sm">选择 Shopify 商品卡片</h3>
             <p class="text-[11px] text-slate-400 mt-0.5">{{ shopDomain || '仅显示当前会话关联店铺的在售商品' }}</p>
           </div>
         </div>
         <button
           type="button"
           @click="emit('close')"
-          class="w-7 h-7 rounded-lg hover:bg-white/10 text-slate-400 hover:text-slate-100 flex items-center justify-center transition-colors"
+          class="w-7 h-7 rounded-lg hover:bg-white/10 text-slate-400 hover:text-[#0F172A] flex items-center justify-center transition-colors"
         >
           <i class="fa-solid fa-xmark text-sm"></i>
         </button>
       </div>
 
       <!-- 搜索框 -->
-      <div class="p-3.5 border-b border-white/[0.06] bg-[#0C111C]">
+      <div class="p-3.5 border-b border-slate-100 bg-[#0C111C]">
         <div class="relative">
           <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-slate-500 text-xs"></i>
           <input
             v-model="query"
             type="search"
             placeholder="搜索商品名称、品牌或商品链接标识…"
-            class="w-full bg-[#161E31] border border-white/10 rounded-xl pl-8 pr-3 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-purple-500/50"
+            class="w-full bg-[#161E31] border border-slate-200 rounded-xl pl-8 pr-3 py-1.5 text-xs text-slate-800 placeholder-slate-500 focus:outline-none focus:border-purple-500/50"
             autofocus
           />
         </div>
@@ -132,20 +132,20 @@ watch(() => [props.open, props.sessionId], ([open]) => {
             v-for="product in filteredProducts"
             :key="product.id"
             @click="emit('select', product, shopDomain); emit('close')"
-            class="p-2.5 rounded-xl border border-white/[0.06] bg-[#141B2E] hover:bg-[#1A233A] hover:border-purple-500/40 cursor-pointer transition-all flex items-center justify-between gap-3 group"
+            class="p-2.5 rounded-xl border border-slate-100 bg-[#141B2E] hover:bg-[#1A233A] hover:border-purple-500/40 cursor-pointer transition-all flex items-center justify-between gap-3 group"
           >
             <div class="flex items-center gap-3 min-w-0">
               <img
                 v-if="product.image?.src"
                 :src="product.image.src"
                 :alt="product.image.alt || product.title"
-                class="w-11 h-11 rounded-lg object-cover bg-slate-800 shrink-0 border border-white/10"
+                class="w-11 h-11 rounded-lg object-cover bg-slate-800 shrink-0 border border-slate-200"
               />
-              <div v-else class="w-11 h-11 rounded-lg bg-slate-800 flex items-center justify-center text-slate-500 shrink-0 border border-white/10">
+              <div v-else class="w-11 h-11 rounded-lg bg-slate-800 flex items-center justify-center text-slate-500 shrink-0 border border-slate-200">
                 <i class="fa-solid fa-box"></i>
               </div>
               <div class="min-w-0">
-                <div class="text-xs font-semibold text-slate-100 group-hover:text-purple-300 transition-colors truncate">
+                <div class="text-xs font-semibold text-[#0F172A] group-hover:text-purple-300 transition-colors truncate">
                   {{ product.title }}
                 </div>
                 <div class="text-[10px] text-slate-400 mt-0.5 truncate">{{ product.vendor || 'Shopify 官方在售' }}</div>

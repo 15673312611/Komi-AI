@@ -1,5 +1,5 @@
 <!--
-Copyright 2024-2026 ChatterMate
+Copyright 2024-2026 Komi AI
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -73,7 +73,7 @@ const enable = () => {
       <template v-if="needsInstallFirst">
         <div class="prompt-title">安装应用以接收实时通知</div>
         <div class="prompt-body">
-          请先将 ChatterMate 添加到主屏幕 — 在 iPhone 上，推送通知需要在添加到主屏幕的应用中启用。点击分享图标，然后选择“添加到主屏幕”。
+          请先将 Komi AI 添加到主屏幕 — 在 iPhone 上，推送通知需要在添加到主屏幕的应用中启用。点击分享图标，然后选择“添加到主屏幕”。
         </div>
         <button type="button" class="secondary-btn" @click="snooze">知道了</button>
       </template>

@@ -2,10 +2,10 @@
 chcp 65001 > nul
 setlocal enabledelayedexpansion
 
-title ChatterMate Go Backend Server
+title Komi AI Go Backend Server
 
 echo ===================================================
-echo           ChatterMate Go 后端服务启动器
+echo           Komi AI Go 后端服务启动器
 echo ===================================================
 echo.
 
@@ -25,7 +25,7 @@ if exist ".env" (
     set "ENVIRONMENT=development"
     set "HTTP_ADDR=:8001"
     set "PORT=8001"
-    set "DATABASE_URL=postgresql://postgres:postgres@localhost:15432/chattermate"
+    set "DATABASE_URL=postgresql://postgres:postgres@localhost:15432/komi"
     set "REDIS_URL=redis://localhost:16379/0"
     set "REDIS_ENABLED=true"
     set "BACKEND_URL=http://localhost:8001"
@@ -39,10 +39,10 @@ if not exist "..\backend\assets" (
     mkdir "..\backend\assets" 2>nul
 )
 
-:: 检查 chattermate-server.exe 是否已编译
-if not exist "chattermate-server.exe" (
+:: 检查 komi-server.exe 是否已编译
+if not exist "komi-server.exe" (
     echo [INFO] 正在编译 Go 后端服务...
-    go build -o chattermate-server.exe ./cmd/server
+    go build -o komi-server.exe ./cmd/server
     if errorlevel 1 (
         echo [ERROR] 编译失败，请检查 Go 环境与代码！
         pause
@@ -58,7 +58,7 @@ echo   - 运行环境: %ENVIRONMENT%
 echo   - 数据库地址: %DATABASE_URL%
 echo   - Redis地址: %REDIS_URL%
 echo.
-echo [INFO] 正在启动 ChatterMate Go 服务...
+echo [INFO] 正在启动 Komi AI Go 服务...
 echo ---------------------------------------------------
 echo.
 

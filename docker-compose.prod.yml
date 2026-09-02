@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   frontend:
-    image: chattermate/frontend:latest
+    image: komi/frontend:latest
     ports:
       - "80:80"
     env_file:
@@ -10,11 +10,11 @@ services:
     depends_on:
       - backend
     networks:
-      - chattermate-network
+      - komi-network
     restart: unless-stopped
 
   backend:
-    image: chattermate/backend:latest
+    image: komi/backend:latest
     ports:
       - "8000:8000"
     environment:
@@ -46,7 +46,7 @@ services:
       redis:
         condition: service_healthy
     networks:
-      - chattermate-network
+      - komi-network
     restart: unless-stopped
     volumes:
       - backend_data:/app/uploads
@@ -63,7 +63,7 @@ services:
       start_period: 10s
 
   knowledge_processor:
-    image: chattermate/backend:latest
+    image: komi/backend:latest
     command: python -m app.workers.knowledge_processor
     environment:
       - REDIS_ENABLED=true
@@ -93,7 +93,7 @@ services:
       redis:
         condition: service_healthy
     networks:
-      - chattermate-network
+      - komi-network
     restart: always
     volumes:
       - backend_data:/app/uploads
@@ -109,7 +109,7 @@ services:
         max-file: "3"
 
   crm_sync:
-    image: chattermate/backend:latest
+    image: komi/backend:latest
     command: python -m app.workers.crm_sync
     environment:
       - LOG_LEVEL=info
@@ -120,7 +120,7 @@ services:
       db:
         condition: service_healthy
     networks:
-      - chattermate-network
+      - komi-network
     restart: always
     logging:
       driver: "json-file"
@@ -129,7 +129,7 @@ services:
         max-file: "3"
 
   ticket_investigator:
-    image: chattermate/backend:latest
+    image: komi/backend:latest
     command: python -m app.workers.ticket_investigator
     environment:
       - REDIS_ENABLED=true
@@ -148,7 +148,7 @@ services:
       redis:
         condition: service_healthy
     networks:
-      - chattermate-network
+      - komi-network
     restart: always
     volumes:
       - huggingface_cache:/app/.cache/huggingface
@@ -167,11 +167,11 @@ services:
     environment:
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=postgres
-      - POSTGRES_DB=chattermate
+      - POSTGRES_DB=komi
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
-      - chattermate-network
+      - komi-network
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
@@ -187,7 +187,7 @@ services:
     volumes:
       - redis_data:/data
     networks:
-      - chattermate-network
+      - komi-network
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
@@ -198,7 +198,7 @@ services:
     command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
 
 networks:
-  chattermate-network:
+  komi-network:
     driver: bridge
 
 volumes:

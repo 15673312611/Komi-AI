@@ -1,5 +1,5 @@
 /*
-Copyright 2024-2026 ChatterMate
+Copyright 2024-2026 Komi AI
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -42,7 +42,7 @@ const UPDATE_TAKEOVER_TIMEOUT_MS = 4000
 async function promptForUpdate(reload: (reloadPage?: boolean) => Promise<void>) {
   try {
     const { toast } = await import('vue-sonner')
-    const id = toast('A new version of ChatterMate is available', {
+    const id = toast('A new version of Komi AI is available', {
       description: 'Reload to pick up the latest changes.',
       duration: Number.POSITIVE_INFINITY,
       action: {

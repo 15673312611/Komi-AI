@@ -1,5 +1,5 @@
 <!--
-Copyright 2024-2026 ChatterMate
+Copyright 2024-2026 Komi AI
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -15,7 +15,6 @@ limitations under the License.
 -->
 
 <script setup lang="ts">
-
 import type { Agent } from '@/types/agent';
 import type { Widget } from '@/types/widget';
 import { resolveUploadUrl } from '@/config/api'
@@ -28,6 +27,7 @@ import AgentDetail from './AgentDetail.vue'
 import CreateAgentModal from './CreateAgentModal.vue'
 import AgentTestChatModal from './AgentTestChatModal.vue'
 import { widgetService } from '@/services/widget'
+import { storeService } from '@/services/store'
 import { toast } from 'vue-sonner'
 import { useEnterpriseFeatures } from '@/composables/useEnterpriseFeatures'
 import { buildWidgetEmbed } from '@/utils/widgetEmbed'
@@ -47,6 +47,11 @@ const showUpgradeModal = ref(false)
 const widgetLoadingMap = ref<Record<string, boolean>>({})
 const widgetMap = ref<Record<string, Widget | null>>({})
 const searchQuery = ref('')
+const statusFilter = ref<'all' | 'online' | 'offline'>('all')
+
+const activeWidgetModalAgent = ref<Agent | null>(null)
+const activeWidgetModalCode = ref('')
+const activeWidgetModalIframeUrl = ref('')
 
 // Per-card kebab menu
 const openMenuId = ref<string | null>(null)
@@ -65,7 +70,7 @@ const toggleAgentActive = async (agent: Agent) => {
         const updated = await agentService.updateAgent(agent.id, { is_active: !agent.is_active })
         const idx = agents.value.findIndex(a => a.id === agent.id)
         if (idx !== -1) agents.value[idx] = updated
-        toast.success(updated.is_active ? '智能体已设为在线' : '智能体已设为离线')
+        toast.success(updated.is_active ? '已设为在线运行' : '已设为离线')
     } catch (err) {
         console.error('Failed to toggle agent status:', err)
         toast.error('更新智能体状态失败')
@@ -78,13 +83,21 @@ const copyAgentId = async (agent: Agent) => {
     closeMenu()
     try {
         if (await copyTextToClipboard(agent.id)) {
-            toast.success('智能体 ID 已复制到剪贴板')
+            toast.success('智能体 ID 已复制')
         } else {
-            toast.error('复制智能体 ID 失败，请手动选择并复制')
+            toast.error('复制失败，请手动选择')
         }
     } catch (err) {
         console.error('Failed to copy agent ID:', err)
         toast.error('复制智能体 ID 失败')
+    }
+}
+
+const copyText = async (text: string) => {
+    if (await copyTextToClipboard(text)) {
+        toast.success('已复制到剪贴板')
+    } else {
+        toast.error('复制失败，请手动选择')
     }
 }
 
@@ -93,7 +106,7 @@ const emit = defineEmits<{
     (e: 'resume-onboarding'): void
 }>()
 
-// Resume-setup banner: shown when an onboarding run was started but not finished
+// Resume-setup banner
 const onboarding = useOnboardingState()
 const orgId = userService.getCurrentUser()?.organization_id || ''
 const onboardingRecord = ref(onboarding.get(orgId))
@@ -101,7 +114,7 @@ const showResumeBanner = computed(() => onboarding.hasUnfinishedRun(orgId) && !b
 const bannerDismissed = ref(false)
 const checklistProgress = computed(() => {
     const done = onboardingRecord.value.completedSteps.length
-    return `已完成 ${done} / ${onboarding.ONBOARDING_STEPS.length} 个配置步骤`
+    return `已完成 ${done} / ${onboarding.ONBOARDING_STEPS.length} 项配置`
 })
 const dismissBanner = () => {
     onboarding.skip(orgId)
@@ -114,19 +127,28 @@ const isSubscriptionActive = computed(() => subscriptionStorage.isSubscriptionAc
 const currentAgentCount = computed(() => agents.value.length)
 
 const onlineCount = computed(() => agents.value.filter(a => a.is_active).length)
+const offlineCount = computed(() => agents.value.filter(a => !a.is_active).length)
+const totalKnowledgeCount = computed(() => agents.value.reduce((acc, a) => acc + (a.knowledge?.length || 0), 0))
+const workflowCount = computed(() => agents.value.filter(a => a.use_workflow).length)
 
 const filteredAgents = computed(() => {
+    let list = agents.value
+
+    if (statusFilter.value === 'online') {
+        list = list.filter(a => a.is_active)
+    } else if (statusFilter.value === 'offline') {
+        list = list.filter(a => !a.is_active)
+    }
+
     const q = searchQuery.value.trim().toLowerCase()
-    if (!q) return agents.value
-    return agents.value.filter(a =>
+    if (!q) return list
+    return list.filter(a =>
         (a.display_name || a.name).toLowerCase().includes(q) ||
         a.name.toLowerCase().includes(q) ||
         (a.description || '').toLowerCase().includes(q)
     )
 })
 
-// A view_agents role can read the list; it cannot create. Gating only the
-// first-run wizard left these three doing the same job for the same user.
 const canManageAgents = permissionChecks.canManageAgents()
 
 const isAgentCreationLocked = computed(() => {
@@ -147,10 +169,14 @@ const refreshAgents = async () => {
 
 const loadWidgetsForAgents = async () => {
     try {
-        const widgets = await widgetService.getWidgets()
+        const [widgets, stores] = await Promise.all([
+            widgetService.getWidgets(),
+            storeService.getStores(),
+        ])
+        const wList = Array.isArray(widgets) ? widgets : []
         agents.value.forEach(agent => {
             widgetLoadingMap.value[agent.id] = false
-            const widget = widgets.find((w: Widget) => w.agent_id === agent.id)
+            const widget = wList.find((w: Widget) => w.agent_id === agent.id)
             widgetMap.value[agent.id] = widget || null
         })
     } catch (error) {
@@ -160,24 +186,56 @@ const loadWidgetsForAgents = async () => {
 
 const copyWidgetCode = async (agent: Agent) => {
     if (widgetLoadingMap.value[agent.id]) return
-    const widget = widgetMap.value[agent.id]
+    let widget = widgetMap.value[agent.id]
+    const isFirstTime = !widget
+
     if (!widget) {
         try {
             widgetLoadingMap.value[agent.id] = true
-            const newWidget = await widgetService.createWidget({
-                name: `${agent.name} Widget`,
+            // 1. 真实调用后端 API 创建挂件
+            widget = await widgetService.createWidget({
+                name: `${agent.display_name || agent.name} 挂件`,
                 agent_id: agent.id
             })
-            widgetMap.value[agent.id] = newWidget
-            await copyWidgetCodeToClipboard(newWidget, agent.require_token_auth)
-        } catch (error) {
+            widgetMap.value[agent.id] = widget
+
+            // 2. 真实调用后端 API 自动在【店铺管理】中同步建立该挂件店铺
+            try {
+                const stores = await storeService.getStores()
+                const hasStore = Array.isArray(stores) && stores.some(s => s.agent_id === agent.id && s.platform === 'web_widget')
+                if (!hasStore) {
+                    await storeService.createStore({
+                        name: `${agent.display_name || agent.name} 挂件独立站`,
+                        platform: 'web_widget',
+                        agent_id: agent.id,
+                        channel_type: 'web',
+                        is_active: true,
+                        currency: 'USD',
+                        timezone: 'America/New_York',
+                    })
+                }
+            } catch (err) {
+                console.warn('Auto store creation notice:', err)
+            }
+        } catch (error: any) {
             console.error('Failed to create widget:', error)
-            toast.error('创建挂件失败')
+            toast.error(error?.response?.data?.detail || error?.message || '创建挂件失败')
+            return
         } finally {
             widgetLoadingMap.value[agent.id] = false
         }
-    } else {
+    }
+
+    if (widget) {
+        const code = buildWidgetEmbed(widget.id, agent.require_token_auth)
+        activeWidgetModalAgent.value = agent
+        activeWidgetModalCode.value = code
+        activeWidgetModalIframeUrl.value = `${window.location.origin}/api/v1/widgets/${widget.id}/data`
+        
         await copyWidgetCodeToClipboard(widget, agent.require_token_auth)
+        if (isFirstTime) {
+            toast.success('挂件及店铺已同步创建成功！代码已复制到剪贴板', { duration: 3500 })
+        }
     }
 }
 
@@ -185,9 +243,9 @@ const copyWidgetCodeToClipboard = async (widget: Widget, requireTokenAuth?: bool
     const code = buildWidgetEmbed(widget.id, requireTokenAuth)
     try {
         if (await copyTextToClipboard(code)) {
-            toast.success('挂件代码已复制到剪贴板！', { duration: 3000 })
+            toast.success('挂件代码已复制到剪贴板', { duration: 3000 })
         } else {
-            toast.error('复制挂件代码失败，请手动选择并复制')
+            toast.error('复制挂件代码失败')
         }
     } catch (error) {
         console.error('Failed to copy widget code:', error)
@@ -195,18 +253,16 @@ const copyWidgetCodeToClipboard = async (widget: Widget, requireTokenAuth?: bool
     }
 }
 
-const openWidgetHelp = () => window.open('https://docs.chattermate.chat/features/widget', '_blank')
-
 onMounted(async () => {
     await refreshAgents()
     window.addEventListener('click', closeMenu)
 
-    // Restore the detail view after a browser refresh (?agent=<id>)
+    // Restore detail view
     const agentId = new URLSearchParams(window.location.search).get('agent')
     if (agentId) {
         const found = agents.value.find(a => a.id === agentId)
         if (found) selectedAgent.value = found
-        else setAgentParam(null) // stale id → clean the URL
+        else setAgentParam(null)
     }
 })
 
@@ -214,7 +270,6 @@ onUnmounted(() => {
     window.removeEventListener('click', closeMenu)
 })
 
-// Keep the open agent in the URL so a browser refresh restores the detail view
 const setAgentParam = (id: string | null) => {
     const url = new URL(window.location.href)
     if (id) {
@@ -227,9 +282,6 @@ const setAgentParam = (id: string | null) => {
 }
 
 const handleAgentClose = async () => {
-    // Re-sync from the backend so detail edits (photo, name, status) reflect
-    // immediately. With S3 storage the authoritative signed photo URL only
-    // comes back from GET /agent/list, not from localStorage.
     try {
         await agentService.getOrganizationAgents()
     } catch (e) {
@@ -269,15 +321,12 @@ const handleAgentClick = (agent: Agent) => {
     }
 }
 
-// Only called when a photo exists — the orb covers the no-photo case.
 const getAgentPhotoUrl = (agent: Agent) => resolveUploadUrl(agent.customization?.photo_url)
 
 const handleFullscreenToggle = (isFullscreen: boolean) => {
     emit('toggle-fullscreen', isFullscreen)
 }
 
-// Colorful gradient orb per agent. Uses the shared palettes rather than a local
-// copy, so the orb here matches the one on the agent's detail page.
 const getOrbStyle = (agent: Agent): Record<string, string> => {
     if (agent.customization?.photo_url) return {}
     return resolveOrbStyle(agent.name, agent.customization?.customization_metadata?.orb_variant)
@@ -285,215 +334,289 @@ const getOrbStyle = (agent: Agent): Record<string, string> => {
 </script>
 
 <template>
-    <div class="agent-list" :class="{ 'showing-detail': selectedAgent }">
-        <div v-if="!selectedAgent">
-            <!-- Resume guided setup -->
-            <div v-if="showResumeBanner" class="resume-banner">
-                <div class="resume-info">
-                    <div class="resume-text">
-                        <div class="resume-title">完成智能体初始配置</div>
-                        <div class="resume-progress">{{ checklistProgress }}</div>
-                    </div>
+    <div class="agent-workspace" :class="{ 'showing-detail': selectedAgent }">
+        <div v-if="!selectedAgent" class="workspace-content">
+            
+            <!-- Guided setup banner -->
+            <div v-if="showResumeBanner" class="resume-bar">
+                <div class="resume-text-group">
+                    <span class="resume-dot"></span>
+                    <span class="resume-title">初始配置向导</span>
+                    <span class="resume-progress">({{ checklistProgress }})</span>
                 </div>
                 <div class="resume-actions">
-                    <button class="resume-dismiss" @click="dismissBanner">稍后处理</button>
-                    <button
-                        v-if="canManageAgents"
-                        class="resume-cta"
-                        @click="emit('resume-onboarding')"
-                    >继续配置 →</button>
+                    <button class="resume-dismiss-btn" @click="dismissBanner">稍后</button>
+                    <button v-if="canManageAgents" class="resume-continue-btn" @click="emit('resume-onboarding')">继续配置 →</button>
                 </div>
             </div>
 
-            <!-- Search + Create header -->
-            <div class="list-header">
-                <div class="search-wrap">
-                    <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <!-- Page Header Strip -->
+            <div class="page-header">
+                <div class="header-left">
+                    <h1 class="page-title">智能体概览</h1>
+                    <p class="page-desc">构建并管理您的电商 AI 智能客服，实现独立站、WhatsApp 与微信全渠道自主接待。</p>
+                </div>
+
+                <div class="header-right">
+                    <router-link
+                        to="/settings/ai-config"
+                        class="btn-secondary"
+                        title="配置大语言模型与 API"
+                    >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><line x1="9" y1="1" x2="9" y2="4"/><line x1="15" y1="1" x2="15" y2="4"/><line x1="9" y1="20" x2="9" y2="23"/><line x1="15" y1="20" x2="15" y2="23"/><line x1="20" y1="9" x2="23" y2="9"/><line x1="20" y1="14" x2="23" y2="14"/><line x1="1" y1="9" x2="4" y2="9"/><line x1="1" y1="14" x2="4" y2="14"/>
+                        </svg>
+                        <span>模型配置</span>
+                    </router-link>
+
+                    <button
+                        v-if="canManageAgents"
+                        class="btn-primary"
+                        :class="{ 'locked': isAgentCreationLocked }"
+                        :disabled="isAgentCreationLocked"
+                        @click="handleCreateAgent"
+                    >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+                            <path d="M12 5v14M5 12h14"/>
+                        </svg>
+                        <span>新建智能体</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Metrics Overview Cards -->
+            <div class="metrics-grid">
+                <div class="metric-card">
+                    <div class="metric-header">
+                        <span class="metric-title">已发布智能体</span>
+                        <span class="metric-icon-wrap emerald">
+                            <span class="live-dot"></span>
+                        </span>
+                    </div>
+                    <div class="metric-val-row">
+                        <span class="metric-val">{{ onlineCount }}</span>
+                        <span class="metric-total">/ {{ agents.length }} 个已启用</span>
+                    </div>
+                    <div class="metric-footer-text">
+                        <span>全天候自动接待与意图路由</span>
+                    </div>
+                </div>
+
+                <div class="metric-card">
+                    <div class="metric-header">
+                        <span class="metric-title">挂载知识库</span>
+                        <span class="metric-icon-wrap indigo">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+                        </span>
+                    </div>
+                    <div class="metric-val-row">
+                        <span class="metric-val">{{ totalKnowledgeCount }}</span>
+                        <span class="metric-total">个知识源</span>
+                    </div>
+                    <div class="metric-footer-text">
+                        <span>为智能体提供行业问答与店铺数据</span>
+                    </div>
+                </div>
+
+                <div class="metric-card">
+                    <div class="metric-header">
+                        <span class="metric-title">自动化工作流</span>
+                        <span class="metric-icon-wrap purple">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                        </span>
+                    </div>
+                    <div class="metric-val-row">
+                        <span class="metric-val">{{ workflowCount }}</span>
+                        <span class="metric-total">个自动化节点</span>
+                    </div>
+                    <div class="metric-footer-text">
+                        <span>多轮意图分支与业务动作编排</span>
+                    </div>
+                </div>
+
+                <div class="metric-card">
+                    <div class="metric-header">
+                        <span class="metric-title">接入多端生态</span>
+                        <span class="metric-icon-wrap cyan">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+                        </span>
+                    </div>
+                    <div class="metric-val-row">
+                        <span class="metric-val">3</span>
+                        <span class="metric-total">大多端支持</span>
+                    </div>
+                    <div class="metric-footer-text">
+                        <span>网页挂件 · WhatsApp · 微信生态</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Filter & Search Toolbar -->
+            <div class="toolbar-row">
+                <div class="status-tabs">
+                    <button
+                        class="status-tab"
+                        :class="{ active: statusFilter === 'all' }"
+                        @click="statusFilter = 'all'"
+                    >
+                        全部智能体 ({{ agents.length }})
+                    </button>
+                    <button
+                        class="status-tab"
+                        :class="{ active: statusFilter === 'online' }"
+                        @click="statusFilter = 'online'"
+                    >
+                        已启用 ({{ onlineCount }})
+                    </button>
+                    <button
+                        class="status-tab"
+                        :class="{ active: statusFilter === 'offline' }"
+                        @click="statusFilter = 'offline'"
+                    >
+                        已停用 ({{ offlineCount }})
+                    </button>
+                </div>
+
+                <div class="search-box">
+                    <svg class="search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
                     </svg>
                     <input
                         v-model="searchQuery"
                         type="text"
-                        placeholder="搜索智能体名称或标识..."
+                        placeholder="搜索智能体名称或描述..."
                         class="search-input"
                     />
-                </div>
-                <div class="header-actions-wrap">
-                    <router-link
-                        to="/settings/ai-config"
-                        class="ai-config-quick-btn"
-                        title="配置大模型 API Key（OpenAI / DeepSeek / Gemini 等）"
-                    >
-                        <i class="fa-solid fa-microchip"></i>
-                        <span>模型引擎配置</span>
-                    </router-link>
-                    <button
-                        v-if="canManageAgents"
-                        class="create-agent-button"
-                        :class="{ 'locked': isAgentCreationLocked }"
-                        :disabled="isAgentCreationLocked"
-                        @click="handleCreateAgent"
-                        :title="isAgentCreationLocked ? `已达套餐智能体数量上限 (${currentAgentCount}/${planLimits.maxAgents})。` : '创建新 AI 智能体'"
-                    >
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
-                            <path d="M12 5v14M5 12h14"/>
-                        </svg>
-                        创建智能体
-                        <font-awesome-icon v-if="hasEnterpriseModule && isAgentCreationLocked" icon="fa-solid fa-lock" class="lock-icon" />
-                    </button>
-                </div>
-            </div>
-
-            <!-- KPI Strip -->
-            <div class="kpi-strip">
-                <div class="kpi-card">
-                    <div class="kpi-label">活跃智能体</div>
-                    <div class="kpi-value">{{ agents.length }}</div>
-                    <div class="kpi-sub kpi-lime">{{ onlineCount }} 在线运行</div>
-                </div>
-                <div class="kpi-card">
-                    <div class="kpi-label">近30天接待会话</div>
-                    <div class="kpi-value">—</div>
-                    <div class="kpi-sub kpi-lime">▲ 统计分析即将上线</div>
-                </div>
-                <div class="kpi-card">
-                    <div class="kpi-label">AI 独立解决率</div>
-                    <div class="kpi-value">—</div>
-                    <div class="kpi-sub kpi-teal">AI 自主应答闭环</div>
-                </div>
-                <div class="kpi-card">
-                    <div class="kpi-label">转人工会话数</div>
-                    <div class="kpi-value">—</div>
-                    <div class="kpi-sub kpi-coral">人机协作分流</div>
                 </div>
             </div>
 
             <!-- Agent Grid -->
-            <div v-if="filteredAgents.length > 0" class="agents-grid">
+            <div class="agents-grid">
+                <!-- Actual Existing Agents -->
                 <div
                     v-for="agent in filteredAgents"
                     :key="agent.id"
                     class="agent-card"
-                    :class="{ 'workflow-agent': agent.use_workflow }"
+                    @click="handleAgentClick(agent)"
                 >
-                    <!-- Card top: orb + name/slug + menu -->
-                    <div class="card-top">
-                        <div class="agent-orb" :style="getOrbStyle(agent)">
-                            <img
-                                v-if="agent.customization?.photo_url"
-                                :src="getAgentPhotoUrl(agent)"
-                                :alt="agent.name"
-                            />
+                    <!-- Card Top: Avatar + Identity + Status + Kebab -->
+                    <div class="card-header">
+                        <div class="avatar-wrap">
+                            <div class="agent-avatar" :style="getOrbStyle(agent)">
+                                <img
+                                    v-if="agent.customization?.photo_url"
+                                    :src="getAgentPhotoUrl(agent)"
+                                    :alt="agent.name"
+                                />
+                            </div>
+                            <span class="status-indicator" :class="{ online: agent.is_active }"></span>
                         </div>
-                        <div class="agent-meta">
-                            <h4 class="agent-display-name">{{ agent.display_name || agent.name }}</h4>
-                            <span class="agent-slug">{{ agent.name }}</span>
+
+                        <div class="identity-meta">
+                            <div class="name-line">
+                                <h3 class="agent-name">{{ agent.display_name || agent.name }}</h3>
+                                <span v-if="agent.use_workflow" class="workflow-tag">工作流</span>
+                            </div>
+                            <span class="agent-handle">@{{ agent.name }}</span>
                         </div>
-                        <div class="card-menu-wrap" @click.stop>
+
+                        <div class="menu-wrap" @click.stop>
                             <button
-                                class="card-menu-btn"
+                                class="menu-btn"
                                 :class="{ active: openMenuId === agent.id }"
                                 @click.stop="toggleMenu(agent.id)"
                                 title="更多操作"
                             >
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
                                     <circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/>
                                 </svg>
                             </button>
-                            <div v-if="openMenuId === agent.id" class="card-menu" role="menu">
-                                <button class="card-menu-item" role="menuitem" @click="closeMenu(); testingAgent = agent">💬 测试对话</button>
-                                <button class="card-menu-item" role="menuitem" @click="closeMenu(); handleAgentClick(agent)">配置详情</button>
-                                <button class="card-menu-item" role="menuitem" @click="closeMenu(); copyWidgetCode(agent)">复制挂件代码</button>
-                                <button class="card-menu-item" role="menuitem" @click="copyAgentId(agent)">复制智能体 ID</button>
-                                <div class="card-menu-divider"></div>
+                            <div v-if="openMenuId === agent.id" class="dropdown-panel">
+                                <button class="dropdown-item" @click="closeMenu(); testingAgent = agent">测试对话</button>
+                                <button class="dropdown-item" @click="closeMenu(); handleAgentClick(agent)">编辑配置</button>
+                                <button class="dropdown-item" @click="closeMenu(); copyWidgetCode(agent)">{{ widgetMap[agent.id] ? '查看挂件代码' : '创建挂件 (同步店铺)' }}</button>
+                                <button class="dropdown-item" @click="copyAgentId(agent)">复制 ID</button>
+                                <div class="dropdown-divider"></div>
                                 <button
-                                    class="card-menu-item"
-                                    role="menuitem"
+                                    class="dropdown-item"
                                     :disabled="togglingActiveId === agent.id"
                                     @click="toggleAgentActive(agent)"
                                 >
-                                    {{ agent.is_active ? '设为离线' : '设为在线' }}
+                                    {{ agent.is_active ? '设为草稿' : '发布上线' }}
                                 </button>
                             </div>
                         </div>
                     </div>
 
-                    <!-- Status + integration badges -->
-                    <div class="badges-row">
-                        <span class="badge-status" :class="{ online: agent.is_active }">
-                            <span class="status-dot"></span>
-                            {{ agent.is_active ? '在线' : '离线' }}
-                        </span>
-                        <span class="badge-integration">Web 网页</span>
-                        <span v-if="agent.use_workflow" class="badge-workflow">
-                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 3H5a2 2 0 00-2 2v4m6-6h10a2 2 0 012 2v4M9 3v18m0 0h10a2 2 0 002-2V9M9 21H5a2 2 0 01-2-2V9m0 0h18"/></svg>
-                            工作流驱动
-                        </span>
-                    </div>
-
                     <!-- Description -->
-                    <p class="agent-description">{{ agent.description || '暂无描述信息。' }}</p>
+                    <p class="card-desc">{{ agent.description || '全天候智能接待客户咨询，支持根据业务知识库与多分支工作流精准应答。' }}</p>
 
-                    <!-- Stats -->
-                    <div class="stats-divider"></div>
-                    <div class="stats-row">
-                        <div class="stat-item">
-                            <span class="stat-value">—</span>
-                            <span class="stat-label">会话总量</span>
-                        </div>
-                        <div class="stat-item">
-                            <span class="stat-value">—</span>
-                            <span class="stat-label">已解决</span>
-                        </div>
-                        <div class="stat-item">
-                            <span class="stat-value">{{ agent.knowledge?.length ?? 0 }}</span>
-                            <span class="stat-label">关联知识源</span>
-                        </div>
+                    <!-- Meta specs chips -->
+                    <div class="card-specs">
+                        <span class="spec-pill">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+                            Web 挂件
+                        </span>
+                        <span class="spec-pill">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+                            {{ agent.knowledge?.length ?? 0 }} 知识源
+                        </span>
+                        <span class="spec-status-pill" :class="{ online: agent.is_active }">
+                            <span class="status-dot-sm"></span>
+                            {{ agent.is_active ? '已发布' : '草稿' }}
+                        </span>
                     </div>
 
-                    <!-- Action buttons -->
+                    <!-- Action Footer -->
                     <div class="card-actions" @click.stop>
-                        <button class="btn-test-chat" @click="testingAgent = agent" title="开启对话窗口测试此智能体">
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <button class="btn-card-primary" @click="testingAgent = agent">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                 <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
                             </svg>
-                            测试对话
+                            <span>测试对话</span>
                         </button>
-                        <button class="btn-configure" @click="handleAgentClick(agent)">
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/>
-                            </svg>
-                            配置管理
+                        <button class="btn-card-secondary" @click="handleAgentClick(agent)">
+                            <span>配置</span>
                         </button>
                         <button
-                            class="btn-copy-widget"
-                            :class="{ loading: widgetLoadingMap[agent.id] }"
+                            class="btn-card-secondary"
+                            :class="widgetMap[agent.id] ? 'text-slate-700 bg-white hover:bg-slate-50 border-slate-200' : 'font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border-indigo-200'"
                             :disabled="widgetLoadingMap[agent.id]"
                             @click="copyWidgetCode(agent)"
-                            title="复制网页挂件嵌入代码"
+                            :title="widgetMap[agent.id] ? '查看并复制挂件代码' : '一键创建挂件并在店铺管理中同步生成店铺'"
                         >
-                            <div v-if="widgetLoadingMap[agent.id]" class="loading-spinner"></div>
-                            <template v-else>复制挂件代码</template>
+                            <span v-if="!widgetLoadingMap[agent.id]" class="flex items-center gap-1">
+                                <template v-if="!widgetMap[agent.id]">
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
+                                    创建挂件
+                                </template>
+                                <template v-else>
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                                    挂件代码
+                                </template>
+                            </span>
+                            <span v-else>处理中...</span>
                         </button>
                     </div>
                 </div>
+
+                <!-- Create Custom Agent Card (Integrated into Grid) -->
+                <div v-if="canManageAgents && !isAgentCreationLocked" class="create-slot-card" @click="handleCreateAgent">
+                    <div class="create-slot-icon">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+                            <path d="M12 5v14M5 12h14"/>
+                        </svg>
+                    </div>
+                    <h4 class="create-slot-title">新建智能体</h4>
+                    <p class="create-slot-desc">创建专属电商导购、客服或多分支工作流智能体</p>
+                </div>
             </div>
 
-            <!-- Empty search result -->
-            <div v-else-if="searchQuery && agents.length > 0" class="empty-search">
-                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-                <p>未找到匹配 "<strong>{{ searchQuery }}</strong>" 的智能体</p>
-            </div>
-
-            <!-- Empty state: no agents at all -->
-            <div v-else-if="agents.length === 0" class="empty-state">
-                <div class="empty-orb"></div>
-                <h3>暂无 AI 智能体</h3>
-                <p>创建您的第一个 AI 智能客服，开始全天候自动化接待客户咨询。</p>
-                <button v-if="canManageAgents" class="create-agent-button" @click="handleCreateAgent">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
-                    立即创建智能体
-                </button>
+            <!-- Empty Search State -->
+            <div v-if="filteredAgents.length === 0 && searchQuery" class="empty-state">
+                <p class="empty-title">未找到匹配的智能体</p>
+                <p class="empty-desc">未找到包含 "<strong>{{ searchQuery }}</strong>" 的结果</p>
+                <button class="btn-secondary" @click="searchQuery = ''">清除搜索条件</button>
             </div>
         </div>
 
@@ -516,7 +639,7 @@ const getOrbStyle = (agent: Agent): Record<string, string> => {
             @close="testingAgent = null"
         />
 
-        <!-- Agent Limit Upgrade Modal -->
+        <!-- Upgrade Modal -->
         <div v-if="hasEnterpriseModule && showUpgradeModal" class="upgrade-modal-overlay" @click="closeUpgradeModal">
             <div class="upgrade-modal" @click.stop>
                 <div class="upgrade-modal-header">
@@ -526,791 +649,942 @@ const getOrbStyle = (agent: Agent): Record<string, string> => {
                 <div class="upgrade-modal-content">
                     <p class="upgrade-description">
                         您当前套餐的智能体配额已用满 ({{ currentAgentCount }}/{{ planLimits.maxAgents }})。
-                        升级套餐以创建更多智能体并解锁更高级的企业级特性。
+                        升级套餐以创建更多智能体并解锁更多高级特性。
                     </p>
-                    <div class="upgrade-features">
-                        <div class="feature-item">
-                            <font-awesome-icon icon="fa-solid fa-check" class="feature-icon" />
-                            <span>创建更多专属智能客服</span>
-                        </div>
-                        <div class="feature-item">
-                            <font-awesome-icon icon="fa-solid fa-check" class="feature-icon" />
-                            <span>多分支高级工作流编排</span>
-                        </div>
-                        <div class="feature-item">
-                            <font-awesome-icon icon="fa-solid fa-check" class="feature-icon" />
-                            <span>海量知识库容量与向量检索</span>
-                        </div>
-                        <div class="feature-item">
-                            <font-awesome-icon icon="fa-solid fa-check" class="feature-icon" />
-                            <span>专属技术支持与 SLA 保障</span>
-                        </div>
-                    </div>
                 </div>
                 <div class="upgrade-modal-footer">
-                    <button class="upgrade-button primary" @click="handleUpgrade">升级套餐</button>
-                    <button class="upgrade-button secondary" @click="closeUpgradeModal">暂不升级</button>
+                    <button class="btn-primary" @click="handleUpgrade">升级套餐</button>
+                    <button class="btn-secondary" @click="closeUpgradeModal">暂不升级</button>
                 </div>
             </div>
-        </div>
+        
+            <!-- Widget Code Modal Popup -->
+            <div v-if="activeWidgetModalAgent" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" @click.self="activeWidgetModalAgent = null">
+                <div class="bg-white rounded-2xl shadow-2xl max-w-xl w-full p-6 border border-slate-200 relative animate-in fade-in zoom-in duration-150">
+                    <div class="flex items-center justify-between pb-4 border-b border-slate-100 mb-4">
+                        <div class="flex items-center gap-2.5">
+                            <div class="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center text-lg">
+                                <i class="fa-solid fa-code"></i>
+                            </div>
+                            <div>
+                                <h3 class="font-bold text-slate-900 text-base">「{{ activeWidgetModalAgent.display_name || activeWidgetModalAgent.name }}」挂件代码</h3>
+                                <p class="text-xs text-slate-500">挂件已就绪，复制代码嵌入网站即可上线</p>
+                            </div>
+                        </div>
+                        <button class="text-slate-400 hover:text-slate-600 p-1" @click="activeWidgetModalAgent = null">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                        </button>
+                    </div>
+
+                    <div class="mb-4">
+                        <label class="text-xs font-bold text-slate-700 block mb-1.5">HTML 嵌入代码片段：</label>
+                        <div class="relative bg-slate-900 rounded-xl p-3.5 font-mono text-xs text-emerald-400 overflow-x-auto max-h-40">
+                            <code>{{ activeWidgetModalCode }}</code>
+                        </div>
+                    </div>
+
+                    <div class="p-3 bg-indigo-50/60 rounded-xl border border-indigo-100 text-xs text-indigo-800 mb-5 flex items-start gap-2">
+                        <i class="fa-solid fa-circle-info mt-0.5 text-indigo-600"></i>
+                        <span>将此代码直接复制粘贴到您独立站（Shopify、WordPress 或自建站）HTML 的 <code>&lt;/body&gt;</code> 结束标签之前即可生效！</span>
+                    </div>
+
+                    <div class="flex items-center justify-end gap-3">
+                        <button
+                            class="px-4 py-2 rounded-xl text-slate-600 hover:bg-slate-100 text-xs font-semibold"
+                            @click="activeWidgetModalAgent = null"
+                        >
+                            关闭
+                        </button>
+                        <button
+                            class="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-md shadow-indigo-200 active:scale-95 transition-all"
+                            @click="copyText(activeWidgetModalCode)"
+                        >
+                            <i class="fa-solid fa-copy"></i>
+                            <span>一键复制代码</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+</div>
     </div>
 </template>
 
 <style scoped>
-/* ─── Container ─────────────────────────────────────────────────── */
-.agent-list {
-    padding: var(--space-lg);
-    max-width: 1280px;
+/* ─── Workspace Container ───────────────────────────────────────── */
+.agent-workspace {
+    padding: 28px 36px 64px;
+    max-width: 1380px;
     margin: 0 auto;
+    width: 100%;
+    box-sizing: border-box;
 }
 
-/* Detail view fills the area edge-to-edge (no list grid padding / width cap) */
-.agent-list.showing-detail {
+.agent-workspace.showing-detail {
     padding: 0;
     max-width: none;
 }
 
-/* ─── Resume guided setup banner ────────────────────────────────── */
-.resume-banner {
+.workspace-content {
+    display: flex;
+    flex-direction: column;
+    gap: 22px;
+}
+
+/* ─── Resume Banner ────────────────────────────────────────────── */
+.resume-bar {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 24px;
-    background: linear-gradient(120deg, var(--purple-bg), var(--accent-bg-08));
-    border: 1px solid var(--o10);
-    border-radius: 16px;
-    padding: 18px 22px;
-    margin-bottom: 22px;
+    padding: 12px 18px;
+    background: #FFFFFF;
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+}
+
+.resume-text-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.resume-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #4F46E5;
 }
 
 .resume-title {
-    font-family: var(--font-display);
+    font-size: 13.5px;
     font-weight: 600;
-    font-size: 16px;
     color: var(--text);
 }
 
 .resume-progress {
-    font-size: 13.5px;
+    font-size: 13px;
     color: var(--muted);
-    margin-top: 2px;
 }
 
 .resume-actions {
     display: flex;
     align-items: center;
     gap: 10px;
-    flex-shrink: 0;
 }
 
-.resume-dismiss {
+.resume-dismiss-btn {
     background: none;
     border: none;
-    color: var(--muted2);
-    font-size: 13.5px;
-    font-family: var(--font-sans);
+    color: var(--muted);
+    font-size: 13px;
     cursor: pointer;
-    transition: var(--transition-fast);
 }
 
-.resume-dismiss:hover {
-    color: var(--text3);
+.resume-dismiss-btn:hover {
+    color: var(--text);
 }
 
-.resume-cta {
-    padding: 10px 18px;
-    background: var(--accent-solid);
-    color: var(--on-accent-solid);
+.resume-continue-btn {
+    padding: 5px 12px;
+    background: #0F172A;
+    color: #FFFFFF;
     border: none;
     border-radius: var(--radius-btn);
-    font-size: 14px;
+    font-size: 12.5px;
     font-weight: 600;
-    font-family: var(--font-sans);
     cursor: pointer;
-    transition: var(--transition-fast);
+    transition: background 0.15s ease;
 }
 
-.resume-cta:hover {
-    filter: brightness(1.05);
+.resume-continue-btn:hover {
+    background: #000000;
 }
 
-/* ─── Header: search + create ───────────────────────────────────── */
-.list-header {
+/* ─── Page Header Strip ────────────────────────────────────────── */
+.page-header {
     display: flex;
-    gap: var(--space-md);
-    align-items: center;
-    margin-bottom: var(--space-xl);
+    justify-content: space-between;
+    align-items: flex-end;
+    gap: 20px;
+    flex-wrap: wrap;
 }
 
-.search-wrap {
-    flex: 1;
-    position: relative;
-    max-width: 360px;
+.header-left {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
 }
 
-.search-icon {
-    position: absolute;
-    left: 14px;
-    top: 50%;
-    transform: translateY(-50%);
-    color: var(--faint);
-    pointer-events: none;
-    flex-shrink: 0;
-}
-
-.search-input {
-    width: 100%;
-    padding: 11px 14px 11px 40px;
-    background: var(--surface);
-    border: 1px solid var(--o10);
-    border-radius: 12px;
+.page-title {
     font-family: var(--font-sans);
-    font-size: var(--text-sm);
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
     color: var(--text);
-    transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
-    box-sizing: border-box;
+    margin: 0;
+    line-height: 1.2;
 }
 
-.search-input::placeholder { color: var(--faint); }
-
-.search-input:focus {
-    outline: none;
-    border-color: var(--accent-ink);
-    box-shadow: var(--ring-focus);
+.page-desc {
+    font-size: 13.5px;
+    color: var(--muted);
+    margin: 0;
+    line-height: 1.5;
 }
 
-.header-actions-wrap {
+.header-right {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 10px;
+    flex-wrap: wrap;
 }
 
-.ai-config-quick-btn {
+.btn-secondary {
     display: inline-flex;
     align-items: center;
-    gap: 7px;
-    padding: 10px 16px;
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    border-radius: 12px;
-    color: var(--muted, #94A3B8);
-    font-size: var(--text-sm);
-    font-weight: 600;
+    gap: 6px;
+    padding: 8px 14px;
+    background: #FFFFFF;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-btn);
+    color: var(--text2);
+    font-size: 13px;
+    font-weight: 500;
     text-decoration: none;
-    transition: all var(--transition-fast);
+    cursor: pointer;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
+    transition: all 0.15s ease;
     white-space: nowrap;
 }
 
-.ai-config-quick-btn:hover {
-    background: rgba(201, 242, 78, 0.12);
-    border-color: rgba(201, 242, 78, 0.35);
-    color: var(--accent-ink, #C9F24E);
+.btn-secondary:hover {
+    background: #F8FAFC;
+    border-color: var(--border-color-hover);
+    color: var(--text);
 }
 
-.create-agent-button {
-    background: var(--accent-solid);
-    color: var(--on-accent-solid);
-    border: none;
-    border-radius: 12px;
-    padding: 11px 22px;
-    font-family: var(--font-sans);
-    font-weight: 700;
-    font-size: var(--text-sm);
-    cursor: pointer;
-    display: flex;
+.btn-primary {
+    display: inline-flex;
     align-items: center;
-    gap: 8px;
-    transition: opacity var(--transition-fast), transform var(--transition-fast), box-shadow var(--transition-fast);
-    flex-shrink: 0;
-    letter-spacing: -0.01em;
+    gap: 6px;
+    padding: 8px 16px;
+    background: #0F172A;
+    color: #FFFFFF;
+    border: 1px solid transparent;
+    border-radius: var(--radius-btn);
+    font-family: var(--font-sans);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+    transition: all 0.15s ease;
+    white-space: nowrap;
 }
 
-.create-agent-button:hover:not(:disabled) {
-    opacity: 0.88;
-    transform: translateY(-1px);
-    box-shadow: 0 6px 20px rgba(201,242,78,.25);
+.btn-primary:hover:not(:disabled) {
+    background: #000000;
+    transform: translateY(-0.5px);
 }
 
-.create-agent-button.locked {
-    background: var(--o08);
+.btn-primary.locked {
+    background: rgba(15, 23, 42, 0.08);
     color: var(--muted);
     cursor: not-allowed;
 }
 
-.create-agent-button.locked:hover { opacity: 1; transform: none; box-shadow: none; }
-.lock-icon { font-size: 11px; color: var(--warning-color); }
-
-/* ─── KPI Strip ─────────────────────────────────────────────────── */
-.kpi-strip {
+/* ─── Metrics Overview Cards ───────────────────────────────────── */
+.metrics-grid {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
-    gap: var(--space-md);
-    margin-bottom: var(--space-xl);
+    gap: 16px;
 }
 
-.kpi-card {
-    background: var(--surface);
-    border: 1px solid var(--o08);
-    border-radius: 18px;
-    padding: 22px 24px;
+.metric-card {
+    background: #FFFFFF;
+    border: 1px solid var(--border-color);
+    border-radius: 14px;
+    padding: 16px 18px;
     display: flex;
     flex-direction: column;
-    gap: 6px;
-    transition: border-color var(--transition-fast);
+    gap: 8px;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
 }
 
-.kpi-card:hover { border-color: var(--o14); }
+.metric-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
 
-.kpi-label {
-    font-family: var(--font-mono);
-    font-size: 10px;
+.metric-title {
+    font-size: 12.5px;
     font-weight: 600;
-    letter-spacing: 0.1em;
-    color: var(--faint);
-    text-transform: uppercase;
+    color: var(--muted);
 }
 
-.kpi-value {
-    font-family: var(--font-display);
-    font-size: 36px;
+.metric-icon-wrap {
+    width: 26px;
+    height: 26px;
+    border-radius: 7px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+}
+
+.metric-icon-wrap.emerald {
+    background: rgba(16, 185, 129, 0.1);
+}
+
+.metric-icon-wrap.indigo {
+    background: rgba(79, 70, 229, 0.08);
+}
+
+.metric-icon-wrap.purple {
+    background: rgba(168, 85, 247, 0.08);
+}
+
+.metric-icon-wrap.cyan {
+    background: rgba(6, 182, 212, 0.08);
+}
+
+.live-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #10B981;
+    box-shadow: 0 0 6px rgba(16, 185, 129, 0.7);
+}
+
+.metric-val-row {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+}
+
+.metric-val {
+    font-size: 24px;
     font-weight: 700;
-    letter-spacing: -0.03em;
     color: var(--text);
+    letter-spacing: -0.03em;
     line-height: 1;
 }
 
-.kpi-sub {
-    font-size: var(--text-sm);
+.metric-total {
+    font-size: 12px;
+    color: var(--muted);
     font-weight: 500;
 }
 
-.kpi-lime { color: var(--accent-ink); }
-.kpi-teal { color: var(--c-teal); }
-.kpi-coral { color: var(--c-coral); }
+.metric-footer-text {
+    font-size: 11.5px;
+    color: var(--text3);
+    margin-top: 2px;
+}
 
-/* ─── Agent Grid ─────────────────────────────────────────────────── */
+/* ─── Toolbar Row ──────────────────────────────────────────────── */
+.toolbar-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+    padding-top: 4px;
+}
+
+.status-tabs {
+    display: flex;
+    gap: 4px;
+    background: rgba(15, 23, 42, 0.04);
+    padding: 3px;
+    border-radius: 8px;
+}
+
+.status-tab {
+    padding: 5px 12px;
+    background: transparent;
+    border: none;
+    border-radius: 6px;
+    font-size: 12.5px;
+    font-weight: 500;
+    color: var(--muted);
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.status-tab:hover {
+    color: var(--text);
+}
+
+.status-tab.active {
+    color: var(--text);
+    font-weight: 600;
+    background: #FFFFFF;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.search-box {
+    position: relative;
+    width: 240px;
+}
+
+.search-icon {
+    position: absolute;
+    left: 11px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--muted2);
+    pointer-events: none;
+}
+
+.search-input {
+    width: 100%;
+    padding: 7px 12px 7px 32px;
+    background: #FFFFFF;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-btn);
+    font-family: var(--font-sans);
+    font-size: 12.5px;
+    color: var(--text);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
+    box-sizing: border-box;
+    transition: all 0.15s ease;
+}
+
+.search-input:focus {
+    outline: none;
+    border-color: #0F172A;
+    box-shadow: 0 0 0 2px rgba(15, 23, 42, 0.08);
+}
+
+/* ─── Agents Grid ──────────────────────────────────────────────── */
 .agents-grid {
     display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: var(--space-lg);
+    grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+    gap: 16px;
 }
 
 .agent-card {
-    background: var(--surface);
-    border: 1px solid var(--o08);
-    border-radius: 22px;
-    padding: 24px;
+    background: #FFFFFF;
+    border: 1px solid var(--border-color);
+    border-radius: 14px;
+    padding: 18px 20px;
     display: flex;
     flex-direction: column;
-    gap: 14px;
-    transition: border-color var(--transition-normal), box-shadow var(--transition-normal), transform var(--transition-normal);
+    gap: 12px;
+    cursor: pointer;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
+    transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1);
     position: relative;
 }
 
 .agent-card:hover {
-    border-color: var(--o16);
-    box-shadow: 0 8px 32px rgba(0,0,0,.35);
-    transform: translateY(-2px);
+    border-color: rgba(15, 23, 42, 0.18);
+    box-shadow: 0 6px 20px -4px rgba(15, 23, 42, 0.06);
+    transform: translateY(-1px);
 }
 
-.workflow-agent { border-color: rgba(201,242,78,.2); }
-.workflow-agent:hover { border-color: rgba(201,242,78,.4); box-shadow: 0 8px 32px rgba(201,242,78,.08); }
-
-/* Card top row */
-.card-top {
+.card-header {
     display: flex;
     align-items: flex-start;
-    gap: 14px;
+    gap: 12px;
 }
 
-.agent-orb {
-    width: 64px;
-    height: 64px;
-    border-radius: 50%;
-    overflow: hidden;
-    flex-shrink: 0;
-    background: var(--o06);
+.avatar-wrap {
     position: relative;
+    flex-shrink: 0;
 }
 
-.agent-orb img {
+.agent-avatar {
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    overflow: hidden;
+    background: var(--grad-brand);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
+}
+
+.agent-avatar img {
     width: 100%;
     height: 100%;
     object-fit: cover;
-    display: block;
-    border-radius: 50%;
 }
 
-.agent-meta {
+.status-indicator {
+    position: absolute;
+    bottom: -1px;
+    right: -1px;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--muted2);
+    border: 2px solid #FFFFFF;
+}
+
+.status-indicator.online {
+    background: #10B981;
+}
+
+.identity-meta {
     flex: 1;
     min-width: 0;
-    padding-top: 2px;
 }
 
-.agent-display-name {
-    font-family: var(--font-display);
-    font-size: 18px;
-    font-weight: 700;
-    letter-spacing: -0.02em;
+.name-line {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 2px;
+}
+
+.agent-name {
+    font-size: 15px;
+    font-weight: 600;
     color: var(--text);
-    margin: 0 0 4px;
+    margin: 0;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    letter-spacing: -0.01em;
 }
 
-.agent-slug {
-    display: block;
+.workflow-tag {
+    font-size: 10px;
+    font-weight: 600;
+    color: #4F46E5;
+    background: rgba(79, 70, 229, 0.08);
+    padding: 1.5px 5px;
+    border-radius: 4px;
+    flex-shrink: 0;
+}
+
+.agent-handle {
     font-family: var(--font-mono);
-    font-size: 12px;
-    color: var(--faint);
+    font-size: 11.5px;
+    color: var(--muted2);
+    display: block;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
 }
 
-.card-menu-btn {
-    width: 32px;
-    height: 32px;
-    border-radius: 8px;
-    background: var(--o05);
-    border: 1px solid var(--o10);
+.menu-wrap {
+    position: relative;
+}
+
+.menu-btn {
+    width: 26px;
+    height: 26px;
+    border-radius: 6px;
+    background: transparent;
+    border: none;
     color: var(--muted);
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
-    flex-shrink: 0;
-    transition: all var(--transition-fast);
+    transition: background 0.15s ease;
 }
 
-.card-menu-btn:hover,
-.card-menu-btn.active { background: var(--o10); color: var(--text); border-color: var(--o16); }
-
-.card-menu-wrap {
-    position: relative;
-    flex-shrink: 0;
+.menu-btn:hover,
+.menu-btn.active {
+    background: rgba(15, 23, 42, 0.05);
+    color: var(--text);
 }
 
-.card-menu {
+.dropdown-panel {
     position: absolute;
-    top: calc(100% + 6px);
+    top: calc(100% + 4px);
     right: 0;
-    z-index: 20;
-    min-width: 180px;
-    padding: 6px;
-    background: var(--surface);
-    border: 1px solid var(--o12);
-    border-radius: var(--radius-md);
-    box-shadow: var(--shadow-lg);
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
+    z-index: 50;
+    min-width: 150px;
+    background: #FFFFFF;
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    padding: 4px;
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.08);
 }
 
-.card-menu-item {
+.dropdown-item {
+    display: block;
     width: 100%;
-    text-align: left;
-    padding: 9px 12px;
+    padding: 6.5px 10px;
+    font-size: 12.5px;
+    font-weight: 500;
+    color: var(--text2);
     background: none;
     border: none;
-    border-radius: var(--radius-sm);
-    color: var(--text);
-    font-family: var(--font-sans);
-    font-size: 13.5px;
+    border-radius: 6px;
     cursor: pointer;
-    transition: background var(--transition-fast);
+    text-align: left;
+    transition: background 0.12s ease;
 }
 
-.card-menu-item:hover:not(:disabled) { background: var(--o06); }
-.card-menu-item:disabled { opacity: 0.55; cursor: not-allowed; }
+.dropdown-item:hover {
+    background: #F1F5F9;
+    color: var(--text);
+}
 
-.card-menu-divider {
+.dropdown-divider {
     height: 1px;
+    background: var(--border-color);
     margin: 4px 0;
-    background: var(--o08);
 }
 
-/* Badges row */
-.badges-row {
+.card-desc {
+    font-size: 12.5px;
+    color: var(--text3);
+    line-height: 1.5;
+    margin: 0;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    min-height: 38px;
+}
+
+.card-specs {
     display: flex;
     align-items: center;
     gap: 6px;
     flex-wrap: wrap;
 }
 
-.badge-status,
-.badge-integration,
-.badge-workflow {
+.spec-pill {
     display: inline-flex;
     align-items: center;
-    gap: 5px;
-    padding: 4px 10px;
-    border-radius: 999px;
-    font-size: 12px;
-    font-weight: 600;
-    white-space: nowrap;
-}
-
-.badge-status {
-    background: var(--o07);
-    border: 1px solid var(--o12);
+    gap: 4px;
+    font-size: 11px;
+    font-weight: 500;
     color: var(--muted);
+    background: #F8FAFC;
+    border: 1px solid var(--border-color);
+    padding: 2.5px 7px;
+    border-radius: 5px;
 }
 
-.badge-status.online {
-    background: rgba(95,227,214,.1);
-    border-color: rgba(95,227,214,.25);
-    color: var(--c-teal);
+.spec-status-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--muted);
+    background: rgba(15, 23, 42, 0.04);
+    padding: 2.5px 7px;
+    border-radius: 5px;
 }
 
-.status-dot {
-    width: 6px;
-    height: 6px;
+.spec-status-pill.online {
+    color: #059669;
+    background: rgba(16, 185, 129, 0.08);
+}
+
+.status-dot-sm {
+    width: 4px;
+    height: 4px;
     border-radius: 50%;
     background: currentColor;
-    flex-shrink: 0;
 }
 
-.badge-status.online .status-dot {
-    box-shadow: 0 0 6px rgba(95,227,214,.6);
-    animation: pulse-online 2.5s infinite;
+.card-actions {
+    display: grid;
+    grid-template-columns: 1.2fr 1fr 1fr;
+    gap: 6px;
+    padding-top: 10px;
+    border-top: 1px solid rgba(0, 0, 0, 0.04);
 }
 
-@keyframes pulse-online {
-    0%, 100% { box-shadow: 0 0 5px rgba(95,227,214,.5); }
-    50% { box-shadow: 0 0 10px rgba(95,227,214,.8); }
+.btn-card-primary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    padding: 6.5px 10px;
+    border-radius: 7px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    border: none;
+    background: #F1F5F9;
+    color: #0F172A;
+    transition: all 0.15s ease;
 }
 
-.badge-integration {
-    background: var(--o07);
-    border: 1px solid var(--o12);
+.btn-card-primary:hover {
+    background: #0F172A;
+    color: #FFFFFF;
+}
+
+.btn-card-secondary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 6.5px 10px;
+    border-radius: 7px;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    border: 1px solid var(--border-color);
+    background: #FFFFFF;
+    color: var(--text2);
+    transition: all 0.15s ease;
+}
+
+.btn-card-secondary:hover {
+    background: #F8FAFC;
+    color: var(--text);
+    border-color: var(--border-color-hover);
+}
+
+/* ─── Integrated Creation & Preset Slots in Grid ───────────────── */
+.create-slot-card {
+    border: 1px dashed var(--border-color);
+    border-radius: 14px;
+    padding: 24px 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    gap: 8px;
+    background: #FAFAFC;
+    cursor: pointer;
+    transition: all 0.18s ease;
+    min-height: 190px;
+    box-sizing: border-box;
+}
+
+.create-slot-card:hover {
+    border-color: #0F172A;
+    background: #FFFFFF;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.04);
+}
+
+.create-slot-icon {
+    width: 38px;
+    height: 38px;
+    border-radius: 10px;
+    background: #FFFFFF;
+    border: 1px solid var(--border-color);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.create-slot-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text);
+    margin: 0;
+}
+
+.create-slot-desc {
+    font-size: 12px;
     color: var(--muted);
+    margin: 0;
+    max-width: 220px;
+    line-height: 1.4;
 }
 
-.badge-workflow {
-    background: rgba(201,242,78,.08);
-    border: 1px solid rgba(201,242,78,.2);
-    color: var(--accent-ink);
+.preset-slot-card {
+    border: 1px solid var(--border-color);
+    border-radius: 14px;
+    padding: 18px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    background: #FFFFFF;
+    cursor: pointer;
+    transition: all 0.18s ease;
+    box-sizing: border-box;
 }
 
-/* Description */
-.agent-description {
+.preset-slot-card:hover {
+    border-color: rgba(15, 23, 42, 0.18);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.04);
+    transform: translateY(-1px);
+}
+
+.preset-slot-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.preset-icon {
+    font-size: 20px;
+}
+
+.preset-tag {
+    font-size: 10.5px;
+    font-weight: 600;
+    color: #4F46E5;
+    background: rgba(79, 70, 229, 0.08);
+    padding: 1.5px 6px;
+    border-radius: 4px;
+}
+
+.preset-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text);
+    margin: 0;
+}
+
+.preset-desc {
+    font-size: 12px;
     color: var(--muted);
-    font-size: var(--text-sm);
-    line-height: 1.55;
+    line-height: 1.45;
     margin: 0;
     display: -webkit-box;
     -webkit-line-clamp: 2;
     -webkit-box-orient: vertical;
     overflow: hidden;
+    min-height: 35px;
 }
 
-/* Stats */
-.stats-divider {
-    height: 1px;
-    background: var(--o07);
-    flex-shrink: 0;
-}
-
-.stats-row {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: var(--space-sm);
-}
-
-.stat-item {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 4px;
-    text-align: center;
-}
-
-.stat-value {
-    font-family: var(--font-display);
-    font-size: 22px;
-    font-weight: 700;
-    letter-spacing: -0.02em;
-    color: var(--text);
-    line-height: 1;
-}
-
-.stat-label {
-    font-family: var(--font-mono);
-    font-size: 9.5px;
+.preset-action {
+    font-size: 12px;
     font-weight: 600;
-    letter-spacing: 0.08em;
-    color: var(--faint);
-    text-transform: uppercase;
+    color: #0F172A;
+    margin-top: auto;
+    padding-top: 8px;
 }
 
-/* Action buttons */
-.card-actions {
-    display: grid;
-    grid-template-columns: 1fr 1fr auto;
-    gap: 8px;
-    margin-top: 2px;
+.preset-slot-card:hover .preset-action {
+    color: #4F46E5;
 }
 
-.btn-test-chat {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 6px;
-    padding: 10px 12px;
-    background: #eef2ff;
-    color: #4f46e5;
-    border: 1px solid #c7d2fe;
-    border-radius: 12px;
-    font-family: var(--font-sans);
-    font-weight: 700;
-    font-size: var(--text-sm);
-    cursor: pointer;
-    transition: all var(--transition-fast);
-    white-space: nowrap;
-}
-
-.btn-test-chat:hover {
-    background: #4f46e5;
-    color: #ffffff;
-    border-color: #4f46e5;
-    transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(79, 70, 229, 0.2);
-}
-
-.btn-configure {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 7px;
-    padding: 11px 16px;
-    background: var(--accent-solid);
-    color: var(--on-accent-solid);
-    border: none;
-    border-radius: 12px;
-    font-family: var(--font-sans);
-    font-weight: 700;
-    font-size: var(--text-sm);
-    cursor: pointer;
-    transition: opacity var(--transition-fast), transform var(--transition-fast);
-    white-space: nowrap;
-}
-
-.btn-configure:hover {
-    opacity: 0.88;
-    transform: translateY(-1px);
-}
-
-.btn-copy-widget {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 11px 16px;
-    background: var(--o07);
-    border: 1px solid var(--o12);
-    border-radius: 12px;
-    font-family: var(--font-sans);
-    font-weight: 600;
-    font-size: var(--text-sm);
-    color: var(--text3);
-    cursor: pointer;
-    transition: all var(--transition-fast);
-    white-space: nowrap;
-}
-
-.btn-copy-widget:hover:not(:disabled) {
-    background: var(--o12);
-    border-color: var(--o20);
-    color: var(--text);
-}
-
-.btn-copy-widget:disabled { opacity: 0.5; cursor: not-allowed; }
-.btn-copy-widget.loading { pointer-events: none; }
-
-.loading-spinner {
-    width: 14px;
-    height: 14px;
-    border: 2px solid var(--o12);
-    border-radius: 50%;
-    border-top-color: var(--accent-ink);
-    animation: spin 0.8s linear infinite;
-}
-
-@keyframes spin { to { transform: rotate(360deg); } }
-
-/* ─── Empty states ───────────────────────────────────────────────── */
-.empty-search {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: var(--space-md);
-    padding: var(--space-3xl);
-    color: var(--muted);
-    text-align: center;
-}
-
-.empty-search svg { color: var(--faint); }
-.empty-search p { margin: 0; font-size: var(--text-sm); }
-.empty-search strong { color: var(--text3); }
-
+/* ─── Empty States ─────────────────────────────────────────────── */
 .empty-state {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: var(--space-md);
-    padding: var(--space-3xl);
     text-align: center;
+    padding: 48px 20px;
 }
 
-.empty-orb {
-    width: 80px;
-    height: 80px;
-    border-radius: 50%;
-    background: radial-gradient(circle at 40% 40%, var(--c-purple), var(--c-teal), var(--accent-solid));
-    opacity: 0.4;
-    filter: blur(8px);
-    margin-bottom: var(--space-sm);
-}
-
-.empty-state h3 {
-    font-family: var(--font-display);
-    font-size: var(--text-xl);
-    font-weight: 700;
+.empty-title {
+    font-size: 15px;
+    font-weight: 600;
     color: var(--text);
-    margin: 0;
+    margin: 0 0 4px;
 }
 
-.empty-state p {
+.empty-desc {
+    font-size: 13px;
     color: var(--muted);
-    font-size: var(--text-sm);
-    margin: 0 0 var(--space-md);
-    max-width: 340px;
+    margin: 0 0 16px;
 }
 
-/* ─── Responsive ─────────────────────────────────────────────────── */
-@media (max-width: 1200px) {
-    .kpi-strip { grid-template-columns: repeat(2, 1fr); }
-}
-
-@media (max-width: 1024px) {
-    .agents-grid { grid-template-columns: 1fr; }
-}
-
-@media (max-width: 768px) {
-    .agent-list { padding: var(--space-md); }
-    .list-header { flex-wrap: wrap; }
-    .search-wrap { max-width: 100%; flex: 1 1 100%; order: 2; }
-    .create-agent-button { order: 1; }
-    .kpi-strip { grid-template-columns: repeat(2, 1fr); gap: var(--space-sm); }
-    .agents-grid { gap: var(--space-md); }
-    .agent-card { padding: var(--space-lg); border-radius: 18px; }
-}
-
-@media (max-width: 480px) {
-    .kpi-strip { grid-template-columns: 1fr; }
-    .kpi-value { font-size: 28px; }
-}
-
-/* ─── Upgrade Modal ──────────────────────────────────────────────── */
+/* ─── Upgrade Modal ────────────────────────────────────────────── */
 .upgrade-modal-overlay {
     position: fixed;
     inset: 0;
-    background: rgba(5,6,9,.7);
+    background: var(--scrim);
     backdrop-filter: blur(4px);
     display: flex;
-    justify-content: center;
     align-items: center;
+    justify-content: center;
     z-index: 1000;
 }
 
 .upgrade-modal {
-    background: var(--surface);
-    border: 1px solid var(--o10);
-    border-radius: 20px;
-    padding: 0;
-    max-width: 500px;
-    width: 90%;
-    max-height: 90vh;
-    overflow-y: auto;
-    box-shadow: var(--shadow-lg);
+    background: #FFFFFF;
+    border: 1px solid var(--border-color);
+    border-radius: 16px;
+    width: 440px;
+    max-width: 90vw;
+    box-shadow: 0 20px 48px rgba(0, 0, 0, 0.12);
+    overflow: hidden;
 }
 
 .upgrade-modal-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: var(--space-lg);
-    border-bottom: 1px solid var(--o08);
+    padding: 18px 20px;
+    border-bottom: 1px solid var(--border-color);
 }
 
 .upgrade-modal-header h3 {
-    margin: 0;
+    font-size: 15px;
+    font-weight: 600;
     color: var(--text);
-    font-family: var(--font-display);
-    font-size: var(--text-lg);
-    font-weight: 700;
+    margin: 0;
 }
 
 .close-button {
-    background: var(--o05);
-    border: 1px solid var(--o10);
-    font-size: 1.25rem;
-    color: var(--muted);
+    background: none;
+    border: none;
+    font-size: 18px;
     cursor: pointer;
-    width: 32px;
-    height: 32px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 8px;
-    transition: all var(--transition-fast);
-    line-height: 1;
+    color: var(--muted);
 }
 
-.close-button:hover { background: var(--o10); color: var(--text); }
-
-.upgrade-modal-content { padding: var(--space-lg); }
+.upgrade-modal-content {
+    padding: 20px;
+}
 
 .upgrade-description {
-    color: var(--muted);
-    line-height: 1.6;
-    margin-bottom: var(--space-lg);
-    font-size: var(--text-sm);
-}
-
-.upgrade-features { display: flex; flex-direction: column; gap: var(--space-sm); }
-
-.feature-item {
-    display: flex;
-    align-items: center;
-    gap: var(--space-sm);
-    font-size: var(--text-sm);
+    font-size: 13px;
     color: var(--text3);
+    line-height: 1.5;
+    margin: 0;
 }
-
-.feature-icon { color: var(--accent-ink); font-size: 12px; }
 
 .upgrade-modal-footer {
+    padding: 14px 20px;
+    border-top: 1px solid var(--border-color);
     display: flex;
-    gap: var(--space-sm);
-    padding: var(--space-lg);
-    border-top: 1px solid var(--o08);
+    justify-content: flex-end;
+    gap: 8px;
+    background: #F8FAFC;
 }
 
-.upgrade-button {
-    flex: 1;
-    padding: 11px var(--space-md);
-    border-radius: 10px;
-    font-weight: 600;
-    font-size: var(--text-sm);
-    cursor: pointer;
-    transition: all var(--transition-fast);
-    border: none;
+/* ─── Responsive ───────────────────────────────────────────────── */
+@media (max-width: 1200px) {
+    .metrics-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
 }
 
-.upgrade-button.primary { background: var(--accent-solid); color: var(--on-accent-solid); }
-.upgrade-button.primary:hover { opacity: 0.88; transform: translateY(-1px); }
-.upgrade-button.secondary { background: var(--o06); color: var(--text3); border: 1px solid var(--o10); }
-.upgrade-button.secondary:hover { background: var(--o10); color: var(--text); }
+@media (max-width: 768px) {
+    .agent-workspace {
+        padding: 16px;
+    }
+
+    .page-header {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .header-right {
+        width: 100%;
+    }
+
+    .metrics-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .toolbar-row {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .search-box {
+        width: 100%;
+    }
+
+    .agents-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .card-actions {
+        grid-template-columns: 1fr;
+    }
+}
 </style>

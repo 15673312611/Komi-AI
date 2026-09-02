@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
@@ -11,34 +12,34 @@ import (
 	goRedis "github.com/redis/go-redis/v9"
 	"github.com/rs/zerolog"
 
-	"github.com/chattermate/chattermate/backend-go/internal/agent"
-	"github.com/chattermate/chattermate/backend-go/internal/aiconfig"
-	"github.com/chattermate/chattermate/backend-go/internal/analytics"
-	"github.com/chattermate/chattermate/backend-go/internal/auth"
-	"github.com/chattermate/chattermate/backend-go/internal/channel"
-	"github.com/chattermate/chattermate/backend-go/internal/chat"
-	"github.com/chattermate/chattermate/backend-go/internal/config"
-	"github.com/chattermate/chattermate/backend-go/internal/crm"
-	"github.com/chattermate/chattermate/backend-go/internal/customer"
-	"github.com/chattermate/chattermate/backend-go/internal/guardrail"
-	"github.com/chattermate/chattermate/backend-go/internal/helpcenter"
-	"github.com/chattermate/chattermate/backend-go/internal/jira"
-	knowledgeStore "github.com/chattermate/chattermate/backend-go/internal/knowledge"
-	"github.com/chattermate/chattermate/backend-go/internal/leadcapture"
-	"github.com/chattermate/chattermate/backend-go/internal/mcptool"
-	"github.com/chattermate/chattermate/backend-go/internal/notification"
-	"github.com/chattermate/chattermate/backend-go/internal/organization"
-	"github.com/chattermate/chattermate/backend-go/internal/people"
-	"github.com/chattermate/chattermate/backend-go/internal/realtime"
-	"github.com/chattermate/chattermate/backend-go/internal/session"
-	"github.com/chattermate/chattermate/backend-go/internal/shopify"
-	"github.com/chattermate/chattermate/backend-go/internal/store"
-	"github.com/chattermate/chattermate/backend-go/internal/ticketdb"
-	"github.com/chattermate/chattermate/backend-go/internal/ticketing"
-	"github.com/chattermate/chattermate/backend-go/internal/user"
-	"github.com/chattermate/chattermate/backend-go/internal/widget"
-	"github.com/chattermate/chattermate/backend-go/internal/widgetapp"
-	"github.com/chattermate/chattermate/backend-go/internal/workflow"
+	"github.com/komi/komi/backend-go/internal/agent"
+	"github.com/komi/komi/backend-go/internal/aiconfig"
+	"github.com/komi/komi/backend-go/internal/analytics"
+	"github.com/komi/komi/backend-go/internal/auth"
+	"github.com/komi/komi/backend-go/internal/channel"
+	"github.com/komi/komi/backend-go/internal/chat"
+	"github.com/komi/komi/backend-go/internal/config"
+	"github.com/komi/komi/backend-go/internal/crm"
+	"github.com/komi/komi/backend-go/internal/customer"
+	"github.com/komi/komi/backend-go/internal/guardrail"
+	"github.com/komi/komi/backend-go/internal/helpcenter"
+	"github.com/komi/komi/backend-go/internal/jira"
+	knowledgeStore "github.com/komi/komi/backend-go/internal/knowledge"
+	"github.com/komi/komi/backend-go/internal/leadcapture"
+	"github.com/komi/komi/backend-go/internal/mcptool"
+	"github.com/komi/komi/backend-go/internal/notification"
+	"github.com/komi/komi/backend-go/internal/organization"
+	"github.com/komi/komi/backend-go/internal/people"
+	"github.com/komi/komi/backend-go/internal/realtime"
+	"github.com/komi/komi/backend-go/internal/session"
+	"github.com/komi/komi/backend-go/internal/shopify"
+	"github.com/komi/komi/backend-go/internal/store"
+	"github.com/komi/komi/backend-go/internal/ticketdb"
+	"github.com/komi/komi/backend-go/internal/ticketing"
+	"github.com/komi/komi/backend-go/internal/user"
+	"github.com/komi/komi/backend-go/internal/widget"
+	"github.com/komi/komi/backend-go/internal/widgetapp"
+	"github.com/komi/komi/backend-go/internal/workflow"
 )
 
 type Dependencies struct {
@@ -208,6 +209,22 @@ func NewRouter(deps Dependencies) http.Handler {
 		uploads := http.StripPrefix(deps.Config.APIBasePath+"/uploads/", http.FileServer(http.Dir(deps.Config.UploadsDir)))
 		r.Handle(deps.Config.APIBasePath+"/uploads/*", uploads)
 	}
+
+	// Mount static assets for widget UI (/assets/widget.js and /assets/widget.css)
+	assetsDir := deps.Config.AssetsDir
+	if _, err := os.Stat(assetsDir); os.IsNotExist(err) {
+		if _, err := os.Stat("assets"); err == nil {
+			assetsDir = "assets"
+		} else if _, err := os.Stat("backend/assets"); err == nil {
+			assetsDir = "backend/assets"
+		} else if _, err := os.Stat("../backend/assets"); err == nil {
+			assetsDir = "../backend/assets"
+		}
+	}
+	if info, err := os.Stat(assetsDir); err == nil && info.IsDir() {
+		r.Handle("/assets/*", http.StripPrefix("/assets/", http.FileServer(http.Dir(assetsDir))))
+	}
+
 	return r
 }
 
@@ -226,7 +243,7 @@ func root(deps Dependencies) http.HandlerFunc {
 		JSON(w, http.StatusOK, map[string]string{
 			"name":        deps.Config.ProjectName,
 			"version":     deps.Config.Version,
-			"description": "Welcome to ChatterMate API",
+			"description": "Welcome to Komi AI API",
 		})
 	}
 }

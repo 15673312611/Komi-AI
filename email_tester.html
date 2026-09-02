@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ChatterMate 跨境电商邮件与会话联动模拟测试器</title>
+  <title>Komi AI 跨境电商邮件与会话联动模拟测试器</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <style>
     :root {
@@ -410,7 +410,7 @@
         <i class="fa-solid fa-paper-plane"></i>
       </div>
       <div>
-        <h2>ChatterMate 跨境电商邮件与会话联动模拟器</h2>
+        <h2>Komi AI 跨境电商邮件与会话联动模拟器</h2>
         <p>模拟海外买家发信 ➔ 自动触发系统邮件入站 ➔ 关联店铺与 AI 智能体应答 ➔ 同步至会话收件箱</p>
       </div>
     </div>
@@ -670,7 +670,7 @@
         appendMessage(
           'system',
           'Webhook Inbound Receiver',
-          `✅ 邮件已成功投递进系统 (耗时 ${duration}ms, 状态码 ${res.status})！\n\n🎯 【处理结果】：\n• 系统已自动根据 Webhook 识别出绑定的店铺，并为买家 ${from} 归集创建了工单会话；\n• 该店铺负责的 AI 智能体已收到入站事件并开始结合专属知识库检索与生成答复；\n• 👉 请前往 ChatterMate 主系统界面的【会话收件箱】(/conversations) 实时查看答复效果！`,
+          `✅ 邮件已成功投递进系统 (耗时 ${duration}ms, 状态码 ${res.status})！\n\n🎯 【处理结果】：\n• 系统已自动根据 Webhook 识别出绑定的店铺，并为买家 ${from} 归集创建了工单会话；\n• 该店铺负责的 AI 智能体已收到入站事件并开始结合专属知识库检索与生成答复；\n• 👉 请前往 Komi AI 主系统界面的【会话收件箱】(/conversations) 实时查看答复效果！`,
           'success'
         );
       } else {
@@ -686,7 +686,7 @@
       appendMessage(
         'system',
         'Network Error',
-        `❌ 网络请求异常 (${err.message})。\n请确认 ChatterMate 后端服务已正常启动 (http://localhost:8001)。`,
+        `❌ 网络请求异常 (${err.message})。\n请确认 Komi AI 后端服务已正常启动 (http://localhost:8001)。`,
         'error'
       );
     } finally {

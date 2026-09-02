@@ -1,5 +1,5 @@
 """
-Copyright 2024-2026 ChatterMate
+Copyright 2024-2026 Komi AI
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -15,7 +15,7 @@ limitations under the License.
 
 One-way Jira escalation for native tickets: when enabled, tickets at or
 above the configured priority get a mirrored Jira issue (external_ref_*).
-Native ChatterMate stays the source of truth — nothing syncs back.
+Native Komi AI stays the source of truth — nothing syncs back.
 """
 
 from typing import Optional
@@ -94,7 +94,7 @@ async def maybe_escalate_to_jira(db, service, ticket: Ticket, settings_row) -> b
         from app.services.jira import JiraService
 
         description_parts = [
-            f"Escalated from ChatterMate ticket {ticket.display_number} "
+            f"Escalated from Komi AI ticket {ticket.display_number} "
             f"(priority: {ticket.priority}, severity: {ticket.severity or 'n/a'}).",
         ]
         if ticket.ai_summary:

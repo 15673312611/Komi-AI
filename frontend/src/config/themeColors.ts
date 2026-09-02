@@ -1,5 +1,5 @@
 /*
-Copyright 2024-2026 ChatterMate
+Copyright 2024-2026 Komi AI
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -22,6 +22,7 @@ limitations under the License.
  * value as the pre-JS default.
  */
 export const THEME_COLORS = {
-  dark: '#0B0C10',
-  light: '#EEF0F4',
+  dark: '#090A0F',
+  light: '#F8FAFC',
 } as const
+

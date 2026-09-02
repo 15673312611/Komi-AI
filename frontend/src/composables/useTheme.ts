@@ -1,5 +1,5 @@
 /*
-Copyright 2024-2026 ChatterMate
+Copyright 2024-2026 Komi AI
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -21,8 +21,9 @@ export type ThemeMode = 'dark' | 'light' | 'system'
 
 const STORAGE_KEY = 'cm-theme'
 
-const stored = (typeof localStorage !== 'undefined' && localStorage.getItem(STORAGE_KEY)) || 'dark'
-const mode = ref<ThemeMode>(stored === 'light' || stored === 'system' ? (stored as ThemeMode) : 'dark')
+const stored = (typeof localStorage !== 'undefined' && localStorage.getItem(STORAGE_KEY)) || 'light'
+const mode = ref<ThemeMode>(stored === 'dark' || stored === 'system' ? (stored as ThemeMode) : 'light')
+
 
 const prefersDark = (): boolean =>
   typeof window !== 'undefined' &&

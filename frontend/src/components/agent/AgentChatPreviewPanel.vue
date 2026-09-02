@@ -1,5 +1,5 @@
 <!--
-Copyright 2024-2026 ChatterMate
+Copyright 2024-2026 Komi AI
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -554,7 +554,7 @@ const handleInitiationClick = () => {
         <div class="toggle-container" v-if="!isExpanded || customization.showBubblePreview || customization.showInitiationPreview">
             <button class="chat-toggle" :class="{ preview: customization.showBubblePreview || customization.showInitiationPreview }" :style="chatIconStyles"
                 @click="isExpanded = !isExpanded">
-                <!-- New launcher mark: 3 dots in the contrast ink (matches chattermate.js) -->
+                <!-- New launcher mark: 3 dots in the contrast ink (matches komi.js) -->
                 <div class="cm-toggle-dots"><span></span><span></span><span></span></div>
             </button>
         </div>
@@ -607,13 +607,13 @@ const handleInitiationClick = () => {
             
             <!-- Powered by footer for welcome message -->
             <div class="powered-by-welcome" :style="messageNameStyles">
-                <svg class="chattermate-logo" width="15" height="15" viewBox="0 0 60 60" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <svg class="komi-logo" width="15" height="15" viewBox="0 0 60 60" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <path d="M19 3H41A16 16 0 0 1 57 19V41A16 16 0 0 1 41 57H9A6 6 0 0 1 3 51V19A16 16 0 0 1 19 3Z" fill="#C9F24E"/>
                     <circle cx="19.7" cy="30" r="4.3" fill="#0B0C10"/>
                     <circle cx="30" cy="30" r="4.3" fill="#0B0C10"/>
                     <circle cx="40.3" cy="30" r="4.3" fill="#0B0C10"/>
                 </svg>
-                <span class="cm-powered-prefix">Powered by </span><strong class="cm-brand">ChatterMate</strong>
+                <span class="cm-powered-prefix">Powered by </span><strong class="cm-brand">Komi AI</strong>
             </div>
         </div>
 
@@ -710,13 +710,13 @@ const handleInitiationClick = () => {
 
             <!-- Add powered by footer -->
             <div class="powered-by" :style="messageNameStyles">
-                <svg class="chattermate-logo" width="15" height="15" viewBox="0 0 60 60" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <svg class="komi-logo" width="15" height="15" viewBox="0 0 60 60" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <path d="M19 3H41A16 16 0 0 1 57 19V41A16 16 0 0 1 41 57H9A6 6 0 0 1 3 51V19A16 16 0 0 1 19 3Z" fill="#C9F24E"/>
                     <circle cx="19.7" cy="30" r="4.3" fill="#0B0C10"/>
                     <circle cx="30" cy="30" r="4.3" fill="#0B0C10"/>
                     <circle cx="40.3" cy="30" r="4.3" fill="#0B0C10"/>
                 </svg>
-                <span class="cm-powered-prefix">Powered by </span><strong class="cm-brand">ChatterMate</strong>
+                <span class="cm-powered-prefix">Powered by </span><strong class="cm-brand">Komi AI</strong>
             </div>
         </div>
 
@@ -1171,12 +1171,12 @@ const handleInitiationClick = () => {
     font-size: 0.75rem;
     border-top: 1px solid var(--o08);
 }
-.powered-by .chattermate-logo,
-.powered-by-welcome .chattermate-logo {
+.powered-by .komi-logo,
+.powered-by-welcome .komi-logo {
     flex-shrink: 0;
 }
-/* "Powered by" is muted; "ChatterMate" is emphasized (comp). Both inherit the footer's
-   own colour (white on dark themes) so ChatterMate stays visible — dimming is on the
+/* "Powered by" is muted; "Komi AI" is emphasized (comp). Both inherit the footer's
+   own colour (white on dark themes) so Komi AI stays visible — dimming is on the
    prefix only, never a dark app token that would vanish on the dark panel. */
 .cm-powered-prefix { opacity: 0.6; }
 .cm-brand { font-weight: 700; }

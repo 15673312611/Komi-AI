@@ -17,8 +17,8 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
-	"github.com/chattermate/chattermate/backend-go/internal/aiconfig"
-	"github.com/chattermate/chattermate/backend-go/internal/chat"
+	"github.com/komi/komi/backend-go/internal/aiconfig"
+	"github.com/komi/komi/backend-go/internal/chat"
 )
 
 type copilotDraftRequest struct {

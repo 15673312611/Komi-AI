@@ -303,4 +303,4 @@
     route_dump_test.go:17: GET /*
 --- PASS: TestDumpRoutesForMigrationAudit (0.00s)
 PASS
-ok  	github.com/chattermate/chattermate/backend-go/internal/httpapi	0.031s
+ok  	github.com/komi/komi/backend-go/internal/httpapi	0.031s

@@ -1,5 +1,5 @@
 """
-Copyright 2024-2026 ChatterMate
+Copyright 2024-2026 Komi AI
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -145,7 +145,7 @@ class TestBuildNoteBody:
 
     def test_minimal_note(self):
         body = build_note_body(LeadPayload(lead_response_id=uuid.uuid4(), email="a@b.c"))
-        assert body == "<b>Lead captured by ChatterMate</b>"
+        assert body == "<b>Lead captured by Komi AI</b>"
 
     def test_non_http_source_url_is_not_a_link(self):
         body = build_note_body(LeadPayload(

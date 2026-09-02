@@ -1,242 +1,210 @@
 <!--
-Copyright 2024-2026 ChatterMate
-右栏：Shopify 电商订单面板 (ShopifyOrderPanel.vue - 1:1 原版 FontAwesome 复刻)
+Copyright 2024-2026 Komi AI
+Shopify 订单面板 (ShopifyOrderPanel.vue - 现代高定多维色彩体系)
 -->
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
-import { chatService, type ShopifyOrder, type ShopifyShippingAddress } from '@/services/chat'
-import { connectToShopify } from '@/services/shopify'
+import { ref, watch, computed } from 'vue'
+import { chatService, type ShopifyOrder } from '@/services/chat'
 import { permissionChecks } from '@/utils/permissions'
-import { copyTextToClipboard } from '@/utils/clipboard'
 
-const props = withDefaults(defineProps<{
-  sessionId?: string
-  canManageChat?: boolean
-}>(), {
-  sessionId: '',
-  canManageChat: true,
-})
+const props = defineProps<{
+  sessionId: string
+  canManageChat: boolean
+}>()
 
 const emit = defineEmits<{
-  (e: 'close'): void
   (e: 'open-tracking', order: any): void
   (e: 'action-toast', msg: string, type?: 'success' | 'info' | 'error'): void
 }>()
 
-type ActionType = 'refund' | 'address' | 'invoice'
-
-const orders = ref<ShopifyOrder[]>([])
-const orderCount = ref(0)
 const loading = ref(false)
 const loadingMore = ref(false)
+const orderList = ref<ShopifyOrder[]>([])
+const selectedOrderId = ref<string | null>(null)
+const nextCursor = ref<string | null>(null)
 const hasNextPage = ref(false)
-const nextCursor = ref<string | undefined>()
-const showAllOrders = ref(false)
+const orderCount = ref(0)
 const writeOrdersEnabled = ref(false)
-const shopDomain = ref('')
-const selectedOrderId = ref<string>('')
-const activeAction = ref<ActionType | null>(null)
+const shopDomain = ref<string | null>(null)
+const showAllOrders = ref(false)
+
+const activeAction = ref<'refund' | 'address' | 'invoice' | null>(null)
 const actionLoading = ref(false)
-const actionIdempotencyKey = ref('')
-const refundPreview = ref<{ amount?: string | number | null; currency?: string | null; refundable: boolean } | null>(null)
 const refundPreviewLoading = ref(false)
-const addressDraft = ref<ShopifyShippingAddress & { recipient_name?: string }>({
-  recipient_name: '', address1: '', address2: '', city: '', province: '', country: '', zip: '', phone: '',
-})
-let loadRequest = 0
+const refundPreview = ref<any>(null)
+const addressDraft = ref({ recipient_name: '', address1: '', address2: '', city: '', province: '', country: '', zip: '', phone: '' })
+
+let activeContextVersion = 0
 let actionContextVersion = 0
 let refundPreviewRequest = 0
 let actionRequest = 0
 
-const selectedOrder = computed(() => orders.value.find(item => String(item.id) === selectedOrderId.value) || orders.value[0])
-const order = computed(() => selectedOrder.value ? {
-  ...selectedOrder.value,
-  number: selectedOrder.value.name,
-  payStatus: selectedOrder.value.financial_status || '未知支付状态',
-  fulfillStatus: selectedOrder.value.fulfillment_status || '待履约',
-  products: (selectedOrder.value.line_items || []).map(item => ({ ...item, title: item.title || '商品', specs: item.sku || '', price: String(item.price || ''), qty: item.quantity || 1 })),
-  carrier: selectedOrder.value.fulfillments?.[0]?.tracking_company || '',
-  tracking: selectedOrder.value.fulfillments?.[0]?.tracking_numbers?.[0] || '',
-} : null)
+const canPerformOrderWrites = computed(() =>
+  props.canManageChat && Boolean(props.sessionId) && writeOrdersEnabled.value,
+)
 
-const actionOrder = computed(() => order.value)
-const canPerformOrderWrites = computed(() => props.canManageChat && writeOrdersEnabled.value)
-const idempotencyKey = () => {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') return crypto.randomUUID()
-  return `shopify-${Date.now()}-${Math.random().toString(36).slice(2, 14)}`
-}
-
-const clearOrderState = () => {
-  orders.value = []
-  orderCount.value = 0
-  hasNextPage.value = false
-  nextCursor.value = undefined
-  shopDomain.value = ''
-  writeOrdersEnabled.value = false
-  selectedOrderId.value = ''
-}
-
-const clearActionState = () => {
-  actionContextVersion += 1
-  refundPreviewRequest += 1
-  actionRequest += 1
-  activeAction.value = null
-  actionLoading.value = false
-  actionIdempotencyKey.value = ''
-  refundPreview.value = null
-  refundPreviewLoading.value = false
-  addressDraft.value = {
-    recipient_name: '', address1: '', address2: '', city: '', province: '', country: '', zip: '', phone: '',
+const activeOrder = computed(() => {
+  if (!orderList.value.length) return null
+  if (selectedOrderId.value) {
+    const matched = orderList.value.find((item: any) => String(item.id) === String(selectedOrderId.value))
+    if (matched) return matched
   }
+  return orderList.value[0]
+})
+
+const order = computed(() => {
+  const current = activeOrder.value
+  if (!current) return null
+  return {
+    id: current.id,
+    number: current.name,
+    payStatus: current.financial_status || '已支付',
+    fulfillStatus: current.fulfillment_status || '待履约',
+    products: (current.line_items || []).map((item: any) => ({
+      title: item.title,
+      specs: item.variant_title || item.sku || '标准规格',
+      price: `${current.currency || '$'} ${item.price}`,
+      qty: item.quantity,
+    })),
+    carrier: current.fulfillments?.[0]?.tracking_company || 'Shopify 官方物流',
+    tracking: current.fulfillments?.[0]?.tracking_numbers?.[0] || (current.fulfillments?.[0] as any)?.tracking_number || '',
+    fulfillment_status: current.fulfillment_status,
+  }
+})
+
+const actionOrder = computed(() => {
+  return activeOrder.value || null
+})
+
+const copyText = (text?: string, successMsg = '已复制') => {
+  if (!text) return
+  navigator.clipboard.writeText(text)
+  emit('action-toast', successMsg, 'info')
 }
 
 const loadOrders = async (cursor?: string) => {
-  const sessionId = props.sessionId
-  const request = ++loadRequest
-  if (!sessionId) {
-    clearOrderState()
+  const currentSessionId = props.sessionId
+  if (!currentSessionId) {
+    orderList.value = []
+    selectedOrderId.value = null
+    nextCursor.value = null
+    hasNextPage.value = false
+    orderCount.value = 0
+    writeOrdersEnabled.value = false
+    shopDomain.value = null
     loading.value = false
     loadingMore.value = false
     return
   }
-  const isCurrentRequest = () => request === loadRequest && props.sessionId === sessionId
-  if (cursor) loadingMore.value = true
-  else {
-    loading.value = true
-    writeOrdersEnabled.value = false
-  }
+  const isLoadMore = Boolean(cursor)
+  if (isLoadMore) loadingMore.value = true
+  else loading.value = true
+  const contextVersion = ++activeContextVersion
   try {
-    const result = await chatService.getShopifyOrders(sessionId, cursor)
-    if (!isCurrentRequest()) return
-    const incoming = Array.isArray(result?.orders) ? result.orders : []
-    orders.value = cursor ? [...orders.value, ...incoming.filter(item => !orders.value.some(existing => existing.id === item.id))] : incoming
-    if (!orders.value.some(item => String(item.id) === selectedOrderId.value)) selectedOrderId.value = String(orders.value[0]?.id || '')
-    orderCount.value = orders.value.length
-    hasNextPage.value = Boolean(result?.has_next_page)
-    nextCursor.value = result?.end_cursor || undefined
-    writeOrdersEnabled.value = Boolean(result?.write_orders_enabled)
-    shopDomain.value = result?.shop_domain || ''
-  } catch {
-    if (isCurrentRequest() && !cursor) clearOrderState()
+    const data = await chatService.getShopifyOrders(currentSessionId, cursor)
+    if (contextVersion !== activeContextVersion || props.sessionId !== currentSessionId) return
+    if (isLoadMore) orderList.value = [...orderList.value, ...(data.orders || [])]
+    else orderList.value = data.orders || []
+    if (!selectedOrderId.value && orderList.value[0]) selectedOrderId.value = String(orderList.value[0].id)
+    nextCursor.value = data.end_cursor || null
+    hasNextPage.value = Boolean(data.has_next_page)
+    orderCount.value = typeof data.count === 'number' ? data.count : orderList.value.length
+    writeOrdersEnabled.value = Boolean(data.write_orders_enabled)
+    shopDomain.value = data.shop_domain || null
+  } catch (err: any) {
+    if (contextVersion !== activeContextVersion || props.sessionId !== currentSessionId) return
+    orderList.value = []
+    selectedOrderId.value = null
+    nextCursor.value = null
+    hasNextPage.value = false
+    orderCount.value = 0
+    writeOrdersEnabled.value = false
+    shopDomain.value = null
   } finally {
-    if (isCurrentRequest()) {
+    if (contextVersion === activeContextVersion && props.sessionId === currentSessionId) {
       loading.value = false
       loadingMore.value = false
     }
   }
 }
+
 watch(() => props.sessionId, () => {
-  showAllOrders.value = false
-  clearActionState()
-  clearOrderState()
+  actionContextVersion += 1
+  refundPreviewRequest += 1
+  actionRequest += 1
+  activeAction.value = null
+  actionLoading.value = false
+  refundPreviewLoading.value = false
+  selectedOrderId.value = null
   void loadOrders()
 }, { immediate: true })
 
-const copyText = async (text: string, label: string) => {
-  if (!text) return
-  try {
-    if (await copyTextToClipboard(text)) {
-      emit('action-toast', label, 'success')
-    } else {
-      emit('action-toast', '无法访问剪贴板，请手动复制', 'error')
-    }
-  } catch {
-    emit('action-toast', '复制失败，请手动复制', 'error')
-  }
-}
-
 const startShopifyReauthorization = () => {
-  if (!shopDomain.value) return
-  connectToShopify(shopDomain.value)
+  const domain = (shopDomain.value || '').trim()
+  if (!domain) {
+    emit('action-toast', '未找到绑定的 Shopify 店铺域名，请前往渠道设置检查。', 'error')
+    return
+  }
+  const normalizedDomain = domain.replace(/^https?:\/\//i, '').replace(/\/+$/, '')
+  window.location.href = `/api/v1/shopify/install?shop=${encodeURIComponent(normalizedDomain)}`
 }
 
 const openRefund = async () => {
+  const current = activeOrder.value
   const sessionId = props.sessionId
-  const selected = actionOrder.value
-  if (!sessionId || !selected) return
-  if (!props.canManageChat) {
-    emit('action-toast', '您没有管理此会话的权限', 'error')
-    return
-  }
-  if (!writeOrdersEnabled.value) {
-    emit('action-toast', 'Shopify 缺少 write_orders 权限，请由管理员在集成设置中重新授权', 'error')
-    return
-  }
-  const orderId = String(selected.id)
-  const contextVersion = actionContextVersion
-  const request = ++refundPreviewRequest
-  const isCurrentRequest = () =>
-    request === refundPreviewRequest &&
-    contextVersion === actionContextVersion &&
-    props.sessionId === sessionId &&
-    activeAction.value === 'refund'
+  if (!current || !sessionId) return
   activeAction.value = 'refund'
-  actionIdempotencyKey.value = idempotencyKey()
   refundPreview.value = null
   refundPreviewLoading.value = true
+  const request = ++refundPreviewRequest
+  const contextVersion = actionContextVersion
   try {
-    const preview = await chatService.getShopifyRefundPreview(sessionId, orderId)
-    if (!isCurrentRequest()) return
-    if (!preview.refundable) {
-      activeAction.value = null
-      emit('action-toast', '该订单当前没有可退款余额', 'info')
-      return
-    }
+    const preview = await chatService.getShopifyRefundPreview(sessionId, String(current.id))
+    if (request !== refundPreviewRequest || contextVersion !== actionContextVersion || props.sessionId !== sessionId) return
     refundPreview.value = preview
   } catch (err: any) {
-    if (!isCurrentRequest()) return
-    activeAction.value = null
-    emit('action-toast', err?.response?.data?.detail || '无法获取退款金额', 'error')
+    if (request !== refundPreviewRequest || contextVersion !== actionContextVersion || props.sessionId !== sessionId) return
+    refundPreview.value = { refundable: false, reason: err?.response?.data?.detail || '无法获取退款预览信息' }
   } finally {
-    if (isCurrentRequest()) refundPreviewLoading.value = false
+    if (request === refundPreviewRequest && contextVersion === actionContextVersion && props.sessionId === sessionId) {
+      refundPreviewLoading.value = false
+    }
   }
 }
 
 const openAddress = () => {
-  if (!actionOrder.value) return
-  if (!props.canManageChat) {
-    emit('action-toast', '您没有管理此会话的权限', 'error')
-    return
-  }
-  if (!writeOrdersEnabled.value) {
-    emit('action-toast', 'Shopify 缺少 write_orders 权限，请由管理员在集成设置中重新授权', 'error')
-    return
-  }
-  const existing = actionOrder.value.shipping_address || {}
+  const current = activeOrder.value
+  if (!current) return
+  const addr = current.shipping_address || {}
   addressDraft.value = {
-    recipient_name: existing.name || '', address1: existing.address1 || '', address2: existing.address2 || '',
-    city: existing.city || '', province: existing.province || '', country: existing.country || '',
-    zip: existing.zip || '', phone: existing.phone || '',
+    recipient_name: addr.name || (current as any).customer?.first_name || '',
+    address1: addr.address1 || '',
+    address2: addr.address2 || '',
+    city: addr.city || '',
+    province: addr.province || '',
+    country: addr.country || '',
+    zip: addr.zip || '',
+    phone: addr.phone || '',
   }
   activeAction.value = 'address'
-  actionIdempotencyKey.value = idempotencyKey()
 }
 
 const openInvoice = () => {
-  if (!actionOrder.value) return
-  if (!props.canManageChat) {
-    emit('action-toast', '您没有管理此会话的权限', 'error')
-    return
-  }
-  if (!writeOrdersEnabled.value) {
-    emit('action-toast', 'Shopify 缺少 write_orders 权限，请由管理员在集成设置中重新授权', 'error')
-    return
-  }
+  if (!activeOrder.value) return
   activeAction.value = 'invoice'
-  actionIdempotencyKey.value = idempotencyKey()
 }
 
 const submitAction = async () => {
+  const current = activeOrder.value
   const sessionId = props.sessionId
-  const selected = actionOrder.value
   const action = activeAction.value
-  if (!sessionId || !selected || !action || actionLoading.value || !canPerformOrderWrites.value) return
-  const orderId = String(selected.id)
+  if (!current || !sessionId || !action || actionLoading.value) return
+  const orderId = String(current.id)
   const address = { ...addressDraft.value }
-  const idempotencyKeyForAction = actionIdempotencyKey.value || idempotencyKey()
-  const contextVersion = actionContextVersion
+  const idempotencyKeyForAction = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`
   const request = ++actionRequest
+  const contextVersion = actionContextVersion
   const isCurrentContext = () =>
     request === actionRequest && contextVersion === actionContextVersion && props.sessionId === sessionId
   actionLoading.value = true
@@ -268,48 +236,47 @@ const submitAction = async () => {
     if (isCurrentContext()) actionLoading.value = false
   }
 }
-
 </script>
 
 <template>
   <div>
     <div class="flex items-center justify-between mb-3">
-      <span class="text-xs font-bold text-slate-300 flex items-center gap-1.5">
-        <i class="fa-brands fa-shopify text-emerald-400 text-sm"></i>
+      <span class="text-xs font-bold text-[#0F172A] flex items-center gap-1.5">
+        <i class="fa-brands fa-shopify text-emerald-600 text-sm"></i>
         <span>关联 Shopify 订单</span>
       </span>
       <button
         type="button"
         :disabled="loading || !orderCount"
-        class="text-[11px] text-emerald-400 hover:underline disabled:no-underline disabled:opacity-60 flex items-center gap-1"
+        class="text-[11px] text-indigo-600 font-semibold hover:text-indigo-800 disabled:no-underline disabled:opacity-60 flex items-center gap-1"
         @click="showAllOrders = !showAllOrders"
       >
-        <span>{{ loading ? '正在加载…' : showAllOrders ? '收起订单' : `查看全部 ${orderCount} 笔` }}</span>
-        <i class="fa-solid fa-arrow-up-right-from-square text-[9px]"></i>
+        <span>{{ loading ? '正在加载…' : showAllOrders ? '收起订单' : `全部 ${orderCount} 笔` }}</span>
+        <i class="fa-solid fa-chevron-down text-[9px]"></i>
       </button>
     </div>
 
-    <!-- 当前最新关注订单卡片 (1:1 原版复刻) -->
-    <div v-if="loading" class="rounded-xl bg-[#131B2E] border border-white/[0.08] p-6 text-center text-xs text-slate-400">正在加载订单…</div>
-    <div v-else-if="!order" class="rounded-xl bg-[#131B2E] border border-white/[0.08] p-6 text-center text-xs text-slate-400">该客户没有可展示的 Shopify 订单，或此会话未关联 Shopify 店铺。</div>
-    <div v-else class="rounded-xl bg-[#131B2E] border border-white/[0.08] p-3 space-y-3 shadow-md">
+    <!-- 当前最新关注订单卡片 -->
+    <div v-if="loading" class="rounded-xl bg-slate-50 border border-slate-200 p-6 text-center text-xs text-slate-400">正在加载订单…</div>
+    <div v-else-if="!order" class="rounded-xl bg-slate-50 border border-slate-200 p-6 text-center text-xs text-slate-400">该客户暂无关联 Shopify 订单。</div>
+    <div v-else class="rounded-xl bg-[#FFFFFF] border border-slate-200 p-3.5 space-y-3 shadow-sm">
       <!-- 订单编号与状态 -->
-      <div class="flex items-center justify-between pb-2 border-b border-white/[0.06]">
+      <div class="flex items-center justify-between pb-2 border-b border-slate-100">
         <div class="flex items-center gap-1.5">
-          <span class="font-mono font-bold text-slate-100 text-xs">{{ order.number }}</span>
+          <span class="font-mono font-bold text-[#0F172A] text-xs">{{ order.number }}</span>
           <button
-              @click="copyText(order.number, '订单号已复制')"
-            class="text-slate-400 hover:text-slate-200"
+            @click="copyText(order.number, '订单号已复制')"
+            class="text-slate-400 hover:text-indigo-600 transition-colors"
             title="复制订单号"
           >
             <i class="fa-regular fa-copy text-[10px]"></i>
           </button>
         </div>
         <div class="flex items-center gap-1.5">
-          <span class="px-1.5 py-0.2 rounded text-[10px] font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/20">
+          <span class="px-1.5 py-0.2 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
             {{ order.payStatus }}
           </span>
-          <span class="px-1.5 py-0.2 rounded text-[10px] font-semibold bg-blue-500/15 text-blue-400 border border-blue-500/20">
+          <span class="px-1.5 py-0.2 rounded text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
             {{ order.fulfillStatus }}
           </span>
         </div>
@@ -320,43 +287,41 @@ const submitAction = async () => {
         <div
           v-for="(prod, i) in order.products"
           :key="i"
-          class="flex items-center gap-2 p-1.5 rounded-lg bg-[#080B11]/70 border border-white/[0.04] shadow-sm"
+          class="flex items-center gap-2 p-2 rounded-lg bg-slate-50/70 border border-slate-100"
         >
-          <div class="w-8 h-8 rounded-md bg-white/5 border border-white/10 shrink-0 flex items-center justify-center text-slate-500"><i class="fa-solid fa-box"></i></div>
+          <div class="w-8 h-8 rounded-md bg-white border border-slate-200 shrink-0 flex items-center justify-center text-indigo-500 shadow-sm"><i class="fa-solid fa-box text-xs"></i></div>
           <div class="flex-1 min-w-0">
-            <div class="font-semibold text-slate-200 text-[11px] truncate">{{ prod.title }}</div>
-            <div class="text-[10px] text-slate-400 flex items-center justify-between mt-0.5">
+            <div class="font-semibold text-slate-900 text-[11px] truncate">{{ prod.title }}</div>
+            <div class="text-[10px] text-slate-500 flex items-center justify-between mt-0.5">
               <span>{{ prod.specs }}</span>
-              <span class="font-mono text-slate-300 font-bold">{{ prod.price }} × {{ prod.qty }}</span>
+              <span class="font-mono text-indigo-700 font-bold">{{ prod.price }} × {{ prod.qty }}</span>
             </div>
           </div>
         </div>
       </div>
 
-      <!-- 物流单号与一键查询 (1:1 原版复刻) -->
-      <div class="p-2 rounded-lg bg-[#080B11] border border-white/[0.08] text-xs space-y-1.5 shadow-inner">
+      <!-- 物流单号与一键查询 -->
+      <div class="p-2.5 rounded-lg bg-indigo-50/40 border border-indigo-100 text-xs space-y-1.5">
         <div class="flex items-center justify-between text-[11px]">
-          <span class="text-slate-400 flex items-center gap-1">
-            <i class="fa-solid fa-truck-fast text-emerald-400"></i>
+          <span class="text-slate-600 font-medium flex items-center gap-1">
+            <i class="fa-solid fa-truck-fast text-indigo-500"></i>
             <span>{{ order.carrier }}</span>
           </span>
-          <span class="text-emerald-400 font-mono text-[10px]">{{ order.fulfillment_status || '暂无履约状态' }}</span>
+          <span class="text-emerald-700 font-mono text-[10px] font-bold">{{ order.fulfillment_status || '待履约' }}</span>
         </div>
-        <div class="flex items-center justify-between font-mono text-[11px] text-slate-200">
-          <span>{{ order.tracking }}</span>
-          <div class="flex items-center gap-2">
+        <div class="flex items-center justify-between font-mono text-[11px] text-slate-800">
+          <span class="font-semibold">{{ order.tracking || '暂无物流单号' }}</span>
+          <div v-if="order.tracking" class="flex items-center gap-2">
             <button
-              :disabled="!order.tracking"
               @click="copyText(order.tracking, '运单号已复制')"
-              class="text-slate-400 hover:text-emerald-300 text-[10px]"
+              class="text-slate-400 hover:text-indigo-600 text-[10px]"
               title="复制单号"
             >
               <i class="fa-regular fa-copy"></i>
             </button>
             <button
-              :disabled="!order.tracking"
               @click="emit('open-tracking', order)"
-              class="px-1.5 py-0.5 bg-emerald-500/20 hover:bg-emerald-500/30 disabled:opacity-40 text-emerald-300 rounded text-[10px] font-sans font-medium"
+              class="px-2 py-0.5 bg-white border border-indigo-200 hover:bg-indigo-50 text-indigo-700 rounded text-[10px] font-sans font-bold shadow-sm transition-colors"
             >
               实时轨迹
             </button>
@@ -370,7 +335,7 @@ const submitAction = async () => {
           :disabled="!canPerformOrderWrites"
           :title="props.canManageChat ? '创建 Shopify 全额退款' : '您没有管理此会话的权限'"
           @click="openRefund"
-          class="px-2 py-1.5 rounded bg-white/5 hover:bg-rose-500/20 hover:text-rose-300 disabled:opacity-40 text-[11px] text-slate-300 text-center font-medium border border-white/[0.08] transition-colors flex items-center justify-center gap-1"
+          class="px-2 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 hover:text-rose-800 disabled:opacity-40 text-[11px] text-rose-700 text-center font-bold border border-rose-200 transition-colors flex items-center justify-center gap-1 shadow-sm"
         >
           <i class="fa-solid fa-rotate-left text-[10px]"></i>
           <span>发起退款</span>
@@ -380,7 +345,7 @@ const submitAction = async () => {
           :disabled="!canPerformOrderWrites"
           :title="props.canManageChat ? '更新 Shopify 收货地址' : '您没有管理此会话的权限'"
           @click="openAddress"
-          class="px-2 py-1.5 rounded bg-white/5 hover:bg-blue-500/20 hover:text-blue-300 disabled:opacity-40 text-[11px] text-slate-300 text-center font-medium border border-white/[0.08] transition-colors flex items-center justify-center gap-1"
+          class="px-2 py-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 hover:text-blue-800 disabled:opacity-40 text-[11px] text-blue-700 text-center font-bold border border-blue-200 transition-colors flex items-center justify-center gap-1 shadow-sm"
         >
           <i class="fa-solid fa-location-dot text-[10px]"></i>
           <span>改派地址</span>
@@ -390,61 +355,62 @@ const submitAction = async () => {
           :disabled="!canPerformOrderWrites"
           :title="props.canManageChat ? '通过 Shopify 重发订单凭证' : '您没有管理此会话的权限'"
           @click="openInvoice"
-          class="px-2 py-1.5 rounded bg-white/5 hover:bg-amber-500/20 hover:text-amber-300 disabled:opacity-40 text-[11px] text-slate-300 text-center font-medium border border-white/[0.08] transition-colors flex items-center justify-center gap-1"
+          class="px-2 py-1.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 disabled:opacity-40 text-[11px] text-indigo-700 text-center font-bold border border-indigo-200 transition-colors flex items-center justify-center gap-1 shadow-sm"
         >
           <i class="fa-regular fa-paper-plane text-[10px]"></i>
           <span>重发凭证</span>
         </button>
       </div>
 
-      <div v-if="props.canManageChat && !writeOrdersEnabled" class="flex items-center justify-between gap-2 text-[10px] text-amber-300/80">
+      <div v-if="props.canManageChat && !writeOrdersEnabled" class="flex items-center justify-between gap-2 text-[10px] text-amber-800 bg-amber-50 p-2.5 rounded-lg border border-amber-200">
         <span>订单写操作需要管理员重新授权 Shopify。</span>
-        <button v-if="permissionChecks.canManageOrganization() && shopDomain" type="button" class="shrink-0 text-emerald-300 hover:underline" @click="startShopifyReauthorization">重新授权</button>
+        <button v-if="permissionChecks.canManageOrganization() && shopDomain" type="button" class="shrink-0 text-indigo-700 font-bold hover:underline" @click="startShopifyReauthorization">重新授权</button>
       </div>
     </div>
 
     <div v-if="showAllOrders" class="mt-2 space-y-1.5">
       <button
-        v-for="item in orders"
+        v-for="item in orderList"
         :key="item.id"
         type="button"
-        :class="['w-full flex items-center justify-between gap-2 rounded-lg border bg-[#131B2E] px-2.5 py-2 text-left hover:border-emerald-500/40', String(item.id) === selectedOrderId ? 'border-emerald-500/50' : 'border-white/[0.08]']"
+        :class="['w-full flex items-center justify-between gap-2 rounded-lg border bg-[#FFFFFF] px-2.5 py-2 text-left hover:border-indigo-400 shadow-sm transition-all', String(item.id) === selectedOrderId ? 'border-indigo-600 bg-indigo-50/40' : 'border-slate-200']"
         @click="selectedOrderId = String(item.id)"
       >
         <span class="min-w-0">
-          <span class="block truncate font-mono text-[11px] font-semibold text-slate-100">{{ item.name }}</span>
-          <span class="block truncate text-[10px] text-slate-400">{{ item.financial_status || '未知支付状态' }} · {{ item.fulfillment_status || '待履约' }}</span>
+          <span class="block truncate font-mono text-[11px] font-bold text-[#0F172A]">{{ item.name }}</span>
+          <span class="block truncate text-[10px] text-slate-500">{{ item.financial_status || '未知支付状态' }} · {{ item.fulfillment_status || '待履约' }}</span>
         </span>
-        <span class="shrink-0 text-[10px] font-mono text-emerald-300">{{ item.currency || '' }} {{ item.total_price || '--' }}</span>
+        <span class="shrink-0 text-[10px] font-mono text-indigo-700 font-bold">{{ item.currency || '$' }} {{ item.total_price || '--' }}</span>
       </button>
       <button
         v-if="hasNextPage"
         type="button"
         :disabled="loadingMore"
-        class="w-full rounded-lg border border-white/[0.08] bg-white/5 py-1.5 text-[11px] text-slate-300 hover:bg-white/10 disabled:opacity-50"
+        class="w-full rounded-lg border border-indigo-200 bg-indigo-50/50 py-1.5 text-[11px] text-indigo-700 hover:bg-indigo-100 font-semibold disabled:opacity-50 shadow-sm transition-colors"
         @click="nextCursor && loadOrders(nextCursor)"
       >
         {{ loadingMore ? '正在加载…' : '加载更多订单' }}
       </button>
     </div>
 
-    <div v-if="activeAction" class="fixed inset-0 z-[80] flex items-center justify-center bg-black/70 p-4" @click.self="!actionLoading && (activeAction = null)">
-      <section class="w-full max-w-sm rounded-lg border border-white/10 bg-[#111827] p-4 shadow-2xl">
+    <!-- 弹窗部分 -->
+    <div v-if="activeAction" class="fixed inset-0 z-[80] flex items-center justify-center bg-black/40 p-4" @click.self="!actionLoading && (activeAction = null)">
+      <section class="w-full max-w-sm rounded-xl border border-slate-200 bg-[#FFFFFF] p-5 shadow-2xl">
         <div class="flex items-start justify-between gap-3">
           <div>
-            <h4 class="text-sm font-semibold text-slate-100">
+            <h4 class="text-sm font-bold text-[#0F172A]">
               {{ activeAction === 'refund' ? '确认全额退款' : activeAction === 'address' ? '更新收货地址' : '确认重发订单凭证' }}
             </h4>
-            <p class="mt-1 text-[11px] text-slate-400">{{ actionOrder?.number }}</p>
+            <p class="mt-1 text-[11px] text-indigo-600 font-mono font-medium">{{ actionOrder?.name }}</p>
           </div>
-          <button type="button" :disabled="actionLoading" class="text-slate-400 hover:text-slate-100 disabled:opacity-40" aria-label="关闭" @click="activeAction = null"><i class="fa-solid fa-xmark"></i></button>
+          <button type="button" :disabled="actionLoading" class="text-slate-400 hover:text-[#0F172A] disabled:opacity-40" aria-label="关闭" @click="activeAction = null"><i class="fa-solid fa-xmark"></i></button>
         </div>
 
-        <div v-if="activeAction === 'refund'" class="mt-4 space-y-2 text-xs text-slate-300">
+        <div v-if="activeAction === 'refund'" class="mt-4 space-y-2 text-xs text-slate-600">
           <p v-if="refundPreviewLoading" class="text-slate-400">正在核验可退款金额…</p>
           <template v-else>
-            <p>将通过 Shopify 原支付方式退回 <strong class="font-mono text-rose-300">{{ refundPreview?.currency || '' }} {{ refundPreview?.amount || '--' }}</strong>。</p>
-            <p class="text-[11px] text-amber-300">确认后无法在会话中心撤销，请先核对订单和客户诉求。</p>
+            <p>将通过 Shopify 原支付方式退回 <strong class="font-mono text-rose-600 font-bold">{{ refundPreview?.currency || '$' }} {{ refundPreview?.amount || '--' }}</strong>。</p>
+            <p class="text-[11px] text-amber-800 bg-amber-50 p-2 rounded border border-amber-200">确认后无法撤销，请先核对订单和客户诉求。</p>
           </template>
         </div>
 
@@ -459,14 +425,14 @@ const submitAction = async () => {
           <input v-model="addressDraft.phone" class="col-span-2 order-field" placeholder="电话（选填）" />
         </div>
 
-        <p v-else class="mt-4 text-xs leading-relaxed text-slate-300">Shopify 将向订单中已验证的客户邮箱重新发送凭证。</p>
+        <p v-else class="mt-4 text-xs leading-relaxed text-slate-600">Shopify 将向订单客户邮箱重新发送电子凭证。</p>
 
         <div class="mt-5 flex justify-end gap-2">
-          <button type="button" :disabled="actionLoading" class="rounded bg-white/5 px-3 py-1.5 text-xs text-slate-300 hover:bg-white/10 disabled:opacity-40" @click="activeAction = null">取消</button>
+          <button type="button" :disabled="actionLoading" class="rounded-lg bg-white border border-slate-200 px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50 font-medium disabled:opacity-40" @click="activeAction = null">取消</button>
           <button
             type="button"
             :disabled="actionLoading || (activeAction === 'refund' && (refundPreviewLoading || !refundPreview?.refundable)) || (activeAction === 'address' && (!addressDraft.address1 || !addressDraft.city || !addressDraft.country || !addressDraft.zip))"
-            :class="['rounded px-3 py-1.5 text-xs font-semibold text-slate-950 disabled:opacity-40', activeAction === 'refund' ? 'bg-rose-400 hover:bg-rose-300' : 'bg-emerald-400 hover:bg-emerald-300']"
+            :class="['rounded-lg px-3.5 py-1.5 text-xs font-bold text-white shadow-md disabled:opacity-40', activeAction === 'refund' ? 'bg-rose-600 hover:bg-rose-700 shadow-rose-500/20' : 'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-500/20']"
             @click="submitAction"
           >{{ actionLoading ? '正在提交…' : '确认执行' }}</button>
         </div>
@@ -478,15 +444,16 @@ const submitAction = async () => {
 <style scoped>
 .order-field {
   min-width: 0;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 4px;
-  background: #080B11;
-  color: #e2e8f0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid #E2E8F0;
+  background: #FFFFFF;
+  color: #0F172A;
   font-size: 12px;
-  line-height: 1.25rem;
-  padding: 0.375rem 0.5rem;
 }
-
-.order-field::placeholder { color: #64748b; }
-.order-field:focus { border-color: rgba(16, 185, 129, 0.75); outline: none; }
+.order-field:focus {
+  outline: none;
+  border-color: #6366F1;
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.15);
+}
 </style>

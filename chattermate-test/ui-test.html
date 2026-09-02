@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ChatterMate UI test</title>
+<title>Komi AI UI test</title>
 <style>
   * { box-sizing: border-box; }
   body { font-family: system-ui; margin: 0; padding: 24px; background: #f7f7f5; color: #1c1c1e; }
@@ -20,7 +20,7 @@
 </style>
 </head>
 <body>
-<h1 id="title">ChatterMate UI test</h1>
+<h1 id="title">Komi AI UI test</h1>
 <p class="hint"><a href="ui-options.html">← all scenarios</a> · <span id="mode-label"></span></p>
 
 <div class="banner" id="banner"></div>
@@ -35,7 +35,7 @@
   <button onclick="api('showLauncher')">showLauncher()</button>
   <button onclick="api('setPosition', { side: 'left', bottom: 60, offset: 40 })">setPosition(left, 60, 40)</button>
   <button onclick="api('setPosition', { bottom: 20, right: 20 })">setPosition(legacy {bottom,right})</button>
-  <button data-chattermate-open>data-chattermate-open</button>
+  <button data-komi-open>data-komi-open</button>
   <button id="my-trigger">#my-trigger (trigger option)</button>
 </div>
 <div id="log"></div>
@@ -46,7 +46,7 @@
   const params = new URLSearchParams(location.search)
   const settings = JSON.parse(localStorage.getItem('cm-test-settings') || '{}')
   const mode = settings.mode || 'stub'
-  document.getElementById('title').textContent = params.get('title') || 'ChatterMate UI test'
+  document.getElementById('title').textContent = params.get('title') || 'Komi AI UI test'
   document.getElementById('mode-label').textContent = 'mode: ' + mode
 
   function log(msg) {
@@ -65,11 +65,11 @@
   // Every control goes through here, so a loader that failed to load reports itself
   // instead of the buttons silently doing nothing.
   function api(method, arg) {
-    if (!window.ChatterMate) {
-      log('⚠ ChatterMate is not loaded — see the message above')
+    if (!window.Komi AI) {
+      log('⚠ Komi AI is not loaded — see the message above')
       return
     }
-    const result = window.ChatterMate[method](arg)
+    const result = window.Komi AI[method](arg)
     if (method === 'isOpen') log('isOpen: ' + result)
   }
 
@@ -137,23 +137,23 @@
   // The loader comes from the FRONTEND origin (vite in dev, the dashboard origin in
   // production) — the same place the generated embed snippet points at. It is never
   // copied into this folder, where it would go stale and test an old widget.
-  // ('/chattermate.min.js' is a stale saved setting from an earlier version.)
-  const savedLoader = settings.loaderUrl === '/chattermate.min.js' ? '' : settings.loaderUrl
+  // ('/komi.min.js' is a stale saved setting from an earlier version.)
+  const savedLoader = settings.loaderUrl === '/komi.min.js' ? '' : settings.loaderUrl
   // Scheme follows the page — a hardcoded http:// would be blocked as mixed content
   // if this harness is ever served over https.
-  const loaderUrl = savedLoader || `${location.protocol}//localhost:5173/webclient/chattermate.min.js`
+  const loaderUrl = savedLoader || `${location.protocol}//localhost:5173/webclient/komi.min.js`
   const s = document.createElement('script')
   s.src = loaderUrl
   s.onload = function () {
-    if (!window.ChatterMate) {
-      showBanner('Loaded <code>' + loaderUrl + '</code> but it never defined <code>window.ChatterMate</code> — is that file really the widget loader?')
+    if (!window.Komi AI) {
+      showBanner('Loaded <code>' + loaderUrl + '</code> but it never defined <code>window.Komi AI</code> — is that file really the widget loader?')
       return
     }
     log('loader ready: ' + loaderUrl)
     ;['ready', 'open', 'close'].forEach(function (ev) {
-      ChatterMate.on(ev, function () { log('event: ' + ev) })
+      Komi AI.on(ev, function () { log('event: ' + ev) })
     })
-    ChatterMate.on('unread', function (count) { log('event: unread ' + count) })
+    Komi AI.on('unread', function (count) { log('event: unread ' + count) })
   }
   s.onerror = function () {
     showBanner(

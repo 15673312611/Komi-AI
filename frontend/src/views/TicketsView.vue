@@ -1,5 +1,5 @@
 <!--
-Copyright 2024-2026 ChatterMate
+Copyright 2024-2026 Komi AI
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -207,7 +207,9 @@ function updateFilters(next: TicketListFilters) {
 
 <style scoped>
 .tickets-view {
-  padding: 26px 30px 36px;
+  padding: 24px 32px 60px;
+  max-width: 1320px;
+  margin: 0 auto;
 }
 .page-header {
   display: flex;
@@ -218,29 +220,35 @@ function updateFilters(next: TicketListFilters) {
 }
 .page-title {
   font-family: var(--font-display);
-  font-weight: var(--font-weight-bold);
-  font-size: 25px;
-  letter-spacing: var(--tracking-display);
+  font-weight: 700;
+  font-size: 22px;
+  letter-spacing: -0.02em;
   margin: 0 0 4px;
   color: var(--text);
 }
 .page-subtitle {
   margin: 0;
-  font-size: 13px;
+  font-size: 13.5px;
   color: var(--muted);
 }
 .new-ticket-btn {
   display: flex;
   align-items: center;
   gap: 7px;
-  padding: 9px 16px;
-  background: var(--accent-solid);
-  color: var(--on-accent-solid);
-  border: none;
-  border-radius: 10px;
-  font-size: 13.5px;
-  font-weight: var(--font-weight-semibold);
+  padding: 8px 15px;
+  background: #0F172A;
+  color: #FFFFFF;
+  border: 1px solid rgba(15, 23, 42, 0.9);
+  border-radius: var(--radius-btn);
+  font-size: 13px;
+  font-weight: 600;
   cursor: pointer;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+  transition: all var(--transition-fast);
+}
+.new-ticket-btn:hover {
+  background: #000000;
+  transform: translateY(-0.5px);
 }
 .plus {
   font-size: 15px;
@@ -250,41 +258,43 @@ function updateFilters(next: TicketListFilters) {
   padding: 40px;
   text-align: center;
   color: var(--muted);
-  background: var(--surface);
-  border: 1px solid var(--o08);
-  border-radius: 15px;
+  background: #FFFFFF;
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
 }
 .stat-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   gap: 12px;
   margin-bottom: 20px;
 }
 .stat-card {
-  background: var(--surface);
-  border: 1px solid var(--o08);
-  border-radius: 14px;
-  padding: 15px 17px;
+  background: #FFFFFF;
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 16px 18px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
 }
 .stat-label {
   display: flex;
   align-items: center;
   gap: 7px;
-  margin-bottom: 10px;
-  font-size: 12px;
+  margin-bottom: 8px;
+  font-size: 12.5px;
+  font-weight: 500;
   color: var(--muted);
 }
 .stat-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 2px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
 }
 .stat-value {
-  font-family: var(--font-display);
-  font-weight: var(--font-weight-bold);
-  font-size: 28px;
-  letter-spacing: var(--tracking-display);
-  line-height: 1;
+  font-family: var(--font-sans);
+  font-weight: 700;
+  font-size: 22px;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
   color: var(--text);
   display: flex;
   align-items: baseline;
@@ -293,14 +303,15 @@ function updateFilters(next: TicketListFilters) {
 .stat-sub {
   font-size: 11.5px;
   font-family: var(--font-sans);
-  font-weight: var(--font-weight-normal);
-  color: var(--faint);
+  font-weight: 400;
+  color: var(--muted2);
 }
 .ticket-table {
-  border: 1px solid var(--o08);
-  border-radius: 15px;
-  background: var(--surface);
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  background: #FFFFFF;
   overflow: hidden;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
 }
 .table-scroll {
   overflow-x: auto;
@@ -315,21 +326,22 @@ function updateFilters(next: TicketListFilters) {
   min-width: 900px;
 }
 .table-head {
-  border-bottom: 1px solid var(--o07);
-  background: var(--o03);
-  font-family: var(--font-mono);
-  font-size: 10.5px;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
-  color: var(--faint);
+  border-bottom: 1px solid var(--border-color);
+  background: #F8FAFC;
+  font-family: var(--font-sans);
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--muted);
 }
 .table-row {
-  padding: 14px 20px;
-  border-bottom: 1px solid var(--o06);
+  padding: 13px 20px;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.04);
   cursor: pointer;
+  transition: background 0.15s ease;
 }
 .table-row:hover {
-  background: var(--o03);
+  background: #F8FAFC;
 }
 .table-row:last-child {
   border-bottom: none;
@@ -350,17 +362,17 @@ function updateFilters(next: TicketListFilters) {
 }
 .ticket-title {
   font-size: 13.5px;
-  font-weight: var(--font-weight-medium);
+  font-weight: 500;
   color: var(--text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .ticket-tags {
-  font-family: var(--font-mono);
-  font-size: 10.5px;
-  color: var(--faint);
-  margin-top: 3px;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  color: var(--muted2);
+  margin-top: 2px;
 }
 .assignee-cell {
   display: flex;
@@ -371,29 +383,29 @@ function updateFilters(next: TicketListFilters) {
   width: 24px;
   height: 24px;
   border-radius: 50%;
-  background: var(--c-purple);
-  color: var(--on-accent);
+  background: #6366F1;
+  color: #FFFFFF;
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 10px;
-  font-weight: var(--font-weight-bold);
+  font-weight: 600;
   flex-shrink: 0;
 }
 .avatar-ai {
-  background: var(--accent-solid);
-  color: var(--on-accent-solid);
-  border-radius: 8px;
+  background: #0F172A;
+  color: #FFFFFF;
+  border-radius: 6px;
 }
 .sla {
-  font-family: var(--font-mono);
-  font-size: 11.5px;
-  font-weight: var(--font-weight-semibold);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 600;
 }
 .updated {
   text-align: right;
   font-size: 11.5px;
-  color: var(--faint);
+  color: var(--muted2);
 }
 .right {
   text-align: right;
@@ -404,16 +416,21 @@ function updateFilters(next: TicketListFilters) {
   justify-content: center;
   gap: 14px;
   padding: 12px;
-  border-top: 1px solid var(--o07);
+  border-top: 1px solid var(--border-color);
 }
 .pager-btn {
-  padding: 6px 12px;
-  background: var(--o05);
-  border: 1px solid var(--o10);
+  padding: 5px 12px;
+  background: #FFFFFF;
+  border: 1px solid var(--border-color);
   color: var(--text);
-  border-radius: 8px;
+  border-radius: 6px;
   font-size: 12px;
   cursor: pointer;
+  transition: all var(--transition-fast);
+}
+.pager-btn:hover:not(:disabled) {
+  background: #F8FAFC;
+  border-color: var(--border-color-hover);
 }
 .pager-btn:disabled {
   opacity: 0.4;
@@ -423,7 +440,12 @@ function updateFilters(next: TicketListFilters) {
   font-size: 12px;
   color: var(--muted);
 }
-@media (max-width: 900px) {
+@media (max-width: 1024px) {
+  .stat-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+@media (max-width: 768px) {
   .stat-grid {
     grid-template-columns: repeat(2, 1fr);
   }

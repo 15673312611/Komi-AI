@@ -478,7 +478,7 @@ const handleCreateTicket = async () => {
 
 .btn-submit {
   background: var(--accent-ink, #C9F24E);
-  color: #0b0f14;
+  color: #FFFFFF;
   font-weight: 700;
   font-size: 13px;
   padding: 8px 20px;

@@ -1,4 +1,4 @@
-# ChatterMate Enhanced Website Knowledge Base
+# Komi AI Enhanced Website Knowledge Base
 
 This module provides an enhanced website knowledge extraction system that significantly improves content extraction from web pages compared to the default implementation.
 

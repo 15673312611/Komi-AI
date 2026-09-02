@@ -1,5 +1,5 @@
 <!--
-Copyright 2024-2026 ChatterMate
+Copyright 2024-2026 Komi AI
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -220,11 +220,11 @@ const openNotificationsFromSheet = () => {
     showMoreSheet.value = false
     showNotifications.value = true
 }
-
 </script>
 
 <template>
     <div class="dashboard-layout" :class="layoutClasses">
+
         <!-- Backdrop for mobile -->
         <div 
             v-if="!props.hideSidebar && isSidebarOpen" 
@@ -238,7 +238,7 @@ const openNotificationsFromSheet = () => {
             @toggle="toggleSidebar" 
         />
 
-        <!-- Main Content -->
+        <!-- Main Content Wrapper with Ambient Canvas Glow -->
         <div class="main-content">
             <!-- Message Limit Warning Banner -->
             <div v-if="!props.hideHeader && hasEnterpriseModule && showMessageLimitWarning && messageLimitStatus" 
@@ -248,12 +248,12 @@ const openNotificationsFromSheet = () => {
                     <div class="banner-text">
                         <span class="banner-icon" v-if="messageLimitStatus.type === 'error'">⚠️</span>
                         <span class="banner-icon" v-else>ℹ️</span>
-                        {{ messageLimitStatus.message }}
+                        <span>{{ messageLimitStatus.message }}</span>
                     </div>
                     <div v-if="canManageSubscription || canViewAIConfig" class="banner-actions">
                         <button
                             v-if="canManageSubscription"
-                            class="action-button"
+                            class="action-button primary"
                             @click="navigateToUpgrade"
                         >
                             升级套餐
@@ -275,22 +275,30 @@ const openNotificationsFromSheet = () => {
                 </div>
             </div>
 
-            <!-- Header -->
+            <!-- Topbar Header -->
             <header v-if="!props.hideHeader" class="header">
                 <div class="header-content">
                     <div class="left-section">
-                        <!-- Hamburger menu for mobile -->
+                        <!-- Hamburger menu for mobile/tablet -->
                         <button class="hamburger-menu" @click="toggleSidebar" aria-label="切换菜单">
-                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                <path d="M3 12H21M3 6H21M3 18H21" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <line x1="3" y1="12" x2="21" y2="12"></line>
+                                <line x1="3" y1="6" x2="21" y2="6"></line>
+                                <line x1="3" y1="18" x2="21" y2="18"></line>
                             </svg>
                         </button>
-                        <h1 v-if="pageTitle" class="topbar-page-title">{{ pageTitle }}</h1>
+                        <div class="page-title-wrap" v-if="pageTitle">
+                            <h1 class="topbar-page-title">{{ pageTitle }}</h1>
+                        </div>
                     </div>
+
                     <div class="right-section">
+                        <!-- Theme Toggle Button -->
                         <button class="icon-btn" @click="toggleTheme" :title="themeTitle" :aria-label="themeTitle"
-                            v-html="navIconSvg(themeMode === 'dark' ? 'moon' : themeMode === 'light' ? 'sun' : 'monitor', 17)">
+                            v-html="navIconSvg(themeMode === 'dark' ? 'moon' : themeMode === 'light' ? 'sun' : 'monitor', 16)">
                         </button>
+
+                        <!-- Enterprise Trial / Plan Info -->
                         <div v-if="hasEnterpriseModule && (isLoadingPlan || isInTrial)" class="plan-display">
                             <div v-if="isLoadingPlan" class="plan-loading">
                                 <span class="loading-spinner"></span>
@@ -302,75 +310,121 @@ const openNotificationsFromSheet = () => {
                                     :class="{ clickable: canManageSubscription }"
                                     @click="canManageSubscription && navigateToUpgrade()"
                                 >
+                                    <span class="sparkle-icon">✨</span>
                                     免费试用期 (剩余 {{ trialDaysLeft }} 天)
                                 </span>
                             </div>
                         </div>
-                        <div class="user-menu">
-                            <button class="notification-button" @click="showNotifications = !showNotifications" title="消息通知">
-                                <img :src="notificationIcon" alt="消息通知" class="notification-icon" />
-                                <span v-if="unreadCount > 0" class="notification-badge">
-                                    {{ unreadCount > 99 ? '99+' : unreadCount }}
-                                </span>
-                            </button>
 
-                            <div class="topbar-divider" aria-hidden="true"></div>
+                        <!-- Notifications Trigger -->
+                        <button class="icon-btn notification-button" @click="showNotifications = !showNotifications" title="消息通知" aria-label="消息通知">
+                            <img :src="notificationIcon" alt="通知" class="notification-icon" />
+                            <span v-if="unreadCount > 0" class="notification-badge">
+                                {{ unreadCount > 99 ? '99+' : unreadCount }}
+                            </span>
+                        </button>
 
-                            <div class="user-profile">
-                                <div class="profile-trigger" @click="showUserMenu = !showUserMenu">
-                                    <div class="avatar-wrapper">
-                                        <img :src="userAvatarSrc" alt="用户头像" class="avatar" />
-                                        <span 
-                                            class="status-indicator" 
-                                            :class="{ 'online': currentUser?.is_online }"
-                                        ></span>
-                                    </div>
-                                    <div class="user-info" v-if="isSidebarOpen">
-                                        <span class="name">{{ userName }}</span>
-                                        <div class="plan-info">
-                                            <span class="plan-badge" :class="currentPlan?.plan?.type">
-                                                <span class="plan-icon">⚡</span>
-                                                {{ currentPlan?.plan?.name || '' }}
-                                            </span>
+                        <div class="topbar-divider" aria-hidden="true"></div>
+
+                        <!-- User Profile Card & Dropdown Menu -->
+                        <div class="user-profile">
+                            <div class="profile-trigger" @click="showUserMenu = !showUserMenu" :class="{ 'menu-open': showUserMenu }">
+                                <div class="avatar-wrapper">
+                                    <img :src="userAvatarSrc" alt="用户头像" class="avatar" />
+                                    <span 
+                                        class="status-indicator" 
+                                        :class="{ 'online': currentUser?.is_online }"
+                                        :title="currentUser?.is_online ? '当前在线' : '当前离线'"
+                                    ></span>
+                                </div>
+                                <div class="user-info-text">
+                                    <span class="user-name">{{ userName }}</span>
+                                    <span v-if="currentPlan?.plan?.name" class="user-plan-tag">
+                                        {{ currentPlan.plan.name }}
+                                    </span>
+                                </div>
+                                <svg class="profile-chevron" :class="{ 'rotated': showUserMenu }" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <polyline points="6 9 12 15 18 9"></polyline>
+                                </svg>
+                            </div>
+
+                            <!-- Floating Glass Dropdown Menu -->
+                            <Transition name="dropdown-scale">
+                                <div class="dropdown-menu" v-if="showUserMenu">
+                                    <!-- User Summary Card in Menu -->
+                                    <div class="menu-user-header">
+                                        <div class="menu-user-avatar">
+                                            <img :src="userAvatarSrc" alt="用户头像" class="avatar" />
+                                        </div>
+                                        <div class="menu-user-meta">
+                                            <span class="menu-name">{{ userName }}</span>
+                                            <span class="menu-role-badge">{{ userRole }}</span>
                                         </div>
                                     </div>
-                                </div>
-                                <div class="dropdown-menu" v-if="showUserMenu">
-                                    <div class="status-menu-item">
-                                      <span class="status-label">在线状态：</span>
-                                      <button 
-                                        class="status-toggle" 
-                                        :class="{ 'online': currentUser?.is_online }"
-                                        @click="toggleOnlineStatus"
-                                        :disabled="statusUpdating"
-                                      >
-                                        {{ currentUser?.is_online ? '在线' : '离线' }}
-                                      </button>
-                                    </div>
+
                                     <div class="menu-divider"></div>
-                                    
-                                    <button class="menu-item" @click="logout">退出登录</button>
+
+                                    <!-- Online Status Switcher Row -->
+                                    <div class="menu-item status-toggle-item" @click.stop="toggleOnlineStatus">
+                                        <div class="status-toggle-label">
+                                            <span class="status-dot-icon" :class="{ 'online': currentUser?.is_online }"></span>
+                                            <span>{{ currentUser?.is_online ? '工作状态：在线接待中' : '工作状态：离线待命' }}</span>
+                                        </div>
+                                        <div class="ios-switch" :class="{ 'active': currentUser?.is_online, 'disabled': statusUpdating }">
+                                            <div class="ios-switch-knob"></div>
+                                        </div>
+                                    </div>
+
+                                    <div class="menu-divider"></div>
+
+                                    <!-- Profile Navigation Links -->
+                                    <router-link to="/settings/user" class="menu-item" @click="showUserMenu = false">
+                                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                                            <circle cx="12" cy="7" r="4"></circle>
+                                        </svg>
+                                        <span>个人账号设置</span>
+                                    </router-link>
+
+                                    <router-link v-if="canManageSubscription" to="/settings/subscription" class="menu-item" @click="showUserMenu = false">
+                                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                            <rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect>
+                                            <line x1="1" y1="10" x2="23" y2="10"></line>
+                                        </svg>
+                                        <span>订阅套餐与配额</span>
+                                    </router-link>
+
+                                    <div class="menu-divider"></div>
+
+                                    <!-- Logout -->
+                                    <button class="menu-item logout-btn" @click="logout">
+                                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                                            <polyline points="16 17 21 12 16 7"></polyline>
+                                            <line x1="21" y1="12" x2="9" y2="12"></line>
+                                        </svg>
+                                        <span>退出登录</span>
+                                    </button>
                                 </div>
-                            </div>
+                            </Transition>
                         </div>
                     </div>
                 </div>
             </header>
 
-            <!-- Main Content Area -->
+            <!-- Main Content Viewport -->
             <main class="content">
                 <slot></slot>
             </main>
         </div>
 
-        <!-- Notification drawer (fixed) — outside the header so the More sheet
-             can open it on pages that hide the header (e.g. Inbox) -->
+        <!-- Notification Drawer -->
         <NotificationList :is-open="showNotifications" @close="showNotifications = false"
             @notification-read="fetchUnreadCount" />
 
         <EnablePushPrompt @enable="enableNotifications" />
 
-        <!-- Mobile app shell -->
+        <!-- Mobile Bottom Nav & More Sheet -->
         <BottomNav
             v-if="showBottomNav"
             :unread-count="unreadCount"
@@ -398,179 +452,202 @@ const openNotificationsFromSheet = () => {
     grid-template-columns: auto 1fr;
     height: 100vh;
     height: 100dvh;
-    transition: grid-template-columns var(--transition-normal);
+    transition: grid-template-columns 0.24s cubic-bezier(0.4, 0, 0.2, 1);
     overflow: hidden;
     width: 100%;
     position: relative;
+    background: var(--bg);
 }
 
 .sidebar-backdrop {
     display: none;
 }
 
-/* Sidebar Styles */
-.sidebar {
-    background: var(--background-soft);
-    border-right: 1px solid var(--border-color);
-    padding: var(--space-md);
+/* Main Content Area & Ambient Canvas Glow */
+.main-content {
     display: flex;
     flex-direction: column;
-    gap: var(--space-lg);
+    height: 100vh;
+    height: 100dvh;
+    width: 100%;
+    overflow-y: auto;
+    overflow-x: hidden;
+    position: relative;
+    background: var(--mesh-studio-light), var(--bg);
 }
 
-.sidebar-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding-bottom: var(--space-md);
-    border-bottom: 1px solid var(--border-color);
-}
-
-.logo {
-    height: 32px;
-}
-
-.toggle-btn {
-    background: none;
-    border: none;
-    color: var(--text-color);
-    cursor: pointer;
-    opacity: 0.7;
-    transition: var(--transition-fast);
-}
-
-.toggle-btn:hover {
-    opacity: 1;
-}
-
-.nav-item {
-    display: flex;
-    align-items: center;
-    gap: var(--space-sm);
-    padding: var(--space-sm);
-    color: var(--text-color);
-    text-decoration: none;
-    border-radius: var(--radius-sm);
-    transition: var(--transition-fast);
-}
-
-.nav-item:hover {
-    background: var(--background-mute);
-}
-
-.nav-item.active {
-    background: var(--accent-solid);
-    color: var(--background-color);
-}
-
-/* Header Styles */
+/* Header Styles — Crystal Frosted Glass */
 .header {
-    background: var(--topbar);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    border-bottom: 1px solid var(--o07);
+    background: rgba(255, 255, 255, 0.82);
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    border-bottom: 1px solid rgba(15, 23, 42, 0.05);
     position: sticky;
     top: 0;
     z-index: 50;
-    /* Standalone PWA: content extends under the status bar (black-translucent) */
     padding-top: var(--safe-top);
-}
-
-.topbar-page-title {
-    font-family: var(--font-display);
-    font-size: 16px;
-    font-weight: var(--font-weight-semibold);
-    letter-spacing: -0.01em;
-    color: var(--text2);
-    margin: 0;
-    line-height: 1;
-}
-
-.icon-btn {
-    width: 38px;
-    height: 38px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: var(--o04);
-    border: 1px solid var(--o10);
-    border-radius: 10px;
-    color: var(--text3);
-    cursor: pointer;
-    transition: background-color var(--transition-fast), color var(--transition-fast);
-    flex-shrink: 0;
-}
-
-.icon-btn:hover {
-    background: var(--o08);
-    color: var(--text);
+    box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.015);
 }
 
 .header-content {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: var(--space-md) var(--space-xl);
+    height: 60px;
+    padding: 0 28px;
 }
 
 .left-section {
     display: flex;
     align-items: center;
-    gap: var(--space-md);
+    gap: 16px;
 }
 
 .hamburger-menu {
     display: none;
-    background: none;
-    border: none;
-    color: var(--text-color);
+    background: #FFFFFF;
+    border: 1px solid var(--border-color);
+    color: var(--text2);
     cursor: pointer;
-    padding: var(--space-xs);
-    border-radius: var(--radius-sm);
-    transition: var(--transition-fast);
+    width: 36px;
+    height: 36px;
+    border-radius: var(--radius-btn);
+    transition: all var(--transition-fast);
+    box-shadow: var(--shadow-xs);
 }
 
 .hamburger-menu:hover {
-    background: var(--background-mute);
+    background: var(--bg-deep);
+    color: var(--text);
 }
 
-.hamburger-menu svg {
-    display: block;
+.page-title-wrap {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.topbar-page-title {
+    font-family: var(--font-sans);
+    font-size: 16px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    color: var(--text);
+    margin: 0;
+    line-height: 1.2;
 }
 
 .right-section {
     display: flex;
     align-items: center;
-    gap: 18px;
+    gap: 12px;
 }
 
-.search input {
-    background: var(--background-mute);
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius-full);
-    padding: var(--space-sm) var(--space-lg);
-    color: var(--text-color);
-}
-
-.user-menu {
+/* Icon Buttons (Theme, Notifications) */
+.icon-btn {
+    width: 36px;
+    height: 36px;
     display: flex;
     align-items: center;
-    gap: 18px;
-}
-
-.notifications {
-    background: none;
-    border: none;
-    color: var(--text-color);
+    justify-content: center;
+    background: #FFFFFF;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-btn);
+    color: var(--text3);
     cursor: pointer;
-    opacity: 0.7;
-    transition: var(--transition-fast);
+    box-shadow: var(--shadow-xs);
+    transition: all var(--transition-fast);
+    flex-shrink: 0;
+    position: relative;
 }
 
-.notifications:hover {
+.icon-btn:hover {
+    background: #F8FAFC;
+    border-color: var(--border-color-hover);
+    color: var(--text);
+    box-shadow: var(--shadow-sm);
+    transform: translateY(-1px);
+}
+
+.icon-btn:active {
+    transform: translateY(0);
+}
+
+.icon-btn:focus-visible {
+    outline: none;
+    box-shadow: var(--ring-focus);
+}
+
+.notification-icon {
+    width: 17px;
+    height: 17px;
+    opacity: 0.7;
+    transition: opacity var(--transition-fast);
+}
+
+.notification-button:hover .notification-icon {
     opacity: 1;
 }
 
+.notification-badge {
+    position: absolute;
+    top: -3px;
+    right: -3px;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    background-color: var(--c-danger);
+    color: #FFFFFF;
+    border: 2px solid #FFFFFF;
+    border-radius: var(--radius-pill);
+    font-family: var(--font-sans);
+    font-size: 10px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 2px 5px rgba(239, 68, 68, 0.4);
+}
+
+.topbar-divider {
+    width: 1px;
+    height: 22px;
+    background: var(--border-color);
+    flex-shrink: 0;
+    margin: 0 2px;
+}
+
+/* Enterprise Trial Badge */
+.plan-display {
+    display: flex;
+    align-items: center;
+}
+
+.trial-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: linear-gradient(135deg, #2563EB 0%, #4F46E5 100%);
+    color: #FFFFFF;
+    padding: 5px 12px;
+    border-radius: var(--radius-pill);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    box-shadow: 0 2px 8px rgba(37, 99, 235, 0.25);
+    transition: all var(--transition-fast);
+}
+
+.trial-badge.clickable {
+    cursor: pointer;
+}
+
+.trial-badge:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.35);
+}
+
+/* User Profile Trigger Capsule */
 .user-profile {
     position: relative;
     cursor: pointer;
@@ -579,345 +656,278 @@ const openNotificationsFromSheet = () => {
 .profile-trigger {
     display: flex;
     align-items: center;
-    gap: var(--space-sm);
+    gap: 10px;
+    padding: 4px 12px 4px 5px;
+    border-radius: var(--radius-pill);
+    background: #FFFFFF;
+    border: 1px solid var(--border-color);
+    box-shadow: var(--shadow-xs);
+    transition: all var(--transition-fast);
+}
+
+.profile-trigger:hover,
+.profile-trigger.menu-open {
+    background: #F8FAFC;
+    border-color: var(--border-color-hover);
+    box-shadow: var(--shadow-sm);
+    transform: translateY(-1px);
 }
 
 .avatar-wrapper {
     position: relative;
-    width: 40px;
-    height: 40px;
+    width: 32px;
+    height: 32px;
     border-radius: 50%;
-    background: var(--grad-purple-teal);
+    background: var(--grad-brand);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
 }
 
 .avatar {
-    width: 40px;
-    height: 40px;
+    width: 32px;
+    height: 32px;
     border-radius: 50%;
     object-fit: cover;
-}
-
-.user-info {
-    display: flex;
-    flex-direction: column;
-}
-
-.name {
-    font-weight: 500;
-}
-
-.role {
-    font-size: var(--text-sm);
-    opacity: 0.7;
-}
-
-.dropdown-menu {
-    position: absolute;
-    top: 100%;
-    right: 0;
-    background: var(--surface);
-    border: 1px solid var(--o10);
-    border-radius: 16px;
-    padding: var(--space-xs);
-    margin-top: var(--space-sm);
-    min-width: 220px;
-    z-index: 100;
-    box-shadow: var(--shadow-lg);
-}
-
-.menu-item {
-    display: block;
-    width: 100%;
-    padding: var(--space-sm) var(--space-md);
-    text-align: left;
-    background: none;
-    border: none;
-    color: var(--text3);
-    font-size: var(--text-sm);
-    font-weight: var(--font-weight-medium);
-    font-family: var(--font-sans);
-    cursor: pointer;
-    border-radius: var(--radius-sm);
-    transition: background-color var(--transition-fast), color var(--transition-fast);
-}
-
-.menu-item:hover {
-    background: var(--o06);
-    color: var(--text);
-}
-
-/* Content Styles */
-.content {
-    padding: var(--space-xl);
-}
-
-/* Remove padding when header is hidden (for full-page layouts like ConversationsView) */
-.dashboard-layout.header-hidden .content {
-    padding: 0;
-}
-
-/* Footer Styles */
-.footer {
-    background: var(--bg2);
-    border-top: 1px solid var(--o07);
-    padding: var(--space-lg) var(--space-xl);
-}
-
-.footer-content {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-}
-
-.footer-links {
-    display: flex;
-    gap: var(--space-lg);
-}
-
-.footer-links a {
-    color: var(--text-color);
-    text-decoration: none;
-    opacity: 0.7;
-    transition: var(--transition-fast);
-}
-
-.footer-links a:hover {
-    opacity: 1;
-}
-
-.notification-button {
-    width: 38px;
-    height: 38px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: var(--o04);
-    border: 1px solid var(--o10);
-    border-radius: 10px;
-    color: var(--muted);
-    padding: 0;
-    cursor: pointer;
-    position: relative;
-    flex-shrink: 0;
-    transition: background-color var(--transition-fast), color var(--transition-fast);
-}
-
-.notification-button:hover {
-    background: var(--o08);
-    color: var(--text);
-}
-
-.notification-icon {
-    width: 18px;
-    height: 18px;
-    filter: var(--icon-filter, brightness(0) invert(1));
-    opacity: var(--icon-opacity, 0.55);
-}
-
-.notification-badge {
-    position: absolute;
-    top: -5px;
-    right: -5px;
-    min-width: 17px;
-    height: 17px;
-    padding: 0 4px;
-    background-color: var(--c-danger);
-    color: #fff;
-    border: 1.5px solid var(--bg);
-    border-radius: var(--radius-pill);
-    font-family: var(--font-display);
-    font-size: 10px;
-    font-weight: var(--font-weight-bold);
-    display: flex;
-    align-items: center;
-    justify-content: center;
 }
 
 .status-indicator {
     position: absolute;
     bottom: 0;
     right: 0;
-    width: 10px;
-    height: 10px;
+    width: 9.5px;
+    height: 9.5px;
     border-radius: 50%;
     background-color: var(--muted);
-    border: 2px solid var(--bg2);
+    border: 2px solid #FFFFFF;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
 }
 
 .status-indicator.online {
     background-color: var(--success-color);
+    box-shadow: 0 0 0 1.5px #FFFFFF, 0 0 6px rgba(16, 185, 129, 0.6);
 }
 
-.topbar-divider {
-    width: 1px;
-    height: 26px;
-    background: var(--o10);
-    flex-shrink: 0;
+.user-info-text {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    min-width: 0;
+    line-height: 1.2;
 }
 
-.status-menu-item {
-    padding: var(--space-sm);
+.user-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+    letter-spacing: -0.01em;
+    white-space: nowrap;
+}
+
+.user-plan-tag {
+    font-size: 10.5px;
+    color: var(--accent-solid);
+    font-weight: 600;
+}
+
+.profile-chevron {
+    color: var(--muted);
+    transition: transform var(--transition-fast);
+}
+
+.profile-chevron.rotated {
+    transform: rotate(180deg);
+}
+
+/* Floating Glass User Dropdown */
+.dropdown-menu {
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    border: 1px solid var(--border-color);
+    border-radius: 14px;
+    padding: 6px;
+    min-width: 220px;
+    z-index: 100;
+    box-shadow: 0 12px 36px -4px rgba(15, 23, 42, 0.12), 0 4px 12px -2px rgba(15, 23, 42, 0.04);
+}
+
+.menu-user-header {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    gap: var(--space-sm);
+    gap: 10px;
+    padding: 8px 10px;
 }
 
-.status-label {
-    color: var(--text-muted);
-    font-size: 0.9rem;
+.menu-user-avatar .avatar {
+    width: 36px;
+    height: 36px;
 }
 
-.status-toggle {
-    background: var(--background-mute);
-    border: none;
-    padding: var(--space-xs) var(--space-sm);
-    border-radius: var(--radius-sm);
-    color: var(--text-muted);
-    cursor: pointer;
-    font-size: 0.9rem;
-    transition: all 0.3s ease;
+.menu-user-meta {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
 }
 
-.status-toggle.online {
-    background: var(--success-color);
-    color: white;
+.menu-name {
+    font-size: 13.5px;
+    font-weight: 600;
+    color: var(--text);
 }
 
-.status-toggle:disabled {
-    opacity: 0.7;
-    cursor: not-allowed;
+.menu-role {
+    font-size: 11.5px;
+    color: var(--muted);
 }
 
 .menu-divider {
     height: 1px;
-    background: var(--o08);
-    margin: var(--space-xs) 0;
+    background: var(--border-color);
+    margin: 4px 0;
 }
 
-.plan-display {
+/* Status Menu Switch Row */
+.status-menu-item {
     display: flex;
     align-items: center;
-    gap: var(--space-md);
-}
-
-.plan-loading {
-    color: var(--text-muted);
-    font-size: var(--text-sm);
-}
-
-.plan-info {
-    display: flex;
-    align-items: center;
-    gap: var(--space-sm);
-    margin-top: 2px;
-}
-
-.plan-badge {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    padding: 2px 8px;
-    border-radius: var(--radius-full);
-    font-size: var(--text-xs);
-    font-weight: 600;
-    background: var(--o08);
-    color: var(--text3);
-}
-
-.plan-badge.pro {
-    background: linear-gradient(45deg, #000000, #333333);
-    color: white;
-}
-
-.plan-badge.enterprise {
-    background: linear-gradient(45deg, var(--accent-solid), var(--accent-solid));
-    color: white;
-}
-
-.plan-icon {
-    font-size: var(--text-xs);
-}
-
-.upgrade-button.gradient {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    padding: 2px 8px;
-    font-size: var(--text-xs);
-    font-weight: 600;
-    color: white;
-    background: linear-gradient(45deg, var(--accent-solid), var(--accent-solid));
-    border: none;
-    border-radius: var(--radius-full);
-    cursor: pointer;
-    transition: all 0.2s ease;
-}
-
-.upgrade-button.gradient:hover {
-    transform: translateY(-1px);
-    filter: brightness(1.1);
-}
-
-.upgrade-icon {
-    font-size: var(--text-xs);
-}
-
-.upgrade-button {
-    padding: var(--space-xs) var(--space-sm);
+    justify-content: space-between;
+    padding: 8px 10px;
     border-radius: var(--radius-sm);
-    background-color: var(--accent-solid);
-    color: white;
-    border: none;
-    font-size: var(--text-sm);
-    font-weight: 500;
     cursor: pointer;
-    transition: all 0.2s ease;
+    transition: background-color var(--transition-fast);
 }
 
-.upgrade-button:hover {
-    background-color: var(--accent-solid);
-    transform: translateY(-1px);
+.status-menu-item:hover {
+    background: rgba(15, 23, 42, 0.04);
 }
 
-.trial-info {
+.status-meta {
     display: flex;
     align-items: center;
-    margin-right: 12px;
+    gap: 8px;
 }
 
-.trial-badge {
-    background: linear-gradient(135deg, var(--accent-solid), var(--accent-solid));
-    color: white;
-    padding: 4px 12px;
-    border-radius: 12px;
-    font-size: 0.875rem;
+.status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--muted);
+}
+
+.status-dot.online {
+    background: var(--success-color);
+    box-shadow: 0 0 6px rgba(16, 185, 129, 0.6);
+}
+
+.status-label {
+    font-size: 13px;
     font-weight: 500;
+    color: var(--text2);
+}
+
+/* iOS-Style Toggle Switch */
+.ios-switch {
+    width: 36px;
+    height: 20px;
+    border-radius: 99px;
+    background: rgba(15, 23, 42, 0.12);
+    position: relative;
+    transition: background-color var(--transition-fast);
+}
+
+.ios-switch.active {
+    background: var(--success-color);
+}
+
+.ios-switch-knob {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: #FFFFFF;
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+    transition: transform var(--transition-fast);
+}
+
+.ios-switch.active .ios-switch-knob {
+    transform: translateX(16px);
+}
+
+.menu-item {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    width: 100%;
+    padding: 8px 10px;
+    text-align: left;
+    background: none;
+    border: none;
+    color: var(--text2);
+    font-size: 13px;
+    font-weight: 500;
+    font-family: var(--font-sans);
     cursor: pointer;
-    transition: all 0.2s ease;
+    border-radius: var(--radius-sm);
+    text-decoration: none;
+    transition: all var(--transition-fast);
 }
 
-.trial-badge:hover {
-    transform: translateY(-1px);
-    filter: brightness(1.1);
+.menu-item:hover {
+    background: rgba(15, 23, 42, 0.05);
+    color: var(--text);
 }
 
-.trial-badge.clickable {
-    cursor: pointer;
+.menu-item.logout {
+    color: var(--c-danger);
 }
 
+.menu-item.logout:hover {
+    background: rgba(239, 68, 68, 0.08);
+    color: #DC2626;
+}
+
+/* Dropdown Animation */
+.dropdown-scale-enter-active,
+.dropdown-scale-leave-active {
+    transition: all 0.16s cubic-bezier(0.4, 0, 0.2, 1);
+    transform-origin: top right;
+}
+
+.dropdown-scale-enter-from,
+.dropdown-scale-leave-to {
+    opacity: 0;
+    transform: scale(0.94) translateY(-6px);
+}
+
+/* Content Area */
+.content {
+    flex: 1;
+    padding: var(--space-xl);
+}
+
+.dashboard-layout.header-hidden .content {
+    padding: 0;
+}
+
+/* Message Limit Warning Banner */
 .message-limit-banner {
     position: relative;
-    padding: var(--space-md) var(--space-xl);
-    background: var(--warning-bg);
-    border-bottom: 1px solid var(--warning-color);
+    padding: 12px 24px;
+    background: rgba(245, 158, 11, 0.08);
+    border-bottom: 1px solid rgba(245, 158, 11, 0.25);
     width: 100%;
-    overflow: hidden;
 }
 
 .message-limit-banner.error {
-    background: var(--error-bg);
-    border-bottom: 1px solid var(--error-color);
+    background: rgba(239, 68, 68, 0.08);
+    border-bottom: 1px solid rgba(239, 68, 68, 0.25);
 }
 
 .banner-content {
@@ -930,43 +940,44 @@ const openNotificationsFromSheet = () => {
 .banner-text {
     display: flex;
     align-items: center;
-    gap: var(--space-sm);
+    gap: 8px;
+    font-size: 13.5px;
     font-weight: 500;
-    word-break: break-word;
-    flex: 1;
-}
-
-.banner-icon {
-    font-size: 1.2em;
+    color: var(--text);
 }
 
 .banner-actions {
     display: flex;
-    gap: var(--space-sm);
-    flex-wrap: wrap;
+    gap: 8px;
 }
 
 .action-button {
-    padding: var(--space-xs) var(--space-sm);
-    border-radius: var(--radius-sm);
-    font-size: var(--text-sm);
-    font-weight: 500;
+    padding: 6px 12px;
+    border-radius: var(--radius-btn);
+    font-size: 12.5px;
+    font-weight: 600;
     cursor: pointer;
-    border: none;
-    background: var(--accent-solid);
-    color: white;
-    transition: all 0.2s ease;
+    border: 1px solid transparent;
+    transition: all var(--transition-fast);
 }
 
-.action-button:hover {
-    transform: translateY(-1px);
-    filter: brightness(1.1);
+.action-button.primary {
+    background: var(--accent-solid);
+    color: #FFFFFF;
+}
+
+.action-button.primary:hover {
+    background: #1D4ED8;
 }
 
 .action-button.secondary {
-    background: var(--background-soft);
-    color: var(--text-color);
-    border: 1px solid var(--border-color);
+    background: #FFFFFF;
+    color: var(--text);
+    border-color: var(--border-color);
+}
+
+.action-button.secondary:hover {
+    background: var(--bg-deep);
 }
 
 .usage-bar {
@@ -975,7 +986,7 @@ const openNotificationsFromSheet = () => {
     left: 0;
     width: 100%;
     height: 2px;
-    background: var(--background-mute);
+    background: rgba(15, 23, 42, 0.06);
 }
 
 .usage-progress {
@@ -988,31 +999,13 @@ const openNotificationsFromSheet = () => {
     background: var(--error-color);
 }
 
-/* Adjust main content to account for banner */
-.main-content {
-    display: flex;
-    flex-direction: column;
-    height: 100vh;
-    height: 100dvh;
-    width: 100%;
-    overflow-y: auto;
-    overflow-x: hidden;
-}
-
-.content {
-    flex: 1;
-    padding: var(--space-xl);
-}
-
-/* Fullscreen workflow mode */
+/* Fullscreen Workflow Mode */
 .dashboard-layout.fullscreen-workflow {
     grid-template-columns: 1fr;
 }
 
 .dashboard-layout.fullscreen-workflow .main-content {
     padding: 0;
-    min-height: 100vh;
-    min-height: 100dvh;
 }
 
 .dashboard-layout.fullscreen-workflow .content {
@@ -1022,327 +1015,104 @@ const openNotificationsFromSheet = () => {
     overflow: hidden;
 }
 
-.dashboard-layout.header-hidden .main-content {
-    min-height: 100vh;
-    min-height: 100dvh;
+/* Dark Mode Overrides for Layout */
+[data-theme="dark"] .main-content {
+    background: radial-gradient(circle at 90% 8%, rgba(59, 130, 246, 0.05) 0%, transparent 40%),
+                var(--bg);
 }
 
-.dashboard-layout.header-hidden .content {
-    height: 100vh;
-    height: 100dvh;
-    overflow: hidden;
+[data-theme="dark"] .header {
+    background: rgba(9, 10, 15, 0.85);
+    box-shadow: 0 1px 0 0 rgba(255, 255, 255, 0.06);
 }
 
-/* Responsive Design - 13 inch laptops */
-@media (max-width: 1366px) {
-    .header-content {
-        padding: var(--space-md) var(--space-lg);
-    }
-    
-    .content {
-        padding: var(--space-lg);
-    }
-    
-    .banner-content {
-        flex-direction: column;
-        align-items: flex-start;
-        gap: var(--space-sm);
-    }
-    
-    .banner-actions {
-        width: 100%;
-        justify-content: flex-start;
-    }
-    
-    .action-button {
-        padding: var(--space-xs) var(--space-md);
-        font-size: 0.8rem;
-    }
-    
-    .plan-badge {
-        font-size: 0.7rem;
-        padding: 2px 6px;
-    }
+[data-theme="dark"] .icon-btn,
+[data-theme="dark"] .profile-trigger,
+[data-theme="dark"] .hamburger-menu {
+    background: var(--surface);
+    color: var(--text2);
 }
 
-/* Responsive Design - Small laptops (1025px - 1280px) */
-@media (max-width: 1280px) and (min-width: 1025px) {
-    /* Keep normal grid layout with sidebar in this range */
-    .dashboard-layout {
-        grid-template-columns: auto 1fr;
-    }
-    
-    .dashboard-layout.sidebar-collapsed {
-        grid-template-columns: auto 1fr;
-    }
-    
-    .header-content {
-        padding: var(--space-sm) var(--space-md);
-    }
-    
-    .content {
-        padding: var(--space-md);
-    }
-    
-    .right-section {
-        gap: var(--space-md);
-    }
-    
-    .trial-badge {
-        font-size: 0.75rem;
-        padding: 3px 10px;
-    }
+[data-theme="dark"] .icon-btn:hover,
+[data-theme="dark"] .profile-trigger:hover,
+[data-theme="dark"] .profile-trigger.menu-open {
+    background: var(--o08);
+    color: var(--text);
 }
 
-/* Tablet and below (overlay mode) */
+[data-theme="dark"] .status-indicator {
+    border-color: var(--surface);
+}
+
+[data-theme="dark"] .dropdown-menu {
+    background: rgba(20, 23, 34, 0.95);
+}
+
+[data-theme="dark"] .menu-item:hover {
+    background: rgba(255, 255, 255, 0.06);
+}
+
+/* Responsive Breakpoints */
 @media (max-width: 1024px) {
     .dashboard-layout {
         grid-template-columns: 1fr;
     }
-    
+
     .sidebar-backdrop {
         display: block;
         position: fixed;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        background: rgba(0, 0, 0, 0.5);
+        inset: 0;
+        background: rgba(15, 23, 42, 0.35);
         z-index: 999;
-        backdrop-filter: blur(2px);
+        backdrop-filter: blur(4px);
     }
-    
+
     .dashboard-layout.sidebar-collapsed .sidebar-backdrop {
         display: none;
     }
-    
+
     .hamburger-menu {
         display: flex;
         align-items: center;
         justify-content: center;
     }
-    
-    .user-info {
-        display: none !important;
-    }
-    
-    .plan-display .plan-info {
+
+    .user-info-text {
         display: none;
-    }
-    
-    .trial-info {
-        margin-right: 0;
-    }
-    
-    .footer-content {
-        flex-direction: column;
-        gap: var(--space-md);
-        text-align: center;
-    }
-    
-    .footer-links {
-        flex-direction: column;
-        gap: var(--space-sm);
     }
 }
 
-/* Mobile responsive */
 @media (max-width: 768px) {
-    /* Breathing room above/below the 38px controls so they don't crowd the
-       bottom border of the bar */
     .header-content {
-        padding: 10px 12px;
+        padding: 0 14px;
+        height: 56px;
     }
 
-    /* The divider reads as a line touching the avatar at this size; the gap
-       between the controls is enough separation on its own */
+    .content {
+        padding: var(--space-md);
+    }
+
     .topbar-divider {
         display: none;
     }
 
-    .user-menu {
-        gap: 10px;
-    }
-
-    .content {
-        padding: var(--space-sm);
-    }
-
-    /* Bottom nav replaces the hamburger/drawer on phones */
-    .hamburger-menu {
-        display: none;
-    }
-
-    /* Reserve space for the fixed bottom nav */
     .dashboard-layout.has-bottom-nav .content {
         padding-bottom: calc(var(--bottom-nav-height) + var(--safe-bottom) + var(--space-sm));
     }
 
-    .dashboard-layout.has-bottom-nav .footer {
-        display: none;
-    }
-
-    /* Full-height pages (Inbox): shrink the content area instead of padding it.
-       flex: 0 0 auto is required — the default flex: 1 zeroes the flex basis and
-       grows back to the full 100dvh, putting the page bottom under the nav. */
     .dashboard-layout.has-bottom-nav.header-hidden .content {
         flex: 0 0 auto;
         height: calc(100dvh - var(--bottom-nav-height) - var(--safe-bottom));
         padding-bottom: 0;
     }
-    
-    .right-section {
-        gap: var(--space-sm);
-    }
-    
-    .banner-content {
-        gap: var(--space-xs);
-    }
-    
-    .banner-text {
-        font-size: var(--text-sm);
-    }
-    
-    .banner-actions {
-        flex-direction: column;
-        width: 100%;
-    }
-    
-    .action-button {
-        width: 100%;
-        text-align: center;
-        padding: var(--space-sm);
-    }
-    
-    .trial-badge {
-        font-size: 0.7rem;
-        padding: 2px 8px;
-    }
-    
-    .notification-badge {
-        min-width: 16px;
-        height: 16px;
-        font-size: 10px;
-    }
-    
-    .avatar {
-        width: 28px;
-        height: 28px;
-    }
-    
-    .avatar-wrapper {
-        width: 28px;
-        height: 28px;
-    }
-    
-    .dropdown-menu {
-        right: 0;
-        left: auto;
-        min-width: 140px;
-    }
-    
-    .footer {
-        padding: var(--space-md);
-    }
-    
-    .footer-content p {
-        font-size: var(--text-sm);
-    }
-}
 
-/* Very small mobile devices */
-@media (max-width: 480px) {
-    /* Keeps the 38px controls off the bar's bottom border */
-    .header-content {
-        padding: 9px 10px;
+    .right-section {
+        gap: 8px;
     }
-    
-    .content {
-        padding: var(--space-xs);
-    }
-    
-    .plan-display {
-        display: none !important;
-    }
-    
-    .user-menu {
-        gap: var(--space-xs);
-    }
-    
-    .notification-button {
-        padding: var(--space-xs);
-    }
-    
-    .notification-icon {
-        width: 20px;
-        height: 20px;
-    }
-    
-    .message-limit-banner {
-        padding: var(--space-sm);
-    }
-    
-    .banner-content {
-        gap: var(--space-xs);
-    }
-    
-    .banner-text {
-        font-size: var(--text-xs);
-        flex-direction: column;
-        align-items: flex-start;
-        gap: var(--space-xs);
-    }
-    
-    .banner-icon {
-        font-size: 1em;
-    }
-    
-    .action-button {
-        font-size: 0.75rem;
-        padding: var(--space-xs) var(--space-sm);
-        white-space: nowrap;
-    }
-    
-    .avatar {
-        width: 24px;
-        height: 24px;
-    }
-    
-    .avatar-wrapper {
-        width: 24px;
-        height: 24px;
-    }
-    
-    .status-indicator {
-        width: 8px;
-        height: 8px;
-        border-width: 1px;
-    }
-    
-    .dropdown-menu {
-        min-width: 120px;
-        font-size: var(--text-sm);
-    }
-    
-    .menu-item {
-        padding: var(--space-xs) var(--space-sm);
-        font-size: var(--text-sm);
-    }
-    
-    .footer {
-        padding: var(--space-sm);
-    }
-    
-    .footer-content {
-        gap: var(--space-sm);
-    }
-    
-    .footer-content p {
-        font-size: var(--text-xs);
-    }
-    
-    .footer-links a {
-        font-size: var(--text-xs);
+
+    .trial-badge {
+        display: none;
     }
 }
 </style>
+

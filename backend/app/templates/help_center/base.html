@@ -1,5 +1,5 @@
 {#
-Copyright 2024-2026 ChatterMate
+Copyright 2024-2026 Komi AI
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -366,9 +366,9 @@ org content safe. Colors: only `--brand`/`--brand-ink` come from the server
         {% endif %}
         <span class="hc-name">{{ row.organization.name }}</span>
       </div>
-      <a class="hc-powered" href="https://chattermate.chat" target="_blank" rel="noopener">
+      <a class="hc-powered" href="https://komi.ai" target="_blank" rel="noopener">
         <span>Powered by</span>
-        <strong><span class="hc-cm-mark"><i></i><i></i><i></i></span> ChatterMate</strong>
+        <strong><span class="hc-cm-mark"><i></i><i></i><i></i></span> Komi AI</strong>
       </a>
     </div>
   </footer>
@@ -377,19 +377,19 @@ org content safe. Colors: only `--brand`/`--brand-ink` come from the server
   <script type="application/ld+json">{{ json_ld | tojson }}</script>
   {% endif %}
 
-  <!-- open the real embedded ChatterMate widget -->
+  <!-- open the real embedded Komi AI widget -->
   <script>
   (function () {
-    // The widget script is async and builds its launcher (#chattermate-button)
+    // The widget script is async and builds its launcher (#komi-button)
     // a moment after load, so a click can land before it exists — poll briefly
     // and click as soon as it appears instead of silently doing nothing.
     function openChat() {
       var tries = 0;
       (function attempt() {
-        var btn = document.getElementById('chattermate-button');
+        var btn = document.getElementById('komi-button');
         if (btn) { btn.click(); return; }
         if (tries++ < 40) { setTimeout(attempt, 150); return; }  // ~6s
-        if (window.console) console.warn('[ChatterMate] chat widget is not available on this page.');
+        if (window.console) console.warn('[Komi AI] chat widget is not available on this page.');
       })();
     }
     [].slice.call(document.querySelectorAll('[data-chat]')).forEach(function (b) {

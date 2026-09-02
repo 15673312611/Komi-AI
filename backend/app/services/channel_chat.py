@@ -1,5 +1,5 @@
 """
-Copyright 2024-2026 ChatterMate
+Copyright 2024-2026 Komi AI
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -466,7 +466,7 @@ async def _relay_to_human(session_record, inbound: InboundMessage,
 async def _within_message_limit(db: Session, org_id: str, ai_config) -> bool:
     """Enterprise subscription limit; permissive on any failure so the
     community edition and enterprise errors never block conversations."""
-    if not (HAS_ENTERPRISE and ai_config.model_type == AIModelType.CHATTERMATE):
+    if not (HAS_ENTERPRISE and ai_config.model_type == AIModelType.KOMI_AI):
         return True
     try:
         return await check_message_limit(db, org_id, None, None)

@@ -15,8 +15,8 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
-	knowledgeStore "github.com/chattermate/chattermate/backend-go/internal/knowledge"
-	"github.com/chattermate/chattermate/backend-go/internal/user"
+	knowledgeStore "github.com/komi/komi/backend-go/internal/knowledge"
+	"github.com/komi/komi/backend-go/internal/user"
 )
 
 const (
@@ -913,7 +913,20 @@ func queueSummary(item *knowledgeStore.QueueItem) map[string]any {
 	if item == nil {
 		return map[string]any{}
 	}
-	return map[string]any{"id": item.ID, "status": item.Status, "source": item.Source, "source_type": item.SourceType, "error": item.Error, "created_at": item.CreatedAt, "updated_at": item.UpdatedAt, "processing_stage": item.ProcessingStage, "progress_percentage": item.ProgressPercentage}
+	return map[string]any{
+		"id":                  item.ID,
+		"status":              item.Status,
+		"source":              item.Source,
+		"source_type":         item.SourceType,
+		"error":               item.Error,
+		"created_at":          item.CreatedAt,
+		"updated_at":          item.UpdatedAt,
+		"processing_stage":    item.ProcessingStage,
+		"progress_percentage": item.ProgressPercentage,
+		"total_items":         item.TotalItems,
+		"processed_items":     item.ProcessedItems,
+		"crawled_urls":        item.CrawledURLs,
+	}
 }
 func queueSummaries(items []*knowledgeStore.QueueItem) []map[string]any {
 	result := make([]map[string]any, 0, len(items))

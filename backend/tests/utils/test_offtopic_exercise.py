@@ -1,5 +1,5 @@
 """
-Copyright 2024-2026 ChatterMate
+Copyright 2024-2026 Komi AI
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -68,7 +68,7 @@ class TestCatchesTheAbuse:
         assert detect_offtopic_exercise(PROD_BRIEF) is True
 
     def test_still_caught_when_org_name_is_known(self):
-        assert detect_offtopic_exercise(PROD_BRIEF, ["ChatterMate"]) is True
+        assert detect_offtopic_exercise(PROD_BRIEF, ["Komi AI"]) is True
 
 
 class TestPrecision:
@@ -121,5 +121,5 @@ class TestThresholds:
         assert detect_offtopic_exercise(text) is False
 
     def test_org_name_mention_anchors_it(self):
-        text = PROD_BRIEF + "\nWe need this for our ChatterMate integration."
-        assert detect_offtopic_exercise(text, ["ChatterMate"]) is False
+        text = PROD_BRIEF + "\nWe need this for our Komi AI integration."
+        assert detect_offtopic_exercise(text, ["Komi AI"]) is False
