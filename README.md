@@ -1,3 +1,8 @@
+> [!IMPORTANT]
+> 📢 **【商业合作 & 软件定制开发】**  
+> 承接 **AI 智能客服系统**、**AI Agent 智能体工作流定制**、**跨境电商 / 独立站出海方案** 以及 **各类企业级 Web / 小程序 / 全栈软件定制开发**。  
+> 💬 **微信联系**：`soe303`（添加请备注：**软件定制** 或 **项目咨询**，快速响应）
+
 <div align="center">
 
 # 🤖 Komi AI
@@ -16,10 +21,6 @@
   <a href="https://modelcontextprotocol.io/"><img src="https://img.shields.io/badge/Protocol-MCP%20Enabled-black.svg?style=flat-square" alt="MCP"></a>
   <img src="https://img.shields.io/badge/PRs-Welcome-brightgreen.svg?style=flat-square" alt="PRs Welcome">
 </p>
-
-> 💡 **【商业合作 & 定制开发】**  
-> 承接 **AI 智能客服系统**、**AI Agent 智能体工作流定制**、**跨境电商/独立站出海方案** 以及 **各类企业级 Web/全栈/移动端软件定制开发**。  
-> 💬 **微信联系**：`soe303`（添加请备注：项目咨询/软件定制）
 
 <p align="center">
   <a href="#-核心特性">核心特性</a> •
