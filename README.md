@@ -17,6 +17,10 @@
   <img src="https://img.shields.io/badge/PRs-Welcome-brightgreen.svg?style=flat-square" alt="PRs Welcome">
 </p>
 
+> 💡 **【商业合作 & 定制开发】**  
+> 承接 **AI 智能客服系统**、**AI Agent 智能体工作流定制**、**跨境电商/独立站出海方案** 以及 **各类企业级 Web/全栈/移动端软件定制开发**。  
+> 💬 **微信联系**：`soe303`（添加请备注：项目咨询/软件定制）
+
 <p align="center">
   <a href="#-核心特性">核心特性</a> •
   <a href="#-系统架构">系统架构</a> •
@@ -89,34 +93,34 @@
 
 ```mermaid
 flowchart TB
-    subgraph ClientLayer [终端多渠道接入层]
-        Web[Web 悬浮挂件 / PWA]
-        Shopify[Shopify / WordPress 插件]
-        Meta[WhatsApp / Instagram / Messenger]
-        IM[Slack / Telegram / LINE / 邮件]
+    subgraph ClientLayer ["终端多渠道接入层"]
+        Web["Web 悬浮挂件 / PWA"]
+        Shopify["Shopify / WordPress 插件"]
+        Meta["WhatsApp / Instagram / Messenger"]
+        IM["Slack / Telegram / LINE / 邮件"]
     end
 
-    subgraph GatewayLayer [接入网关与安全控制]
-        GoGateway[高性能 Go 消息与 WS 路由]
-        AuthGuard[JWT 鉴权 / RBAC 权限控制 / 租户隔离]
+    subgraph GatewayLayer ["接入网关与安全控制"]
+        GoGateway["高性能 Go 消息与 WS 路由"]
+        AuthGuard["JWT 鉴权 / RBAC 权限控制 / 租户隔离"]
     end
 
-    subgraph CoreEngine [Komi 核心服务引擎]
-        AgentEngine[AI Agent 编排引擎 & 工作流引擎]
-        RAGModule[RAG 知识库检索 & 文档解析]
-        TicketEngine[AI 智能工单与根因调查模块]
-        HandoffMgr[人机协同与会话分流调度]
+    subgraph CoreEngine ["Komi 核心服务引擎"]
+        AgentEngine["AI Agent 编排引擎 & 工作流引擎"]
+        RAGModule["RAG 知识库检索 & 文档解析"]
+        TicketEngine["AI 智能工单与根因调查模块"]
+        HandoffMgr["人机协同与会话分流调度"]
     end
 
-    subgraph LLM_MCP [大模型与工具协议层]
-        LLMHub[LLM 聚合调度 (OpenAI/Claude/Gemini/DeepSeek/Ollama)]
-        MCPHub[MCP 工具连接器 (Grafana/Sentry/SQL/APIs)]
+    subgraph LLM_MCP ["大模型与工具协议层"]
+        LLMHub["LLM 聚合调度 (OpenAI / Claude / Gemini / DeepSeek / Ollama)"]
+        MCPHub["MCP 工具连接器 (Grafana / Sentry / SQL / APIs)"]
     end
 
-    subgraph DataStorage [数据存储层]
-        PG[(PostgreSQL + 向量检索)]
-        Redis[(Redis 缓存 & 实时状态)]
-        S3[(对象存储 / 媒体文件)]
+    subgraph DataStorage ["数据存储层"]
+        PG["PostgreSQL + 向量检索 pgvector"]
+        Redis["Redis 缓存 & 实时状态"]
+        S3["对象存储 / 媒体文件"]
     end
 
     ClientLayer --> GatewayLayer
@@ -233,14 +237,16 @@ Komi AI 将数据安全与合规放在首位，专为企业级私有化生产环
 
 ---
 
-## 🤝 贡献与反馈 (Contributing)
+## 🤝 商业定制与技术支持
 
-欢迎所有开发者参与共建！无论是提交 Issue、改进文档，还是发起 Pull Request：
+如果您有以下需求，欢迎随时联系沟通：
+- 🛠️ **企业级私有化定制部署与二次开发**
+- 🛍️ **电商独立站（Shopify / WooCommerce 等）全自动 AI 客服对接**
+- 🤖 **专属行业大模型知识库（RAG）构建与 Agent 工作流编排**
+- 💻 **各类 Web / 小程序 / 全栈 / 自动化软件定制开发**
 
-1. Fork 本仓库并创建特性分支 (`git checkout -b feature/AmazingFeature`)
-2. 提交您的修改 (`git commit -m 'feat: Add some AmazingFeature'`)
-3. 推送到远程分支 (`git push origin feature/AmazingFeature`)
-4. 提交 Pull Request
+> 📲 **微信联系**：`soe303`  
+> 📌 **添加请备注**：`Komi定制` 或 `软件开发`
 
 ---
 
