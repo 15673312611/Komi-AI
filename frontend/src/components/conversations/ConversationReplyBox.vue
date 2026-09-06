@@ -58,11 +58,13 @@ watch(() => props.draft, value => {
 })
 watch(() => props.sessionId, () => {
   attachmentContextVersion += 1
+  messageText.value = props.draft || ''
   pendingFiles.value = []
   selectedMentions.value = []
   mentionStart.value = null
   mentionQuery.value = ''
   showSendMenu.value = false
+  currentReplyMode.value = 'reply'
 })
 
 const canAttach = computed(() => props.allowAttachments !== false)
@@ -76,10 +78,17 @@ const switchReplyMode = (mode: 'reply' | 'note') => {
   nextTick(() => textareaRef.value?.focus())
 }
 
-const toggleAiAutoReply = (event: Event) => {
+const toggleAiAutoReply = (event?: Event) => {
   if (props.aiAutoReplyDisabled || props.aiAutoReplyLoading) return
-  const checked = (event.target as HTMLInputElement).checked
-  emit('toggle-ai-auto-reply', checked)
+  if (event?.target) {
+    (event.target as HTMLInputElement).checked = aiAutoReplyEnabled.value
+  }
+  emit('toggle-ai-auto-reply', !aiAutoReplyEnabled.value)
+}
+
+const toggleSendMenu = () => {
+  if (props.disabled || currentReplyMode.value === 'note') return
+  showSendMenu.value = !showSendMenu.value
 }
 
 const handleSend = () => {
@@ -416,7 +425,7 @@ const removePendingFile = (index: number) => { pendingFiles.value.splice(index, 
                 @click="handleSend"
                 :disabled="props.disabled"
                 :class="[
-                  'px-4 py-1.5 font-bold text-xs rounded-lg flex items-center gap-1.5 transition-all active:scale-[0.98]',
+                  'px-4 py-1.5 font-bold text-xs rounded-l-lg flex items-center gap-1.5 transition-all active:scale-[0.98]',
                   currentReplyMode === 'reply'
                     ? 'bg-gradient-to-r from-indigo-600 via-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white shadow-md shadow-indigo-500/25'
                     : 'bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white shadow-md shadow-amber-500/25',
@@ -425,6 +434,37 @@ const removePendingFile = (index: number) => { pendingFiles.value.splice(index, 
                 <span>{{ currentReplyMode === 'reply' ? '发送' : '添加便签' }}</span>
                 <i class="fa-solid fa-paper-plane text-[10px]"></i>
               </button>
+              <button
+                type="button"
+                @click="toggleSendMenu"
+                :disabled="props.disabled || currentReplyMode === 'note'"
+                :aria-expanded="showSendMenu"
+                aria-haspopup="menu"
+                aria-label="更多发送操作"
+                :class="[
+                  'px-2 py-1.5 text-xs rounded-r-lg border-l transition-colors disabled:cursor-not-allowed disabled:opacity-40',
+                  currentReplyMode === 'reply'
+                    ? 'bg-indigo-700 hover:bg-indigo-600 text-white border-indigo-500/30'
+                    : 'bg-amber-600 hover:bg-amber-500 text-white border-amber-400/30',
+                ]"
+              >
+                <i class="fa-solid fa-chevron-down text-[10px]"></i>
+              </button>
+              <div
+                v-if="showSendMenu"
+                role="menu"
+                class="absolute right-0 bottom-full z-20 mb-2 min-w-44 overflow-hidden rounded-lg border border-slate-200 bg-white py-1 shadow-xl text-xs"
+              >
+                <button
+                  type="button"
+                  role="menuitem"
+                  class="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-slate-700 transition-colors hover:bg-indigo-50 hover:text-indigo-900"
+                  @click="handleSendAndResolve"
+                >
+                  <i class="fa-solid fa-check-double text-indigo-600"></i>
+                  <span>发送并解决会话</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>

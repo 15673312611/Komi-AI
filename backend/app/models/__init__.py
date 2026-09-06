@@ -16,7 +16,9 @@ limitations under the License.
 
 from app.database import Base
 from .organization import Organization
-from .user import User
+from .user import User, UserGroup
+from .widget import Widget
+from .widget_app import WidgetApp
 from .fcm_token import FCMToken
 from .customer import Customer
 from .role import Role
@@ -75,6 +77,9 @@ from app.models.guardrail_event import GuardrailEvent
 __all__ = [
     "Organization",
     "User",
+    "UserGroup",
+    "Widget",
+    "WidgetApp",
     "FCMToken",
     "Customer",
     "Permission",

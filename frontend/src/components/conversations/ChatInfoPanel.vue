@@ -22,6 +22,7 @@ const emit = defineEmits<{
   (e: 'action-toast', msg: string, type?: 'success' | 'info' | 'error'): void
   (e: 'select-session', sessionId: string): void
   (e: 'ticket-created', ticketId: string): void
+  (e: 'chat-updated', chat: ChatDetail): void
 }>()
 
 const showCreateTicketModal = ref(false)
@@ -50,9 +51,11 @@ const assignmentLabel = computed(() => {
 
 const TAG_COLORS = ['indigo', 'emerald', 'amber', 'rose', 'cyan', 'purple']
 const tags = computed(() => {
-  const metaTags = props.chatInfo?.customer?.meta_data?.tags
-  if (Array.isArray(metaTags)) {
-    return metaTags.map((t: any, idx: number) => {
+  const sourceTags = (Array.isArray(props.chatInfo?.tags) && props.chatInfo.tags.length > 0)
+    ? props.chatInfo.tags
+    : (Array.isArray(props.chatInfo?.customer?.meta_data?.tags) ? props.chatInfo.customer.meta_data.tags : (props.chatInfo?.tags || []))
+  if (Array.isArray(sourceTags)) {
+    return sourceTags.map((t: any, idx: number) => {
       const color = TAG_COLORS[idx % TAG_COLORS.length]
       return typeof t === 'string' ? { id: `tag-${idx}`, name: t, color } : { id: t.id || `tag-${idx}`, name: t.name || String(t), color: t.color || color }
     })
@@ -72,15 +75,22 @@ const persistTags = async (nextTags: string[]) => {
   tagsSaving.value = true
   try {
     const updated = await chatService.updateTags(sessionId, nextTags)
+    if (props.chatInfo?.session_id !== sessionId) return
+    if (props.chatInfo) {
+      props.chatInfo.tags = updated.tags || nextTags
+    }
     if (props.chatInfo?.customer) {
       props.chatInfo.customer.meta_data = {
         ...(props.chatInfo.customer.meta_data || {}),
-        tags: updated.customer?.meta_data?.tags || nextTags,
+        tags: updated.customer?.meta_data?.tags || updated.tags || nextTags,
       }
     }
+    emit('chat-updated', updated)
     emit('action-toast', '标签已更新', 'success')
   } catch (err: any) {
-    emit('action-toast', err?.response?.data?.detail || '保存标签失败', 'error')
+    if (props.chatInfo?.session_id === sessionId) {
+      emit('action-toast', err?.response?.data?.detail || '保存标签失败', 'error')
+    }
   } finally {
     tagsSaving.value = false
   }

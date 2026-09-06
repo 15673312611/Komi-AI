@@ -365,7 +365,7 @@ const openNotificationsFromSheet = () => {
                                     <div class="menu-divider"></div>
 
                                     <!-- Online Status Switcher Row -->
-                                    <div class="menu-item status-toggle-item" @click.stop="toggleOnlineStatus">
+                                    <div class="menu-item status-toggle-item status-toggle" :class="{ 'online': currentUser?.is_online }" @click.stop="toggleOnlineStatus">
                                         <div class="status-toggle-label">
                                             <span class="status-dot-icon" :class="{ 'online': currentUser?.is_online }"></span>
                                             <span>{{ currentUser?.is_online ? '工作状态：在线接待中' : '工作状态：离线待命' }}</span>

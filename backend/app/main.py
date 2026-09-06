@@ -38,7 +38,6 @@ from app.database import engine, Base
 import asyncio
 from app.core.logger import get_logger
 from contextlib import asynccontextmanager
-import os
 from app.core.socketio import socket_app, configure_socketio, sio
 from app.core.cors import get_cors_origins, get_cors_origin_regex
 from app.core.application import app, initialize_cors_listener
@@ -64,7 +63,10 @@ async def lifespan(app: FastAPI):
     await startup_event()
     yield
     # Shutdown
-    pass
+    try:
+        engine.dispose()
+    except Exception as e:
+        logger.warning(f"Error during database engine disposal: {e}")
 
 # Move the CORS setup before app instantiation
 cors_origins = get_cors_origins()
@@ -85,7 +87,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-@app.on_event("startup")
 async def startup_event():
     """Configure Socket.IO on startup"""
     configure_socketio(cors_origins)

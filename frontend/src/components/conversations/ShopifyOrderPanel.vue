@@ -30,10 +30,16 @@ const shopDomain = ref<string | null>(null)
 const showAllOrders = ref(false)
 
 const activeAction = ref<'refund' | 'address' | 'invoice' | null>(null)
+const actionIdempotencyKey = ref('')
 const actionLoading = ref(false)
 const refundPreviewLoading = ref(false)
 const refundPreview = ref<any>(null)
 const addressDraft = ref({ recipient_name: '', address1: '', address2: '', city: '', province: '', country: '', zip: '', phone: '' })
+
+const idempotencyKey = () => {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') return crypto.randomUUID()
+  return `shopify-${Date.now()}-${Math.random().toString(36).slice(2, 14)}`
+}
 
 let activeContextVersion = 0
 let actionContextVersion = 0
@@ -134,6 +140,7 @@ watch(() => props.sessionId, () => {
   refundPreviewRequest += 1
   actionRequest += 1
   activeAction.value = null
+  actionIdempotencyKey.value = ''
   actionLoading.value = false
   refundPreviewLoading.value = false
   selectedOrderId.value = null
@@ -155,6 +162,7 @@ const openRefund = async () => {
   const sessionId = props.sessionId
   if (!current || !sessionId) return
   activeAction.value = 'refund'
+  actionIdempotencyKey.value = idempotencyKey()
   refundPreview.value = null
   refundPreviewLoading.value = true
   const request = ++refundPreviewRequest
@@ -188,11 +196,13 @@ const openAddress = () => {
     phone: addr.phone || '',
   }
   activeAction.value = 'address'
+  actionIdempotencyKey.value = idempotencyKey()
 }
 
 const openInvoice = () => {
   if (!activeOrder.value) return
   activeAction.value = 'invoice'
+  actionIdempotencyKey.value = idempotencyKey()
 }
 
 const submitAction = async () => {
@@ -202,7 +212,8 @@ const submitAction = async () => {
   if (!current || !sessionId || !action || actionLoading.value) return
   const orderId = String(current.id)
   const address = { ...addressDraft.value }
-  const idempotencyKeyForAction = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`
+  const idempotencyKeyForAction = actionIdempotencyKey.value || idempotencyKey()
+  actionIdempotencyKey.value = idempotencyKeyForAction
   const request = ++actionRequest
   const contextVersion = actionContextVersion
   const isCurrentContext = () =>
@@ -228,6 +239,7 @@ const submitAction = async () => {
     }
     if (!isCurrentContext()) return
     activeAction.value = null
+    actionIdempotencyKey.value = ''
     await loadOrders()
   } catch (err: any) {
     if (!isCurrentContext()) return

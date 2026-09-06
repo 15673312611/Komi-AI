@@ -153,8 +153,15 @@ export default defineConfig(({ command, mode }) => {
       output: {
         manualChunks: {
           'vendor-vue': ['vue', 'vue-router', 'pinia'],
-          'vendor-ui': ['vue3-apexcharts'],
-          'vendor-utils': ['axios', 'marked'],
+          'vendor-fontawesome': [
+            '@fortawesome/fontawesome-svg-core',
+            '@fortawesome/free-solid-svg-icons',
+            '@fortawesome/free-regular-svg-icons',
+            '@fortawesome/free-brands-svg-icons',
+            '@fortawesome/vue-fontawesome',
+          ],
+          'vendor-charts': ['vue3-apexcharts', 'apexcharts'],
+          'vendor-utils': ['axios', 'marked', 'dompurify'],
           'vendor-firebase': ['firebase/app', 'firebase/messaging', 'firebase/auth'],
         },
       },
