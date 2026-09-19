@@ -38,3 +38,24 @@ export function getInitials(name?: string | null, fallback = '?'): string {
       .join('') || fallback
   )
 }
+
+/**
+ * Format bytes into human-readable file size string (e.g. 1024 -> "1 KB", 1048576 -> "1 MB").
+ * Safely handles 0, negative numbers, or non-finite inputs.
+ */
+export function formatFileSize(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes <= 0) return '0 Bytes'
+  const k = 1024
+  const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB']
+  const i = Math.min(Math.floor(Math.log(bytes) / Math.log(k)), sizes.length - 1)
+  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`
+}
+
+/**
+ * Safely truncate a string to maximum length with an ellipsis suffix.
+ */
+export function truncateText(text?: string | null, maxLength = 100, suffix = '...'): string {
+  const value = (text || '').trim()
+  if (!value || value.length <= maxLength) return value
+  return value.slice(0, maxLength).trimEnd() + suffix
+}

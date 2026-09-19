@@ -15,7 +15,7 @@ limitations under the License.
 */
 
 import { describe, it, expect } from 'vitest'
-import { getInitials } from '@/utils/text'
+import { getInitials, formatFileSize, truncateText } from '@/utils/text'
 
 describe('getInitials', () => {
   it('takes the first letter of the first two words', () => {
@@ -45,3 +45,31 @@ describe('getInitials', () => {
     expect(getInitials('', '')).toBe('')
   })
 })
+
+describe('formatFileSize', () => {
+  it('formats various byte sizes accurately', () => {
+    expect(formatFileSize(0)).toBe('0 Bytes')
+    expect(formatFileSize(-100)).toBe('0 Bytes')
+    expect(formatFileSize(NaN)).toBe('0 Bytes')
+    expect(formatFileSize(500)).toBe('500 Bytes')
+    expect(formatFileSize(1024)).toBe('1 KB')
+    expect(formatFileSize(1536)).toBe('1.5 KB')
+    expect(formatFileSize(1048576)).toBe('1 MB')
+    expect(formatFileSize(1073741824)).toBe('1 GB')
+  })
+})
+
+describe('truncateText', () => {
+  it('truncates strings longer than maxLength and appends suffix', () => {
+    expect(truncateText('Hello World', 5)).toBe('Hello...')
+    expect(truncateText('Short', 10)).toBe('Short')
+    expect(truncateText('Custom suffix', 6, ' [more]')).toBe('Custom [more]')
+  })
+
+  it('handles null, undefined, and empty string safely', () => {
+    expect(truncateText('')).toBe('')
+    expect(truncateText(null)).toBe('')
+    expect(truncateText(undefined)).toBe('')
+  })
+})
+
