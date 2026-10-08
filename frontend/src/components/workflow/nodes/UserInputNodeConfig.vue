@@ -1,0 +1,223 @@
+<!--
+Copyright 2024-2026 Komi AI
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+-->
+
+<script setup lang="ts">
+import { computed } from 'vue'
+
+interface UserInputNodeData {
+  prompt_message: string
+  confirmation_message: string
+}
+
+const props = defineProps<{
+  modelValue: UserInputNodeData
+  validationErrors: Record<string, string>
+}>()
+
+const emit = defineEmits<{
+  (e: 'update:modelValue', value: UserInputNodeData): void
+  (e: 'validateField', field: string): void
+}>()
+
+// Computed properties for two-way binding
+const promptMessage = computed({
+  get: () => props.modelValue.prompt_message,
+  set: (value: string) => {
+    emit('update:modelValue', { ...props.modelValue, prompt_message: value })
+    emit('validateField', 'prompt_message')
+  }
+})
+
+const confirmationMessage = computed({
+  get: () => props.modelValue.confirmation_message,
+  set: (value: string) => {
+    emit('update:modelValue', { ...props.modelValue, confirmation_message: value })
+    emit('validateField', 'confirmation_message')
+  }
+})
+</script>
+
+<template>
+  <div class="user-input-config">
+    <div class="form-group">
+      <label for="prompt-message">引导提问文案 (Prompt Message)</label>
+      <textarea
+        id="prompt-message"
+        v-model="promptMessage"
+        class="form-textarea"
+        :class="{ 'error': validationErrors.prompt_message }"
+        placeholder="输入引导用户提供输入的提示问题（可选）"
+        rows="3"
+        @blur="$emit('validateField', 'prompt_message')"
+        @input="$emit('validateField', 'prompt_message')"
+      ></textarea>
+      <div v-if="validationErrors.prompt_message" class="error-message">
+        {{ validationErrors.prompt_message }}
+      </div>
+      <div class="help-text">
+        向用户发送的引导提问消息。如果留空，工作流将直接在界面静默等待用户输入。
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label for="confirmation-message">输入后确认反馈文案</label>
+      <textarea
+        id="confirmation-message"
+        v-model="confirmationMessage"
+        class="form-textarea"
+        placeholder="用户提交输入后的感谢或反馈文案（如：“收到您的反馈，正在为您处理！”）"
+        rows="2"
+      ></textarea>
+      <div class="help-text">
+        用户输入完成后展示的确认消息。若留空则直接流转至下一个节点。
+      </div>
+    </div>
+
+    <div class="info-section">
+      <div class="info-header">
+        <svg class="info-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10"></circle>
+          <path d="M9,9h0a3,3,0,0,1,6,0c0,2-3,3-3,3"></path>
+          <path d="M12,17h0"></path>
+        </svg>
+        <span>用户输入节点运行机制</span>
+      </div>
+      <div class="info-content">
+        <ul>
+          <li>工作流运行至此节点将暂停，并等待访客回复</li>
+          <li>若配置了引导文案，将自动展示给访客</li>
+          <li>访客发送文本消息后，工作流自动继续流转至下一节点</li>
+          <li>输入的内容会自动暂存为变量，供后续节点及条件分支直接引用</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</template>
+
+<style scoped>
+.user-input-config {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.form-group label {
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--text-color);
+}
+
+.form-textarea {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: var(--background-color);
+  color: var(--text-color);
+  font-size: 0.85rem;
+  transition: border-color 0.2s ease;
+  resize: vertical;
+  min-height: 60px;
+  font-family: inherit;
+}
+
+.form-textarea:focus {
+  outline: none;
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 2px rgba(201, 242, 78, 0.15);
+}
+
+.form-textarea.error {
+  border-color: var(--error-color);
+  background-color: rgba(239, 68, 68, 0.05);
+}
+
+.form-textarea.error:focus {
+  border-color: var(--error-color);
+  box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.1);
+}
+
+.error-message {
+  color: var(--error-color);
+  font-size: 0.75rem;
+  margin-top: 4px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.error-message::before {
+  content: "⚠";
+  font-size: 0.8rem;
+}
+
+.help-text {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  line-height: 1.3;
+}
+
+.info-section {
+  margin-top: var(--space-sm);
+  padding: var(--space-sm);
+  background: var(--background-soft);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
+}
+
+.info-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  margin-bottom: var(--space-xs);
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--text-color);
+}
+
+.info-icon {
+  width: 16px;
+  height: 16px;
+  color: var(--primary-color);
+  flex-shrink: 0;
+}
+
+.info-content {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.info-content ul {
+  margin: 0;
+  padding-left: var(--space-md);
+  list-style-type: disc;
+}
+
+.info-content li {
+  margin-bottom: var(--space-xs);
+}
+
+.info-content li:last-child {
+  margin-bottom: 0;
+}
+</style> 

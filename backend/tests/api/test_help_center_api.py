@@ -1,0 +1,429 @@
+"""
+Copyright 2024-2026 Komi AI
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+
+Help-center admin API tests: settings get-or-create + slug, FAQ CRUD and
+publish flow, generation/import job enqueueing (409/400 guards, SSRF),
+and plan gating in simulated cloud mode.
+"""
+
+from unittest.mock import MagicMock, patch
+from uuid import uuid4
+
+import pytest
+from fastapi.testclient import TestClient
+
+import app.main  # noqa: F401 — ensures routers are registered on the FastAPI app
+from app.core.application import app
+from app.core.auth import get_current_user, require_permissions
+from app.database import get_db
+from app.models.faq import FAQ, FAQStatus
+from app.repositories.faq import FAQRepository
+
+BASE = "/api/v1/help-center"
+
+
+@pytest.fixture(autouse=True)
+def _open_plan_gate(request):
+    """Env-independent plan gating: local dev has the enterprise module (test
+    org has no subscription → everything 403s), CI/OSS doesn't. These tests
+    target the help-center endpoints, not the gate — the plan-gating tests
+    below opt out via the `real_plan_gate` marker to exercise it for real."""
+    if request.node.get_closest_marker("real_plan_gate"):
+        yield
+        return
+    # Patch the names bound inside help_center_access (import-time binding —
+    # patching feature_gate itself would not reach them).
+    with patch("app.services.help_center_access.feature_allowed", return_value=True), \
+         patch("app.services.help_center_access.check_feature_access", return_value=None):
+        yield
+
+
+@pytest.fixture
+def client(db, test_user):
+    # The shared test_role lacks manage_knowledge, which every help-center
+    # endpoint requires.
+    from app.models.permission import Permission
+    perm = Permission(name="manage_knowledge")
+    db.add(perm)
+    test_user.role.permissions.append(perm)
+    db.commit()
+
+    async def override_user():
+        return test_user
+
+    def override_db():
+        yield db
+
+    # NOTE: overriding require_permissions itself would be a no-op (FastAPI
+    # keys overrides on the closure it returns) — the real permission check
+    # runs against test_user's role, which now has manage_knowledge.
+    app.dependency_overrides[get_current_user] = override_user
+    app.dependency_overrides[get_db] = override_db
+    yield TestClient(app)
+    app.dependency_overrides.clear()
+
+
+def _create_faq(db, org_id, **kwargs):
+    defaults = dict(question="How do I sign up?", answer="With your email.", category="Getting started")
+    defaults.update(kwargs)
+    return FAQRepository(db).create(FAQ(organization_id=org_id, **defaults))
+
+
+# ---------- settings ----------
+
+def test_settings_get_or_create_assigns_slug_and_defaults(client, test_agent):
+    r = client.get(f"{BASE}/settings")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["slug"] == "test-organization"
+    # Default (path) mode advertises {BACKEND_URL}/help/{slug}.
+    assert body["live_url"].endswith("/help/test-organization")
+    assert body["plan_allowed"] is True  # OSS mode: never locked
+    assert body["auto_generate"] is True
+    assert body["ai_search_enabled"] is True
+    assert [a["name"] for a in body["agents"]] == ["Test Agent"]
+    # Second call returns the same row (no duplicate creation).
+    assert client.get(f"{BASE}/settings").json()["slug"] == "test-organization"
+
+
+def test_settings_update_branding(client):
+    client.get(f"{BASE}/settings")
+    r = client.put(f"{BASE}/settings", json={
+        "brand_color": "#0E8C8C",
+        "header_links": [{"label": "Product", "url": "example.com"}],
+        "cta_text": "Sign in",
+        "cta_url": "app.example.com",
+        "enabled": True,
+    })
+    assert r.status_code == 200
+    body = r.json()
+    assert body["brand_color"] == "#0E8C8C"
+    assert body["header_links"] == [{"label": "Product", "url": "https://example.com"}]
+    assert body["cta_url"] == "https://app.example.com"
+    assert body["enabled"] is True
+
+
+def test_settings_update_rejects_bad_color_and_cross_org_agent(client):
+    assert client.put(f"{BASE}/settings", json={"brand_color": "red"}).status_code == 422
+    assert client.put(f"{BASE}/settings", json={"agent_id": str(uuid4())}).status_code == 404
+
+
+# ---------- FAQ CRUD ----------
+
+def test_faq_crud_flow(client, db, test_organization):
+    created = client.post(f"{BASE}/faqs", json={
+        "question": "What does it cost?", "answer": "From $19.", "category": "Billing",
+    })
+    assert created.status_code == 201
+    faq_id = created.json()["id"]
+    assert created.json()["status"] == "draft"
+    assert created.json()["source_label"] == "Added manually"
+
+    # Partial update must not reset omitted fields (category keeps Billing).
+    updated = client.put(f"{BASE}/faqs/{faq_id}", json={"status": "published"})
+    assert updated.status_code == 200
+    assert updated.json()["status"] == "published"
+    assert updated.json()["category"] == "Billing"
+
+    listing = client.get(f"{BASE}/faqs", params={"status": "published"})
+    assert listing.status_code == 200
+    assert listing.json()["pagination"]["total"] == 1
+
+    assert client.get(f"{BASE}/faqs/categories").json() == ["Billing"]
+
+    assert client.delete(f"{BASE}/faqs/{faq_id}").status_code == 204
+    assert client.get(f"{BASE}/faqs").json()["pagination"]["total"] == 0
+
+
+def test_faq_seo_fields_round_trip(client):
+    """Slug and meta overrides are settable at create and edit time."""
+    created = client.post(f"{BASE}/faqs", json={
+        "question": "What does it cost?", "answer": "From $19.",
+        "slug": "Pricing & Plans!", "meta_title": "Pricing",
+        "meta_description": "What Komi AI costs.",
+    })
+    assert created.status_code == 201
+    # A hand-typed slug is normalized the same way a generated one is.
+    assert created.json()["slug"] == "pricing-plans"
+    assert created.json()["meta_title"] == "Pricing"
+
+    faq_id = created.json()["id"]
+    updated = client.put(f"{BASE}/faqs/{faq_id}", json={"slug": "our-pricing"})
+    assert updated.json()["slug"] == "our-pricing"
+    # Untouched overrides survive a partial update.
+    assert updated.json()["meta_description"] == "What Komi AI costs."
+
+
+def test_faq_slug_is_deduped_but_stable_for_its_own_row(client):
+    """A taken slug gets a numeric suffix; re-saving a row's own slug is a
+    no-op rather than a self-collision that renames the article."""
+    first = client.post(f"{BASE}/faqs", json={
+        "question": "A", "answer": "a", "slug": "pricing",
+    }).json()
+    second = client.post(f"{BASE}/faqs", json={
+        "question": "B", "answer": "b", "slug": "pricing",
+    }).json()
+    assert first["slug"] == "pricing"
+    assert second["slug"] == "pricing-2"
+
+    resaved = client.put(f"{BASE}/faqs/{first['id']}", json={"slug": "pricing"})
+    assert resaved.json()["slug"] == "pricing"
+
+
+def test_blank_seo_values_clear_overrides_but_keep_the_slug(client):
+    """Emptying a field in the UI restores the derived default. The slug has no
+    derived-at-render fallback, so a blank one keeps the assigned value instead
+    of leaving the article unreachable."""
+    faq = client.post(f"{BASE}/faqs", json={
+        "question": "What does it cost?", "answer": "From $19.", "meta_title": "Pricing",
+    }).json()
+    cleared = client.put(f"{BASE}/faqs/{faq['id']}", json={"meta_title": "", "slug": ""})
+    assert cleared.json()["meta_title"] is None
+    assert cleared.json()["slug"] == faq["slug"]
+
+
+def test_faq_seo_fields_reject_oversized_values(client):
+    """Lengths are bounded at the API so a value can never exceed its column."""
+    over_title = client.post(f"{BASE}/faqs", json={
+        "question": "Q", "answer": "a", "meta_title": "x" * 121,
+    })
+    over_description = client.post(f"{BASE}/faqs", json={
+        "question": "Q", "answer": "a", "meta_description": "x" * 301,
+    })
+    assert over_title.status_code == 422
+    assert over_description.status_code == 422
+
+
+def test_faq_cross_org_is_404(client, db):
+    from app.models.organization import Organization
+    other_org = Organization(name="Other", domain="other.com", timezone="UTC")
+    db.add(other_org)
+    db.commit()
+    foreign = _create_faq(db, other_org.id)
+    assert client.put(f"{BASE}/faqs/{foreign.id}", json={"status": "published"}).status_code == 404
+    assert client.delete(f"{BASE}/faqs/{foreign.id}").status_code == 404
+
+
+def test_bulk_status_publish(client, db, test_organization):
+    ids = [str(_create_faq(db, test_organization.id, question=f"Q{i}?").id) for i in range(3)]
+    r = client.post(f"{BASE}/faqs/bulk-status", json={"faq_ids": ids, "status": "published"})
+    assert r.status_code == 200
+    assert r.json()["updated"] == 3
+
+
+def test_bulk_delete_is_org_scoped(client, db, test_organization):
+    from app.models.organization import Organization
+    mine = [str(_create_faq(db, test_organization.id, question=f"D{i}?").id) for i in range(2)]
+    other_org = Organization(name="Other2", domain="other2.com", timezone="UTC")
+    db.add(other_org)
+    db.commit()
+    foreign = _create_faq(db, other_org.id)
+
+    r = client.post(f"{BASE}/faqs/bulk-delete", json={"faq_ids": mine + [str(foreign.id)]})
+    assert r.status_code == 200
+    assert r.json()["deleted"] == 2  # foreign id silently ignored
+    assert client.get(f"{BASE}/faqs").json()["pagination"]["total"] == 0
+    db.expire_all()
+    assert db.get(FAQ, foreign.id) is not None  # other org untouched
+
+
+# ---------- generation / import ----------
+
+def test_generate_requires_ai_config(client):
+    assert client.post(f"{BASE}/generate").status_code == 400
+
+
+def _create_knowledge(db, org_id, source="docs.example.com"):
+    from app.models.knowledge import Knowledge, SourceType
+    knowledge = Knowledge(
+        source=source, source_type=SourceType.WEBSITE,
+        schema="ai", table_name="d_test", organization_id=org_id,
+    )
+    db.add(knowledge)
+    db.commit()
+    return knowledge
+
+
+def test_generate_requires_knowledge_sources(client, test_ai_config):
+    assert client.post(f"{BASE}/generate").status_code == 400
+
+
+def test_generate_enqueues_and_409s_on_duplicate(client, db, test_organization, test_ai_config):
+    _create_knowledge(db, test_organization.id)
+    first = client.post(f"{BASE}/generate")
+    assert first.status_code == 202
+    assert first.json()["status"] == "pending"
+    assert client.post(f"{BASE}/generate").status_code == 409
+    # Polling returns the active job.
+    active = client.get(f"{BASE}/jobs")
+    assert active.json()["id"] == first.json()["id"]
+
+
+def test_generate_409s_when_all_sources_generated(client, db, test_organization, test_ai_config):
+    knowledge = _create_knowledge(db, test_organization.id)
+    _create_faq(db, test_organization.id, knowledge_id=knowledge.id)
+    r = client.post(f"{BASE}/generate")
+    assert r.status_code == 409
+    assert "already have FAQs" in r.json()["detail"]
+
+
+def test_generate_estimate_reports_new_sources(client, db, test_organization, test_ai_config):
+    generated = _create_knowledge(db, test_organization.id, "done.example.com")
+    _create_faq(db, test_organization.id, knowledge_id=generated.id)
+    _create_knowledge(db, test_organization.id, "new.example.com")
+    r = client.get(f"{BASE}/generate/estimate")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["total_sources"] == 2
+    assert body["new_sources"] == 1
+    assert body["estimated_calls"] >= 1
+    # Per-source list for the picker: both sources, with has_faqs per source.
+    by_name = {s["name"]: s for s in body["sources"]}
+    assert set(by_name) == {"done.example.com", "new.example.com"}
+    assert by_name["done.example.com"]["has_faqs"] is True
+    assert by_name["new.example.com"]["has_faqs"] is False
+
+
+def test_import_rejects_internal_hosts(client, test_ai_config):
+    with patch("app.api.help_center.generation.resolves_to_blocked_host", return_value=True):
+        assert client.post(f"{BASE}/import", json={"url": "https://internal.host/faq"}).status_code == 400
+
+
+def test_import_enqueues_with_source_url(client, test_ai_config):
+    with patch("app.api.help_center.generation.resolves_to_blocked_host", return_value=False):
+        r = client.post(f"{BASE}/import", json={"url": "support.example.com/faq"})
+    assert r.status_code == 202
+    assert r.json()["source_url"] == "https://support.example.com/faq"
+    assert r.json()["job_type"] == "import_url"
+
+
+def test_import_articles_carries_the_preserve_urls_opt_in(client, db, test_ai_config):
+    """The migration toggle has to reach the worker, or imported articles quietly
+    lose the URLs the org already ranks for."""
+    from app.models.faq_generation_job import FAQGenerationJob
+
+    with patch("app.api.help_center.generation.resolves_to_blocked_host", return_value=False):
+        r = client.post(
+            f"{BASE}/import",
+            json={"url": "support.example.com/help", "mode": "articles", "preserve_urls": True},
+        )
+
+    assert r.status_code == 202
+    assert r.json()["job_type"] == "import_articles"
+    job = db.query(FAQGenerationJob).filter(FAQGenerationJob.id == r.json()["id"]).one()
+    assert job.preserve_source_urls is True
+
+
+def test_import_defaults_to_not_preserving_urls(client, db, test_ai_config):
+    from app.models.faq_generation_job import FAQGenerationJob
+
+    with patch("app.api.help_center.generation.resolves_to_blocked_host", return_value=False):
+        r = client.post(f"{BASE}/import", json={"url": "support.example.com/help", "mode": "articles"})
+
+    job = db.query(FAQGenerationJob).filter(FAQGenerationJob.id == r.json()["id"]).one()
+    assert job.preserve_source_urls is False
+
+
+def test_job_by_id_cross_org_404(client):
+    assert client.get(f"{BASE}/jobs/999999").status_code == 404
+
+
+# ---------- plan gating (simulated cloud) ----------
+
+def _cloud_gate(feature_available: bool):
+    """Simulate the enterprise module being present with a plan whose
+    help_center flag is `feature_available`."""
+    subscription = MagicMock(plan_id=uuid4())
+    plan_repo = MagicMock()
+    plan_repo.check_feature_availability.return_value = feature_available
+    return (
+        patch("app.services.feature_gate.HAS_ENTERPRISE", True),
+        patch("app.services.feature_gate.require_accessible_subscription",
+              return_value=subscription, create=True),
+        patch("app.services.feature_gate.PlanRepository",
+              return_value=plan_repo, create=True),
+    )
+
+
+@pytest.mark.real_plan_gate
+def test_cloud_free_plan_gets_403_on_writes(client, test_ai_config):
+    p1, p2, p3 = _cloud_gate(feature_available=False)
+    with p1, p2, p3:
+        assert client.post(f"{BASE}/faqs", json={"question": "Q?", "answer": "A."}).status_code == 403
+        assert client.post(f"{BASE}/generate").status_code == 403
+        # Ungated read still works and reports the lock.
+        settings_response = client.get(f"{BASE}/settings")
+        assert settings_response.status_code == 200
+        assert settings_response.json()["plan_allowed"] is False
+
+
+@pytest.mark.real_plan_gate
+def test_cloud_pro_plan_allowed(client, test_ai_config):
+    p1, p2, p3 = _cloud_gate(feature_available=True)
+    with p1, p2, p3:
+        assert client.post(f"{BASE}/faqs", json={"question": "Q?", "answer": "A."}).status_code == 201
+        assert client.get(f"{BASE}/settings").json()["plan_allowed"] is True
+
+
+# ---------- per-article preserved URL path ----------
+
+def test_create_faq_with_a_preserved_url_path(client, db, test_organization):
+    r = client.post(f"{BASE}/faqs", json={
+        "question": "How do I reset my password?", "answer": "Use the link.",
+        "url_path": "https://help.acme.com/hc/en-us/articles/360012-reset?utm=x",
+    })
+    assert r.status_code == 201
+    assert r.json()["url_path"] == "/hc/en-us/articles/360012-reset"
+
+
+def test_update_faq_sets_then_clears_the_url_path(client, db, test_organization):
+    faq = _create_faq(db, test_organization.id)
+
+    r = client.put(f"{BASE}/faqs/{faq.id}", json={"url_path": "/hc/articles/1"})
+    assert r.status_code == 200
+    assert r.json()["url_path"] == "/hc/articles/1"
+
+    # Blank CLEARS it (unlike the slug, where blank is a no-op) — back to /a/{slug}.
+    r = client.put(f"{BASE}/faqs/{faq.id}", json={"url_path": ""})
+    assert r.status_code == 200
+    assert r.json()["url_path"] is None
+    assert r.json()["slug"]
+
+
+def test_update_faq_keeps_its_own_url_path_on_resave(client, db, test_organization):
+    faq = _create_faq(db, test_organization.id, url_path="/hc/articles/1")
+
+    r = client.put(f"{BASE}/faqs/{faq.id}", json={"url_path": "/hc/articles/1"})
+
+    assert r.status_code == 200
+    assert r.json()["url_path"] == "/hc/articles/1"
+
+
+def test_update_faq_rejects_a_url_path_another_article_owns(client, db, test_organization):
+    _create_faq(db, test_organization.id, question="Taken", url_path="/hc/articles/1")
+    faq = _create_faq(db, test_organization.id, question="Other")
+
+    r = client.put(f"{BASE}/faqs/{faq.id}", json={"url_path": "/hc/articles/1"})
+
+    assert r.status_code == 409
+
+
+@pytest.mark.parametrize("bad", ["/a/x", "/ask", "/api/v1/uploads/x", "/sitemap.xml", "/"])
+def test_update_faq_rejects_url_paths_that_would_shadow_a_route(
+    client, db, test_organization, bad
+):
+    faq = _create_faq(db, test_organization.id)
+
+    assert client.put(f"{BASE}/faqs/{faq.id}", json={"url_path": bad}).status_code == 400

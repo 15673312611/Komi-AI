@@ -1,0 +1,128 @@
+# Web Framework
+# Pin fastapi/starlette: fastapi 0.138.0 breaks error-handling behavior relied on
+# by the session takeover tests (returns 200/422 instead of 403/404/400/500).
+# fastapi 0.135.1 only requires starlette>=0.46.0 (no upper bound), so pin starlette too.
+fastapi==0.135.1
+starlette==0.52.1
+uvicorn
+python-socketio
+websockets
+
+# Database
+sqlalchemy
+alembic
+psycopg[binary]>=3.1.0
+asyncpg
+
+# Authentication & Security
+python-jose[cryptography]
+passlib[bcrypt]
+bcrypt>=3.2.0,<4.0.0
+python-multipart
+
+# Environment & Config
+python-dotenv
+pydantic>=2.0.0
+pydantic-settings>=2.0.0
+
+# Utilities
+email-validator
+python-dateutil
+requests
+beautifulsoup4
+
+# Testing
+pytest
+pytest-asyncio
+pytest-cov==4.1.0
+pytest-mock
+coverage==7.4.1
+
+
+# Sentiment Analysis
+textblob
+
+#ai
+openai
+agno==1.7.6
+duckduckgo-search
+pypdf
+pgvector
+
+google-generativeai
+google-cloud-aiplatform
+ollama
+anthropic
+mistralai<2  # agno 1.7.6 uses the mistralai 1.x API (mistralai.models); 2.x breaks the import
+
+#ocr
+rapidocr-onnxruntime==1.4.4
+onnxruntime==1.23.0
+opencv-python==4.12.0.88
+
+#pdf
+pypdf
+
+pytz
+
+firebase_admin
+beautifulsoup4
+aiofiles
+
+# help-center article rendering: FAQ answers are authored/stored as Markdown and
+# rendered to sanitized HTML on the public page (markdown -> nh3 allowlist clean).
+markdown
+nh3
+# help-center article import: crawled help pages are converted HTML -> Markdown
+# (subclassed converter re-hosts images and absolutizes links inline).
+markdownify
+
+gunicorn
+
+redis
+
+
+aiohttp
+
+bs4
+
+boto3
+
+groq
+
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.8.0+cpu
+transformers==4.57.1
+sentence-transformers==5.1.1
+
+fastembed==0.7.3
+
+# Shopify API
+ShopifyAPI
+
+# Razorpay payment gateway
+razorpay
+
+# Pinned below 2.0: mcp 2.0.0 (2026-07-28) dropped streamablehttp_client from
+# mcp.client.streamable_http, which the pinned agno==1.7.6 imports at module
+# scope. agno catches the failure and re-raises it as "`mcp` not installed",
+# so an unpinned install breaks every import of app.main with a message that
+# points at the wrong problem. Lift this together with the agno 2.x upgrade.
+mcp<2
+
+# UV tool runner for Python-based MCP servers
+uv
+
+# Web Crawling
+httpx
+pyOpenSSL==26.0.0
+cryptography==46.0.3
+crawl4ai>=0.7.0
+
+# Help center (public SSR templates + custom-domain DNS verification)
+jinja2
+dnspython
+sqlglot>=30.0
+pymysql>=1.1
+sshtunnel>=0.4.0
+paramiko>=3.4,<4

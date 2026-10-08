@@ -1,0 +1,420 @@
+<!--
+Copyright 2024-2026 Komi AI
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+-->
+<script setup lang="ts">
+import { ref, onMounted, computed } from 'vue'
+import { useRouter } from 'vue-router'
+import { toast } from 'vue-sonner'
+import { peopleService, type PersonCrmStatus } from '@/services/people'
+import channelsService, { type ChannelAccount } from '@/services/channels'
+import NewWhatsAppConversation from '@/components/conversations/NewWhatsAppConversation.vue'
+import type { PersonDetail } from '@/types/people'
+import { permissionChecks } from '@/utils/permissions'
+
+const PROVIDER_LABELS: Record<string, string> = { hubspot: 'HubSpot', pipedrive: 'Pipedrive' }
+const providerLabel = (p: string) => PROVIDER_LABELS[p] || p
+
+const props = defineProps<{ customerId: string }>()
+const emit = defineEmits<{ (e: 'close'): void; (e: 'updated', stage?: string): void }>()
+
+const person = ref<PersonDetail | null>(null)
+const loading = ref(true)
+const marking = ref(false)
+
+// Inline contact edit — the identification tool: adding a phone/name is what
+// turns an anonymous session into a person (and unlocks the actions below).
+const editing = ref(false)
+const saving = ref(false)
+const editName = ref('')
+const editPhone = ref('')
+
+function startEdit() {
+  editName.value = person.value?.name || ''
+  editPhone.value = person.value?.phone || ''
+  editing.value = true
+}
+
+async function saveEdit() {
+  saving.value = true
+  try {
+    person.value = await peopleService.updatePerson(props.customerId, {
+      full_name: editName.value.trim() || undefined,
+      // "" deliberately passes through: it clears a wrong number.
+      phone: editPhone.value.trim(),
+    })
+    editing.value = false
+    emit('updated')
+  } catch (error: any) {
+    toast.error('保存失败', {
+      description: error?.response?.data?.detail || '请稍后重试',
+    })
+  } finally {
+    saving.value = false
+  }
+}
+
+const attrEntries = computed(() => Object.entries(person.value?.captured_attributes || {}))
+
+// CRM sync state for this person
+const crm = ref<PersonCrmStatus | null>(null)
+const syncing = ref(false)
+const crmConnected = computed(() => (crm.value?.connected_providers.length ?? 0) > 0)
+const crmSynced = computed(() => crm.value?.synced || [])
+const syncedSummary = computed(() =>
+  crmSynced.value.map(s => providerLabel(s.provider)).join(', '))
+const connectedSummary = computed(() =>
+  (crm.value?.connected_providers || []).map(providerLabel).join(', '))
+// The CRM dedupes on email, so a person needs one before they can sync.
+// Editing a person, marking them a customer and pushing to CRM all take the
+// same grant the API requires (PEOPLE_WRITE_PERMISSIONS). These buttons used to
+// render for everyone who could read the directory and 403 on click.
+const canEditPeople = permissionChecks.canManagePeople()
+
+const canSync = computed(() => !!person.value?.email && canEditPeople)
+
+async function loadCrm() {
+  try { crm.value = await peopleService.getCrmStatus(props.customerId) }
+  catch { /* non-fatal: the widget just shows nothing */ }
+}
+
+async function syncNow() {
+  syncing.value = true
+  try {
+    crm.value = await peopleService.syncToCrm(props.customerId)
+    toast.success('已成功同步至 CRM')
+  } catch (error: any) {
+    toast.error('同步 CRM 失败', {
+      description: error?.response?.data?.detail || '请稍后重试',
+    })
+  } finally {
+    syncing.value = false
+  }
+}
+
+function goToIntegrations() {
+  emit('close')
+  router.push('/settings/integrations')
+}
+
+async function load() {
+  loading.value = true
+  try { person.value = await peopleService.getPerson(props.customerId) }
+  catch { toast.error('获取客户档案失败') }
+  finally { loading.value = false }
+}
+
+async function markCustomer() {
+  marking.value = true
+  try {
+    person.value = await peopleService.markAsCustomer(props.customerId)
+    toast.success('已成功标记为成交客户')
+    emit('updated', 'customer')
+  } catch (error: any) {
+    toast.error('标记客户失败', {
+      description: error?.response?.data?.detail || undefined,
+    })
+  } finally {
+    marking.value = false
+  }
+}
+
+// "Message on WhatsApp" — the drawer is the person-centric entry point to the
+// same modal the Conversations button opens. Disabled-with-reason, matching
+// the Sync-now pattern above it.
+const router = useRouter()
+const whatsappAccounts = ref<ChannelAccount[]>([])
+const showNewConversation = ref(false)
+
+async function loadWhatsAppAccounts() {
+  try {
+    whatsappAccounts.value = await channelsService.listActiveWhatsAppAccounts()
+  } catch (error) {
+    console.error('Failed to load WhatsApp accounts:', error)
+    whatsappAccounts.value = []
+  }
+}
+
+const whatsappDisabledReason = computed(() => {
+  if (!whatsappAccounts.value.length) return '请先在“设置 → 渠道与集成”中连接 WhatsApp 账号'
+  return ''
+})
+
+function onConversationStarted(sessionId: string) {
+  showNewConversation.value = false
+  emit('close')
+  router.push({ path: '/conversations', query: { session: sessionId } })
+}
+
+function stageLabel(s?: string) {
+  if (!s) return ''
+  const map: Record<string, string> = {
+    visitor: '访客',
+    lead: '销售线索',
+    customer: '成交客户',
+    all: '全部'
+  }
+  return map[s] || s.charAt(0).toUpperCase() + s.slice(1)
+}
+function fmt(d?: string | null) {
+  if (!d) return ''
+  try { return new Date(d).toLocaleString('zh-CN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) } catch { return '' }
+}
+
+onMounted(() => { load(); loadWhatsAppAccounts(); loadCrm() })
+</script>
+
+<template>
+  <div class="pdd-overlay" @click.self="emit('close')">
+    <aside class="pdd">
+      <div class="pdd-head">
+        <div class="pdd-head-main" v-if="person">
+          <div class="pdd-name">{{ person.name || (person.is_anonymous ? '匿名访客' : (person.email || '—')) }}</div>
+          <div class="pdd-email">
+            {{ person.is_anonymous ? '匿名会话' : (person.email || '') }}
+            <span v-if="person.phone" class="pdd-phone">{{ person.phone }}</span>
+          </div>
+        </div>
+        <button class="pdd-close" @click="emit('close')" aria-label="关闭">✕</button>
+      </div>
+
+      <div v-if="loading" class="pdd-loading">正在加载客户档案…</div>
+
+      <div v-else-if="person" class="pdd-body">
+        <div class="pdd-stagerow">
+          <span class="pdd-badge" :class="person.lead_stage">{{ stageLabel(person.lead_stage) }}</span>
+          <span v-if="person.qualified" class="pdd-star" title="AI 评定为高意向线索">★ AI 意向达标</span>
+        </div>
+
+        <!-- CRM sync -->
+        <div class="pdd-sync">
+          <!-- No CRM connected for the org -->
+          <template v-if="!crmConnected">
+            <span class="pdd-sync-text">未绑定 CRM 系统。</span>
+            <button class="pdd-sync-btn" @click="goToIntegrations">去连接</button>
+          </template>
+          <!-- Already synced -->
+          <template v-else-if="crmSynced.length">
+            <span class="pdd-sync-text">
+              已同步至 {{ syncedSummary }}
+              <span v-if="crmSynced[0].synced_at" class="pdd-sync-when"> · {{ fmt(crmSynced[0].synced_at) }}</span>
+              <a v-if="crmSynced[0].record_url" :href="crmSynced[0].record_url" target="_blank" rel="noopener" class="pdd-sync-link">在 CRM 中查看 ↗</a>
+            </span>
+            <button class="pdd-sync-btn" :disabled="syncing || !canSync" @click="syncNow">
+              {{ syncing ? '同步中…' : '重新同步' }}
+            </button>
+          </template>
+          <!-- Connected but not yet synced -->
+          <template v-else>
+            <span class="pdd-sync-text">尚未同步至 {{ connectedSummary }}。</span>
+            <button
+              class="pdd-sync-btn primary"
+              :disabled="syncing || !canSync"
+              :title="canSync ? '' : '请先添加客户邮箱 — CRM 依据邮箱排重合并'"
+              @click="syncNow"
+            >
+              {{ syncing ? '同步中…' : '立即同步' }}
+            </button>
+          </template>
+        </div>
+
+        <button
+          v-if="canEditPeople && person.lead_stage !== 'customer'"
+          class="pdd-mark"
+          :disabled="marking || !person.identified"
+          :title="person.identified ? '' : '请先补充邮箱或电话 — 当前为匿名会话'"
+          @click="markCustomer"
+        >
+          {{ marking ? '正在标记…' : '标记为成交客户' }}
+        </button>
+        <p v-if="!person.identified" class="pdd-identify-hint">
+          匿名访客 — 可在下方补充姓名或联系电话以生成客户档案。
+        </p>
+
+        <button
+          class="pdd-whatsapp"
+          :disabled="!!whatsappDisabledReason"
+          :title="whatsappDisabledReason"
+          @click="showNewConversation = true"
+        >
+          <font-awesome-icon :icon="['fab', 'whatsapp']" />
+          通过 WhatsApp 发起对话
+        </button>
+
+        <!-- Contact edit: the one place a wrong phone can be corrected -->
+        <div class="pdd-section-title">
+          联系人信息
+          <button
+            v-if="canEditPeople && !editing"
+            type="button"
+            class="pdd-edit-link"
+            @click="startEdit"
+          >编辑</button>
+        </div>
+        <div v-if="editing" class="pdd-edit">
+          <label class="pdd-edit-field">
+            <span>姓名</span>
+            <input v-model="editName" placeholder="输入客户姓名" autocomplete="off" />
+          </label>
+          <label class="pdd-edit-field">
+            <span>联系电话</span>
+            <input v-model="editPhone" placeholder="+86 13800000000" autocomplete="off" />
+          </label>
+          <div class="pdd-edit-actions">
+            <button type="button" class="pdd-edit-btn" @click="editing = false">取消</button>
+            <button type="button" class="pdd-edit-btn primary" :disabled="saving" @click="saveEdit">
+              {{ saving ? '正在保存…' : '保存修改' }}
+            </button>
+          </div>
+        </div>
+        <div v-else class="pdd-attrs">
+          <div class="pdd-attr"><span class="pdd-attr-k">联系电话</span><span class="pdd-attr-v">{{ person.phone || '—' }}</span></div>
+        </div>
+
+        <!-- AI qualification summary -->
+        <template v-if="person.summary">
+          <div class="pdd-section-title">AI 意向度小结</div>
+          <div class="pdd-summary">{{ person.summary }}</div>
+        </template>
+
+        <!-- Lifecycle -->
+        <div class="pdd-section-title">生命周期流转时间线</div>
+        <div class="pdd-timeline">
+          <div v-for="(t, i) in person.timeline" :key="i" class="pdd-tl">
+            <span class="pdd-tl-dot" :class="t.stage"></span>
+            <span class="pdd-tl-label">{{ stageLabel(t.stage) }}</span>
+            <span class="pdd-tl-time">{{ fmt(t.at) }}</span>
+          </div>
+        </div>
+
+        <!-- Captured attributes -->
+        <div class="pdd-section-title">捕获的留资画像字段</div>
+        <div v-if="attrEntries.length" class="pdd-attrs">
+          <div v-for="[k, v] in attrEntries" :key="k" class="pdd-attr">
+            <span class="pdd-attr-k">{{ k }}</span>
+            <span class="pdd-attr-v">{{ v }}</span>
+          </div>
+        </div>
+        <div v-else class="pdd-none">暂无捕获的留资字段。</div>
+
+        <!-- Conversations -->
+        <div class="pdd-section-title">历史关联会话 <span class="pdd-count">{{ person.conversations.length }}</span></div>
+        <div v-if="person.conversations.length" class="pdd-convos">
+          <div v-for="c in person.conversations" :key="c.session_id" class="pdd-convo">
+            <div class="pdd-convo-top">
+              <span class="pdd-agent">{{ c.agent_name || '智能体' }}</span>
+              <span class="pdd-status">{{ c.status }}</span>
+            </div>
+            <div class="pdd-snippet">{{ c.last_message || '—' }}</div>
+            <div class="pdd-convo-date">{{ fmt(c.created_at) }}</div>
+          </div>
+        </div>
+        <div v-else class="pdd-none">暂无历史关联会话。</div>
+      </div>
+    </aside>
+
+    <NewWhatsAppConversation
+      v-if="showNewConversation && person"
+      :accounts="whatsappAccounts"
+      :person="{ id: person.id, name: person.name, phone: person.phone }"
+      @close="showNewConversation = false"
+      @started="onConversationStarted"
+    />
+  </div>
+</template>
+
+<style scoped>
+.pdd-overlay { position: fixed; inset: 0; background: var(--scrim); z-index: var(--z-drawer); display: flex; justify-content: flex-end; }
+.pdd { width: 440px; max-width: 94vw; height: 100%; background: var(--surface); border-left: 1px solid var(--border-color); display: flex; flex-direction: column; box-shadow: -12px 0 40px rgba(0,0,0,.2); }
+.pdd-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 20px 22px; border-bottom: 1px solid var(--border-color); }
+.pdd-name { font-size: 18px; font-weight: 700; }
+.pdd-email { font-size: 12px; color: var(--muted); margin-top: 3px; }
+.pdd-close { width: 30px; height: 30px; border-radius: 8px; border: 1px solid var(--border-color); background: transparent; cursor: pointer; flex-shrink: 0; }
+.pdd-loading { padding: 40px; text-align: center; color: var(--muted); }
+.pdd-body { flex: 1; overflow-y: auto; padding: 20px 22px; }
+.pdd-stagerow { display: flex; align-items: center; gap: 10px; margin-bottom: 18px; }
+.pdd-badge { padding: 4px 12px; border-radius: 999px; font-size: 12.5px; font-weight: 600; }
+.pdd-badge.visitor { background: rgba(0,0,0,.06); color: var(--muted); }
+.pdd-badge.lead { background: var(--purple-bg); color: var(--c-purple); }
+.pdd-badge.customer { background: var(--accent-bg-12); color: var(--primary-color); }
+.pdd-star { font-size: 12.5px; color: #f59e0b; }
+.pdd-sync { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 14px; background: var(--o05); border: 1px solid var(--border-color); border-radius: 12px; margin-bottom: 12px; }
+.pdd-sync-text { font-size: 13px; color: var(--muted); }
+.pdd-sync-when { color: var(--muted); }
+.pdd-sync-link { display: block; margin-top: 4px; color: var(--c-info); font-size: 12px; text-decoration: none; }
+.pdd-sync-link:hover { text-decoration: underline; }
+.pdd-sync-btn { flex-shrink: 0; padding: 7px 14px; border-radius: 9px; border: 1px solid var(--border-color); background: transparent; color: var(--text); font-size: 13px; cursor: pointer; }
+.pdd-sync-btn:hover:not(:disabled) { background: var(--o10); }
+.pdd-sync-btn.primary { background: var(--accent-solid); color: var(--on-accent-solid); border-color: transparent; }
+.pdd-sync-btn:disabled { opacity: .5; cursor: default; }
+.pdd-mark { width: 100%; padding: 10px; border-radius: 10px; border: none; background: var(--accent-solid); color: var(--on-accent-solid); font-weight: 600; font-size: 14px; cursor: pointer; margin-bottom: 22px; }
+.pdd-mark:disabled { opacity: .6; cursor: default; }
+.pdd-identify-hint { font-size: 12px; color: var(--muted); margin: -14px 0 18px; }
+.pdd-whatsapp { width: 100%; display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 10px; border-radius: 10px; border: 1px solid var(--border-color); background: transparent; color: var(--text); font-weight: 600; font-size: 14px; cursor: pointer; margin-bottom: 22px; }
+.pdd-whatsapp:disabled { opacity: .55; cursor: default; }
+.pdd-phone { margin-left: 8px; font-variant-numeric: tabular-nums; }
+.pdd-edit-link { margin-left: auto; border: none; background: none; color: var(--c-info); font-size: 11px; letter-spacing: normal; text-transform: none; cursor: pointer; padding: 0; }
+.pdd-edit { background: var(--o05); border: 1px solid var(--border-color); border-radius: 12px; padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; }
+.pdd-edit-field { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
+.pdd-edit-field input { padding: 8px 10px; border: 1px solid var(--border-color); border-radius: 8px; background: var(--surface); color: var(--text); font-size: 13px; }
+.pdd-edit-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.pdd-edit-btn { padding: 7px 12px; border-radius: 8px; border: 1px solid var(--border-color); background: transparent; font-size: 12.5px; cursor: pointer; color: var(--text); }
+.pdd-edit-btn.primary { background: var(--accent-solid); color: var(--on-accent-solid); border-color: transparent; }
+.pdd-edit-btn:disabled { opacity: .6; cursor: default; }
+.pdd-section-title { font-size: 10.5px; letter-spacing: .07em; color: var(--muted); margin: 18px 0 12px; display: flex; align-items: center; gap: 8px; }
+.pdd-summary { background: var(--purple-bg); border: 1px solid var(--purple-border, var(--o12)); border-radius: 12px; padding: 12px 14px; font-size: 13px; line-height: 1.55; color: var(--text2); }
+.pdd-count { font-weight: 600; }
+.pdd-timeline { display: flex; flex-direction: column; gap: 12px; }
+.pdd-tl { display: flex; align-items: center; gap: 10px; font-size: 13px; }
+.pdd-tl-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); }
+.pdd-tl-dot.lead { background: var(--c-purple); }
+.pdd-tl-dot.customer { background: var(--primary-color); }
+.pdd-tl-label { font-weight: 600; }
+.pdd-tl-time { color: var(--muted); font-size: 12px; margin-left: auto; }
+.pdd-attrs { background: var(--o05); border: 1px solid var(--border-color); border-radius: 12px; padding: 4px 14px; }
+.pdd-attr { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; padding: 10px 0; border-bottom: 1px solid var(--border-color); font-size: 13px; }
+.pdd-attr:last-child { border-bottom: none; }
+.pdd-attr-k { color: var(--muted); flex-shrink: 0; }
+.pdd-attr-v { text-align: right; font-weight: 500; word-break: break-word; }
+.pdd-none { font-size: 13px; color: var(--muted); padding: 6px 0; }
+.pdd-convos { display: flex; flex-direction: column; gap: 10px; }
+.pdd-convo { background: var(--o05); border: 1px solid var(--border-color); border-radius: 12px; padding: 12px 14px; }
+.pdd-convo-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 6px; }
+.pdd-agent { font-size: 12.5px; font-weight: 600; }
+.pdd-status { font-size: 11px; color: var(--muted); }
+.pdd-snippet { font-size: 13px; color: var(--muted); line-height: 1.5; }
+.pdd-convo-date { font-size: 11px; color: var(--muted); margin-top: 6px; }
+
+/* Mobile: full-screen sheet rather than a 440px drawer with a dead sliver */
+@media (max-width: 768px) {
+  .pdd {
+    width: 100%;
+    max-width: 100%;
+    border-left: none;
+    height: 100vh;
+    height: 100dvh;
+  }
+
+  .pdd-head {
+    padding: calc(16px + var(--safe-top)) 16px 16px;
+  }
+
+  /* 44px minimum touch target (Apple HIG / WCAG 2.5.8) */
+  .pdd-close { width: 44px; height: 44px; }
+
+  .pdd-body {
+    padding: 16px 16px calc(24px + var(--safe-bottom));
+  }
+}
+</style>

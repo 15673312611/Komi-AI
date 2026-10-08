@@ -1,0 +1,503 @@
+<!--
+Copyright 2024-2026 Komi AI
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+-->
+
+<script setup lang="ts">
+import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { marked } from 'marked'
+import { sanitizeHtml } from '@/utils/sanitize'
+import { widgetService } from '@/services/widget'
+import { knowledgeService } from '@/services/knowledge'
+import { useOnboardingTestChat } from '@/composables/useOnboardingTestChat'
+
+const props = defineProps<{
+  agentId: string
+  agentName: string
+  widgetId: string | null
+}>()
+
+const emit = defineEmits<{
+  (e: 'next'): void
+  (e: 'back'): void
+  (e: 'widget-created', widgetId: string): void
+}>()
+
+const {
+  messages,
+  loading,
+  connecting,
+  connectionError,
+  start,
+  send,
+  cleanup,
+} = useOnboardingTestChat()
+
+const input = ref('')
+const setupError = ref('')
+const scrollEl = ref<HTMLElement | null>(null)
+
+// Knowledge ingestion runs in the background. While it's queued/processing the
+// agent can still answer general questions; we poll the queue and let the user
+// know it'll get smarter once indexing finishes.
+const knowledgeProcessing = ref(false)
+const knowledgeJustFinished = ref(false)
+let knowledgePoll: ReturnType<typeof setInterval> | null = null
+
+const checkKnowledgeStatus = async () => {
+  try {
+    const data = await knowledgeService.getAgentQueueItems(props.agentId)
+    const items = (data?.queue_items ?? []) as Array<{ status: string }>
+    const pending = items.filter(i => i.status === 'pending' || i.status === 'processing').length
+    const wasProcessing = knowledgeProcessing.value
+    knowledgeProcessing.value = pending > 0
+    if (wasProcessing && pending === 0) {
+      knowledgeJustFinished.value = true
+      stopKnowledgePoll()
+    }
+  } catch (err) {
+    console.error('Failed to check knowledge status:', err)
+  }
+}
+
+const stopKnowledgePoll = () => {
+  if (knowledgePoll) {
+    clearInterval(knowledgePoll)
+    knowledgePoll = null
+  }
+}
+
+const ensureWidget = async (): Promise<string | null> => {
+  if (props.widgetId) return props.widgetId
+  try {
+    const widget = await widgetService.createWidget({
+      name: `${props.agentName} Widget`,
+      agent_id: props.agentId,
+    })
+    emit('widget-created', widget.id)
+    return widget.id
+  } catch (err: any) {
+    setupError.value = err?.response?.data?.detail || 'Failed to prepare a test session.'
+    return null
+  }
+}
+
+const handleRetry = async () => {
+  setupError.value = ''
+  const widgetId = await ensureWidget()
+  if (widgetId) await start(widgetId)
+}
+
+onMounted(async () => {
+  const widgetId = await ensureWidget()
+  if (widgetId) await start(widgetId)
+  // Watch the knowledge queue and poll while anything is still indexing
+  await checkKnowledgeStatus()
+  if (knowledgeProcessing.value) {
+    knowledgePoll = setInterval(checkKnowledgeStatus, 5000)
+  }
+})
+
+onBeforeUnmount(() => {
+  cleanup()
+  stopKnowledgePoll()
+})
+
+const scrollToBottom = () => {
+  nextTick(() => {
+    if (scrollEl.value) scrollEl.value.scrollTop = scrollEl.value.scrollHeight
+  })
+}
+
+watch(() => messages.value.length, scrollToBottom)
+watch(loading, scrollToBottom)
+
+const handleSend = () => {
+  const text = input.value.trim()
+  if (!text || loading.value) return
+  send(text)
+  input.value = ''
+}
+
+const formatMessage = (content: string) => sanitizeHtml(marked(content) as string)
+</script>
+
+<template>
+  <div class="step">
+    <header class="step-head">
+      <h2 class="step-title">测试对话效果</h2>
+      <p class="step-sub">以真实客户的口吻提问，预览智能体的应答与服务表现。</p>
+    </header>
+
+    <!-- Knowledge indexing status -->
+    <div v-if="knowledgeProcessing" class="kb-note processing">
+      <span class="kb-spinner" aria-hidden="true"></span>
+      <span>
+        知识库文档正在后台加速构建索引。智能体当前可答复
+        <strong>通用咨询</strong> — 索引完成后将自动基于专属知识库提供精准解答。
+      </span>
+    </div>
+    <div v-else-if="knowledgeJustFinished" class="kb-note done">
+      <span class="kb-check" aria-hidden="true">✓</span>
+      <span>知识库索引构建完成 — 智能体已可根据专属文档提供专业解答。</span>
+    </div>
+
+    <div class="test-chat">
+      <div v-if="connecting" class="chat-state connecting">
+        <span class="state-spinner"></span>
+        <span>正在建立智能体实时连接通道…</span>
+      </div>
+      <div v-else-if="setupError || connectionError" class="chat-state error">
+        <div class="error-text">{{ setupError || connectionError }}</div>
+        <button type="button" class="retry-link-btn" @click="handleRetry">
+          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+          重新连接
+        </button>
+      </div>
+
+      <div ref="scrollEl" class="chat-scroll">
+        <div
+          v-for="(msg, i) in messages"
+          :key="i"
+          class="bubble-row"
+          :class="msg.message_type === 'user' ? 'from-user' : 'from-bot'"
+        >
+          <div class="bubble" v-html="formatMessage(msg.message || '')"></div>
+        </div>
+        <div v-if="loading" class="bubble-row from-bot">
+          <div class="bubble typing">
+            <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="chat-compose">
+      <input
+        v-model="input"
+        class="text-input"
+        type="text"
+        placeholder="向您的智能体提问任意问题…"
+        :disabled="connecting || !!setupError"
+        @keydown.enter.prevent="handleSend"
+      />
+      <button type="button" class="send-btn" :disabled="connecting || loading || !!setupError" @click="handleSend" aria-label="发送">↑</button>
+    </div>
+
+    <div class="step-actions">
+      <button type="button" class="btn-ghost" @click="emit('back')">返回上一步</button>
+      <button type="button" class="btn-accent" @click="emit('next')">
+        效果满意，下一步 <span class="arrow">→</span>
+      </button>
+    </div>
+  </div>
+</template>
+
+<style scoped>
+.step {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+.step-head {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.step-title {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 22px;
+  margin: 0;
+  color: var(--text);
+}
+
+.step-sub {
+  font-size: 14.5px;
+  color: var(--muted);
+  margin: 0;
+}
+
+.kb-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 11px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.kb-note.processing {
+  background: var(--purple-bg);
+  border: 1px solid var(--purple-border);
+  color: var(--text3);
+}
+
+.kb-note.done {
+  background: var(--accent-bg-08);
+  border: 1px solid var(--accent-border);
+  color: var(--text3);
+}
+
+.kb-note strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.kb-spinner {
+  width: 14px;
+  height: 14px;
+  margin-top: 2px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  border: 2px solid var(--o20);
+  border-top-color: var(--c-purple);
+  animation: kb-spin 0.8s linear infinite;
+}
+
+.kb-check {
+  margin-top: 1px;
+  flex-shrink: 0;
+  color: var(--accent-ink);
+  font-weight: 700;
+}
+
+@keyframes kb-spin {
+  to { transform: rotate(360deg); }
+}
+
+.test-chat {
+  background: var(--bg);
+  border: 1px solid var(--o10);
+  border-radius: var(--radius-input);
+  overflow: hidden;
+}
+
+.chat-state {
+  padding: 12px 16px;
+  font-size: 13px;
+  color: var(--muted);
+  border-bottom: 1px solid var(--o08);
+}
+
+.chat-state.connecting {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--accent-ink, #C9F24E);
+}
+
+.state-spinner {
+  width: 13px;
+  height: 13px;
+  border: 2px solid var(--o20, rgba(255, 255, 255, 0.2));
+  border-top-color: currentColor;
+  border-radius: 50%;
+  animation: kb-spin 0.7s linear infinite;
+  flex-shrink: 0;
+}
+
+.chat-state.error {
+  color: var(--error-color, #f87171);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  background: rgba(239, 68, 68, 0.06);
+}
+
+.error-text {
+  flex: 1;
+}
+
+.retry-link-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: var(--text, #F5F6F8);
+  padding: 4px 10px;
+  border-radius: 5px;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.retry-link-btn:hover {
+  background: var(--accent-bg-12, rgba(201, 242, 78, 0.12));
+  border-color: var(--accent-ink, #C9F24E);
+  color: var(--accent-ink, #C9F24E);
+}
+
+.chat-scroll {
+  height: 300px;
+  overflow-y: auto;
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.bubble-row {
+  display: flex;
+  max-width: 85%;
+}
+
+.from-user {
+  align-self: flex-end;
+}
+
+.from-bot {
+  align-self: flex-start;
+}
+
+.bubble {
+  padding: 10px 14px;
+  font-size: 13.5px;
+  line-height: 1.5;
+  border-radius: 14px 14px 14px 4px;
+}
+
+.from-bot .bubble {
+  background: var(--surface);
+  border: 1px solid var(--o08);
+  color: var(--text);
+}
+
+.from-user .bubble {
+  background: var(--accent-solid);
+  color: var(--on-accent-solid);
+  border-radius: 14px 14px 4px 14px;
+}
+
+.typing {
+  display: flex;
+  gap: 4px;
+}
+
+.dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--muted2);
+  animation: bounce 1.4s infinite ease-in-out;
+}
+
+.dot:nth-child(1) { animation-delay: -0.32s; }
+.dot:nth-child(2) { animation-delay: -0.16s; }
+
+@keyframes bounce {
+  0%, 80%, 100% { transform: scale(0); }
+  40% { transform: scale(1); }
+}
+
+.chat-compose {
+  display: flex;
+  gap: 10px;
+}
+
+.text-input {
+  flex: 1;
+  min-width: 0;
+  padding: 14px 16px;
+  background: var(--bg);
+  border: 1px solid var(--o12);
+  border-radius: var(--radius-input);
+  color: var(--text);
+  font-size: 15px;
+  font-family: var(--font-sans);
+  outline: none;
+  transition: var(--transition-fast);
+}
+
+.text-input:focus {
+  border-color: var(--accent-ink);
+  box-shadow: var(--ring-focus);
+}
+
+.send-btn {
+  flex-shrink: 0;
+  width: 50px;
+  background: var(--accent-solid);
+  color: var(--on-accent-solid);
+  border: none;
+  border-radius: var(--radius-input);
+  font-size: 18px;
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+
+.send-btn:hover:not(:disabled) {
+  filter: brightness(1.05);
+}
+
+.step-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 4px;
+}
+
+.btn-ghost {
+  padding: 14px 22px;
+  background: var(--o05);
+  border: 1px solid var(--o14);
+  border-radius: var(--radius-btn);
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 600;
+  font-family: var(--font-sans);
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+
+.btn-ghost:hover {
+  background: var(--o10);
+}
+
+.btn-accent {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 26px;
+  background: var(--accent-solid);
+  color: var(--on-accent-solid);
+  border: none;
+  border-radius: var(--radius-btn);
+  font-size: 15px;
+  font-weight: 600;
+  font-family: var(--font-sans);
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+
+.btn-accent:hover {
+  filter: brightness(1.05);
+}
+
+.send-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.arrow {
+  font-size: 17px;
+}
+</style>

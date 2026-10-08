@@ -1,0 +1,422 @@
+"""
+Copyright 2024-2026 Komi AI
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+"""
+
+from sqlalchemy.orm import Session
+import re
+
+from sqlalchemy import and_, func, or_, desc, exists
+from sqlalchemy.exc import IntegrityError
+from typing import Optional, Tuple, List
+from uuid import UUID
+from datetime import datetime, timedelta, timezone
+
+from app.repositories.customer import (
+    CustomerRepository,
+    PHONE_KEYED_CHANNELS,
+    PHONE_KEYED_CHANNEL_SUFFIXES,
+)
+from app.utils.phone import normalize_phone
+from app.models.customer import Customer, LeadStage
+from app.models.channels.channel_conversation import ChannelConversation
+from app.models.chat_history import ChatHistory
+from app.models.lead_capture import LeadCaptureResponse
+from app.models.session_to_agent import SessionToAgent
+from app.models.agent import Agent
+from app.repositories.chat import ChatRepository
+
+
+class PeopleRepository:
+    def __init__(self, db: Session):
+        self.db = db
+
+    def _is_anonymous(self, customer: Customer) -> bool:
+        return CustomerRepository.is_placeholder_email(customer.email) and not (customer.full_name or "").strip()
+
+    def _captured_contact_map(self, customer_ids) -> dict:
+        """customer_id -> {'email':.., 'name':..} from qualifying lead responses.
+
+        Used so a captured lead never shows as "Anonymous" when its email/name
+        could not be written onto the customer row (e.g. the email already belongs
+        to another customer). One query for the whole page — no N+1. Latest wins.
+        """
+        ids = [cid for cid in customer_ids if cid]
+        if not ids:
+            return {}
+        rows = (
+            self.db.query(LeadCaptureResponse.customer_id, LeadCaptureResponse.field_values)
+            .filter(LeadCaptureResponse.customer_id.in_(ids),
+                    LeadCaptureResponse.qualified.is_(True))
+            .order_by(LeadCaptureResponse.created_at)
+            .all()
+        )
+        out: dict = {}
+        for cid, fv in rows:
+            if not fv:
+                continue
+            d = out.setdefault(cid, {})
+            if fv.get("email"):
+                d["email"] = fv["email"]
+            if fv.get("name"):
+                d["name"] = fv["name"]
+        return out
+
+    def _resolve_display(self, customer: Customer, captured: Optional[dict]):
+        """Return (name, email, is_anonymous), preferring the customer's own contact
+        and falling back to the captured lead's email/name when the record is bare."""
+        if not self._is_anonymous(customer):
+            # display_email: a channel person's `{id}@{channel}.channel` key is
+            # not an address and must not be shown as one.
+            return customer.full_name, CustomerRepository.display_email(customer.email), False
+        captured = captured or {}
+        email = captured.get("email")
+        name = (customer.full_name or "").strip() or captured.get("name")
+        if email or name:
+            return name, email, False
+        return customer.full_name, None, True
+
+    # A person is IDENTIFIED when something could actually reach or recognize
+    # them: a real email (not the @noemail.com widget placeholder, not a
+    # synthesized {id}@{channel}.channel address), a phone, or a qualifying
+    # lead capture. Deliberately NOT name — name is never an identity key.
+    # The SQL restatement of CustomerRepository.is_placeholder_email — the one
+    # copy that cannot be avoided, since this runs in the database. Its three
+    # clauses mirror that function's three: empty, @noemail.com, .channel.
+    _REAL_EMAIL = and_(Customer.email != "",
+                       Customer.email.notilike("%@noemail.com"),
+                       Customer.email.notilike("%.channel"))
+
+    def _identified(self, qualified_cid):
+        return or_(self._REAL_EMAIL, Customer.phone.isnot(None),
+                   qualified_cid.isnot(None))
+
+    @staticmethod
+    def _search_clauses(search: str):
+        """Name/email substring match, plus phone when the term looks like a
+        number — matching on digits so "+91 12345" and "9112345" both hit."""
+        term = search.strip()
+        like = f"%{term}%"
+        clauses = [Customer.full_name.ilike(like), Customer.email.ilike(like)]
+        digits = re.sub(r"[\s\-().]", "", term)
+        if re.fullmatch(r"\+?\d{3,}", digits):
+            clauses.append(Customer.phone.like(f"%{digits.lstrip('+')}%"))
+        return or_(*clauses)
+
+    def list_people(
+        self, org_id: UUID, stage: Optional[str] = None, search: Optional[str] = None,
+        page: int = 1, page_size: int = 20, view: str = "identified",
+    ) -> Tuple[List[dict], int]:
+        # Latest activity per customer (one aggregate row per customer — no N+1).
+        last_activity_sq = (
+            self.db.query(
+                ChatHistory.customer_id.label("cid"),
+                func.max(ChatHistory.created_at).label("last"),
+            )
+            .filter(ChatHistory.organization_id == org_id)
+            .group_by(ChatHistory.customer_id)
+            .subquery()
+        )
+        # Customers who have at least one qualifying capture.
+        qualified_sq = (
+            self.db.query(LeadCaptureResponse.customer_id.label("cid"))
+            .filter(
+                LeadCaptureResponse.organization_id == org_id,
+                LeadCaptureResponse.qualified.is_(True),
+            )
+            .distinct()
+            .subquery()
+        )
+
+        q = (
+            self.db.query(Customer, last_activity_sq.c.last, qualified_sq.c.cid)
+            .outerjoin(last_activity_sq, last_activity_sq.c.cid == Customer.id)
+            .outerjoin(qualified_sq, qualified_sq.c.cid == Customer.id)
+            .filter(Customer.organization_id == org_id)
+            # Hide rows merged into another customer — the target row represents them.
+            .filter(Customer.merged_into_customer_id.is_(None))
+            # Exclude integration-authenticated people (identified via generate-token) —
+            # they're the business's existing customers, not leads the agent captured.
+            .filter(Customer.is_authenticated.is_(False))
+            # Only people who actually engaged (have chat history) — drops the huge tail of
+            # empty widget-loads that created a customer but never sent a message.
+            .filter(last_activity_sq.c.cid.isnot(None))
+        )
+
+        # Identity split: the directory shows identified people; anonymous
+        # browser sessions are a funnel signal behind an explicit view, not
+        # the page (prod data: 5,873 of one org's 5,876 rows were anonymous).
+        if view == "anonymous":
+            q = q.filter(~self._identified(qualified_sq.c.cid))
+        else:
+            q = q.filter(self._identified(qualified_sq.c.cid))
+
+        if stage and stage != "all":
+            try:
+                q = q.filter(Customer.lead_stage == LeadStage(stage))
+            except ValueError:
+                pass  # unknown stage → no filter
+        if search:
+            q = q.filter(self._search_clauses(search))
+
+        total = q.count()
+        rows = (
+            q.order_by(desc(func.coalesce(last_activity_sq.c.last, Customer.created_at)))
+            .offset(max(page - 1, 0) * page_size)
+            .limit(page_size)
+            .all()
+        )
+
+        contact_map = self._captured_contact_map([c.id for c, _, _ in rows])
+        items = []
+        for customer, last, qcid in rows:
+            name, email, anon = self._resolve_display(customer, contact_map.get(customer.id))
+            items.append({
+                "id": customer.id,
+                "name": name,
+                "email": email,
+                "phone": customer.phone,
+                "is_anonymous": anon,
+                "lead_stage": customer.lead_stage,
+                "qualified": qcid is not None,
+                "source": customer.lead_source,
+                "captured_at": customer.lead_qualified_at,
+                "last_activity": last,
+                "synced": False,
+            })
+        return items, total
+
+    def get_stats(self, org_id: UUID) -> dict:
+        week_ago = datetime.now(timezone.utc) - timedelta(days=7)
+        # Same scoping as list_people: exclude merged rows and integration-authenticated
+        # (generate-token) customers so the KPIs count only organic visitors/leads.
+        not_merged = Customer.merged_into_customer_id.is_(None)
+        organic = Customer.is_authenticated.is_(False)
+        # Engaged = actually chatted (has chat history) — excludes empty widget-loads.
+        engaged = exists().where(ChatHistory.customer_id == Customer.id)
+        # "Identified" for stats mirrors list_people's rule; qualified capture
+        # is expressed as an EXISTS here rather than the list's join.
+        has_capture = exists().where(and_(
+            LeadCaptureResponse.customer_id == Customer.id,
+            LeadCaptureResponse.qualified.is_(True)))
+        identified = or_(self._REAL_EMAIL, Customer.phone.isnot(None), has_capture)
+        total = self.db.query(func.count(Customer.id)).filter(
+            Customer.organization_id == org_id, not_merged, organic, engaged,
+            identified).scalar() or 0
+        anonymous = self.db.query(func.count(Customer.id)).filter(
+            Customer.organization_id == org_id, not_merged, organic, engaged,
+            ~identified).scalar() or 0
+        new_leads = self.db.query(func.count(Customer.id)).filter(
+            Customer.organization_id == org_id,
+            not_merged, organic,
+            Customer.lead_stage == LeadStage.LEAD,
+            Customer.lead_qualified_at >= week_ago,
+        ).scalar() or 0
+        customers = self.db.query(func.count(Customer.id)).filter(
+            Customer.organization_id == org_id,
+            not_merged, organic,
+            Customer.lead_stage == LeadStage.CUSTOMER,
+        ).scalar() or 0
+        return {
+            "total_people": total,
+            "anonymous": anonymous,
+            "new_leads_7d": new_leads,
+            "customers": customers,
+            "synced_to_crm": 0,
+        }
+
+    def get_customer(self, org_id: UUID, customer_id: UUID) -> Optional[Customer]:
+        customer = self.db.query(Customer).filter(
+            Customer.id == customer_id, Customer.organization_id == org_id,
+        ).first()
+        # Follow the merge pointer so stale links open the surviving record.
+        seen = set()
+        while customer and customer.merged_into_customer_id and customer.id not in seen:
+            seen.add(customer.id)
+            customer = self.db.query(Customer).filter(
+                Customer.id == customer.merged_into_customer_id,
+                Customer.organization_id == org_id,
+            ).first()
+        return customer
+
+    def get_detail(self, org_id: UUID, customer_id: UUID) -> Optional[dict]:
+        customer = self.get_customer(org_id, customer_id)
+        if not customer:
+            return None
+        customer_id = customer.id  # may differ if a merged row was requested
+
+        responses = (
+            self.db.query(LeadCaptureResponse)
+            .filter(LeadCaptureResponse.customer_id == customer_id)
+            .order_by(LeadCaptureResponse.created_at)
+            .all()
+        )
+        # Merge the fields captured across submissions; latest AI summary wins.
+        attrs: dict = {}
+        qualified = False
+        summary = None
+        for r in responses:
+            qualified = qualified or bool(r.qualified)
+            for k, v in (r.field_values or {}).items():
+                attrs[k] = v
+            if r.summary:
+                summary = r.summary
+
+        name, email, anon = self._resolve_display(customer, attrs)
+        return {
+            "id": customer.id,
+            "name": name,
+            "email": email,
+            "phone": customer.phone,
+            "identified": self.is_identified(customer, qualified),
+            "is_anonymous": anon,
+            "lead_stage": customer.lead_stage,
+            "qualified": qualified,
+            "source": customer.lead_source,
+            "created_at": customer.created_at,
+            "lead_qualified_at": customer.lead_qualified_at,
+            "meta_data": customer.meta_data,
+            "summary": summary,
+            "captured_attributes": attrs,
+            "timeline": self._timeline(customer),
+            "conversations": self._conversations(customer_id),
+        }
+
+    def _timeline(self, customer: Customer) -> List[dict]:
+        entries = [{"stage": "visitor", "at": customer.created_at}]
+        if customer.lead_qualified_at:
+            entries.append({"stage": "lead", "at": customer.lead_qualified_at})
+        # No dedicated became-customer timestamp in phase 1; approximate with updated_at.
+        if customer.lead_stage == LeadStage.CUSTOMER and customer.updated_at:
+            entries.append({"stage": "customer", "at": customer.updated_at})
+        return [e for e in entries if e["at"] is not None]
+
+    def _conversations(self, customer_id: UUID) -> List[dict]:
+        sessions = (
+            self.db.query(SessionToAgent)
+            .filter(SessionToAgent.customer_id == customer_id)
+            .order_by(desc(SessionToAgent.assigned_at))
+            .limit(20)
+            .all()
+        )
+        # One query for all previews, sharing the chat inbox's definition of
+        # "most recent message" rather than restating it here.
+        last_messages = ChatRepository(self.db).get_last_messages(
+            [s.session_id for s in sessions])
+
+        out = []
+        for s in sessions:
+            agent = self.db.query(Agent).filter(Agent.id == s.agent_id).first() if s.agent_id else None
+            out.append({
+                "session_id": s.session_id,
+                "agent_name": (agent.display_name or agent.name) if agent else None,
+                "status": s.status.value if s.status else None,
+                "last_message": last_messages.get(s.session_id),
+                "created_at": s.assigned_at,
+            })
+        return out
+
+    @staticmethod
+    def is_identified(customer: Customer, qualified: bool = False) -> bool:
+        """Python-side twin of the SQL identity rule (_identified), for single
+        records. Defers to is_placeholder_email so the rule for what counts as
+        a real address lives in exactly one place — _REAL_EMAIL below is its
+        unavoidable SQL restatement, and a third hand-rolled copy here is how
+        the three quietly drift apart."""
+        real_email = not CustomerRepository.is_placeholder_email(customer.email)
+        return bool(real_email or customer.phone or qualified)
+
+    def _has_qualified_capture(self, customer_id: UUID) -> bool:
+        return self.db.query(
+            exists().where(and_(LeadCaptureResponse.customer_id == customer_id,
+                                LeadCaptureResponse.qualified.is_(True)))
+        ).scalar()
+
+    def _phone_is_sole_identity_key(self, customer: Customer) -> bool:
+        """True when losing the phone would make this person unfindable.
+
+        A WhatsApp/SMS person starts out keyed by BOTH their synthesized
+        `{number}@whatsapp.channel` address and their phone. Once a capture
+        upgrades that address to a real email (which update_contact allows
+        precisely because the phone is a key), the phone is all that is left
+        for inbound routing: nothing about a WhatsApp message carries an email.
+
+        Change or clear the phone in that state and their next message finds
+        nobody and mints a duplicate — the exact failure the phone key exists
+        to prevent.
+        """
+        if not customer.phone:
+            return False
+        if (customer.email or "").endswith(PHONE_KEYED_CHANNEL_SUFFIXES):
+            return False  # still findable by their synthesized address
+        return self.db.query(
+            exists().where(and_(
+                ChannelConversation.customer_id == customer.id,
+                ChannelConversation.channel_type.in_(PHONE_KEYED_CHANNELS),
+            ))
+        ).scalar()
+
+    def update_person(self, org_id: UUID, customer_id: UUID,
+                      full_name: Optional[str] = None,
+                      phone: Optional[str] = None) -> Tuple[Optional[Customer], Optional[str]]:
+        """Explicit human edit of a person's name/phone from the drawer.
+
+        Unlike the automatic capture paths (set-if-absent), a human may
+        CORRECT a wrong phone — overwrite is allowed, clearing via "" too.
+        Returns (customer, error): error is a human-readable refusal (bad
+        format / number belongs to someone else / it is their only identity),
+        customer is None only when the record doesn't exist.
+        """
+        customer = self.get_customer(org_id, customer_id)
+        if not customer:
+            return None, None
+
+        if phone is not None:
+            normalized = None if phone.strip() == "" else normalize_phone(phone)
+            if phone.strip() != "" and not normalized:
+                return customer, "Enter the number in international format, e.g. +91 12345 67890"
+            if normalized != customer.phone and self._phone_is_sole_identity_key(customer):
+                return customer, (
+                    "This number is how their WhatsApp messages find them — changing "
+                    "it here would split them into a second person. Ask them to "
+                    "message from the new number instead."
+                )
+            if normalized is not None:
+                other = CustomerRepository(self.db).get_customer_by_phone(normalized, org_id)
+                if other and other.id != customer.id:
+                    return customer, "That number already belongs to another person"
+            customer.phone = normalized
+
+        if full_name is not None and full_name.strip():
+            customer.full_name = full_name.strip()
+
+        try:
+            self.db.commit()
+        except IntegrityError:
+            # The uniqueness check above is not atomic with the write: two
+            # agents assigning the same number concurrently both pass it. The
+            # index is the real arbiter — report its refusal the same way.
+            self.db.rollback()
+            return customer, "That number already belongs to another person"
+        self.db.refresh(customer)
+        return customer, None
+
+    def mark_customer(self, org_id: UUID, customer_id: UUID) -> Optional[Customer]:
+        customer = self.get_customer(org_id, customer_id)
+        if not customer:
+            return None
+        customer.lead_stage = LeadStage.CUSTOMER
+        self.db.commit()
+        self.db.refresh(customer)
+        return customer

@@ -1,0 +1,140 @@
+/* Layout */
+.container {
+  width: 100%;
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 0 var(--space-xl);
+  min-height: 100vh;
+}
+
+.container-fluid {
+  width: 100%;
+  margin: 0 auto;
+  padding: 0 var(--space-xl);
+}
+
+/* Responsive containers */
+@media (max-width: 1366px) {
+  .container,
+  .container-fluid {
+    max-width: 1200px;
+    padding: 0 var(--space-lg);
+  }
+}
+
+@media (max-width: 1280px) {
+  .container,
+  .container-fluid {
+    padding: 0 var(--space-md);
+  }
+}
+
+@media (max-width: 768px) {
+  .container,
+  .container-fluid {
+    padding: 0 var(--space-sm);
+  }
+}
+
+/* Flexbox */
+.flex { display: flex; }
+.flex-col { flex-direction: column; }
+.items-center { align-items: center; }
+.justify-center { justify-content: center; }
+.justify-between { justify-content: space-between; }
+.gap-sm { gap: var(--space-sm); }
+.gap-md { gap: var(--space-md); }
+.gap-lg { gap: var(--space-lg); }
+
+/* Spacing */
+.m-0 { margin: 0; }
+.mt-lg { margin-top: var(--space-lg); }
+.mb-lg { margin-bottom: var(--space-lg); }
+.mx-auto { margin-left: auto; margin-right: auto; }
+
+/* Text */
+.text-center { text-align: center; }
+.text-sm { font-size: var(--text-sm); }
+.text-lg { font-size: var(--text-lg); }
+.font-bold { font-weight: 600; }
+.opacity-80 { opacity: 0.8; }
+
+/* Responsive visibility utilities */
+.hidden { display: none !important; }
+.visible { display: block !important; }
+
+/* Show/hide on specific screen sizes */
+@media (max-width: 1366px) {
+  .hidden-laptop-13 { display: none !important; }
+  .visible-laptop-13 { display: block !important; }
+}
+
+@media (max-width: 1280px) {
+  .hidden-laptop-small { display: none !important; }
+  .visible-laptop-small { display: block !important; }
+}
+
+@media (max-width: 1024px) {
+  .hidden-tablet { display: none !important; }
+  .visible-tablet { display: block !important; }
+}
+
+@media (max-width: 768px) {
+  .hidden-mobile { display: none !important; }
+  .visible-mobile { display: block !important; }
+}
+
+/* Modern Designer Utilities */
+.glass-panel {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(16px) saturate(180%);
+  -webkit-backdrop-filter: blur(16px) saturate(180%);
+  border: 1px solid var(--border-color);
+}
+
+[data-theme="dark"] .glass-panel {
+  background: rgba(15, 17, 24, 0.85);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+.text-gradient-brand {
+  background: var(--grad-brand);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.text-gradient-purple {
+  background: var(--grad-purple-teal);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.badge-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 9px;
+  border-radius: var(--radius-pill);
+  font-size: 11.5px;
+  font-weight: var(--font-weight-semibold);
+  line-height: 1;
+  letter-spacing: -0.01em;
+}
+
+.badge-pill-blue {
+  background: rgba(37, 99, 235, 0.08);
+  color: #2563EB;
+  border: 1px solid rgba(37, 99, 235, 0.18);
+}
+
+.badge-pill-green {
+  background: rgba(16, 185, 129, 0.08);
+  color: #059669;
+  border: 1px solid rgba(16, 185, 129, 0.2);
+}
+
+.shadow-float {
+  box-shadow: 0 10px 30px -4px rgba(15, 23, 42, 0.08), 0 4px 12px -2px rgba(15, 23, 42, 0.04);
+}
+ 

@@ -1,0 +1,1230 @@
+<!--
+Copyright 2024-2026 Komi AI
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+-->
+
+<script setup lang="ts">
+import { computed, ref, watch, onMounted } from 'vue'
+import { checkShopifyConnection } from '@/services/shopify'
+import channelsService, { type ChannelAccount } from '@/services/channels'
+
+interface JiraProject {
+  id: string;
+  key: string;
+  name: string;
+}
+
+interface JiraIssueType {
+  id: string;
+  name: string;
+  description?: string;
+}
+
+
+const props = defineProps({
+  // Agent ID - required for Slack config
+  agentId: {
+    type: String,
+    required: true
+  },
+  // Jira props
+  jiraConnected: {
+    type: Boolean,
+    required: true
+  },
+  jiraLoading: {
+    type: Boolean,
+    required: true
+  },
+  createTicketEnabled: {
+    type: Boolean,
+    required: true
+  },
+  jiraProjects: {
+    type: Array as () => JiraProject[],
+    required: true
+  },
+  jiraIssueTypes: {
+    type: Array as () => JiraIssueType[],
+    required: true
+  },
+  selectedProject: {
+    type: String,
+    required: true
+  },
+  selectedIssueType: {
+    type: String,
+    required: true
+  },
+  loadingProjects: {
+    type: Boolean,
+    required: true
+  },
+  loadingIssueTypes: {
+    type: Boolean,
+    required: true
+  },
+  jiraActionLoading: {
+    type: Boolean,
+    default: false
+  },
+  // Native AI ticketing (per-agent toggle)
+  ticketingEnabled: {
+    type: Boolean,
+    default: true
+  },
+  // True when the org's plan doesn't include AI ticketing — locks the toggle.
+  ticketingLocked: {
+    type: Boolean,
+    default: false
+  },
+  // Shopify props
+  shopifyIntegrationEnabled: {
+    type: Boolean,
+    default: false
+  },
+  shopifyLoading: {
+    type: Boolean,
+    default: false
+  },
+  shopifyError: {
+    type: String,
+    default: ''
+  }
+})
+
+// Local state for Shopify connection
+const shopifyConnected = ref(false)
+const shopifyShopDomain = ref('')
+const shopifyConnectionLoading = ref(true)
+const localShopifyEnabled = ref(props.shopifyIntegrationEnabled)
+const shopifyToggleInProgress = ref(false)
+const shopifyConnectionError = ref('')
+
+// Local state for messaging-channel routing (Telegram, WhatsApp, Messenger, Instagram)
+const MESSAGING_CHANNELS = ['telegram', 'whatsapp', 'messenger', 'instagram', 'slack', 'email', 'sms', 'line']
+const CHANNEL_LABELS: Record<string, string> = {
+  telegram: 'Telegram', whatsapp: 'WhatsApp', messenger: 'Messenger', instagram: 'Instagram', slack: 'Slack',
+  email: 'Email', sms: 'SMS', line: 'LINE'
+}
+const channelAccounts = ref<ChannelAccount[]>([])
+const channelSaving = ref(false)
+
+const fetchChannelAccounts = async () => {
+  try {
+    const accounts = await channelsService.listAccounts()
+    channelAccounts.value = accounts.filter(a => MESSAGING_CHANNELS.includes(a.channel_type))
+  } catch (error) {
+    console.error('Error loading channel accounts:', error)
+  }
+}
+
+const toggleChannelAccount = async (account: ChannelAccount) => {
+  try {
+    channelSaving.value = true
+    if (account.agent_id === props.agentId) {
+      await channelsService.clearAccountAgent(account.id)
+    } else {
+      await channelsService.setAccountAgent(account.id, props.agentId)
+    }
+    await fetchChannelAccounts()
+  } catch (error: any) {
+    console.error('Error updating channel routing:', error)
+  } finally {
+    channelSaving.value = false
+  }
+}
+
+const emit = defineEmits([
+  'toggle-create-ticket',
+  'toggle-ticketing',
+  'handle-project-change',
+  'handle-issue-type-change',
+  'save-jira-config',
+  'toggle-shopify-integration',
+  'save-shopify-config'
+])
+
+const toggleTicketing = () => {
+  if (props.ticketingLocked) return
+  emit('toggle-ticketing')
+}
+
+// Create local copies of the props
+const localSelectedProject = ref(props.selectedProject)
+const localSelectedIssueType = ref(props.selectedIssueType)
+
+// Watch for changes in the props to update the local copies
+watch(() => props.selectedProject, (newValue) => {
+  localSelectedProject.value = newValue
+})
+
+watch(() => props.selectedIssueType, (newValue) => {
+  localSelectedIssueType.value = newValue
+})
+
+// Update localShopifyEnabled when prop changes
+watch(() => props.shopifyIntegrationEnabled, (newValue) => {
+  localShopifyEnabled.value = newValue
+  // Reset error when parent updates the enabled state successfully
+  shopifyConnectionError.value = ''
+})
+
+// Update error state when parent passes error
+watch(() => props.shopifyError, (newValue) => {
+  if (newValue) {
+    shopifyConnectionError.value = newValue
+    // Revert the toggle if there's an error
+    localShopifyEnabled.value = props.shopifyIntegrationEnabled
+  }
+})
+
+const ticketReasons = [
+  "无法立即在线解答的复杂问题",
+  "当前无在线人工客服值班",
+  "转人工请求超时未被接待",
+  "需要多部门协同调查的售后事项",
+  "需要长期追踪解决进度的事务"
+]
+
+const ticketTooltipContent = computed(() => {
+  return `在以下情况自动创建工单：\n${ticketReasons.map(reason => `• ${reason}`).join('\n')}`
+})
+
+const shopifyReasons = [
+  "实时展示商品详情与价格",
+  "精准解答商品规格与参数咨询",
+  "智能推荐关联搭配商品",
+  "实时查询库存可用状态",
+  "一键查询买家订单物流进度"
+]
+
+const shopifyTooltipContent = computed(() => {
+  return `开启 Shopify 联动支持：\n${shopifyReasons.map(reason => `• ${reason}`).join('\n')}`
+})
+
+const toggleCreateTicket = () => {
+  emit('toggle-create-ticket')
+}
+
+const toggleShopifyIntegration = (event: Event) => {
+  // v-model has already applied the checkbox value. Toggling it again here
+  // would send the parent the opposite state and make a click appear to do
+  // nothing when the server echoes the value back.
+  const checked = (event.target as HTMLInputElement | null)?.checked
+  if (typeof checked === 'boolean') localShopifyEnabled.value = checked
+  shopifyToggleInProgress.value = true
+  emit('toggle-shopify-integration')
+  
+  // The parent component should call an API method and handle errors
+  // If an error occurs, the watch on props.shopifyError will revert the state
+  
+  // For demo purposes, let's set a timeout to simulate API call
+  // This should be removed in production as the parent component should control this
+  setTimeout(() => {
+    // Auto-reset progress after 3 seconds if parent doesn't control it
+    if (shopifyToggleInProgress.value) {
+      shopifyToggleInProgress.value = false
+    }
+  }, 3000)
+}
+
+const handleProjectChange = () => {
+  emit('handle-project-change', localSelectedProject.value)
+}
+
+const handleIssueTypeChange = () => {
+  emit('handle-issue-type-change', localSelectedIssueType.value)
+}
+
+const saveJiraConfig = () => {
+  emit('save-jira-config', {
+    projectKey: localSelectedProject.value,
+    issueTypeId: localSelectedIssueType.value
+  })
+}
+
+
+// Fetch Shopify connection status
+const fetchShopifyStatus = async () => {
+  try {
+    shopifyConnectionLoading.value = true
+    const data = await checkShopifyConnection()
+    shopifyConnected.value = data.connected
+    shopifyShopDomain.value = data.shop_domain || ''
+    console.log('Shopify connection status:', data)
+  } catch (error) {
+    console.error('Error checking Shopify connection:', error)
+    shopifyConnected.value = false
+  } finally {
+    shopifyConnectionLoading.value = false
+  }
+}
+
+// Fetch connection status on component mount
+onMounted(async () => {
+  await Promise.all([
+    fetchShopifyStatus(),
+    fetchChannelAccounts()
+  ])
+})
+</script>
+
+<template>
+  <div class="integrations-tab">
+    <section class="detail-section">
+      <h3 class="section-title">渠道与系统集成 (Integrations)</h3>
+      <p class="section-description">
+        让当前智能体无缝对接企业现有业务系统与多渠道通讯工具，实现自动化跨系统协作。
+      </p>
+
+      <!-- Native AI Ticketing (per-agent toggle) -->
+      <div class="integration-section">
+        <div class="integration-head">
+          <div class="integration-head-left">
+            <div class="integration-badge badge-lime">TK</div>
+            <div class="integration-heading">
+              <div class="integration-title">
+                AI 智能工单 (AI Ticketing)
+                <font-awesome-icon v-if="ticketingLocked" :icon="['fas', 'lock']" class="lock-icon" />
+              </div>
+              <div class="integration-desc">
+                允许该智能体在会话中直接创建原生工单，由 AI 进行调查并生成复盘解决方案。
+              </div>
+            </div>
+          </div>
+          <label
+            class="switch"
+            v-tooltip="ticketingLocked ? '专业版 (Pro) 专享功能 — 升级套餐以启用 AI 工单联动。' : '开启或关闭该智能体的原生工单联动功能'"
+          >
+            <input
+              type="checkbox"
+              :checked="ticketingEnabled && !ticketingLocked"
+              :disabled="ticketingLocked"
+              @change="toggleTicketing"
+            >
+            <span class="slider" :class="{ locked: ticketingLocked }"></span>
+          </label>
+        </div>
+        <p v-if="ticketingLocked" class="helper-text">
+          AI 智能工单为专业版专享功能。
+          <router-link to="/settings/subscription" class="connect-link">立即升级套餐</router-link>
+        </p>
+        <p v-else class="helper-text">
+          开启后，智能客服可在对话中识别复杂售后并自动立项工单；若下方开启 Jira 联动，将优先同步至 Jira。
+        </p>
+      </div>
+
+      <!-- Jira Integration -->
+      <div class="integration-section">
+        <div class="integration-head">
+          <div class="integration-head-left">
+            <div class="integration-badge badge-teal">Ji</div>
+            <div class="integration-heading">
+              <div class="integration-title">Jira — 研发工单自动同步</div>
+              <div class="integration-desc">为需要技术/研发团队跟进的复杂异常问题自动创建 Jira Issue。</div>
+            </div>
+          </div>
+          <router-link
+            v-if="!jiraConnected"
+            to="/settings/integrations"
+            class="connect-btn"
+          >
+            去连接
+          </router-link>
+          <router-link
+            v-else
+            to="/settings/integrations"
+            class="connect-btn"
+          >
+            管理集成
+          </router-link>
+        </div>
+        <!-- Jira Ticket Creation Toggle -->
+        <div v-if="jiraConnected" class="ticket-toggle">
+          <div class="toggle-header">
+            <h5 class="toggle-title">开启自动创建 Jira 工单</h5>
+            <label class="switch" v-tooltip="ticketTooltipContent">
+              <input type="checkbox" 
+                :checked="createTicketEnabled"
+                @change="toggleCreateTicket"
+                :disabled="jiraActionLoading || jiraLoading"
+              >
+              <span class="slider"></span>
+            </label>
+          </div>
+          <p class="helper-text">当客户反馈产品 Bug 或需要技术介入时，自动在对应 Jira 项目中生成工单</p>
+          
+          <!-- Jira Connection Status -->
+          <div v-if="jiraLoading" class="jira-status loading">
+            正在检测 Jira 连通性...
+          </div>
+          <div v-else-if="!jiraConnected" class="jira-status not-connected">
+            <span class="status-icon">⚠️</span>
+            Jira 尚未授权连接
+            <router-link to="/settings/integrations" class="connect-link">
+              立即连接 Jira
+            </router-link>
+          </div>
+          <div v-else class="jira-status connected">
+            <span class="status-icon">✓</span>
+            Jira 已成功连接
+          </div>
+          
+          <!-- Jira Project Selection -->
+          <div v-if="createTicketEnabled && jiraConnected" class="jira-config">
+            <div class="form-group">
+              <label for="jira-project">Jira 项目</label>
+              <div v-if="loadingProjects" class="loading-indicator">正在加载项目列表...</div>
+              <select 
+                v-else
+                id="jira-project" 
+                v-model="localSelectedProject"
+                @change="handleProjectChange"
+                :disabled="loadingProjects || jiraActionLoading"
+              >
+                <option value="">选择目标 Jira 项目</option>
+                <option 
+                  v-for="project in jiraProjects" 
+                  :key="project.id" 
+                  :value="project.key"
+                >
+                  {{ project.name }}
+                </option>
+              </select>
+            </div>
+            
+            <div class="form-group">
+              <label for="issue-type">工单问题类型 (Issue Type)</label>
+              <div v-if="loadingIssueTypes" class="loading-indicator">正在加载问题类型...</div>
+              <select 
+                v-else
+                id="issue-type" 
+                v-model="localSelectedIssueType"
+                @change="handleIssueTypeChange"
+                :disabled="!localSelectedProject || loadingIssueTypes || jiraActionLoading"
+              >
+                <option value="">选择工单类型</option>
+                <option 
+                  v-for="issueType in jiraIssueTypes" 
+                  :key="issueType.id" 
+                  :value="issueType.id"
+                >
+                  {{ issueType.name }}
+                </option>
+              </select>
+            </div>
+            
+            <button 
+              class="save-config-btn"
+              @click="saveJiraConfig"
+              :disabled="!localSelectedProject || !localSelectedIssueType || jiraActionLoading"
+            >
+              保存配置
+            </button>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Shopify Integration -->
+      <div class="integration-section">
+        <div class="integration-head">
+          <div class="integration-head-left">
+            <div class="integration-badge badge-lime">Sh</div>
+            <div class="integration-heading">
+              <div class="integration-title">Shopify — 订单与商品库联动</div>
+              <div class="integration-desc">允许智能体查询买家订单物流履约状态并智能推荐关联商品。</div>
+            </div>
+          </div>
+          <router-link
+            v-if="!shopifyConnected"
+            to="/settings/integrations"
+            class="connect-btn"
+          >
+            去连接
+          </router-link>
+          <router-link
+            v-else
+            to="/settings/integrations"
+            class="connect-btn"
+          >
+            管理集成
+          </router-link>
+        </div>
+        <div v-if="shopifyConnected" class="ticket-toggle">
+          <div class="toggle-header">
+            <h5 class="toggle-title">启用 Shopify 电商扩展</h5>
+            <div class="toggle-with-loader">
+              <div class="toggle-loader" v-if="shopifyToggleInProgress">
+                <span class="loader-dot"></span>
+                <span class="loader-dot"></span>
+                <span class="loader-dot"></span>
+              </div>
+              <label class="switch" v-tooltip="shopifyTooltipContent">
+                <input type="checkbox" 
+                  v-model="localShopifyEnabled"
+                  @change="toggleShopifyIntegration"
+                  :disabled="shopifyConnectionLoading || props.shopifyLoading || shopifyToggleInProgress"
+                >
+                <span class="slider" :class="{ 'in-progress': shopifyToggleInProgress }"></span>
+              </label>
+            </div>
+          </div>
+          <p class="helper-text">为该智能客服开启店铺实时库存、订单查询及商品卡片推送功能</p>
+          
+          <!-- Shopify Connection Status -->
+          <div v-if="shopifyConnectionLoading" class="jira-status loading">
+            正在检测 Shopify 店铺状态...
+          </div>
+          <div v-else-if="!shopifyConnected" class="jira-status not-connected">
+            <span class="status-icon">⚠️</span>
+            Shopify 店铺尚未连接
+            <router-link to="/settings/integrations" class="connect-link">
+              立即连接 Shopify
+            </router-link>
+          </div>
+          <div v-else class="jira-status connected">
+            <span class="status-icon">✓</span>
+            已成功连接至店铺 {{ shopifyShopDomain }}
+          </div>
+        </div>
+        <!-- Add error message display -->
+        <div v-if="shopifyConnected && shopifyConnectionError" class="shopify-error">
+          <span class="error-icon">❌</span>
+          {{ shopifyConnectionError }}
+        </div>
+      </div>
+
+      <!-- Messaging Channels (Telegram / WhatsApp / Messenger / Instagram) -->
+      <div class="integration-section">
+        <div class="integration-head">
+          <div class="integration-head-left">
+            <div class="integration-badge badge-purple">Ch</div>
+            <div class="integration-heading">
+              <div class="integration-title">多渠道通讯集成 — 客户触达</div>
+              <div class="integration-desc">让智能客服支持在 Telegram、WhatsApp、Messenger、Instagram、Slack、邮件、短信和 LINE 上全天候接待客户。</div>
+            </div>
+          </div>
+          <router-link to="/settings/integrations" class="connect-btn">
+            {{ channelAccounts.length > 0 ? '管理渠道' : '去连接渠道' }}
+          </router-link>
+        </div>
+
+        <div v-if="channelAccounts.length > 0" class="msg-config">
+          <p class="helper-text">
+            每个连接的通讯账号由一个智能体负责应答。勾选下方账号即可将该渠道的访客消息路由至当前智能客服。
+          </p>
+          <div class="msg-list">
+            <div
+              v-for="account in channelAccounts"
+              :key="account.id"
+              class="msg-row"
+              :class="{ 'msg-row-active': account.agent_id === props.agentId }"
+            >
+              <div class="msg-info">
+                <span class="msg-badge">{{ CHANNEL_LABELS[account.channel_type] || account.channel_type }}</span>
+                <span class="msg-name">{{ account.display_name || account.external_account_id }}</span>
+                <span v-if="account.agent_id && account.agent_id !== props.agentId" class="msg-note">
+                  当前路由至其他智能体
+                </span>
+              </div>
+              <label class="msg-toggle" :title="account.agent_id === props.agentId ? '正在负责应答' : '未分配应答'">
+                <input
+                  type="checkbox"
+                  :checked="account.agent_id === props.agentId"
+                  @change="toggleChannelAccount(account)"
+                  :disabled="channelSaving"
+                />
+                <span class="msg-track"><span class="msg-thumb"></span></span>
+              </label>
+            </div>
+          </div>
+        </div>
+        <div v-else class="no-channels-message">
+          暂未绑定任何第三方社交通讯渠道。请前往「系统设置 → 渠道集成」进行连接。
+        </div>
+      </div>
+    </section>
+  </div>
+</template>
+
+<style scoped>
+.integrations-tab {
+  max-width: 1200px;
+  margin: 0 auto;
+  width: 100%;
+  padding: 0 var(--space-lg);
+}
+
+.detail-section {
+  margin-bottom: var(--space-xl);
+}
+
+.section-title {
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text);
+  margin: 0 0 6px;
+}
+
+.section-description {
+  color: var(--muted);
+  font-size: 14px;
+  margin: 0 0 22px;
+  line-height: 1.5;
+}
+
+.integration-section {
+  border: 1px solid var(--o08);
+  border-radius: var(--radius-lg);
+  padding: 22px 24px;
+  background: var(--surface);
+  margin-bottom: 14px;
+  width: 100%;
+}
+
+.integration-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.integration-head-left {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+
+.connect-btn {
+  flex-shrink: 0;
+  display: inline-block;
+  padding: 10px 18px;
+  background: var(--o05);
+  border: 1px solid var(--o14);
+  color: var(--text);
+  border-radius: var(--radius-chip);
+  font-size: 13.5px;
+  font-weight: 500;
+  text-decoration: none;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.connect-btn:hover {
+  background: var(--o14);
+}
+
+.integration-badge {
+  width: 42px;
+  height: 42px;
+  flex-shrink: 0;
+  border-radius: 11px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 15px;
+}
+
+.badge-teal {
+  background: var(--teal-bg);
+  color: var(--c-teal);
+}
+
+.badge-lime {
+  background: var(--accent-bg-12);
+  color: var(--accent-ink);
+}
+
+.badge-purple {
+  background: var(--purple-bg);
+  color: var(--c-purple);
+}
+
+.integration-heading {
+  min-width: 0;
+}
+
+.integration-title {
+  font-family: var(--font-display);
+  color: var(--text);
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.lock-icon {
+  margin-left: 6px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.integration-desc {
+  font-size: 13.5px;
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+.toggle-title {
+  font-size: 1rem;
+  font-weight: 500;
+  color: var(--text);
+  margin: 0;
+}
+
+.ticket-toggle {
+  margin-top: var(--space-lg);
+}
+
+.toggle-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-sm);
+}
+
+.helper-text {
+  color: var(--muted);
+  font-size: var(--text-sm);
+  margin-bottom: var(--space-md);
+  line-height: 1.5;
+}
+
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 48px;
+  height: 24px;
+}
+
+.switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: var(--toggle-track-off);
+  transition: .4s;
+  border-radius: 24px;
+}
+
+.slider:before {
+  position: absolute;
+  content: "";
+  height: 18px;
+  width: 18px;
+  left: 3px;
+  bottom: 3px;
+  background-color: var(--toggle-knob);
+  transition: .4s;
+  border-radius: 50%;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+input:checked + .slider {
+  background-color: var(--accent-solid);
+}
+
+input:checked + .slider:before {
+  background-color: var(--on-accent-solid);
+}
+
+input:focus + .slider {
+  box-shadow: 0 0 1px var(--accent-ink);
+}
+
+input:checked + .slider:before {
+  transform: translateX(24px);
+}
+
+.slider.locked {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.jira-status {
+  margin-top: var(--space-md);
+  padding: var(--space-md);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.jira-status.loading {
+  background-color: var(--o05);
+  color: var(--muted);
+}
+
+.jira-status.connected {
+  background-color: var(--teal-bg);
+  color: var(--c-teal);
+}
+
+.jira-status.not-connected {
+  background-color: var(--o05);
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.connect-link {
+  color: var(--text);
+  font-weight: 500;
+  text-decoration: none;
+  padding: 10px 18px;
+  background: var(--o05);
+  border: 1px solid var(--o14);
+  border-radius: var(--radius-chip);
+  transition: all var(--transition-fast);
+}
+
+.connect-link:hover {
+  background: var(--o14);
+}
+
+.jira-config {
+  margin-top: var(--space-lg);
+  padding: var(--space-lg);
+  background: var(--bg-deep);
+  border-radius: var(--radius-md);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  border: 1px solid var(--o08);
+}
+
+.shopify-info {
+  background-color: var(--background-soft);
+  padding: var(--space-sm);
+  border-radius: var(--radius-md);
+  border-left: 3px solid var(--primary-color);
+}
+
+.shopify-info p {
+  margin-bottom: var(--space-xs);
+  font-size: var(--text-sm);
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.form-group label {
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--muted);
+}
+
+.form-group select {
+  padding: var(--space-md);
+  border: 1px solid var(--o14);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--text);
+  font-size: var(--text-sm);
+}
+
+.form-group select:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.loading-indicator {
+  font-size: var(--text-sm);
+  color: var(--muted);
+  padding: var(--space-sm);
+}
+
+.save-config-btn {
+  margin-top: var(--space-lg);
+  padding: 10px 18px;
+  background: var(--accent-solid);
+  color: var(--on-accent-solid);
+  border: none;
+  border-radius: var(--radius-chip);
+  font-weight: 600;
+  font-size: 13.5px;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  align-self: flex-start;
+}
+
+.save-config-btn:hover {
+  filter: brightness(1.1);
+  transform: translateY(-1px);
+}
+
+.save-config-btn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+  filter: grayscale(0.5);
+}
+
+.shopify-error {
+  margin-top: var(--space-md);
+  padding: var(--space-md);
+  border-radius: var(--radius-md);
+  background-color: var(--coral-bg);
+  color: var(--error-color);
+  font-size: var(--text-sm);
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.error-icon {
+  margin-right: var(--space-xs);
+}
+
+.toggle-with-loader {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.toggle-loader {
+  position: absolute;
+  right: 55px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.loader-dot {
+  width: 6px;
+  height: 6px;
+  background-color: var(--accent-solid);
+  border-radius: 50%;
+  animation: pulse 1.5s infinite ease-in-out;
+}
+
+.loader-dot:nth-child(2) {
+  animation-delay: 0.5s;
+}
+
+.loader-dot:nth-child(3) {
+  animation-delay: 1s;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    transform: scale(0.75);
+    opacity: 0.5;
+  }
+  50% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.slider.in-progress {
+  opacity: 0.7;
+  background-image: linear-gradient(45deg, rgba(255,255,255,0.15) 25%, transparent 25%, transparent 50%, rgba(255,255,255,0.15) 50%, rgba(255,255,255,0.15) 75%, transparent 75%, transparent);
+  background-size: 20px 20px;
+  animation: progress-animation 1s linear infinite;
+}
+
+@keyframes progress-animation {
+  0% {
+    background-position: 0 0;
+  }
+  100% {
+    background-position: 20px 0;
+  }
+}
+
+/* Slack Integration Styles */
+.slack-config,
+.msg-config {
+  margin-top: var(--space-md);
+}
+
+.msg-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  margin-top: var(--space-md);
+}
+
+.msg-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  background: var(--bg-deep);
+  border: 1px solid var(--o08);
+  border-radius: var(--radius-md);
+  padding: 12px 16px;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.msg-row-active {
+  border-color: var(--o14, var(--o10));
+  background: var(--o05);
+}
+
+.msg-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.msg-badge {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: var(--o08);
+  color: var(--muted);
+}
+
+.msg-name {
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.msg-note {
+  flex-shrink: 0;
+  font-size: var(--text-xs, 12px);
+  color: var(--muted);
+}
+
+/* Themed on/off toggle */
+.msg-toggle {
+  position: relative;
+  display: inline-flex;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.msg-toggle input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  margin: 0;
+  cursor: pointer;
+}
+
+.msg-track {
+  width: 42px;
+  height: 24px;
+  border-radius: 999px;
+  background: var(--o14, rgba(128, 128, 128, 0.3));
+  transition: background 0.2s ease;
+  display: inline-block;
+  position: relative;
+}
+
+.msg-thumb {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  transition: transform 0.2s ease;
+}
+
+.msg-toggle input:checked + .msg-track {
+  background: var(--accent-solid);
+}
+
+.msg-toggle input:checked + .msg-track .msg-thumb {
+  transform: translateX(18px);
+}
+
+.msg-toggle input:disabled + .msg-track {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.slack-error {
+  margin-top: var(--space-md);
+  padding: var(--space-md);
+  border-radius: var(--radius-md);
+  background-color: var(--coral-bg);
+  color: var(--error-color);
+  font-size: var(--text-sm);
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.slack-channels-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  margin-top: var(--space-md);
+}
+
+.slack-channel-item {
+  background: var(--bg-deep);
+  border: 1px solid var(--o08);
+  border-radius: var(--radius-md);
+  padding: var(--space-md);
+}
+
+.channel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--space-sm);
+}
+
+.channel-name {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.remove-btn {
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 1.25rem;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+}
+
+.remove-btn:hover {
+  color: var(--error-color);
+}
+
+.remove-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.channel-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-md);
+}
+
+.option-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  font-size: var(--text-sm);
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.option-item input[type="checkbox"] {
+  cursor: pointer;
+}
+
+.no-channels-message,
+.no-channels-available {
+  padding: var(--space-md);
+  background: var(--o05);
+  border-radius: var(--radius-md);
+  color: var(--muted);
+  font-size: var(--text-sm);
+  text-align: center;
+  margin-top: var(--space-md);
+}
+
+.add-channel-btn {
+  margin-top: var(--space-md);
+  padding: 10px 18px;
+  background: var(--o05);
+  color: var(--text);
+  border: 1px solid var(--o14);
+  border-radius: var(--radius-chip);
+  font-weight: 500;
+  font-size: 13.5px;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.add-channel-btn:hover {
+  background: var(--o14);
+}
+
+.add-channel-btn:hover {
+  filter: brightness(1.1);
+  transform: translateY(-1px);
+}
+
+.add-channel-form {
+  margin-top: var(--space-lg);
+  padding: var(--space-lg);
+  background: var(--bg-deep);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--o08);
+}
+
+.channel-options-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  margin-top: var(--space-md);
+  padding: var(--space-md);
+  background: var(--surface);
+  border-radius: var(--radius-md);
+}
+
+.form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-sm);
+  margin-top: var(--space-lg);
+}
+
+.cancel-btn {
+  padding: 10px 18px;
+  background: var(--o05);
+  color: var(--text);
+  border: 1px solid var(--o14);
+  border-radius: var(--radius-chip);
+  font-weight: 500;
+  font-size: 13.5px;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.cancel-btn:hover {
+  background: var(--o14);
+}
+
+.cancel-btn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+</style>

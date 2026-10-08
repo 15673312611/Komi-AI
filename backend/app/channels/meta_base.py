@@ -1,0 +1,430 @@
+"""
+Copyright 2024-2026 Komi AI
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+"""
+
+import asyncio
+import hashlib
+import hmac
+import json
+from datetime import datetime, timezone
+from typing import ClassVar, Optional
+
+import httpx
+
+from app.channels.base import ChannelAdapter, SendResult, WindowStatus
+from app.core.config import settings
+from app.core.security import decrypt_api_key
+from app.models.channels import ChannelAccount, ChannelConversation
+from app.core.logger import get_logger
+
+logger = get_logger(__name__)
+
+GRAPH_BASE = "https://graph.facebook.com"
+# Instagram API with Instagram Login speaks to its own host with an Instagram
+# user token; the Facebook graph rejects those. Page-based channels keep using
+# GRAPH_BASE, so every helper below takes the base rather than assuming one.
+GRAPH_INSTAGRAM_BASE = "https://graph.instagram.com"
+INSTAGRAM_OAUTH_BASE = "https://api.instagram.com"
+REQUEST_TIMEOUT_SECONDS = 15.0
+SEND_RETRIES = 2
+# Meta customer-service window: free-form replies allowed for 24h after the
+# customer's last inbound message (applies to WhatsApp, Messenger and Instagram).
+WINDOW_HOURS = 24
+
+# Shared keep-alive client to graph.facebook.com (process-lifetime, like the
+# Telegram adapter's) — avoids a TCP+TLS handshake per outbound message.
+_http_client: Optional[httpx.AsyncClient] = None
+
+
+def _get_http_client() -> httpx.AsyncClient:
+    global _http_client
+    if _http_client is None or _http_client.is_closed:
+        _http_client = httpx.AsyncClient(timeout=REQUEST_TIMEOUT_SECONDS)
+    return _http_client
+
+
+def graph_url(path: str, base: str = GRAPH_BASE) -> str:
+    return f"{base}/{settings.META_GRAPH_VERSION}/{path}"
+
+
+def verify_meta_signature(raw_body: bytes, signature_header: str) -> bool:
+    """Validate the X-Hub-Signature-256 header against our app secrets.
+
+    The signature covers the raw request body; it must be checked before the
+    body is parsed. Uses a constant-time comparison.
+
+    Instagram Login webhooks are signed with the Instagram app secret rather
+    than the Meta one, and the only thing that would say which product sent this
+    is inside the body we have not authenticated yet. So this tries each secret
+    we own instead of trusting unverified content to choose one; an attacker
+    still has to forge one of them.
+    """
+    if not signature_header or not signature_header.startswith("sha256="):
+        return False
+    provided = signature_header[len("sha256="):]
+    for app_secret in (settings.META_APP_SECRET, settings.INSTAGRAM_APP_SECRET):
+        if not app_secret:
+            continue
+        expected = hmac.new(app_secret.encode(), raw_body, hashlib.sha256).hexdigest()
+        if hmac.compare_digest(expected, provided):
+            return True
+    return False
+
+
+def verify_challenge(mode: Optional[str], token: Optional[str], challenge: Optional[str]) -> Optional[str]:
+    """Answer a webhook GET verification handshake.
+
+    Returns the challenge string to echo when the subscribe token matches, else
+    None (caller should 403).
+    """
+    if mode == "subscribe" and token and token == settings.META_WEBHOOK_VERIFY_TOKEN:
+        return challenge
+    return None
+
+
+async def graph_post(path: str, access_token: str, payload: dict,
+                     base: str = GRAPH_BASE) -> SendResult:
+    """POST to the Graph API with small exponential backoff on transient errors.
+
+    Returns a SendResult; 4xx errors are terminal (no retry), network/5xx are
+    retried up to SEND_RETRIES times. `base` selects the host — Instagram Login
+    accounts send via graph.instagram.com, everything else via graph.facebook.com.
+    """
+    url = graph_url(path, base)
+    headers = {"Authorization": f"Bearer {access_token}"}
+    last_error = "unknown error"
+    for attempt in range(SEND_RETRIES + 1):
+        try:
+            response = await _get_http_client().post(url, json=payload, headers=headers)
+            if response.status_code < 300:
+                data = response.json()
+                message_id = _extract_message_id(data)
+                return SendResult(ok=True, external_message_id=message_id)
+            # 4xx are our fault (bad token, closed window) — don't retry
+            if response.status_code < 500:
+                return SendResult(ok=False, error=_graph_error(response))
+            last_error = _graph_error(response)
+        except Exception as e:
+            last_error = str(e)
+        if attempt < SEND_RETRIES:
+            await asyncio.sleep(0.5 * (2 ** attempt))
+    return SendResult(ok=False, error=last_error)
+
+
+async def _graph_request(method: str, path: str, access_token: Optional[str],
+                         params: Optional[dict] = None,
+                         json_body: Optional[dict] = None,
+                         base: str = GRAPH_BASE) -> tuple[bool, dict]:
+    """Issue a Graph call and return (ok, decoded-json).
+
+    Unlike graph_post this keeps the whole response body, for calls where the
+    body is the result rather than just a message id. The token goes in the
+    Authorization header so it never appears in URLs or proxy logs; pass None
+    for the one endpoint that authenticates with app credentials instead. These
+    are management calls, not sends, so a failure surfaces to the caller
+    instead of being retried.
+    """
+    try:
+        response = await _get_http_client().request(
+            method,
+            graph_url(path, base),
+            params=params or None,
+            json=json_body,
+            headers={"Authorization": f"Bearer {access_token}"} if access_token else {},
+        )
+        return (response.status_code < 300, response.json())
+    except Exception as e:
+        logger.error(f"Graph {method} {path} failed: {e}")
+        return (False, {"error": {"message": str(e)}})
+
+
+async def graph_get(path: str, access_token: str, params: Optional[dict] = None,
+                    base: str = GRAPH_BASE) -> tuple[bool, dict]:
+    """GET a Graph node (validating tokens during onboarding, listing templates)."""
+    return await _graph_request("GET", path, access_token, params=params, base=base)
+
+
+def graph_detail(data: dict, fallback: str) -> str:
+    """Meta's own error text where it has one, so the UI can show the real
+    reason (e.g. a template that cannot be deleted) rather than a generic
+    failure.
+
+    error_user_msg first: `message` is often a generic OAuth string that says
+    nothing actionable — Graph will pair a `message` of "Application does not
+    have permission for this action" with an error_user_msg that names the
+    actual asset and rule. Only one of those is a clue.
+    """
+    error = data.get("error", {})
+    if not isinstance(error, dict):
+        return fallback
+    return error.get("error_user_msg") or error.get("message") or fallback
+
+
+async def graph_post_json(path: str, access_token: str, payload: dict) -> tuple[bool, dict]:
+    """POST to a Graph node, keeping the response body (e.g. creating a message
+    template returns its id, status and category)."""
+    return await _graph_request("POST", path, access_token, json_body=payload)
+
+
+async def debug_token(input_token: str) -> tuple[bool, dict]:
+    """Inspect a token: what it is, who it belongs to, and whether it is ours.
+
+    Returns Meta's `data` object, which for a Page token carries
+    `type: "PAGE"`, `profile_id` (the page id), `app_id`, `is_valid` and the
+    granted `scopes`.
+
+    This authenticates with app credentials rather than the token being
+    inspected, so it needs no permission on the asset. Reading the Page node
+    directly (`me?fields=id,name`) would instead demand `pages_read_engagement`
+    — unrelated to messaging, and absent from a token that can nonetheless send
+    perfectly well.
+    """
+    app_token = f"{settings.META_APP_ID}|{settings.META_APP_SECRET}"
+    ok, data = await _graph_request("GET", "debug_token", app_token,
+                                    params={"input_token": input_token})
+    if not ok:
+        return False, data
+    return True, data.get("data", {})
+
+
+async def exchange_signup_code(code: str, redirect_uri: Optional[str] = None) -> tuple[bool, dict]:
+    """Trade a login code for the customer's access token.
+
+    The app credentials authenticate this call, so it is the one Graph request
+    that carries no bearer token.
+
+    redirect_uri must match whatever the login dialog used, or Graph rejects the
+    code as a mismatch:
+      - WhatsApp Embedded Signup issues its code through the JS SDK with no
+        redirect_uri, so it passes None and we omit the param.
+      - Facebook Login for Business runs as a first-party OAuth popup bound to
+        our own callback URL, so that flow passes that exact callback URL.
+    """
+    params = {
+        "client_id": settings.META_APP_ID,
+        "client_secret": settings.META_APP_SECRET,
+        "code": code,
+    }
+    if redirect_uri is not None:
+        params["redirect_uri"] = redirect_uri
+    return await _graph_request("GET", "oauth/access_token", None, params=params)
+
+
+async def exchange_for_long_lived_token(short_lived_token: str) -> tuple[bool, dict]:
+    """Trade a user token for a 60-day one.
+
+    Page tokens inherit their lifetime from the user token they were read with:
+    from a short-lived one they die in about an hour, from a long-lived one they
+    never expire. We store the Page token and send with it for months, so this
+    runs before /me/accounts. An already-long-lived token comes back unchanged,
+    so it is safe to call unconditionally. App credentials authenticate it, so
+    like exchange_signup_code it carries no bearer token.
+    """
+    return await _graph_request("GET", "oauth/access_token", None, params={
+        "grant_type": "fb_exchange_token",
+        "client_id": settings.META_APP_ID,
+        "client_secret": settings.META_APP_SECRET,
+        "fb_exchange_token": short_lived_token,
+    })
+
+
+def instagram_token_payload(data: dict) -> dict:
+    """The token object out of an Instagram Login exchange response.
+
+    Instagram has returned this both flat and wrapped in a single-element `data`
+    list depending on the API version, and the difference is invisible until it
+    silently yields no token — so accept either shape.
+    """
+    entries = data.get("data")
+    if isinstance(entries, list) and entries and isinstance(entries[0], dict):
+        return entries[0]
+    return data
+
+
+async def exchange_instagram_code(code: str, redirect_uri: str) -> tuple[bool, dict]:
+    """Trade an Instagram Business Login code for a short-lived user token.
+
+    Instagram Login is a separate OAuth from the Facebook graph: its own host,
+    its own app credentials, form-encoded rather than query params, and it
+    returns an Instagram user token plus the account's user_id — no Page and no
+    Page token anywhere in the flow.
+    """
+    try:
+        response = await _get_http_client().request(
+            "POST",
+            f"{INSTAGRAM_OAUTH_BASE}/oauth/access_token",
+            data={
+                "client_id": settings.INSTAGRAM_APP_ID,
+                "client_secret": settings.INSTAGRAM_APP_SECRET,
+                "grant_type": "authorization_code",
+                "redirect_uri": redirect_uri,
+                "code": code,
+            },
+        )
+        return (response.status_code < 300, response.json())
+    except Exception as e:
+        logger.error(f"Instagram code exchange failed: {e}")
+        return (False, {"error": {"message": str(e)}})
+
+
+async def exchange_instagram_long_lived(short_lived_token: str) -> tuple[bool, dict]:
+    """Trade a short-lived Instagram token (~1 hour) for a 60-day one.
+
+    Without this the connection dies about an hour after onboarding, with no
+    signal beyond messages quietly failing.
+    """
+    try:
+        response = await _get_http_client().request(
+            "GET",
+            f"{GRAPH_INSTAGRAM_BASE}/access_token",
+            params={
+                "grant_type": "ig_exchange_token",
+                "client_secret": settings.INSTAGRAM_APP_SECRET,
+                "access_token": short_lived_token,
+            },
+        )
+        return (response.status_code < 300, response.json())
+    except Exception as e:
+        logger.error(f"Instagram long-lived exchange failed: {e}")
+        return (False, {"error": {"message": str(e)}})
+
+
+async def subscribe_instagram_app(access_token: str) -> bool:
+    """Subscribe our app to this Instagram account's message webhooks.
+
+    Best-effort, like subscribe_app: onboarding still succeeds if it fails, and
+    it can be retried by reconnecting.
+    """
+    ok, _ = await _graph_request("POST", "me/subscribed_apps", access_token,
+                                 params={"subscribed_fields": "messages"},
+                                 base=GRAPH_INSTAGRAM_BASE)
+    return ok
+
+
+async def register_phone_number(phone_number_id: str, access_token: str, pin: str) -> tuple[bool, dict]:
+    """Enable a number for Cloud API sending.
+
+    A number onboarded through Embedded Signup is attached to the WABA but not
+    yet usable; registering it with a two-step-verification PIN is what makes it
+    able to send.
+    """
+    return await _graph_request("POST", f"{phone_number_id}/register", access_token,
+                                json_body={"messaging_product": "whatsapp", "pin": pin})
+
+
+# Template fields worth reading back from Graph; components carries the body
+# text and any {{n}} variables the UI has to prompt for.
+TEMPLATE_FIELDS = "name,status,category,language,components"
+TEMPLATE_PAGE_LIMIT = 100
+# Backstop against paging forever on a malformed cursor. Well above Meta's own
+# per-WABA template ceiling, so a real account never reaches it.
+TEMPLATE_MAX_PAGES = 10
+
+
+async def graph_list_all(path: str, access_token: str, params: dict,
+                         max_pages: int = TEMPLATE_MAX_PAGES) -> tuple[bool, list | dict]:
+    """Every node on a Graph edge, following its cursor.
+
+    A node that exists but isn't listed is an invisible failure — a Page the
+    customer administers but never sees offered, a template an agent cannot pick
+    — so this pages rather than stopping at the first page. Returns
+    (True, [node dicts]) or (False, graph error body), matching the other
+    helpers here. A `limit` in params lets a short final page end the walk one
+    round-trip early; without one it stops when Graph offers no `after` cursor.
+    """
+    items: list = []
+    limit = params.get("limit")
+    for _ in range(max_pages):
+        ok, data = await graph_get(path, access_token, params=params)
+        if not ok:
+            return False, data
+        page = data.get("data")
+        if not isinstance(page, list):
+            return False, data
+        items.extend(page)
+
+        after = (data.get("paging") or {}).get("cursors", {}).get("after")
+        if not after or (limit is not None and len(page) < limit):
+            return True, items
+        params = {**params, "after": after}
+
+    logger.warning(f"Stopped paging {path} at {max_pages} pages")
+    return True, items
+
+
+async def fetch_message_templates(waba_id: str, access_token: str) -> tuple[bool, list | dict]:
+    """Every template on the WABA (see graph_list_all for the paging rationale)."""
+    return await graph_list_all(
+        f"{waba_id}/message_templates", access_token,
+        {"fields": TEMPLATE_FIELDS, "limit": TEMPLATE_PAGE_LIMIT})
+
+
+async def subscribe_app(node_id: str, access_token: str, subscribed_fields: Optional[str] = None) -> bool:
+    """Subscribe our app to a Page/WABA so its messages reach our webhook.
+    Best-effort: onboarding still succeeds if this fails (can be retried)."""
+    payload = {}
+    if subscribed_fields:
+        payload["subscribed_fields"] = subscribed_fields
+    result = await graph_post(f"{node_id}/subscribed_apps", access_token, payload)
+    return result.ok
+
+
+def _extract_message_id(data: dict) -> Optional[str]:
+    # WhatsApp: {"messages":[{"id":...}]}; Messenger/IG: {"message_id":...}
+    if isinstance(data.get("messages"), list) and data["messages"]:
+        return str(data["messages"][0].get("id", "")) or None
+    return data.get("message_id")
+
+
+def _graph_error(response: httpx.Response) -> str:
+    try:
+        body = response.json()
+        return str(body.get("error", {}).get("message") or body)
+    except Exception:
+        return f"HTTP {response.status_code}"
+
+
+class MetaBaseAdapter(ChannelAdapter):
+    """Shared behavior for the Meta messaging channels (WhatsApp, Messenger,
+    Instagram): one webhook signature scheme, one Graph client, one 24h
+    customer-service window. Subclasses implement parse_inbound and send_text."""
+
+    # What an expired window means for this channel: WhatsApp can reopen with a
+    # template, Messenger/Instagram simply cannot deliver.
+    expired_status: ClassVar[WindowStatus] = WindowStatus.UNDELIVERABLE
+
+    async def verify_webhook(self, headers: dict, raw_body: bytes, account: Optional[ChannelAccount]) -> bool:
+        return verify_meta_signature(raw_body, headers.get("x-hub-signature-256", ""))
+
+    def check_delivery_window(self, conversation: ChannelConversation) -> WindowStatus:
+        last_inbound = conversation.last_inbound_at
+        if last_inbound is None:
+            return self.expired_status
+        if last_inbound.tzinfo is None:
+            last_inbound = last_inbound.replace(tzinfo=timezone.utc)
+        age_hours = (datetime.now(timezone.utc) - last_inbound).total_seconds() / 3600
+        return WindowStatus.OK if age_hours < WINDOW_HOURS else self.expired_status
+
+    @staticmethod
+    def access_token(account: ChannelAccount) -> str:
+        """Decrypt the account's Graph access token (page or WABA token)."""
+        return json.loads(decrypt_api_key(account.encrypted_credentials))["access_token"]
+
+    @staticmethod
+    def _timestamp(value) -> Optional[datetime]:
+        try:
+            return datetime.fromtimestamp(int(value), tz=timezone.utc)
+        except (TypeError, ValueError):
+            return None

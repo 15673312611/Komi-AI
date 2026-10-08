@@ -1,0 +1,1024 @@
+<!--
+Copyright 2024-2026 Komi AI
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+-->
+
+<template>
+  <div class="analytics-container">
+    <!-- Analytics Locked Overlay (only shown when enterprise module exists) -->
+    <div v-if="hasEnterpriseModule && isAnalyticsLocked" class="analytics-locked-overlay">
+      <div class="locked-content">
+        <div class="locked-header">
+          <div class="locked-icon-wrapper">
+            <div class="locked-icon-bg">
+              <font-awesome-icon icon="fa-solid fa-chart-line" class="locked-icon" />
+            </div>
+          </div>
+          <h2>数据分析与洞察看板</h2>
+          <div class="locked-badge">
+            <font-awesome-icon icon="fa-solid fa-lock" class="badge-icon" />
+            <span>高级特性</span>
+          </div>
+        </div>
+        
+        <p class="locked-description">
+          解锁强大的数据分析与全局洞察能力，通过直观的报表与可视化图表全面追踪团队绩效、客户满意度与会话趋势。
+        </p>
+        
+        <div class="locked-features">
+          <div class="feature-item">
+            <div class="feature-icon-wrapper">
+              <font-awesome-icon icon="fa-solid fa-chart-bar" class="feature-icon" />
+            </div>
+            <div class="feature-content">
+              <span class="feature-title">实时数据分析</span>
+              <span class="feature-desc">实时对话指标与服务性能追踪</span>
+            </div>
+          </div>
+          <div class="feature-item">
+            <div class="feature-icon-wrapper">
+              <font-awesome-icon icon="fa-solid fa-users" class="feature-icon" />
+            </div>
+            <div class="feature-content">
+              <span class="feature-title">客服与智能体效能</span>
+              <span class="feature-desc">个人及团队综合服务绩效洞察</span>
+            </div>
+          </div>
+          <div class="feature-item">
+            <div class="feature-icon-wrapper">
+              <font-awesome-icon icon="fa-solid fa-heart" class="feature-icon" />
+            </div>
+            <div class="feature-content">
+              <span class="feature-title">客户满意度 CSAT</span>
+              <span class="feature-desc">评分趋势与满意度多维指标</span>
+            </div>
+          </div>
+          <div class="feature-item">
+            <div class="feature-icon-wrapper">
+              <font-awesome-icon icon="fa-solid fa-file-export" class="feature-icon" />
+            </div>
+            <div class="feature-content">
+              <span class="feature-title">高级报表与分析</span>
+              <span class="feature-desc">深度数据钻取与多格式导出能力</span>
+            </div>
+          </div>
+        </div>
+        
+        <div class="upgrade-section">
+          <button class="upgrade-button" @click="handleUpgrade">
+            <font-awesome-icon icon="fa-solid fa-crown" class="upgrade-icon" />
+            <span>立即升级解锁数据分析看板</span>
+            <font-awesome-icon icon="fa-solid fa-arrow-right" class="arrow-icon" />
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Analytics Content (when unlocked) -->
+    <div v-else>
+      <div class="analytics-header">
+        <div class="time-range-selector">
+          <button 
+            v-for="range in [{ key: '24h', label: '24小时' }, { key: '7d', label: '近7天' }, { key: '30d', label: '近30天' }, { key: '90d', label: '近90天' }]" 
+            :key="range.key"
+            :class="{ active: timeRange === range.key }"
+            @click="handleTimeRangeChange(range.key)"
+          >
+            {{ range.label }}
+          </button>
+        </div>
+      </div>
+
+    <div class="analytics-tabs">
+      <div class="tab-buttons">
+        <button 
+          :class="{ active: activeTab === 'overview' }"
+          @click="activeTab = 'overview'"
+        >
+          总览概况
+        </button>
+        <button 
+          :class="{ active: activeTab === 'agent-performance' }"
+          @click="activeTab = 'agent-performance'"
+        >
+          客服与智能体效能
+        </button>
+        <button 
+          :class="{ active: activeTab === 'customers' }"
+          @click="activeTab = 'customers'"
+        >
+          客户画像分析
+        </button>
+        <button 
+          :class="{ active: activeTab === 'sentiment' }"
+          @click="activeTab = 'sentiment'"
+        >
+          情绪倾向分析
+        </button>
+      </div>
+    </div>
+
+    <!-- Overview Tab -->
+    <div v-if="activeTab === 'overview'">
+      <div v-if="error" class="error-state">
+        {{ error }}
+        <button type="button" class="retry-button" @click="fetchAnalytics">重试</button>
+      </div>
+
+      <div v-else-if="isLoading" class="loading-state">
+        正在加载分析数据…
+      </div>
+
+      <div v-else class="analytics-grid">
+        <!-- Overview Cards -->
+        <div class="metrics-overview">
+          <div class="metric-card">
+            <h3>对话总数</h3>
+            <div class="metric-value">
+              {{ analyticsData?.conversations?.total || 0 }}
+              <span class="change" :class="{ positive: (analyticsData?.conversations?.change || 0) >= 0 }">
+                {{ (analyticsData?.conversations?.change || 0) >= 0 ? '+' : '' }}{{ (analyticsData?.conversations?.change || 0).toFixed(1) }}%
+                <i :class="analyticsData?.conversations?.trend === 'up' ? 'trend-up' : 'trend-down'"></i>
+              </span>
+            </div>
+          </div>
+          <div class="metric-card">
+            <h3>AI 对话独立结单数</h3>
+            <div class="metric-value">
+              {{ analyticsData?.aiClosures?.total || 0 }}
+              <span class="change" :class="{ positive: (analyticsData?.aiClosures?.change || 0) >= 0 }">
+                {{ (analyticsData?.aiClosures?.change || 0) >= 0 ? '+' : '' }}{{ (analyticsData?.aiClosures?.change || 0).toFixed(1) }}%
+                <i :class="analyticsData?.aiClosures?.trend === 'up' ? 'trend-up' : 'trend-down'"></i>
+              </span>
+            </div>
+          </div>
+          <div class="metric-card">
+            <h3>人工客服转接数</h3>
+            <div class="metric-value">
+              {{ analyticsData?.transfers?.total || 0 }}
+              <span class="change" :class="{ positive: (analyticsData?.transfers?.change || 0) >= 0 }">
+                {{ (analyticsData?.transfers?.change || 0) >= 0 ? '+' : '' }}{{ (analyticsData?.transfers?.change || 0).toFixed(1) }}%
+                <i :class="analyticsData?.transfers?.trend === 'up' ? 'trend-up' : 'trend-down'"></i>
+              </span>
+            </div>
+          </div>
+          <div class="metric-card">
+            <h3>AI 机器人平均评分</h3>
+            <div class="metric-value">
+              {{ (analyticsData?.ratings?.bot_avg || 0).toFixed(1) }}
+              <span class="change" :class="{ positive: (analyticsData?.ratings?.bot_change || 0) >= 0 }">
+                {{ (analyticsData?.ratings?.bot_change || 0) >= 0 ? '+' : '' }}{{ (analyticsData?.ratings?.bot_change || 0).toFixed(1) }}%
+                <i :class="analyticsData?.ratings?.bot_trend === 'up' ? 'trend-up' : 'trend-down'"></i>
+              </span>
+            </div>
+            <div class="rating-count">{{ analyticsData?.ratings?.bot_count || 0 }} 条评价</div>
+          </div>
+          <div class="metric-card">
+            <h3>人工客服平均评分</h3>
+            <div class="metric-value">
+              {{ (analyticsData?.ratings?.human_avg || 0).toFixed(1) }}
+              <span class="change" :class="{ positive: (analyticsData?.ratings?.human_change || 0) >= 0 }">
+                {{ (analyticsData?.ratings?.human_change || 0) >= 0 ? '+' : '' }}{{ (analyticsData?.ratings?.human_change || 0).toFixed(1) }}%
+                <i :class="analyticsData?.ratings?.human_trend === 'up' ? 'trend-up' : 'trend-down'"></i>
+              </span>
+            </div>
+            <div class="rating-count">{{ analyticsData?.ratings?.human_count || 0 }} 条评价</div>
+          </div>
+        </div>
+
+        <!-- Charts -->
+        <div class="charts-grid">
+          <div class="chart-container">
+            <h3>对话量历史趋势</h3>
+            <div v-if="!hasData(analyticsData?.conversations)" class="no-data">
+              暂无对话数据
+            </div>
+            <VueApexCharts
+              v-else
+              type="area"
+              height="300"
+              :options="getChartOptions('Conversations', '#C9F24E')"
+              :series="[{
+                name: '对话数',
+                data: getChartData(analyticsData?.conversations)
+              }]"
+            />
+          </div>
+          <div class="chart-container">
+            <h3>AI 独立结单 vs 人工转接对比</h3>
+            <div v-if="!hasData(analyticsData?.aiClosures) && !hasData(analyticsData?.transfers)" class="no-data">
+              暂无结单/转接数据
+            </div>
+            <VueApexCharts
+              v-else
+              type="area"
+              height="300"
+              :options="getComparisonChartOptions()"
+              :series="[
+                {
+                  name: 'AI 结单数',
+                  data: getChartData(analyticsData?.aiClosures)
+                },
+                {
+                  name: '人工转接数',
+                  data: getChartData(analyticsData?.transfers)
+                }
+              ]"
+            />
+          </div>
+          <div class="chart-container">
+            <h3>满意度评分对比</h3>
+            <div v-if="!hasData(analyticsData?.ratings)" class="no-data">
+              暂无评分数据
+            </div>
+            <VueApexCharts
+              v-else
+              type="line"
+              height="300"
+              :options="getRatingChartOptions()"
+              :series="[
+                {
+                  name: 'AI 机器人评分',
+                  data: getChartData(analyticsData?.ratings?.bot)
+                },
+                {
+                  name: '人工客服评分',
+                  data: getChartData(analyticsData?.ratings?.human)
+                }
+              ]"
+            />
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Agent Performance Tab -->
+    <div v-if="activeTab === 'agent-performance'">
+      <AgentPerformance :time-range="timeRange" @time-range-change="handleTimeRangeChange" />
+    </div>
+
+      <!-- Customer Analytics Tab -->
+      <div v-if="activeTab === 'customers'">
+        <CustomerAnalytics :time-range="timeRange" @time-range-change="handleTimeRangeChange" />
+      </div>
+
+      <!-- Sentiment Analytics Tab -->
+      <div v-if="activeTab === 'sentiment'">
+        <SentimentAnalytics :time-range="timeRange" />
+      </div>
+    </div>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { ref, computed } from 'vue'
+import VueApexCharts from 'vue3-apexcharts'
+import api from '@/services/api'
+import AgentPerformance from './AgentPerformance.vue'
+import CustomerAnalytics from './CustomerAnalytics.vue'
+import SentimentAnalytics from './SentimentAnalytics.vue'
+import { useSubscriptionStorage } from '@/utils/storage'
+import { useEnterpriseFeatures } from '@/composables/useEnterpriseFeatures'
+
+interface AnalyticsMetric {
+  data: number[]
+  labels: string[]
+  total?: number
+  active?: number
+  change: number
+  trend: 'up' | 'down'
+}
+
+interface RatingMetrics {
+  bot: AnalyticsMetric
+  human: AnalyticsMetric
+  bot_avg: number
+  human_avg: number
+  bot_count: number
+  human_count: number
+  bot_change: number
+  human_change: number
+  bot_trend: 'up' | 'down'
+  human_trend: 'up' | 'down'
+}
+
+interface AnalyticsData {
+  conversations: AnalyticsMetric
+  aiClosures: AnalyticsMetric
+  transfers: AnalyticsMetric
+  ratings: RatingMetrics
+}
+
+const timeRange = ref('7d')
+const activeTab = ref('overview')
+const isLoading = ref(true)
+const error = ref<string | null>(null)
+const analyticsData = ref<AnalyticsData | null>(null)
+let analyticsRequestVersion = 0
+
+// Subscription and analytics feature checking
+const subscriptionStorage = useSubscriptionStorage()
+const { hasEnterpriseModule } = useEnterpriseFeatures()
+const isSubscriptionActive = computed(() => subscriptionStorage.isSubscriptionActive())
+
+// Check if analytics feature is available
+const hasAnalyticsFeature = computed(() => {
+  return subscriptionStorage.hasFeature('analytics')
+})
+
+// Check if analytics is locked (only if enterprise module exists)
+const isAnalyticsLocked = computed(() => {
+  // Only lock if enterprise module exists
+  if (!hasEnterpriseModule) {
+    return false
+  }
+  return !hasAnalyticsFeature.value || !isSubscriptionActive.value
+})
+
+const handleUpgrade = () => {
+  // Only redirect to subscription page if enterprise module exists
+  if (hasEnterpriseModule) {
+    window.location.href = '/settings/subscription'
+  }
+}
+
+const hasData = (metric: AnalyticsMetric | RatingMetrics | undefined): boolean => {
+  if (!metric) return false
+  if ('bot' in metric) {
+    // Handle RatingMetrics
+    return !!metric.bot?.data?.length && !!metric.bot?.labels?.length &&
+           !!metric.human?.data?.length && !!metric.human?.labels?.length
+  }
+  // Handle AnalyticsMetric
+  return !!metric?.data?.length && !!metric?.labels?.length
+}
+
+const getChartData = (metric: AnalyticsMetric | undefined) => {
+  if (!metric?.data || !metric?.labels) return []
+  return metric.data.reduce<Array<{ x: number; y: number }>>((points, value, index) => {
+    const x = new Date(metric.labels[index]).getTime()
+    const y = Number(value)
+    if (Number.isFinite(x) && Number.isFinite(y)) points.push({ x, y })
+    return points
+  }, [])
+}
+
+const getChartOptions = (name: string, color: string) => ({
+  chart: {
+    type: 'area',
+    toolbar: {
+      show: false
+    },
+    zoom: {
+      enabled: false
+    },
+    animations: {
+      enabled: true,
+      easing: 'easeinout',
+      speed: 800,
+      animateGradually: {
+        enabled: true,
+        delay: 150
+      },
+      dynamicAnimation: {
+        enabled: true,
+        speed: 350
+      }
+    }
+  },
+  colors: [color],
+  fill: {
+    type: 'gradient',
+    gradient: {
+      shadeIntensity: 1,
+      opacityFrom: 0.7,
+      opacityTo: 0.2,
+      stops: [0, 90, 100]
+    }
+  },
+  dataLabels: {
+    enabled: false
+  },
+  stroke: {
+    curve: 'smooth',
+    width: 2
+  },
+  grid: {
+    padding: {
+      top: 0,
+      right: 0,
+      bottom: 0,
+      left: 0
+    }
+  },
+  xaxis: {
+    type: 'datetime',
+    labels: {
+      datetimeFormatter: {
+        year: 'yyyy',
+        month: 'MMM \'yy',
+        day: 'dd MMM',
+        hour: 'HH:mm'
+      }
+    },
+    tooltip: {
+      enabled: false
+    }
+  },
+  yaxis: {
+    labels: {
+      formatter: (value: number) => Math.round(value)
+    }
+  },
+  tooltip: {
+    x: {
+      format: 'dd MMM yyyy HH:mm'
+    }
+  },
+  markers: {
+    size: 4,
+    strokeWidth: 2,
+    hover: {
+      size: 6
+    }
+  }
+})
+
+const getRatingChartOptions = () => ({
+  ...getChartOptions('Ratings', '#10B981'),
+  colors: ['#C9F24E', '#5FE3D6'],
+  stroke: {
+    curve: 'smooth',
+    width: 3
+  },
+  markers: {
+    size: 4,
+    strokeWidth: 2,
+    hover: {
+      size: 6
+    }
+  },
+  yaxis: {
+    min: 0,
+    max: 5,
+    tickAmount: 5,
+    labels: {
+      formatter: (value: number) => value.toFixed(1)
+    }
+  },
+  legend: {
+    show: true,
+    position: 'top',
+    horizontalAlign: 'right'
+  }
+})
+
+const getComparisonChartOptions = () => ({
+  ...getChartOptions('Closures & Transfers', '#10B981'),
+  colors: ['#5FE3D6', '#C9F24E'],
+  stroke: {
+    curve: 'smooth',
+    width: 2
+  },
+  fill: {
+    type: 'gradient',
+    gradient: {
+      shadeIntensity: 1,
+      opacityFrom: 0.7,
+      opacityTo: 0.2,
+      stops: [0, 90, 100]
+    }
+  },
+  legend: {
+    show: true,
+    position: 'top',
+    horizontalAlign: 'right'
+  }
+})
+
+const fetchAnalytics = async () => {
+  const requestVersion = ++analyticsRequestVersion
+  // Don't fetch if analytics is locked
+  if (isAnalyticsLocked.value) {
+    if (requestVersion === analyticsRequestVersion) {
+      isLoading.value = false
+      analyticsData.value = null
+    }
+    return
+  }
+
+  try {
+    isLoading.value = true
+    error.value = null
+    const response = await api.get('/analytics', {
+      params: { time_range: timeRange.value }
+    })
+    if (requestVersion === analyticsRequestVersion) {
+      analyticsData.value = response?.data && typeof response.data === 'object' ? response.data : null
+    }
+  } catch (err: any) {
+    if (requestVersion === analyticsRequestVersion) {
+      error.value = err.response?.data?.detail || 'Failed to fetch analytics data'
+    }
+  } finally {
+    if (requestVersion === analyticsRequestVersion) isLoading.value = false
+  }
+}
+
+const handleTimeRangeChange = (range: string) => {
+  if (!['24h', '7d', '30d', '90d'].includes(range)) return
+  if (range === timeRange.value) return
+  timeRange.value = range
+  void fetchAnalytics()
+}
+
+fetchAnalytics()
+</script>
+
+<style scoped>
+.analytics-container {
+  padding: 24px 32px 60px;
+  max-width: 1320px;
+  margin: 0 auto;
+}
+
+.analytics-header {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.analytics-tabs {
+  margin-bottom: 24px;
+}
+
+.tab-buttons {
+  display: flex;
+  border-bottom: 1px solid var(--border-color);
+  margin-bottom: 20px;
+}
+
+.tab-buttons button {
+  padding: 10px 16px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 13.5px;
+  color: var(--muted);
+  transition: all var(--transition-fast);
+  position: relative;
+  font-family: var(--font-sans);
+}
+
+.tab-buttons button:hover {
+  color: var(--text);
+}
+
+.tab-buttons button.active {
+  color: #0F172A;
+  font-weight: 600;
+}
+
+.tab-buttons button.active::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: #0F172A;
+}
+
+.time-range-selector {
+  display: flex;
+  gap: 4px;
+  background: rgba(15, 23, 42, 0.04);
+  border: 1px solid var(--border-color);
+  padding: 3px;
+  border-radius: 8px;
+}
+
+.time-range-selector button {
+  padding: 5px 12px;
+  border: none;
+  background: none;
+  border-radius: 6px;
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 12.5px;
+  font-family: var(--font-sans);
+  font-weight: 500;
+  transition: all var(--transition-fast);
+}
+
+.time-range-selector button.active {
+  background: #0F172A;
+  color: #FFFFFF;
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+.metrics-overview {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.metric-card {
+  background: #FFFFFF;
+  padding: 20px 22px;
+  border-radius: 14px;
+  border: 1px solid var(--border-color);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
+}
+
+.metric-card h3 {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+  margin: 0 0 10px;
+}
+
+.metric-value {
+  font-family: var(--font-sans);
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  color: var(--text);
+  margin: 0;
+}
+
+.change {
+  font-size: 12.5px;
+  color: var(--c-danger);
+  font-weight: 600;
+}
+
+.change.positive {
+  color: #10B981;
+}
+
+.charts-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 16px;
+  margin-top: 24px;
+}
+
+.chart-container {
+  padding: 20px 22px;
+  border-radius: 14px;
+  border: 1px solid var(--border-color);
+  background: #FFFFFF;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
+}
+
+.chart-container h3 {
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  margin: 0 0 16px;
+}
+
+.error-state {
+  background-color: var(--error-color);
+  color: white;
+  padding: var(--space-md);
+  border-radius: var(--radius-md);
+  margin-bottom: var(--space-lg);
+}
+
+.loading-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 200px;
+  color: var(--text-secondary);
+}
+
+.no-data {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 250px;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+
+.trend-up, .trend-down {
+  display: inline-block;
+  width: 0;
+  height: 0;
+  margin-left: 4px;
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+}
+
+.trend-up {
+  border-bottom: 4px solid currentColor;
+}
+.trend-down {
+  border-top: 4px solid currentColor;
+}
+
+.rating-count {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  margin-top: var(--space-xs);
+}
+
+/* Analytics Locked Overlay Styles */
+.analytics-locked-overlay {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 60vh;
+  background: var(--background-soft);
+  border-radius: var(--radius-lg);
+  margin: var(--space-lg) 0;
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--border-color);
+}
+
+.analytics-locked-overlay::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: 
+    radial-gradient(circle at 20% 80%, rgba(201, 242, 78, 0.04) 0%, transparent 50%),
+    radial-gradient(circle at 80% 20%, rgba(95, 227, 214, 0.04) 0%, transparent 50%);
+  pointer-events: none;
+}
+
+.locked-content {
+  text-align: center;
+  max-width: 800px;
+  padding: var(--space-2xl) var(--space-lg);
+  position: relative;
+  z-index: 1;
+}
+
+.locked-header {
+  margin-bottom: var(--space-xl);
+}
+
+.locked-icon-wrapper {
+  margin-bottom: var(--space-md);
+}
+
+.locked-icon-bg {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 64px;
+  height: 64px;
+  background: var(--accent-solid);
+  border-radius: 50%;
+  box-shadow: var(--shadow-lg);
+  margin-bottom: var(--space-sm);
+}
+
+.locked-icon {
+  font-size: 1.5rem;
+  color: var(--on-accent-solid);
+}
+
+.locked-content h2 {
+  font-size: var(--text-3xl);
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: var(--space-sm);
+}
+
+.locked-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  background: var(--accent-solid);
+  color: var(--on-accent-solid);
+  padding: var(--space-xs) var(--space-sm);
+  border-radius: var(--radius-full);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  box-shadow: var(--shadow-sm);
+}
+
+.badge-icon {
+  font-size: 0.75rem;
+}
+
+.locked-description {
+  font-size: var(--text-lg);
+  color: var(--text-muted);
+  line-height: 1.6;
+  margin-bottom: var(--space-xl);
+  max-width: 700px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.locked-features {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--space-md);
+  margin-bottom: var(--space-xl);
+}
+
+.feature-item {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-sm);
+  padding: var(--space-lg);
+  background: var(--background-color);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
+  box-shadow: var(--shadow-sm);
+  text-align: left;
+  transition: all var(--transition-normal);
+}
+
+.feature-item:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+  border-color: var(--border-color-hover);
+}
+
+.feature-icon-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  background: var(--success-color);
+  border-radius: var(--radius-md);
+  flex-shrink: 0;
+}
+
+.feature-icon {
+  font-size: 1rem;
+  color: white;
+}
+
+.feature-content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.feature-title {
+  font-size: var(--text-base);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.feature-desc {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.upgrade-section {
+  text-align: center;
+}
+
+.upgrade-button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-sm);
+  background: var(--accent-solid);
+  color: var(--on-accent-solid);
+  border: none;
+  border-radius: var(--radius-lg);
+  padding: var(--space-lg) var(--space-xl);
+  font-size: var(--text-base);
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-normal);
+  box-shadow: var(--shadow-md);
+  position: relative;
+  overflow: hidden;
+}
+
+.upgrade-button::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+  transition: left 0.5s;
+}
+
+.upgrade-button:hover::before {
+  left: 100%;
+}
+
+.upgrade-button:hover {
+  background: var(--primary-dark);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-lg);
+}
+
+.upgrade-icon {
+  font-size: 1rem;
+  color: #ffd700;
+}
+
+.arrow-icon {
+  font-size: 0.875rem;
+  transition: transform var(--transition-normal);
+}
+
+.upgrade-button:hover .arrow-icon {
+  transform: translateX(4px);
+}
+
+/* Responsive adjustments for locked overlay */
+@media (max-width: 1024px) {
+  .locked-features {
+    grid-template-columns: repeat(2, 1fr);
+    gap: var(--space-sm);
+  }
+}
+
+@media (max-width: 768px) {
+  .analytics-locked-overlay {
+    min-height: 50vh;
+    margin: var(--space-md) 0;
+  }
+  
+  .locked-content {
+    padding: var(--space-xl) var(--space-md);
+  }
+  
+  .locked-content h2 {
+    font-size: var(--text-2xl);
+  }
+  
+  .locked-description {
+    font-size: var(--text-base);
+    margin-bottom: var(--space-lg);
+  }
+  
+  .locked-features {
+    grid-template-columns: 1fr;
+    gap: var(--space-sm);
+    margin-bottom: var(--space-lg);
+  }
+  
+  .feature-item {
+    padding: var(--space-md);
+  }
+  
+  .feature-icon-wrapper {
+    width: 32px;
+    height: 32px;
+  }
+  
+  .feature-icon {
+    font-size: 0.875rem;
+  }
+  
+  .upgrade-button {
+    width: 100%;
+    padding: var(--space-md) var(--space-lg);
+    font-size: var(--text-sm);
+  }
+  
+  .locked-icon-bg {
+    width: 48px;
+    height: 48px;
+  }
+  
+  .locked-icon {
+    font-size: 1.25rem;
+  }
+  
+  .locked-header {
+    margin-bottom: var(--space-lg);
+  }
+}
+</style>

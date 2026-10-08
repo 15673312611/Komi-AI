@@ -1,0 +1,2118 @@
+<!--
+Copyright 2024-2026 Komi AI
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+-->
+
+<script setup lang="ts">
+import { onMounted, onUnmounted, ref, watch } from 'vue'
+import { useKnowledgeManagement } from '@/composables/useKnowledgeManagement'
+import { knowledgeService } from '@/services/knowledge'
+import DeleteIcon from '@/assets/delete.svg'
+import EditIcon from '@/assets/edit.svg'
+import mitt from '@/utils/emitter'
+
+const props = defineProps<{
+    agentId?: string
+    organizationId?: string
+}>()
+
+const {
+    knowledgeItems,
+    currentPage,
+    totalPages,
+    isLoading,
+    error,
+    showKnowledgeModal,
+    activeTab,
+    files,
+    urls,
+    newUrl,
+    isUploading,
+    uploadProgress,
+    successMessage,
+    fileInput,
+    fetchKnowledge,
+    fetchQueueItems,
+    deleteQueueItem,
+    handlePageChange,
+    formatDate,
+
+    triggerFileInput,
+    handleFileSelect,
+    handleFileUpload,
+    handleUrlAdd,
+    removeUrl,
+    handleUrlUpload,
+    showLinkModal,
+    orgKnowledgeItems,
+    orgCurrentPage,
+    orgTotalPages,
+    isLoadingOrg,
+    handleOrgPageChange,
+    linkKnowledge,
+    unlinkKnowledge,
+    showDeleteConfirm,
+    confirmDelete,
+    handleDelete,
+    cancelDelete,
+    isDeleting,
+    urlFormError,
+    uploadError,
+    queueItems,
+    selectedKnowledge,
+    knowledgeContent,
+    isLoadingContent,
+    contentError,
+    isSavingContent,
+    showContentModal,
+    viewKnowledgeContent,
+    saveChunkContent,
+    closeContentModal,
+} = useKnowledgeManagement(props.agentId || '', props.organizationId || '')
+
+// Handle knowledge update notifications
+const handleKnowledgeUpdate = () => {
+    fetchKnowledge()
+    fetchQueueItems()
+}
+
+// Polling interval for queue updates
+let queuePollingInterval: ReturnType<typeof setInterval> | null = null
+
+const startQueuePolling = () => {
+    // Only poll if there are pending or processing items
+    const hasPendingItems = queueItems.value.some(
+        item => item.status === 'pending' || item.status === 'processing'
+    )
+
+    if (!hasPendingItems && queuePollingInterval) {
+        stopQueuePolling()
+        return
+    }
+
+    if (hasPendingItems && !queuePollingInterval) {
+        // Poll every 10 seconds
+        queuePollingInterval = setInterval(() => {
+            fetchQueueItems()
+        }, 10000)
+    }
+}
+
+const stopQueuePolling = () => {
+    if (queuePollingInterval) {
+        clearInterval(queuePollingInterval)
+        queuePollingInterval = null
+    }
+}
+
+// Watch for queue items changes to start/stop polling
+watch(queueItems, () => {
+    startQueuePolling()
+}, { deep: true })
+
+onMounted(() => {
+    fetchKnowledge()
+    // Subscribe to knowledge update events
+    mitt.on('knowledge-updated', handleKnowledgeUpdate)
+    // Start polling for queue updates
+    startQueuePolling()
+})
+
+onUnmounted(() => {
+    // Clean up event listener
+    mitt.off('knowledge-updated', handleKnowledgeUpdate)
+    // Stop polling
+    stopQueuePolling()
+})
+
+const isKnowledgeLinked = (knowledgeId: number): boolean => {
+    return knowledgeItems.value.some(item => item.id === knowledgeId)
+}
+
+const handleLink = async (knowledgeId: number) => {
+    await linkKnowledge(knowledgeId)
+}
+
+const handleUnlink = async (knowledgeId: number) => {
+    await unlinkKnowledge(knowledgeId)
+}
+
+// Subpage editing state
+const editingSubpageId = ref<string | null>(null)
+const editingSubpageContent = ref('')
+const showEditSubpageModal = ref(false)
+
+const editSubpage = (subpageId: string) => {
+    const subpage = knowledgeContent.value?.chunks.find((c: any) => c.id === subpageId)
+    if (subpage) {
+        editingSubpageId.value = subpageId
+        editingSubpageContent.value = subpage.content
+        showEditSubpageModal.value = true
+    }
+}
+
+const saveEditedSubpage = async () => {
+    if (editingSubpageId.value) {
+        const saved = await saveChunkContent(editingSubpageId.value, editingSubpageContent.value)
+        if (saved) {
+            showEditSubpageModal.value = false
+            editingSubpageId.value = null
+            editingSubpageContent.value = ''
+        }
+    }
+}
+
+const cancelEditSubpage = () => {
+    showEditSubpageModal.value = false
+    editingSubpageId.value = null
+    editingSubpageContent.value = ''
+}
+
+// Subpage deletion
+const subpageToDelete = ref<string | null>(null)
+const showDeleteSubpageConfirm = ref(false)
+
+const confirmDeleteSubpage = (subpageId: string) => {
+    subpageToDelete.value = subpageId
+    showDeleteSubpageConfirm.value = true
+}
+
+const deleteSubpage = async () => {
+    if (subpageToDelete.value && selectedKnowledge.value) {
+        try {
+            await knowledgeService.deleteChunk(selectedKnowledge.value, subpageToDelete.value)
+            showDeleteSubpageConfirm.value = false
+            subpageToDelete.value = null
+            // Reload content
+            await viewKnowledgeContent(selectedKnowledge.value)
+        } catch (err) {
+            console.error('Error deleting subpage:', err)
+        }
+    }
+}
+
+const cancelDeleteSubpage = () => {
+    showDeleteSubpageConfirm.value = false
+    subpageToDelete.value = null
+}
+
+// Add new subpage
+const showAddSubpageModal = ref(false)
+const newSubpageName = ref('')
+const newSubpageContent = ref('')
+
+const addNewSubpage = async () => {
+    if (!selectedKnowledge.value || !newSubpageName.value.trim() || !newSubpageContent.value.trim()) {
+        return
+    }
+
+    try {
+        error.value = null // Clear any previous errors
+        await knowledgeService.addSubpage(
+            selectedKnowledge.value,
+            newSubpageName.value.trim(),
+            newSubpageContent.value.trim()
+        )
+        showAddSubpageModal.value = false
+        newSubpageName.value = ''
+        newSubpageContent.value = ''
+        // Reload content
+        await viewKnowledgeContent(selectedKnowledge.value)
+    } catch (err: any) {
+        console.error('Error adding subpage:', err)
+        // Show error message to user
+        const errorMessage = err.response?.data?.detail || 'Failed to add subpage'
+        error.value = errorMessage
+    }
+}
+
+const cancelAddSubpage = () => {
+    showAddSubpageModal.value = false
+    newSubpageName.value = ''
+    newSubpageContent.value = ''
+    error.value = null
+}
+
+// Add closeKnowledgeModal function
+const closeKnowledgeModal = () => {
+    showKnowledgeModal.value = false
+    successMessage.value = ''
+    urlFormError.value = null
+}
+</script>
+
+<template>
+    <div class="knowledge-grid-container">
+        <div class="knowledge-header">
+            <div class="header-left">
+                <h3>知识库源</h3>
+                <p class="header-subtitle">关联文档与网页 — Komi AI 将自动构建索引，让智能体的每次回复都有据可循。</p>
+            </div>
+            <div class="header-actions">
+                <button class="action-button action-button--primary" @click="showKnowledgeModal = true">
+                    + 添加知识源
+                </button>
+                <button class="action-button action-button--ghost" @click="showLinkModal = true">
+                    关联已有知识库
+                </button>
+            </div>
+            <div v-if="totalPages > 1" class="pagination">
+                <button :disabled="currentPage === 1" @click="handlePageChange(currentPage - 1)"
+                    class="pagination-button">
+                    上一页
+                </button>
+                <span class="page-info">第 {{ currentPage }} 页 / 共 {{ totalPages }} 页</span>
+                <button :disabled="currentPage === totalPages" @click="handlePageChange(currentPage + 1)"
+                    class="pagination-button">
+                    下一页
+                </button>
+            </div>
+        </div>
+
+        <!-- Queue Status Section -->
+        <div v-if="queueItems && queueItems.length > 0" class="queue-section">
+            <h4 class="queue-header">知识索引处理队列</h4>
+            <div class="queue-items">
+                <div v-for="item in queueItems" :key="item.id" class="queue-item">
+                    <div class="queue-item-content">
+                        <div class="queue-item-header">
+                            <div class="queue-info">
+                                <span class="queue-source" :title="item.source">{{ item.source }}</span>
+                                <span class="queue-meta">
+                                    <span class="queue-type">{{ item.source_type }}</span>
+                                    <span class="queue-time">• {{ formatDate(item.created_at) }}</span>
+                                </span>
+                            </div>
+                            <div class="queue-status-container">
+                                <span :class="['status-badge', item.status]">
+                                    {{ item.status === 'processing' ? '处理中' : item.status === 'pending' ? '排队中' : item.status === 'failed' ? '失败' : item.status }}
+                                </span>
+                                <button v-if="item.status === 'failed' || item.status === 'pending'"
+                                    class="delete-queue-btn" @click="deleteQueueItem(item.id)"
+                                    title="从队列中移除">
+                                    <img :src="DeleteIcon" alt="Delete" class="delete-icon-sm" />
+                                </button>
+                            </div>
+                        </div>
+
+                        <div v-if="item.status === 'processing' && item.progress_percentage"
+                            class="progress-bar-container">
+                            <div class="progress-bar">
+                                <div class="progress-fill" :style="{ width: item.progress_percentage + '%' }"></div>
+                            </div>
+                            <span class="progress-text">{{ item.progress_percentage }}%</span>
+                        </div>
+
+                        <div v-if="item.error" class="queue-error">
+                            <span class="error-icon">⚠️</span>
+                            <span class="error-text">{{ item.error }}</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div v-if="isLoading" class="loading-state">
+            正在加载知识库源…
+        </div>
+
+        <div v-else-if="error" class="error-state">
+            {{ error }}
+        </div>
+
+        <div v-else class="knowledge-grid">
+            <div class="knowledge-grid-header">
+                <div class="header-cell">知识源名称</div>
+                <div class="header-cell">类型</div>
+                <div class="header-cell">状态</div>
+                <div class="header-cell">操作</div>
+            </div>
+
+            <div v-if="!knowledgeItems.length" class="knowledge-empty">
+                ⚠ 暂无关联知识源 — 请添加网页 URL 或上传 PDF 文档以赋能智能体。
+            </div>
+
+            <template v-for="item in knowledgeItems" :key="item.id">
+                <div class="knowledge-grid-row">
+                    <div class="grid-cell source-cell" :title="item.name">{{ item.name }}</div>
+                    <div class="grid-cell">
+                        <span class="type-tag"
+                            :class="String(item.type).toLowerCase().includes('pdf') || String(item.type).toLowerCase().includes('file') ? 'type-tag--pdf' : 'type-tag--web'">{{
+                                String(item.type).toLowerCase().includes('pdf') || String(item.type).toLowerCase().includes('file') ? 'PDF 文件' : '网页链接' }}</span>
+                    </div>
+                    <div class="grid-cell status-cell">
+                        <span class="status-indexed">✓ 已索引</span>
+                    </div>
+                    <div class="grid-cell remove-cell">
+                        <button class="remove-button" @click="confirmDelete(item.id)" title="移除该知识源">
+                            移除
+                        </button>
+                    </div>
+                </div>
+            </template>
+        </div>
+
+        <!-- Knowledge Upload Modal -->
+        <div v-if="showKnowledgeModal" class="modal-overlay">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>添加知识源</h3>
+                    <button class="close-button" @click="closeKnowledgeModal">×</button>
+                </div>
+
+                <div class="knowledge-tabs">
+                    <button :class="{ active: activeTab === 'pdf' }" @click="activeTab = 'pdf'">
+                        上传 PDF 文档
+                    </button>
+                    <button :class="{ active: activeTab === 'url' }" @click="activeTab = 'url'">
+                        导入网页 URL
+                    </button>
+                </div>
+
+                <div v-if="activeTab === 'pdf'" class="tab-content">
+                    <input type="file" ref="fileInput" multiple accept=".pdf" class="hidden" @change="handleFileSelect">
+                    <button class="select-files-button" @click="triggerFileInput">
+                        选择 PDF 文件
+                    </button>
+
+                    <div v-if="uploadError" class="upload-error">
+                        {{ uploadError }}
+                    </div>
+
+                    <div v-if="files.length" class="selected-files">
+                        <div v-for="file in files" :key="file.name" class="file-item">
+                            {{ file.name }}
+                        </div>
+                        <button class="upload-button" :disabled="isUploading" @click="handleFileUpload">
+                            {{ isUploading ? '正在上传…' : '开始上传文件' }}
+                        </button>
+                    </div>
+                </div>
+
+                <div v-if="activeTab === 'url'" class="tab-content">
+                    <div class="url-input-group">
+                        <input type="url" v-model="newUrl" placeholder="输入网页 URL 地址" @keyup.enter="handleUrlAdd">
+                        <button @click="handleUrlAdd">添加</button>
+                    </div>
+
+                    <div v-if="urlFormError" class="error-message">
+                        {{ urlFormError }}
+                    </div>
+
+                    <div v-if="uploadError" class="upload-error">
+                        {{ uploadError }}
+                    </div>
+
+                    <div v-if="urls.length" class="url-list">
+                        <div v-for="(url, index) in urls" :key="index" class="url-item">
+                            <span>{{ url }}</span>
+                            <button class="remove-url-button" @click="removeUrl(index)" title="移除 URL">
+                                <span class="remove-icon">×</span>
+                            </button>
+                        </div>
+                        <button class="upload-button" :disabled="isUploading" @click="handleUrlUpload">
+                            {{ isUploading ? '正在导入…' : '开始导入 URL' }}
+                        </button>
+                    </div>
+                </div>
+
+                <div v-if="isUploading" class="upload-progress">
+                    <div class="progress-bar">
+                        <div class="progress" :style="{ width: `${uploadProgress}%` }"></div>
+                    </div>
+                </div>
+
+                <div v-if="successMessage" class="success-message">
+                    {{ successMessage }}
+                </div>
+            </div>
+        </div>
+
+        <!-- Link Knowledge Modal -->
+        <div v-if="showLinkModal" class="modal-overlay">
+            <div class="modal-content link-modal">
+                <div class="modal-header">
+                    <h3>关联已有知识源</h3>
+                    <button class="close-button" @click="showLinkModal = false">×</button>
+                </div>
+
+                <div v-if="isLoadingOrg" class="loading-state">
+                    正在加载知识库源…
+                </div>
+
+                <div v-else class="org-knowledge-grid">
+                    <div class="knowledge-grid-header">
+                        <div class="header-cell source-cell">知识源名称</div>
+                        <div class="header-cell type-cell">类型</div>
+                        <div class="header-cell action-cell">操作</div>
+                    </div>
+
+                    <template v-for="item in orgKnowledgeItems" :key="item.id">
+                        <div class="knowledge-grid-row">
+                            <div class="grid-cell source-cell">{{ item.name }}</div>
+                            <div class="grid-cell type-cell">{{ item.type }}</div>
+                            <div class="grid-cell action-cell">
+                                <button v-if="!isKnowledgeLinked(item.id)" class="link-button"
+                                    @click="handleLink(item.id)">
+                                    关联
+                                </button>
+                                <button v-else class="unlink-button" @click="handleUnlink(item.id)">
+                                    取消关联
+                                </button>
+                            </div>
+                        </div>
+                    </template>
+
+                    <div v-if="orgTotalPages > 1" class="pagination">
+                        <button :disabled="orgCurrentPage === 1" @click="handleOrgPageChange(orgCurrentPage - 1)"
+                            class="pagination-button">
+                            上一页
+                        </button>
+                        <span class="page-info">
+                            第 {{ orgCurrentPage }} 页 / 共 {{ orgTotalPages }} 页
+                        </span>
+                        <button :disabled="orgCurrentPage === orgTotalPages"
+                            @click="handleOrgPageChange(orgCurrentPage + 1)" class="pagination-button">
+                            下一页
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Add confirmation modal -->
+        <div v-if="showDeleteConfirm" class="modal-overlay">
+            <div class="modal-content confirm-modal">
+                <div class="modal-header">
+                    <h3>确认删除</h3>
+                    <button class="close-button" :disabled="isDeleting" @click="cancelDelete">×</button>
+                </div>
+                <div class="confirm-content">
+                    <p>确定要删除此知识源吗？删除后智能体将不再引用该内容，此操作无法撤销。</p>
+                    <div class="confirm-actions">
+                        <button class="cancel-button" :disabled="isDeleting" @click="cancelDelete">取消</button>
+                        <button class="delete-button" :disabled="isDeleting" @click="handleDelete">
+                            {{ isDeleting ? '正在删除…' : '确认删除' }}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Content Viewing/Editing Modal -->
+        <div v-if="showContentModal" class="modal-overlay">
+            <div class="modal-content content-modal">
+                <div class="modal-header">
+                    <h3>知识库切片内容</h3>
+                    <button class="close-button" @click="closeContentModal">×</button>
+                </div>
+
+                <div v-if="isLoadingContent" class="loading-state">
+                    正在加载切片内容…
+                </div>
+
+                <div v-else-if="contentError" class="content-error-state">
+                    <p>{{ contentError }}</p>
+                    <button class="retry-button" type="button" @click="selectedKnowledge && viewKnowledgeContent(selectedKnowledge)">
+                        重试
+                    </button>
+                </div>
+
+                <div v-else-if="knowledgeContent" class="content-body">
+                    <div class="content-header">
+                        <div class="content-info">
+                            <span class="content-source">{{ knowledgeContent.source }}</span>
+                            <span class="content-type">{{ knowledgeContent.source_type }}</span>
+                            <span class="content-subpages-count">{{ knowledgeContent.chunks.length }} 个切片子页</span>
+                        </div>
+                        <button class="add-subpage-btn" @click="showAddSubpageModal = true" title="添加新切片子页">
+                            + 新增切片子页
+                        </button>
+                    </div>
+
+                    <div class="content-table-container">
+                        <table class="content-table">
+                            <thead>
+                                <tr>
+                                    <th class="col-url">切片子页名称</th>
+                                    <th class="col-content">正文内容</th>
+                                    <th class="col-actions">操作</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr v-for="subpage in knowledgeContent.chunks" :key="subpage.id"
+                                    class="subpage-row" :data-subpage-id="subpage.id">
+                                    <td class="cell-url">
+                                        <a v-if="subpage.metadata && subpage.metadata.url" :href="subpage.metadata.url"
+                                            target="_blank" rel="noopener noreferrer" class="subpage-url"
+                                            :title="subpage.metadata.url">
+                                            {{ subpage.metadata.url }}
+                                        </a>
+                                        <span v-else class="subpage-id">
+                                            {{ subpage.id }}
+                                        </span>
+                                    </td>
+                                    <td class="cell-content">
+                                        <div class="subpage-content-wrapper">
+                                            <p class="subpage-text">{{ subpage.content }}</p>
+                                        </div>
+                                    </td>
+                                    <td class="cell-actions">
+                                        <div class="actions-buttons">
+                                            <button class="edit-subpage-btn" @click="() => editSubpage(subpage.id)"
+                                                title="编辑此切片">
+                                                <img :src="EditIcon" alt="Edit" class="action-icon-sm" />
+                                            </button>
+                                            <button class="delete-subpage-btn"
+                                                @click="() => confirmDeleteSubpage(subpage.id)"
+                                                title="删除此切片">
+                                                <img :src="DeleteIcon" alt="Delete" class="action-icon-sm" />
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Subpage Edit Modal -->
+        <div v-if="showEditSubpageModal" class="modal-overlay">
+            <div class="modal-content subpage-edit-modal">
+                <div class="modal-header">
+                    <h3>编辑切片内容</h3>
+                    <button class="close-button" @click="cancelEditSubpage">×</button>
+                </div>
+
+                <div class="modal-body">
+                    <textarea v-model="editingSubpageContent" class="subpage-edit-textarea"
+                        placeholder="请输入编辑后的切片正文内容…"></textarea>
+                </div>
+
+                <div class="modal-footer">
+                    <button class="cancel-button" @click="cancelEditSubpage">取消</button>
+                    <button class="save-button" @click="saveEditedSubpage" :disabled="isSavingContent">
+                        {{ isSavingContent ? '正在保存…' : '保存修改' }}
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Subpage Delete Confirmation Modal -->
+        <div v-if="showDeleteSubpageConfirm" class="modal-overlay">
+            <div class="modal-content confirm-modal">
+                <div class="modal-header">
+                    <h3>确认删除</h3>
+                    <button class="close-button" @click="cancelDeleteSubpage">×</button>
+                </div>
+
+                <div class="modal-body">
+                    <p>确定要删除该切片子页吗？此操作无法撤销。</p>
+                </div>
+
+                <div class="modal-footer">
+                    <button class="cancel-button" @click="cancelDeleteSubpage">取消</button>
+                    <button class="delete-button" @click="deleteSubpage">确认删除</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Add Subpage Modal -->
+        <div v-if="showAddSubpageModal" class="modal-overlay">
+            <div class="modal-content subpage-edit-modal">
+                <div class="modal-header">
+                    <h3>新增切片子页</h3>
+                    <button class="close-button" @click="cancelAddSubpage">×</button>
+                </div>
+
+                <div class="modal-body">
+                    <div v-if="error" class="error-message">
+                        {{ error }}
+                    </div>
+                    <div class="form-group">
+                        <label for="subpage-name">切片子页名称 (需唯一)</label>
+                        <input id="subpage-name" v-model="newSubpageName" type="text" class="subpage-name-input"
+                            placeholder="请输入唯一的子页名称…" />
+                    </div>
+                    <div class="form-group">
+                        <label for="subpage-content">正文内容</label>
+                        <textarea id="subpage-content" v-model="newSubpageContent" class="subpage-edit-textarea"
+                            placeholder="请输入切片子页的正文内容…"></textarea>
+                    </div>
+                </div>
+
+                <div class="modal-footer">
+                    <button class="cancel-button" @click="cancelAddSubpage">取消</button>
+                    <button class="save-button" @click="addNewSubpage"
+                        :disabled="!newSubpageName.trim() || !newSubpageContent.trim()">
+                        确认新增
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</template>
+
+<style scoped>
+.knowledge-grid-container {
+    grid-column: 1 / -1;
+    padding: var(--space-md);
+    background: var(--bg);
+    border-top: 1px solid var(--o08);
+}
+
+.knowledge-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    gap: 24px;
+    margin-bottom: 22px;
+}
+
+.header-left {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+}
+
+.header-left h3 {
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 20px;
+    color: var(--text);
+    margin: 0;
+}
+
+.header-subtitle {
+    font-size: 14px;
+    color: var(--muted);
+    margin: 0;
+    max-width: 520px;
+}
+
+.header-actions {
+    display: flex;
+    gap: 10px;
+    flex-shrink: 0;
+}
+
+.action-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 11px 18px;
+    border-radius: var(--radius-chip);
+    font-family: var(--font-sans);
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.action-button--primary {
+    background: var(--accent-solid);
+    color: var(--on-accent-solid);
+    border: none;
+}
+
+.action-button--primary:hover {
+    filter: brightness(1.05);
+}
+
+.action-button--ghost {
+    background: var(--o05);
+    border: 1px solid var(--o14);
+    color: var(--text);
+    font-weight: 500;
+}
+
+.action-button--ghost:hover {
+    background: var(--o08);
+}
+
+.knowledge-grid {
+    background: var(--surface);
+    border: 1px solid var(--o08);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    width: 100%;
+}
+
+.knowledge-grid-header {
+    display: grid;
+    grid-template-columns: 2fr 1fr 1fr 80px;
+    gap: 12px;
+    border-bottom: 1px solid var(--o08);
+}
+
+.header-cell {
+    padding: 12px 18px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--muted2);
+}
+
+.knowledge-grid-row {
+    display: grid;
+    grid-template-columns: 2fr 1fr 1fr 80px;
+    gap: 12px;
+    border-bottom: 1px solid var(--o05);
+    align-items: center;
+}
+
+.knowledge-grid-row:last-child {
+    border-bottom: none;
+}
+
+.grid-cell {
+    padding: 14px 18px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text2);
+}
+
+.type-tag {
+    font-size: 12px;
+}
+
+.type-tag--pdf {
+    color: var(--c-coral);
+}
+
+.type-tag--web {
+    color: var(--c-teal);
+}
+
+.status-cell {
+    font-size: 12px;
+}
+
+.status-indexed {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--c-lime);
+}
+
+.remove-cell {
+    overflow: visible;
+}
+
+.remove-button {
+    justify-self: end;
+    padding: 6px 11px;
+    background: transparent;
+    border: 1px solid var(--coral-border);
+    border-radius: var(--radius-md);
+    color: var(--c-coral);
+    font-family: var(--font-sans);
+    font-size: 12px;
+    cursor: pointer;
+    transition: background 0.15s ease;
+}
+
+.remove-button:hover {
+    background: var(--coral-bg);
+}
+
+.pages-cell {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+    padding: var(--space-sm) var(--space-md);
+}
+
+.page-item {
+    display: flex;
+    justify-content: flex-start;
+    align-items: center;
+    padding: var(--space-xs) var(--space-sm);
+    background: var(--o05);
+    border-radius: var(--radius-sm);
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+}
+
+.page-url {
+    color: var(--muted);
+    text-decoration: none;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.page-link {
+    color: var(--c-teal);
+    cursor: pointer;
+}
+
+.page-link:hover {
+    text-decoration: underline;
+}
+
+.pagination {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+}
+
+.pagination-button {
+    padding: var(--space-xs) var(--space-sm);
+    background: var(--background-soft);
+    border: none;
+    border-radius: var(--radius-lg);
+    cursor: pointer;
+}
+
+.pagination-button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.page-info {
+    color: var(--text-muted);
+}
+
+.loading-state {
+    padding: var(--space-xl);
+    text-align: center;
+    color: var(--muted);
+    background: var(--surface);
+    border: 1px solid var(--o08);
+    border-radius: var(--radius-lg);
+}
+
+.error-state {
+    padding: var(--space-xl);
+    text-align: center;
+    color: var(--c-coral);
+    background: var(--surface);
+    border: 1px solid var(--o08);
+    border-radius: var(--radius-lg);
+}
+
+.knowledge-empty {
+    padding: 40px;
+    text-align: center;
+    color: var(--muted2);
+    font-size: 14px;
+}
+
+/* Modal styles */
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: var(--scrim);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    backdrop-filter: blur(6px);
+    padding: 24px;
+}
+
+.modal-content {
+    background: var(--surface);
+    border-radius: 22px;
+    padding: 30px;
+    width: 100%;
+    max-width: 520px;
+    max-height: 85vh;
+    overflow-y: auto;
+    box-shadow: 0 40px 100px -30px rgba(0, 0, 0, .8);
+    border: 1px solid var(--o10);
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+.modal-header h3 {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 20px;
+    color: var(--text);
+    margin: 0;
+}
+
+.close-button {
+    width: 32px;
+    height: 32px;
+    border-radius: 9px;
+    background: var(--o05);
+    border: 1px solid var(--o10);
+    font-size: 16px;
+    cursor: pointer;
+    color: var(--muted);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s ease;
+}
+
+.close-button:hover {
+    background: var(--o10);
+}
+
+.knowledge-tabs {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 20px;
+}
+
+.knowledge-tabs button {
+    flex: 1;
+    padding: 10px 14px;
+    border: 1px solid var(--o12);
+    background: var(--o05);
+    color: var(--muted);
+    border-radius: var(--radius-chip);
+    font-family: var(--font-sans);
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.knowledge-tabs button:hover {
+    background: var(--o08);
+}
+
+.knowledge-tabs button.active {
+    background: var(--accent-solid);
+    color: var(--on-accent-solid);
+    border-color: transparent;
+    font-weight: 600;
+}
+
+.tab-content {
+    margin-bottom: var(--space-lg);
+}
+
+.hidden {
+    display: none;
+}
+
+.select-files-button {
+    width: 100%;
+    padding: 28px;
+    border: 1.5px dashed var(--o20);
+    border-radius: 14px;
+    background: var(--o05);
+    color: var(--muted);
+    font-family: var(--font-sans);
+    font-size: 14.5px;
+    cursor: pointer;
+    margin-bottom: var(--space-md);
+    transition: all 0.15s ease;
+}
+
+.select-files-button:hover {
+    border-color: var(--accent-border);
+    color: var(--accent-ink);
+}
+
+.upload-button {
+    width: 100%;
+    padding: 12px;
+    background: var(--accent-solid);
+    color: var(--on-accent-solid);
+    border: none;
+    border-radius: var(--radius-chip);
+    font-family: var(--font-sans);
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    margin-bottom: var(--space-md);
+    transition: filter 0.15s ease;
+}
+
+.upload-button:hover:not(:disabled) {
+    filter: brightness(1.05);
+}
+
+.select-files-button:disabled,
+.upload-button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.file-item,
+.url-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--space-sm) var(--space-md);
+    background: var(--o05);
+    border: 1px solid var(--o08);
+    border-radius: var(--radius-md);
+    margin-bottom: var(--space-xs);
+    gap: var(--space-sm);
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: var(--text2);
+}
+
+.url-item span {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.url-input-group {
+    display: flex;
+    gap: 10px;
+    margin-bottom: var(--space-md);
+}
+
+.url-input-group input {
+    flex: 1;
+    padding: 14px 16px;
+    background: var(--bg);
+    border: 1px solid var(--o12);
+    border-radius: var(--radius-input);
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: 14px;
+    outline: none;
+    transition: all 0.15s ease;
+}
+
+.url-input-group input:focus {
+    border-color: var(--accent-ink);
+    box-shadow: 0 0 0 3px var(--accent-bg-12);
+}
+
+.url-input-group button {
+    flex-shrink: 0;
+    padding: 14px 22px;
+    background: var(--accent-solid);
+    color: var(--on-accent-solid);
+    border: none;
+    border-radius: var(--radius-input);
+    font-family: var(--font-sans);
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: filter 0.15s ease;
+}
+
+.url-input-group button:hover {
+    filter: brightness(1.05);
+}
+
+.upload-progress {
+    margin-top: var(--space-md);
+}
+
+.progress-bar {
+    width: 100%;
+    height: 4px;
+    background: var(--background-soft);
+    border-radius: var(--radius-full);
+    overflow: hidden;
+}
+
+.progress {
+    height: 100%;
+    background: var(--accent-solid);
+    transition: width 0.3s ease;
+}
+
+.success-message {
+    margin-top: var(--space-md);
+    padding: var(--space-sm);
+    background: var(--success-color-soft);
+    color: var(--success-color);
+    border-radius: var(--radius-lg);
+    text-align: center;
+}
+
+.link-modal {
+    max-width: 600px;
+    width: 80%;
+}
+
+.org-knowledge-grid {
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    margin-top: var(--space-md);
+    width: 100%;
+}
+
+.org-knowledge-grid .knowledge-grid-header,
+.org-knowledge-grid .knowledge-grid-row {
+    display: grid;
+    grid-template-columns: 3fr 1fr 120px;
+    align-items: center;
+}
+
+.source-cell {
+    padding-left: var(--space-md);
+}
+
+.type-cell {
+    text-align: center;
+}
+
+.action-cell {
+    padding-right: var(--space-md);
+    text-align: right;
+}
+
+.link-button,
+.unlink-button {
+    min-width: 80px;
+    padding: var(--space-xs) var(--space-sm);
+    border: none;
+    border-radius: var(--radius-lg);
+    cursor: pointer;
+    text-align: center;
+}
+
+.link-button {
+    background: var(--accent-solid);
+    color: var(--on-accent-solid);
+}
+
+.unlink-button {
+    background: var(--error-color);
+    color: white;
+}
+
+.link-button:hover {
+    background: var(--primary-dark);
+}
+
+.unlink-button:hover {
+    background: color-mix(in srgb, var(--error-color) 80%, black);
+}
+
+.error-message {
+    color: var(--error-color);
+    padding: var(--space-sm);
+    margin: var(--space-sm) 0;
+    background: var(--error-color-soft);
+    border-radius: var(--radius-lg);
+    font-size: 0.875rem;
+}
+
+.actions-cell {
+    width: 80px;
+    text-align: center;
+}
+
+.delete-button {
+    padding: var(--space-xs);
+    background: none;
+    border: none;
+    cursor: pointer;
+    opacity: 0.7;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.delete-button:hover {
+    opacity: 1;
+    transform: scale(1.1);
+}
+
+.delete-icon {
+    width: 20px;
+    height: 20px;
+    filter: var(--primary-color-filter);
+}
+
+.confirm-modal {
+    max-width: 420px;
+    width: 90%;
+    margin: 0 auto;
+}
+
+.confirm-content {
+    text-align: center;
+}
+
+.confirm-content p {
+    margin-bottom: var(--space-lg);
+    line-height: 1.5;
+    color: var(--text-color);
+}
+
+.confirm-actions {
+    display: flex;
+    gap: var(--space-md);
+    justify-content: center;
+}
+
+.confirm-actions .cancel-button,
+.confirm-actions .delete-button {
+    padding: var(--space-sm) var(--space-lg);
+    border: none;
+    border-radius: var(--radius-lg);
+    cursor: pointer;
+    font-weight: 500;
+    min-width: 80px;
+}
+
+.confirm-actions .cancel-button {
+    background: var(--background-soft);
+    color: var(--text-color);
+}
+
+.confirm-actions .delete-button {
+    background: var(--error-color);
+    color: white;
+}
+
+.confirm-actions .cancel-button:hover {
+    background: var(--border-color);
+}
+
+.confirm-actions .delete-button:hover {
+    background: color-mix(in srgb, var(--error-color) 80%, black);
+}
+
+.confirm-content {
+    padding: var(--space-lg) 0;
+}
+
+/* Queue Section Styles */
+.queue-section {
+    margin: var(--space-lg) 0;
+    padding: var(--space-md);
+    background: var(--background-soft);
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--border-color);
+}
+
+.queue-header {
+    margin: 0 0 var(--space-md) 0;
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text-color);
+}
+
+.queue-items {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+}
+
+.queue-item {
+    background: var(--surface);
+    border: 1px solid var(--o08);
+    border-radius: var(--radius-lg);
+    padding: var(--space-md);
+    transition: all 0.2s ease;
+}
+
+.queue-item:hover {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+    transform: translateY(-1px);
+}
+
+.queue-item-content {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+}
+
+.queue-item-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: var(--space-sm);
+}
+
+.queue-source {
+    font-weight: 500;
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.status-badge {
+    padding: var(--space-xs) var(--space-sm);
+    border-radius: var(--radius-full);
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.status-badge.pending {
+    background: var(--info-bg);
+    color: var(--c-info);
+}
+
+.status-badge.processing {
+    background: var(--warning-bg);
+    color: var(--warning-color);
+    animation: pulse 2s ease-in-out infinite;
+}
+
+.status-badge.failed {
+    background: var(--error-bg);
+    color: var(--error-color);
+}
+
+.status-badge.completed {
+    background: var(--success-bg);
+    color: var(--success-color);
+}
+
+@keyframes pulse {
+
+    0%,
+    100% {
+        opacity: 1;
+    }
+
+    50% {
+        opacity: 0.7;
+    }
+}
+
+.progress-bar-container {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+}
+
+.progress-bar {
+    flex: 1;
+    height: 6px;
+    background: var(--background-soft);
+    border-radius: var(--radius-full);
+    overflow: hidden;
+}
+
+.progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--c-info), color-mix(in srgb, var(--c-info) 70%, var(--surface)));
+    border-radius: var(--radius-full);
+    transition: width 0.3s ease;
+}
+
+.progress-text {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    min-width: 40px;
+}
+
+.queue-error {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    padding: var(--space-sm);
+    background: var(--error-bg);
+    border-radius: var(--radius-sm);
+}
+
+.error-icon {
+    font-size: 1rem;
+}
+
+.error-text {
+    color: var(--error-color);
+    font-size: 0.875rem;
+    flex: 1;
+}
+
+.queue-item-meta {
+    display: flex;
+    gap: var(--space-md);
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+.queue-type,
+.queue-time {
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+}
+
+
+/* Action Buttons in Grid */
+.view-button,
+.delete-button {
+    padding: 7px;
+    background: var(--o05);
+    border: 1px solid var(--o08);
+    cursor: pointer;
+    border-radius: var(--radius-md);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+}
+
+.view-button:hover {
+    background: var(--o08);
+    border-color: var(--o14);
+}
+
+.actions-cell .delete-button {
+    background: transparent;
+    border: 1px solid var(--coral-border);
+}
+
+.actions-cell .delete-button:hover {
+    background: var(--coral-bg);
+}
+
+.actions-cell .delete-button .action-icon {
+    filter: invert(58%) sepia(40%) saturate(900%) hue-rotate(316deg) brightness(102%) contrast(101%);
+}
+
+.action-icon {
+    width: 16px;
+    height: 16px;
+    opacity: 0.85;
+    filter: invert(72%) sepia(8%) saturate(380%) hue-rotate(187deg) brightness(95%) contrast(88%);
+}
+
+.view-button:hover .action-icon,
+.delete-button:hover .action-icon {
+    opacity: 1;
+}
+
+/* Content Modal Styles */
+.content-modal {
+    max-width: 900px;
+    width: 90%;
+    max-height: 85vh;
+}
+
+.content-body {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+}
+
+.content-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--space-md) 0;
+    border-bottom: 1px solid var(--border-color);
+    margin-bottom: var(--space-md);
+}
+
+.content-info {
+    display: flex;
+    gap: var(--space-md);
+    align-items: center;
+}
+
+.add-subpage-btn {
+    padding: var(--space-sm) var(--space-md);
+    background: var(--accent-solid);
+    color: var(--on-accent-solid);
+    border: none;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    font-size: 0.875rem;
+    font-weight: 500;
+    transition: all 0.2s ease;
+}
+
+.add-subpage-btn:hover {
+    background: var(--primary-dark);
+    transform: translateY(-1px);
+}
+
+.content-source {
+    font-weight: 600;
+    color: var(--text-color);
+}
+
+.content-type,
+.content-chunks-count {
+    font-size: 0.875rem;
+    color: var(--text-muted);
+}
+
+.content-actions {
+    display: flex;
+    gap: var(--space-sm);
+}
+
+.edit-button,
+.save-button {
+    padding: var(--space-xs) var(--space-sm);
+    background: var(--accent-solid);
+    color: var(--on-accent-solid);
+    border: none;
+    border-radius: var(--radius-lg);
+    cursor: pointer;
+    font-size: 0.875rem;
+    transition: all 0.2s ease;
+}
+
+.edit-button:hover,
+.save-button:hover:not(:disabled) {
+    background: var(--primary-dark);
+    transform: translateY(-1px);
+}
+
+.save-button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.content-display {
+    max-height: 500px;
+    overflow-y: auto;
+}
+
+.content-editor {
+    width: 100%;
+    min-height: 400px;
+    padding: var(--space-md);
+    border: 2px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    font-family: monospace;
+    font-size: 0.875rem;
+    line-height: 1.6;
+    resize: vertical;
+}
+
+.content-editor:focus {
+    outline: none;
+    border-color: var(--primary-color);
+}
+
+.content-viewer {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+}
+
+.content-chunk {
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+}
+
+.chunk-header {
+    padding: var(--space-sm) var(--space-md);
+    background: var(--background-soft);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.chunk-number {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+}
+
+.chunk-content {
+    padding: var(--space-md);
+    font-size: 0.875rem;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+}
+
+/* Content Table Styles */
+.content-table-container {
+    max-height: 60vh;
+    overflow: auto;
+    padding-right: var(--space-md);
+}
+
+.content-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.875rem;
+}
+
+.content-table thead {
+    position: sticky;
+    top: 0;
+    background: var(--background-soft);
+    z-index: 1;
+}
+
+.content-table th {
+    padding: var(--space-sm) var(--space-md);
+    text-align: left;
+    font-weight: 600;
+    border-bottom: 2px solid var(--border-color);
+}
+
+.content-table .col-url {
+    width: 25%;
+}
+
+.content-table .col-content {
+    width: 65%;
+}
+
+.content-table .col-actions {
+    width: 10%;
+    text-align: center;
+}
+
+.subpage-row {
+    border-bottom: 1px solid var(--border-color);
+}
+
+.subpage-row:hover {
+    background: var(--background-soft);
+}
+
+.cell-url,
+.cell-content,
+.cell-actions {
+    padding: var(--space-md);
+    vertical-align: top;
+}
+
+.subpage-url {
+    color: var(--primary-color);
+    text-decoration: none;
+    word-break: break-all;
+    display: block;
+    font-size: 0.8rem;
+}
+
+.subpage-url:hover {
+    text-decoration: underline;
+}
+
+.subpage-id {
+    color: var(--text-muted);
+    font-family: monospace;
+    font-size: 0.75rem;
+}
+
+.subpage-content-wrapper {
+    max-height: 150px;
+    overflow-y: auto;
+}
+
+.subpage-text {
+    margin: 0;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    line-height: 1.5;
+}
+
+.edit-subpage-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 4px;
+    border-radius: var(--radius-sm);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto;
+    transition: all 0.2s ease;
+}
+
+.edit-subpage-btn:hover {
+    background: var(--background-soft);
+}
+
+.delete-subpage-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 4px;
+    border-radius: var(--radius-sm);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto;
+    transition: all 0.2s ease;
+}
+
+.delete-subpage-btn:hover {
+    background: var(--background-soft);
+}
+
+.actions-buttons {
+    display: flex;
+    gap: var(--space-xs);
+    align-items: center;
+    justify-content: center;
+}
+
+.form-group {
+    margin-bottom: var(--space-md);
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: var(--space-xs);
+    font-weight: 500;
+    font-size: 0.875rem;
+}
+
+.subpage-name-input {
+    width: 100%;
+    padding: var(--space-sm) var(--space-md);
+    border: 2px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    font-size: 0.875rem;
+}
+
+.subpage-name-input:focus {
+    outline: none;
+    border-color: var(--primary-color);
+}
+
+.action-icon-sm {
+    width: 16px;
+    height: 16px;
+    opacity: 0.8;
+    filter: invert(37%) sepia(89%) saturate(3207%) hue-rotate(352deg) brightness(98%) contrast(93%);
+}
+
+.edit-subpage-btn:hover .action-icon-sm {
+    opacity: 1;
+}
+
+/* Subpage Edit Modal */
+.subpage-edit-modal {
+    max-width: 700px;
+    width: 90%;
+}
+
+.modal-body {
+    padding: var(--space-lg);
+}
+
+.subpage-edit-textarea {
+    width: 100%;
+    min-height: 300px;
+    padding: var(--space-md);
+    border: 2px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    font-family: monospace;
+    font-size: 0.875rem;
+    line-height: 1.6;
+    resize: vertical;
+}
+
+.subpage-edit-textarea:focus {
+    outline: none;
+    border-color: var(--primary-color);
+}
+
+.modal-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--space-sm);
+    padding: var(--space-md) var(--space-lg);
+    border-top: 1px solid var(--border-color);
+}
+
+/* Update actions cell width to accommodate view button */
+.actions-cell {
+    width: 100px;
+    text-align: center;
+    display: flex;
+    gap: var(--space-xs);
+    align-items: center;
+    justify-content: center;
+}
+
+.confirm-actions {
+    display: flex;
+    justify-content: center;
+    gap: var(--space-md);
+    margin-top: var(--space-lg);
+}
+
+.cancel-button {
+    padding: var(--space-sm) var(--space-lg);
+    background: var(--background-soft);
+    border: none;
+    border-radius: var(--radius-lg);
+    cursor: pointer;
+}
+
+.confirm-modal .delete-button {
+    padding: var(--space-sm) var(--space-lg);
+    background: var(--error-color);
+    color: white;
+    border: none;
+    border-radius: var(--radius-lg);
+    cursor: pointer;
+    opacity: 1;
+}
+
+.confirm-modal .delete-button:hover {
+    background: color-mix(in srgb, var(--error-color) 80%, black);
+}
+
+.remove-url-button {
+    padding: var(--space-xs);
+    background: none;
+    border: none;
+    cursor: pointer;
+    opacity: 0.7;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--primary-color);
+}
+
+.remove-url-button:hover {
+    opacity: 1;
+    transform: scale(1.1);
+}
+
+.remove-icon {
+    font-size: 1.5rem;
+    line-height: 1;
+}
+
+.upload-error {
+    padding: var(--space-sm);
+    margin: var(--space-sm) 0;
+    color: var(--error-color);
+    background: var(--error-color-soft);
+    border-radius: var(--radius-lg);
+    font-size: 0.875rem;
+}
+
+/* Responsive design for knowledge grid */
+@media (max-width: 768px) {
+    .knowledge-grid-container {
+        padding: var(--space-sm);
+    }
+
+    .knowledge-header {
+        flex-direction: column;
+        gap: var(--space-sm);
+        align-items: stretch;
+    }
+
+    .header-left {
+        flex-direction: column;
+        gap: var(--space-sm);
+        align-items: stretch;
+    }
+
+    .header-actions {
+        justify-content: center;
+    }
+
+    .knowledge-grid-header,
+    .knowledge-grid-row {
+        grid-template-columns: 1fr 80px;
+    }
+
+    .header-cell:nth-child(2),
+    .header-cell:nth-child(3),
+    .grid-cell:nth-child(2),
+    .grid-cell:nth-child(3) {
+        display: none;
+        /* Hide type and status columns on mobile, keep source + remove */
+    }
+
+    .grid-cell:first-child {
+        white-space: normal;
+        word-break: break-word;
+    }
+
+    .pagination {
+        flex-direction: column;
+        gap: var(--space-xs);
+    }
+
+    .pagination-button {
+        width: 100%;
+    }
+}
+
+/* Improved Queue Styles */
+.queue-item-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: var(--space-md);
+}
+
+.queue-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    flex: 1;
+    min-width: 0;
+    /* Allow truncation */
+}
+
+.queue-source {
+    font-weight: 500;
+    color: var(--text-color);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.queue-meta {
+    display: flex;
+    gap: var(--space-xs);
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+.queue-status-container {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    flex-shrink: 0;
+}
+
+.delete-queue-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 4px;
+    border-radius: var(--radius-full);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0.6;
+    transition: all 0.2s ease;
+}
+
+.delete-queue-btn:hover {
+    opacity: 1;
+    background: var(--background-soft);
+}
+
+.delete-icon-sm {
+    width: 14px;
+    height: 14px;
+}
+
+/* Grid Improvements */
+.source-cell {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: var(--text2);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 250px;
+}
+
+.pages-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.page-item {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+}
+
+.more-pages {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    font-style: italic;
+    padding-left: var(--space-xs);
+}
+
+.page-url {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+@media (max-width: 480px) {
+
+    .modal-content {
+        width: 95%;
+        padding: var(--space-md);
+        max-height: 95vh;
+    }
+
+    .knowledge-tabs {
+        flex-direction: column;
+    }
+
+    .url-input-group {
+        flex-direction: column;
+    }
+
+    .url-input-group input {
+        margin-bottom: var(--space-sm);
+    }
+
+    .confirm-actions {
+        flex-direction: column;
+        gap: var(--space-sm);
+    }
+
+    .cancel-button,
+    .confirm-modal .delete-button {
+        width: 100%;
+    }
+}
+
+/* Responsive design for org knowledge grid */
+@media (max-width: 768px) {
+
+    .org-knowledge-grid .knowledge-grid-header,
+    .org-knowledge-grid .knowledge-grid-row {
+        grid-template-columns: 1fr 120px;
+    }
+
+    .type-cell {
+        display: none;
+        /* Hide type column on mobile */
+    }
+
+    .source-cell {
+        padding-left: var(--space-sm);
+        white-space: normal;
+        word-break: break-word;
+    }
+
+    .action-cell {
+        padding-right: var(--space-sm);
+    }
+}
+</style>

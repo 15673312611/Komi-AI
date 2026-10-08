@@ -1,0 +1,95 @@
+"""
+Copyright 2024-2026 Komi AI
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+"""
+
+from pydantic import BaseModel, field_serializer
+from typing import List, Optional
+from uuid import UUID
+
+from app.core.s3 import sign_s3_url
+
+
+class WidgetBase(BaseModel):
+    name: str
+
+    # Optional agent ID for widget configuration
+    agent_id: Optional[UUID] = None
+
+
+class WidgetCreate(WidgetBase):
+    pass
+
+
+class AgentCustomizationResponse(BaseModel):
+    chat_background_color: Optional[str] = None
+    chat_text_color: Optional[str] = None
+    chat_bubble_color: Optional[str] = None
+    accent_color: Optional[str] = None
+    font_family: Optional[str] = None
+    photo_url: Optional[str] = None
+    chat_style: Optional[str] = "CHATBOT"
+    widget_position: Optional[str] = "FLOATING"
+    welcome_title: Optional[str] = None
+    welcome_subtitle: Optional[str] = None
+    welcome_message: Optional[str] = None
+    chat_initiation_messages: Optional[List[str]] = None
+    quick_actions: Optional[List[str]] = None
+    show_citations: Optional[bool] = None
+    collect_email: Optional[bool] = None
+    show_ai_disclaimer: Optional[bool] = None
+    allow_new_chat: Optional[bool] = None
+    # Free-form extras (avatar_style, widget_display placement defaults, ...)
+    customization_metadata: Optional[dict] = None
+
+    @field_serializer('photo_url')
+    def _sign_photo_url(self, v: Optional[str]) -> Optional[str]:
+        """Sign on the way out, every response — never stored signed."""
+        return sign_s3_url(v) if v else v
+
+    class Config:
+        from_attributes = True
+
+
+class AgentResponse(BaseModel):
+    id: UUID
+    name: str
+    display_name: Optional[str] = None
+    customization: Optional[AgentCustomizationResponse] = None
+    workflow: bool = False
+
+
+class HumanAgentResponse(BaseModel):
+    human_agent_name: Optional[str] = None
+    human_agent_profile_pic: Optional[str] = None
+
+    @field_serializer('human_agent_profile_pic')
+    def _sign_profile_pic(self, v: Optional[str]) -> Optional[str]:
+        """Sign on the way out, every response — never stored signed."""
+        return sign_s3_url(v) if v else v
+
+    class Config:
+        from_attributes = True
+
+
+class WidgetResponse(BaseModel):
+    id: str
+    organization_id: UUID
+    agent: AgentResponse
+    human_agent: Optional[HumanAgentResponse] = None
+    # Include agent ID in response if set
+    agent_id: Optional[UUID] = None
+    token: Optional[str] = None
+    class Config:
+        from_attributes = True

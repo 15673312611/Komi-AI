@@ -1,0 +1,90 @@
+static/
+.env
+*.ipynb
+*.key
+logs/
+__pycache__/
+.DS_Store
+# Python virtualenvs. Only .venv/ was listed, so backend/venv — 2GB of
+# site-packages — was one `git add -A` away from being committed. The glob
+# covers the "-old"/"-py313" copies that pile up around a version bump.
+.venv/
+venv/
+venv-*/
+.idea/
+.vscode/
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+*.lcov
+node_modules/
+uploads/
+*.key
+*.pem
+*.crt
+*.csr
+*.csr.pem
+*.csr.key
+*.csr.crt
+/shopify/
+
+# WordPress plugin source lives in its own repo (komi-wordpress-plugin);
+# only the built, installable zip is tracked here for manual download.
+/wordpress/*
+!/wordpress/komi-chat.zip
+
+# Firebase service account key (contains sensitive credentials)
+komi-13e0a-firebase-adminsdk-7dqo6-57f3de88cb.json
+
+test.db
+*.db
+*.db.zip
+*.db.tar.gz
+*.db.tar.bz2
+*.db.tar.xz
+*.db.tar.lzma
+
+docs/
+.env.prod
+.env.dev
+backend/app/enterprise/
+frontend/src/modules/
+
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+.claude/settings.local.json
+
+# Hallmark design skill local logs
+.hallmark/
+
+# Local tooling and scratch files that have been accidentally staged before
+backend/.claude/
+backend/*.log
+backend/AWSCLIV2.pkg
+backend/scripts/repro_*.py
+build-and-push.sh
+config/
+
+# Env backups — these hold real credentials, never commit them
+*.env.bak*
+.env.*.bak*
+.env.prod.bak*
+frontend/.env.*.bak*
+
+# Stale loader copies — server.js serves the current build from frontend/public/webclient
+komi-test/komi.min.js
+
+# Only the :dev webclient build emits a sourcemap, and the committed loader is
+# the :prod one, which does not reference it. Keeps a stray dev artifact out.
+frontend/public/webclient/*.map
+
+# Local binaries, DB directories, and temporary screenshots
+pgsql/
+*.exe
+*.exe~
+*.tmp*
+.tmp*
+

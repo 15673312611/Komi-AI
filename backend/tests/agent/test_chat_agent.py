@@ -1,0 +1,455 @@
+"""
+Copyright 2024-2026 Komi AI
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+"""
+
+import asyncio
+import pytest
+from fastapi.testclient import TestClient
+from app.core.config import settings
+from app.models.user import User
+from app.models.role import Role
+from app.models.permission import Permission, role_permissions
+from app.models.session_to_agent import SessionToAgent, SessionStatus
+from app.models.chat_history import ChatHistory
+from app.models.customer import Customer
+from app.models.agent import Agent, AgentType
+from app.models.schemas.jira import AgentWithJiraConfig
+from app.agents.chat_agent import ChatAgent, ChatResponse, TransferReasonType
+from app.repositories.ai_config import AIConfigRepository
+from uuid import uuid4
+from datetime import datetime, timezone
+from unittest.mock import patch, MagicMock
+from agno.storage.base import Storage
+from fastapi import HTTPException
+
+# Create a mock storage class that inherits from AgentStorage
+class MockAgentStorage(Storage):
+    def __init__(self, *args, **kwargs):
+        pass
+
+    async def save_message(self, *args, **kwargs):
+        return None
+
+    async def get_messages(self, *args, **kwargs):
+        return []
+
+    async def get_session_data(self, *args, **kwargs):
+        return {}
+
+    async def save_session_data(self, *args, **kwargs):
+        return None
+
+    async def create(self, *args, **kwargs):
+        return None
+
+    async def read(self, *args, **kwargs):
+        return None
+
+    async def upsert(self, *args, **kwargs):
+        return None
+
+    async def delete_session(self, *args, **kwargs):
+        return None
+
+    async def get_all_session_ids(self, *args, **kwargs):
+        return []
+
+    async def get_all_sessions(self, *args, **kwargs):
+        return []
+
+    async def get_recent_sessions(self, *args, **kwargs):
+        return []
+
+    async def drop(self, *args, **kwargs):
+        return None
+
+    async def upgrade_schema(self, *args, **kwargs):
+        return None
+
+@pytest.fixture
+def test_role(db, test_organization_id) -> Role:
+    """Create a test role with required permissions"""
+    role = Role(
+        name="Test Role",
+        organization_id=test_organization_id
+    )
+    db.add(role)
+    db.commit()
+
+    # Add required permissions
+    permission = Permission(
+        name="manage_chats",
+        description="Can manage chats"
+    )
+    db.add(permission)
+    db.commit()
+
+    # Associate permission with role
+    db.execute(
+        role_permissions.insert().values(
+            role_id=role.id,
+            permission_id=permission.id
+        )
+    )
+    db.commit()
+    return role
+
+@pytest.fixture
+def test_user(db, test_organization_id, test_role) -> User:
+    """Create a test user with required permissions"""
+    user = User(
+        id=uuid4(),
+        email="test@test.com",
+        hashed_password="testpassword",
+        organization_id=test_organization_id,
+        role_id=test_role.id,
+        is_active=True
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return user
+
+@pytest.fixture
+def test_customer(db, test_organization_id) -> Customer:
+    """Create a test customer"""
+    customer = Customer(
+        id=uuid4(),
+        organization_id=test_organization_id,
+        email="customer@example.com",
+        full_name="Test Customer"
+    )
+    db.add(customer)
+    db.commit()
+    db.refresh(customer)
+    return customer
+
+@pytest.fixture
+def test_agent(db, test_organization_id) -> Agent:
+    """Create a test agent"""
+    agent = Agent(
+        id=uuid4(),
+        organization_id=test_organization_id,
+        name="Test Agent",
+        display_name="Test Agent Display",
+        agent_type=AgentType.CUSTOMER_SUPPORT,
+        instructions="Test instructions"
+    )
+    db.add(agent)
+    db.commit()
+    db.refresh(agent)
+    return agent
+
+@pytest.fixture
+def test_session(db, test_organization_id, test_customer, test_agent) -> SessionToAgent:
+    """Create a test session"""
+    session = SessionToAgent(
+        session_id=uuid4(),
+        organization_id=test_organization_id,
+        customer_id=test_customer.id,
+        agent_id=test_agent.id,
+        status=SessionStatus.OPEN
+    )
+    db.add(session)
+    db.commit()
+
+    # Add a test chat message
+    chat = ChatHistory(
+        organization_id=test_organization_id,
+        customer_id=test_customer.id,
+        agent_id=test_agent.id,
+        session_id=session.session_id,
+        message="Test message",
+        message_type="agent"
+    )
+    db.add(chat)
+    db.commit()
+    db.refresh(session)
+    return session
+
+@pytest.fixture
+def mock_db_session(db):
+    """Mock database session for ChatAgent"""
+    def get_mock_db():
+        yield db
+    
+    with patch('app.agents.chat_agent.get_db', get_mock_db), \
+         patch('app.tools.knowledge_search_byagent.SessionLocal') as mock_knowledge_session_local, \
+         patch('app.agents.chat_agent.SessionLocal') as mock_chat_agent_session_local:
+        # Setup SessionLocal to return our test db when used as context manager
+        mock_knowledge_session_local.return_value.__enter__.return_value = db
+        mock_knowledge_session_local.return_value.__exit__.return_value = None
+        
+        mock_chat_agent_session_local.return_value.__enter__.return_value = db
+        mock_chat_agent_session_local.return_value.__exit__.return_value = None
+        yield db
+
+@pytest.mark.asyncio
+async def test_chat_agent_initialization(test_organization_id, test_agent, mock_db_session):
+    """Test ChatAgent initialization"""
+    # Mock the AI config repository and use MockAgentStorage
+    with patch('app.agents.chat_agent.AgentShopifyConfigRepository') as mock_shopify_config_repo, \
+         patch('app.agents.chat_agent.JiraRepository') as mock_jira_repo, \
+         patch('app.agents.chat_agent.EncryptedPostgresAgentStorage', return_value=MockAgentStorage()):
+        mock_shopify_config_repo.return_value.get_agent_shopify_config.return_value = None
+        
+        # Create a proper AgentWithJiraConfig mock
+        agent_with_jira_config = AgentWithJiraConfig(
+            id=test_agent.id,
+            name=test_agent.name,
+            display_name=test_agent.display_name,
+            description=test_agent.description,
+            instructions=test_agent.instructions,
+            tools=test_agent.tools,
+            agent_type=test_agent.agent_type,
+            is_default=test_agent.is_default,
+            is_active=test_agent.is_active,
+            organization_id=test_agent.organization_id,
+            transfer_to_human=test_agent.transfer_to_human,
+            ask_for_rating=test_agent.ask_for_rating,
+            knowledge=[],
+            jira_enabled=False,
+            jira_project_key=None,
+            jira_issue_type_id=None,
+            groups=[],
+            organization=None
+        )
+        mock_jira_repo.return_value.get_agent_with_jira_config.return_value = agent_with_jira_config
+        
+        # Create a mock session_id to ensure shopify_config is properly initialized
+        mock_session_id = str(uuid4())
+        
+        chat_agent = ChatAgent(
+            api_key="test_key",
+            model_name="gpt-4",
+            model_type="OPENAI",
+            org_id=str(test_organization_id),
+            agent_id=str(test_agent.id),
+            session_id=mock_session_id
+        )
+        
+        assert chat_agent.agent_data is not None
+        assert chat_agent.agent_data.name == "Test Agent"
+        assert chat_agent.agent_data.display_name == "Test Agent Display"
+        assert chat_agent.api_key == "test_key"
+        assert chat_agent.model_name == "gpt-4"
+        assert chat_agent.model_type == "OPENAI"
+
+@pytest.mark.asyncio
+async def test_chat_agent_get_response(test_organization_id, test_agent, test_user, mock_db_session):
+    """Test ChatAgent get_response method"""
+    # Mock the AI config repository and use MockAgentStorage
+    with patch('app.agents.chat_agent.AgentShopifyConfigRepository') as mock_shopify_config_repo, \
+         patch('app.agents.chat_agent.JiraRepository') as mock_jira_repo, \
+         patch('app.agents.chat_agent.EncryptedPostgresAgentStorage', return_value=MockAgentStorage()):
+        mock_shopify_config_repo.return_value.get_agent_shopify_config.return_value = None
+        
+        # Create a proper AgentWithJiraConfig mock
+        agent_with_jira_config = AgentWithJiraConfig(
+            id=test_agent.id,
+            name=test_agent.name,
+            display_name=test_agent.display_name,
+            description=test_agent.description,
+            instructions=test_agent.instructions,
+            tools=test_agent.tools,
+            agent_type=test_agent.agent_type,
+            is_default=test_agent.is_default,
+            is_active=test_agent.is_active,
+            organization_id=test_agent.organization_id,
+            transfer_to_human=test_agent.transfer_to_human,
+            ask_for_rating=test_agent.ask_for_rating,
+            knowledge=[],
+            jira_enabled=False,
+            jira_project_key=None,
+            jira_issue_type_id=None,
+            groups=[],
+            organization=None
+        )
+        mock_jira_repo.return_value.get_agent_with_jira_config.return_value = agent_with_jira_config
+        
+        # Create a mock session_id to ensure shopify_config is properly initialized
+        mock_session_id = str(uuid4())
+        
+        chat_agent = ChatAgent(
+            api_key="test_key",
+            model_name="gpt-4",
+            model_type="OPENAI",
+            org_id=str(test_organization_id),
+            agent_id=str(test_agent.id),
+            customer_id=str(test_user.id),
+            session_id=mock_session_id
+        )
+        
+        # Mock the agent's run method
+        chat_agent.agent.arun = MagicMock(return_value=ChatResponse(
+            message="Test response",
+            transfer_to_human=False,
+            transfer_reason=None,
+            transfer_description=None,
+            request_rating=False,
+            create_ticket=False,
+            end_chat=False
+        ))
+        session_id = str(uuid4())
+        response = await chat_agent.get_response(
+            message="Hello",
+            session_id=session_id,
+            org_id=str(test_organization_id),
+            agent_id=str(test_agent.id),
+            customer_id=str(test_user.id)
+        )
+        
+        assert isinstance(response, ChatResponse)
+        assert isinstance(response.message, str)
+        assert isinstance(response.transfer_to_human, bool)
+        if response.transfer_reason:
+            assert isinstance(response.transfer_reason, TransferReasonType)
+
+@pytest.mark.asyncio
+async def test_chat_agent_api_key_validation():
+    """Test API key validation for different model types"""
+    # Test invalid model type
+    with pytest.raises(HTTPException) as excinfo:
+        await ChatAgent(
+            api_key="test_key",
+            model_name="test-model",
+            model_type="INVALID_MODEL"
+        )
+    assert excinfo.value.status_code == 500
+    assert "Failed to initialize model: Unsupported model type: INVALID_MODEL" in excinfo.value.detail
+
+@pytest.mark.asyncio
+async def test_chat_agent_error_handling(test_organization_id, test_agent, test_user, mock_db_session):
+    """Test ChatAgent error handling"""
+    # Mock the AI config repository and use MockAgentStorage
+    with patch('app.agents.chat_agent.AgentShopifyConfigRepository') as mock_shopify_config_repo, \
+         patch('app.agents.chat_agent.JiraRepository') as mock_jira_repo, \
+         patch('app.agents.chat_agent.EncryptedPostgresAgentStorage', return_value=MockAgentStorage()):
+        mock_shopify_config_repo.return_value.get_agent_shopify_config.return_value = None
+        
+        # Create a proper AgentWithJiraConfig mock
+        agent_with_jira_config = AgentWithJiraConfig(
+            id=test_agent.id,
+            name=test_agent.name,
+            display_name=test_agent.display_name,
+            description=test_agent.description,
+            instructions=test_agent.instructions,
+            tools=test_agent.tools,
+            agent_type=test_agent.agent_type,
+            is_default=test_agent.is_default,
+            is_active=test_agent.is_active,
+            organization_id=test_agent.organization_id,
+            transfer_to_human=test_agent.transfer_to_human,
+            ask_for_rating=test_agent.ask_for_rating,
+            knowledge=[],
+            jira_enabled=False,
+            jira_project_key=None,
+            jira_issue_type_id=None,
+            groups=[],
+            organization=None
+        )
+        mock_jira_repo.return_value.get_agent_with_jira_config.return_value = agent_with_jira_config
+        
+        # Create a mock session_id to ensure shopify_config is properly initialized
+        mock_session_id = str(uuid4())
+        
+        chat_agent = ChatAgent(
+            api_key="invalid_key",  # Invalid key to trigger error
+            model_name="gpt-4",
+            model_type="OPENAI",
+            org_id=str(test_organization_id),
+            agent_id=str(test_agent.id),
+            customer_id=str(test_user.id),
+            session_id=mock_session_id
+        )
+        
+        # Mock the agent's run method to raise an exception
+        chat_agent.agent.arun = MagicMock(side_effect=Exception("Test error"))
+        
+        session_id = str(uuid4())
+        response = await chat_agent.get_response(
+            message="Hello",
+            session_id=session_id,
+            org_id=str(test_organization_id),
+            agent_id=str(test_agent.id),
+            customer_id=str(test_user.id)
+        )
+        
+        assert isinstance(response, ChatResponse)
+        assert "error" in response.message.lower()
+        assert not response.transfer_to_human
+        assert response.transfer_reason is None
+        assert response.transfer_description is None
+
+@pytest.mark.asyncio
+async def test_chat_agent_run_timeout(test_organization_id, test_agent, test_user, mock_db_session):
+    """A hung agent run is cancelled by the AGENT_RUN_TIMEOUT guard and the
+    visitor gets the normal error reply instead of waiting forever (issue #269)."""
+    with patch('app.agents.chat_agent.AgentShopifyConfigRepository') as mock_shopify_config_repo, \
+         patch('app.agents.chat_agent.JiraRepository') as mock_jira_repo, \
+         patch('app.agents.chat_agent.EncryptedPostgresAgentStorage', return_value=MockAgentStorage()):
+        mock_shopify_config_repo.return_value.get_agent_shopify_config.return_value = None
+
+        agent_with_jira_config = AgentWithJiraConfig(
+            id=test_agent.id,
+            name=test_agent.name,
+            display_name=test_agent.display_name,
+            description=test_agent.description,
+            instructions=test_agent.instructions,
+            tools=test_agent.tools,
+            agent_type=test_agent.agent_type,
+            is_default=test_agent.is_default,
+            is_active=test_agent.is_active,
+            organization_id=test_agent.organization_id,
+            transfer_to_human=test_agent.transfer_to_human,
+            ask_for_rating=test_agent.ask_for_rating,
+            knowledge=[],
+            jira_enabled=False,
+            jira_project_key=None,
+            jira_issue_type_id=None,
+            groups=[],
+            organization=None
+        )
+        mock_jira_repo.return_value.get_agent_with_jira_config.return_value = agent_with_jira_config
+
+        chat_agent = ChatAgent(
+            api_key="test_key",
+            model_name="gpt-4",
+            model_type="OPENAI",
+            org_id=str(test_organization_id),
+            agent_id=str(test_agent.id),
+            customer_id=str(test_user.id),
+            session_id=str(uuid4())
+        )
+
+        # Simulate the runaway model <-> agno loop: a run that never returns.
+        async def hung_run(*args, **kwargs):
+            await asyncio.sleep(60)
+
+        chat_agent.agent.arun = hung_run
+
+        session_id = str(uuid4())
+        with patch.object(settings, 'AGENT_RUN_TIMEOUT', 1):
+            response = await chat_agent.get_response(
+                message="Hello",
+                session_id=session_id,
+                org_id=str(test_organization_id),
+                agent_id=str(test_agent.id),
+                customer_id=str(test_user.id)
+            )
+
+        assert isinstance(response, ChatResponse)
+        assert "error" in response.message.lower()
+        assert not response.transfer_to_human 

@@ -1,0 +1,1389 @@
+:root {
+    --background-base: #ffffff;
+    --background-soft: #f8f9fa;
+    --border-color: #e5e7eb;
+    --text-color: #111827;
+    --text-muted: #6b7280;
+    --error-color: #ef4444;
+    --success-color: #22c55e;
+    
+    --space-xs: 8px;
+    --space-sm: 12px;
+    --space-md: 16px;
+    --space-lg: 24px;
+    --space-xl: 32px;
+    
+    --text-xs: 12px;
+    --text-sm: 14px;
+    --text-md: 16px;
+    --text-lg: 18px;
+    --text-base: 16px;
+    
+    --radius-sm: 6px;
+    --radius-lg: 12px;
+    --radius-full: 9999px;
+    
+    --text-primary: #111827;
+    --text-secondary: #6b7280;
+    --primary-color: #f34611;
+    --primary-dark: #d93d0f;
+}
+
+/* Form Fields Styles */
+.form-fields {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-lg);
+}
+
+.form-field {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+    position: relative;
+}
+
+.field-label {
+    font-size: var(--text-sm);
+    font-weight: 600;
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+    margin-bottom: var(--space-xs);
+    letter-spacing: 0.02em;
+}
+
+.required-indicator {
+    color: #ff4757;
+    font-weight: 700;
+    font-size: 16px;
+}
+
+.form-input,
+.form-textarea,
+.form-select {
+    /* The widget iframe shell has no CSS reset; content-box + this padding
+       makes the fields overflow their column (#270). */
+    box-sizing: border-box;
+    padding: 16px 20px;
+    border: 2px solid transparent;
+    background: rgba(248, 249, 250, 0.8);
+    border-radius: 16px;
+    font-size: var(--text-base);
+    font-weight: 500;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    font-family: inherit;
+    position: relative;
+    box-shadow:
+        0 1px 3px rgba(0, 0, 0, 0.1),
+        inset 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+.form-input::placeholder,
+.form-textarea::placeholder {
+    color: #9ca3af;
+    font-weight: 400;
+    transition: all 0.3s ease;
+}
+
+.form-input:hover,
+.form-textarea:hover,
+.form-select:hover {
+    background: rgba(248, 249, 250, 1);
+    box-shadow:
+        0 4px 6px -1px rgba(0, 0, 0, 0.1),
+        0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    transform: translateY(-1px);
+}
+
+.form-input:focus,
+.form-textarea:focus,
+.form-select:focus {
+    outline: none;
+    border-color: var(--primary-color);
+    background: #ffffff;
+    box-shadow:
+        0 0 0 4px rgba(243, 70, 17, 0.1),
+        0 8px 16px -4px rgba(0, 0, 0, 0.1);
+    transform: translateY(-2px);
+}
+
+.form-input:focus::placeholder,
+.form-textarea:focus::placeholder {
+    color: transparent;
+    transform: translateY(-2px);
+}
+
+.form-input.error,
+.form-textarea.error,
+.form-select.error {
+    border-color: #ff4757;
+    background: rgba(255, 71, 87, 0.05);
+    animation: shake 0.5s ease-in-out;
+}
+
+@keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    25% { transform: translateX(-5px); }
+    75% { transform: translateX(5px); }
+}
+
+.form-input.error:focus,
+.form-textarea.error:focus,
+.form-select.error:focus {
+    box-shadow: 
+        0 0 0 4px rgba(255, 71, 87, 0.2),
+        0 8px 16px -4px rgba(255, 71, 87, 0.1);
+}
+
+.form-input:disabled,
+.form-textarea:disabled,
+.form-select:disabled {
+    background-color: rgba(0, 0, 0, 0.05);
+    cursor: not-allowed;
+    opacity: 0.6;
+    transform: none;
+}
+
+.form-textarea {
+    resize: vertical;
+    min-height: 100px;
+    line-height: 1.6;
+}
+
+.checkbox-field,
+.radio-field {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+    padding: var(--space-sm);
+    background: rgba(248, 249, 250, 0.5);
+    border-radius: 12px;
+    border: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.checkbox-field {
+    flex-direction: row;
+    align-items: center;
+    padding: var(--space-md);
+}
+
+.radio-option {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: var(--space-sm) var(--space-md);
+    border-radius: 8px;
+    transition: all 0.2s ease;
+    cursor: pointer;
+}
+
+.radio-option:hover {
+    background: rgba(243, 70, 17, 0.05);
+}
+
+.form-checkbox,
+.form-radio {
+    width: 20px;
+    height: 20px;
+    accent-color: var(--primary-color);
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.form-checkbox:checked,
+.form-radio:checked {
+    transform: scale(1.1);
+}
+
+.checkbox-label,
+.radio-label {
+    font-size: var(--text-base);
+    color: var(--text-primary);
+    cursor: pointer;
+    user-select: none;
+    font-weight: 500;
+    transition: color 0.2s ease;
+}
+
+.radio-option:hover .radio-label {
+    color: var(--primary-color);
+}
+
+.field-error {
+    font-size: var(--text-sm);
+    color: #ff4757;
+    margin-top: var(--space-xs);
+    display: flex;
+    /* Align the icon to the first text line (not centered against a wrapped block) */
+    align-items: flex-start;
+    gap: var(--space-sm);
+    padding: var(--space-sm);
+    background: rgba(255, 71, 87, 0.1);
+    border-radius: 8px;
+    border-left: 3px solid #ff4757;
+    font-weight: 500;
+    line-height: 1.45;
+}
+
+.field-error::before {
+    content: "⚠";
+    font-size: 15px;
+    line-height: 1.45;
+    flex-shrink: 0;
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+.form-actions {
+    margin-top: var(--space-xl);
+    display: flex;
+    justify-content: center;
+    gap: var(--space-md);
+}
+
+.form-submit-button {
+    padding: 16px 32px;
+    background: linear-gradient(135deg, var(--accent-solid) 0%, #ff6b47 100%);
+    color: white;
+    border: none;
+    border-radius: 16px;
+    font-size: var(--text-base);
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    min-width: 140px;
+    box-shadow: 
+        0 4px 14px 0 rgba(243, 70, 17, 0.3),
+        0 2px 4px 0 rgba(0, 0, 0, 0.1);
+    position: relative;
+    overflow: hidden;
+    letter-spacing: 0.02em;
+}
+
+.form-submit-button::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+    transition: left 0.5s ease;
+}
+
+.form-submit-button:hover:not(:disabled) {
+    transform: translateY(-3px);
+    box-shadow: 
+        0 8px 25px 0 rgba(243, 70, 17, 0.4),
+        0 4px 8px 0 rgba(0, 0, 0, 0.15);
+    background: linear-gradient(135deg, #ff6b47 0%, var(--accent-solid) 100%);
+}
+
+.form-submit-button:hover:not(:disabled)::before {
+    left: 100%;
+}
+
+.form-submit-button:active:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow: 
+        0 4px 14px 0 rgba(243, 70, 17, 0.3),
+        0 2px 4px 0 rgba(0, 0, 0, 0.1);
+}
+
+.form-submit-button:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    transform: none;
+    background: #9ca3af;
+    box-shadow: none;
+}
+
+.form-submit-button:disabled::before {
+    display: none;
+}
+
+/* Landing Page Fullscreen Styles */
+.landing-page-fullscreen {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: white;
+    border-radius: var(--radius-lg);
+    position: relative;
+    overflow: hidden;
+}
+
+.landing-page-fullscreen .landing-page-content {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    height: 100%;
+    padding: 48px;
+    box-sizing: border-box;
+}
+
+.landing-page-fullscreen .landing-page-header {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+    text-align: left;
+    align-items: flex-start;
+}
+
+.landing-page-fullscreen .landing-page-heading {
+    font-size: 30px;
+    font-weight: 700;
+    margin: 0;
+    line-height: 1.2;
+    color: #1f2937;
+    letter-spacing: -0.02em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.landing-page-fullscreen .landing-page-text {
+    font-size: 16px;
+    line-height: 1.6;
+    margin: 0;
+    color: #6b7280;
+    font-weight: 400;
+    max-width: 400px;
+}
+
+.landing-page-fullscreen .landing-page-actions {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-md);
+}
+
+.landing-page-fullscreen .landing-page-button {
+    background: none;
+    border: none;
+    color: #dc2626;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    padding: 0;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-xs);
+    transition: all 0.2s ease;
+}
+
+.landing-page-fullscreen .landing-page-button:hover {
+    color: #b91c1c;
+    text-decoration: underline;
+}
+
+.landing-page-fullscreen .landing-page-button::after {
+    content: '→';
+    font-size: 16px;
+    transition: transform 0.2s ease;
+}
+
+.landing-page-fullscreen .landing-page-button:hover::after {
+    transform: translateX(2px);
+}
+
+/* Powered by footer for landing page */
+.powered-by-landing {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    text-align: center;
+    font-size: 0.75rem;
+    opacity: 0.6;
+    color: #9ca3af;
+    padding: 12px 16px;
+    background: transparent;
+    border: none;
+    backdrop-filter: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+}
+
+.komi-logo {
+    flex-shrink: 0;
+    opacity: 0.8;
+}
+
+/* Full Screen Form Styles */
+.form-fullscreen {
+    width: 100%;
+    height: 100%;
+    background: white;
+    border-radius: var(--radius-lg);
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    overflow-y: auto;
+}
+
+.form-fullscreen-content {
+    width: 100%;
+    max-width: 600px;
+    padding: 48px 32px 80px;
+    display: flex;
+    flex-direction: column;
+    gap: 32px;
+    min-height: 100%;
+    box-sizing: border-box;
+}
+
+.form-fullscreen .form-header {
+    text-align: left;
+    margin-bottom: 24px;
+}
+
+.form-fullscreen .form-title {
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin: 0 0 16px 0;
+    line-height: 1.3;
+}
+
+.form-fullscreen .form-description {
+    font-size: 16px;
+    color: var(--text-secondary);
+    margin: 0;
+    line-height: 1.5;
+}
+
+.form-fullscreen .form-fields {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+}
+
+.form-fullscreen .form-field {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.form-fullscreen .field-label {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 0;
+}
+
+.form-fullscreen .required-indicator {
+    color: #dc2626;
+    margin-left: 4px;
+}
+
+.form-fullscreen .form-input,
+.form-fullscreen .form-textarea,
+.form-fullscreen .form-select {
+    padding: 12px 16px;
+    border: 2px solid var(--border-color);
+    border-radius: 8px;
+    font-size: 16px;
+    color: var(--text-primary);
+    background: var(--background-base);
+    transition: all 0.2s ease;
+}
+
+.form-fullscreen .form-input:focus,
+.form-fullscreen .form-textarea:focus,
+.form-fullscreen .form-select:focus {
+    outline: none;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px rgba(243, 70, 17, 0.1);
+}
+
+.form-fullscreen .form-input.error,
+.form-fullscreen .form-textarea.error,
+.form-fullscreen .form-select.error {
+    border-color: #dc2626;
+    box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.1);
+}
+
+.form-fullscreen .form-textarea {
+    resize: vertical;
+    min-height: 100px;
+}
+
+.form-fullscreen .checkbox-field,
+.form-fullscreen .radio-field {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    cursor: pointer;
+}
+
+.form-fullscreen .form-checkbox,
+.form-fullscreen .form-radio {
+    width: 20px;
+    height: 20px;
+    cursor: pointer;
+}
+
+.form-fullscreen .checkbox-label,
+.form-fullscreen .radio-label {
+    font-size: 16px;
+    color: var(--text-primary);
+    cursor: pointer;
+}
+
+.form-fullscreen .radio-group {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.form-fullscreen .field-error {
+    color: #dc2626;
+    font-size: 14px;
+    margin-top: 4px;
+}
+
+.form-fullscreen .form-actions {
+    display: flex;
+    justify-content: center;
+    margin-top: 24px;
+}
+
+.form-fullscreen .submit-form-button {
+    padding: 16px 32px;
+    background: var(--accent-solid);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    min-width: 160px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+.form-fullscreen .submit-form-button:hover:not(:disabled) {
+    background: var(--primary-dark);
+    transform: translateY(-1px);
+}
+
+.form-fullscreen .submit-form-button:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
+    transform: none;
+}
+
+.form-fullscreen .loading-spinner-inline {
+    display: flex;
+    gap: 4px;
+}
+
+.form-fullscreen .loading-spinner-inline .dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: currentColor;
+    animation: pulse 1.5s ease-in-out infinite;
+}
+
+.form-fullscreen .loading-spinner-inline .dot:nth-child(2) {
+    animation-delay: 0.3s;
+}
+
+.form-fullscreen .loading-spinner-inline .dot:nth-child(3) {
+    animation-delay: 0.6s;
+}
+
+/* Responsive styles */
+@media (max-width: 768px) {
+    .form-fields {
+        gap: var(--space-md);
+    }
+    
+    .form-input,
+    .form-textarea,
+    .form-select {
+        padding: 14px 16px;
+        border-radius: 12px;
+        font-size: var(--text-sm);
+    }
+    
+    .form-submit-button {
+        padding: 14px 28px;
+        font-size: var(--text-sm);
+        min-width: 120px;
+        border-radius: 12px;
+    }
+    
+    .checkbox-field,
+    .radio-field {
+        padding: var(--space-sm);
+    }
+    
+    .radio-option {
+        padding: var(--space-xs) var(--space-sm);
+    }
+    
+    .form-checkbox,
+    .form-radio {
+        width: 18px;
+        height: 18px;
+    }
+
+
+    
+    .powered-by-landing {
+        font-size: 0.7rem;
+        padding: 8px 12px;
+    }
+
+    /* Form fullscreen mobile responsive styles */
+    .form-fullscreen-content {
+        padding: 24px 20px;
+        gap: 24px;
+    }
+    
+    .form-fullscreen .form-title {
+        font-size: 24px;
+    }
+    
+    .form-fullscreen .form-description {
+        font-size: 15px;
+    }
+    
+    .form-fullscreen .form-fields {
+        gap: 20px;
+    }
+    
+    .form-fullscreen .submit-form-button {
+        width: 100%;
+        padding: 14px 24px;
+    }
+}
+
+/* Widget Container Styles */
+.widget-container {
+    position: fixed;
+    bottom: 90px;
+    right: 20px;
+    z-index: 999998;
+    width: 400px;
+    height: 580px;
+    max-width: 90vw;
+    max-height: 80vh;
+    background: white;
+    border-radius: 16px;
+    /* No border, using corner shadows instead */
+    border: none;
+    box-shadow: none;
+    position: relative;
+    overflow: hidden;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+.widget-container::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    pointer-events: none;
+    border-radius: 16px;
+    border: 1px solid #e5e7eb;
+}
+
+.widget-container .widget-root {
+    width: 100% !important;
+    height: 100% !important;
+    border-radius: 16px !important;
+    box-shadow: none !important;
+}
+
+/* Essential widget styling overrides to match WidgetBuilder.vue */
+.widget-container .widget-builder {
+    width: 100% !important;
+    height: 100% !important;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
+    background: white !important;
+    border-radius: 16px !important;
+    overflow: hidden !important;
+    display: flex !important;
+    flex-direction: column !important;
+}
+
+.widget-container .chat-widget {
+    height: 100% !important;
+    display: flex !important;
+    flex-direction: column !important;
+}
+
+.widget-container .chat-container {
+    width: 100% !important;
+    height: 580px !important;
+    display: flex !important;
+    flex-direction: column !important;
+    background: transparent !important;
+    overflow: hidden !important;
+    position: relative !important;
+    border-radius: var(--radius-lg) !important;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
+}
+
+.widget-container .chat-panel {
+    background: var(--background-base) !important;
+    display: flex !important;
+    flex-direction: column !important;
+    height: 100% !important;
+    transition: all 0.3s ease !important;
+    border-radius: 0 !important;
+}
+
+.widget-container .chat-header {
+    padding: var(--space-md) !important;
+    display: flex !important;
+    justify-content: flex-start !important;
+    align-items: center !important;
+}
+
+
+
+.widget-container .chat-input {
+    padding: var(--space-md) !important;
+    border-top: 1px solid color-mix(in srgb, currentColor 12%, transparent) !important;
+    display: flex !important;
+    flex-direction: column !important;
+    gap: var(--space-sm) !important;
+}
+
+.widget-container .message-input {
+    display: flex !important;
+    gap: var(--space-sm) !important;
+}
+
+.widget-container .message-input input {
+    flex: 1 !important;
+    padding: var(--space-sm) var(--space-md) !important;
+    /* Accent-tinted border so it matches the theme (was a light --border-color = white on dark). */
+    border: 1.5px solid color-mix(in srgb, var(--cm-accent, #C9F24E) 35%, transparent) !important;
+    border-radius: var(--radius-lg) !important;
+}
+
+.widget-container .send-button {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    padding: var(--space-sm) !important;
+    min-width: 40px !important;
+    height: 40px !important;
+    border: none !important;
+    border-radius: var(--radius-lg) !important;
+    cursor: pointer !important;
+    color: white !important;
+}
+
+/* Message Styles for Widget Container */
+.widget-container .chat-messages {
+    flex: 1 !important;
+    overflow-y: auto !important;
+    padding: var(--space-md) !important;
+    display: flex !important;
+    flex-direction: column !important;
+    gap: var(--space-md) !important;
+    -webkit-overflow-scrolling: touch !important;
+    scroll-behavior: smooth !important;
+    margin-top: var(--space-sm) !important;
+}
+
+.widget-container .message {
+    display: flex !important;
+    gap: var(--space-sm) !important;
+    max-width: 95% !important;
+    align-items: flex-start !important;
+    margin-bottom: var(--space-md) !important;
+}
+
+.widget-container .message-bubble {
+    padding: 12px 25px !important;
+    border-radius: 20px !important;
+    line-height: 1.4 !important;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05) !important;
+    max-width: 95% !important;
+}
+
+.widget-container .user-message {
+    align-self: flex-end !important;
+    flex-direction: row-reverse !important;
+}
+
+.widget-container .user-message .message-bubble {
+    border-bottom-right-radius: 4px !important;
+}
+
+.widget-container .agent-message .message-bubble,
+.widget-container .bot .message-bubble {
+    border-bottom-left-radius: 4px !important;
+    background-color: #f5f5f5 !important;
+}
+
+/* System Message Styles */
+.widget-container .message.system-message {
+    align-self: center !important;
+    max-width: 100% !important;
+    margin: var(--space-sm) 0 !important;
+}
+
+.widget-container .system-message .message-bubble {
+    background: rgba(0, 0, 0, 0.05) !important;
+    color: var(--text-muted) !important;
+    font-size: 0.85em !important;
+    padding: var(--space-xs) var(--space-md) !important;
+    border-radius: var(--radius-lg) !important;
+    text-align: center !important;
+}
+
+/* Form Message Styles */
+.widget-container .message.form-message {
+    align-self: center !important;
+    width: 100% !important;
+    max-width: 520px !important;
+    margin: var(--space-md) 0 !important;
+}
+
+.widget-container .form-message .message-bubble {
+    background: linear-gradient(145deg, #ffffff 0%, #f8f9fa 100%) !important;
+    padding: var(--space-xl) !important;
+    border-radius: 24px !important;
+    box-shadow: 
+        0 20px 25px -5px rgba(0, 0, 0, 0.1),
+        0 10px 10px -5px rgba(0, 0, 0, 0.04),
+        0 0 0 1px rgba(255, 255, 255, 0.05) !important;
+    border: 1px solid rgba(0, 0, 0, 0.06) !important;
+    width: 100% !important;
+    max-width: none !important;
+}
+
+/* Welcome Message Styles */
+.widget-container .welcome-message-section {
+    width: 100% !important;
+    height: 100% !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    background: var(--background-base) !important;
+    border-radius: var(--radius-lg) !important;
+    position: relative !important;
+    overflow: hidden !important;
+    padding: var(--space-xl) !important;
+    box-sizing: border-box !important;
+}
+
+.widget-container .welcome-content {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
+    width: 100% !important;
+    max-width: 600px !important;
+    text-align: center !important;
+    flex: 1 !important;
+}
+
+.widget-container .welcome-header {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    gap: var(--space-lg) !important;
+}
+
+.widget-container .welcome-title {
+    font-size: 1.5rem !important;
+    font-weight: 700 !important;
+    color: #1f2937 !important;
+    margin: 0 !important;
+    line-height: 1.2 !important;
+    letter-spacing: -0.02em !important;
+}
+
+.widget-container .welcome-subtitle {
+    font-size: 1rem !important;
+    color: var(--text-secondary) !important;
+    margin: 0 !important;
+    line-height: 1.6 !important;
+    max-width: 500px !important;
+    font-weight: 400 !important;
+}
+
+/* Welcome Input Container */
+.widget-container .welcome-input-container {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: var(--space-lg) !important;
+    max-width: 600px !important;
+    margin: 0 auto !important;
+    width: 100% !important;
+    padding: 0 !important;
+}
+
+.widget-container .welcome-message-input {
+    display: flex !important;
+    gap: var(--space-md) !important;
+    width: 100% !important;
+    align-items: center !important;
+}
+
+.widget-container .welcome-message-field {
+    flex: 1 !important;
+    padding: 16px 20px !important;
+    border: 2px solid color-mix(in srgb, var(--cm-accent, #C9F24E) 35%, transparent) !important;
+    border-radius: 16px !important;
+    font-size: 1rem !important;
+    font-weight: 500 !important;
+    background: var(--background-base) !important;
+    color: var(--text-primary) !important;
+    transition: all 0.3s ease !important;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05) !important;
+}
+
+.widget-container .welcome-send-button {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    padding: 16px !important;
+    min-width: 52px !important;
+    height: 52px !important;
+    border: none !important;
+    border-radius: 16px !important;
+    cursor: pointer !important;
+    color: white !important;
+    transition: all 0.3s ease !important;
+    box-shadow: 0 4px 14px rgba(243, 70, 17, 0.3) !important;
+}
+
+/* ===== AURORA style: dark ask-me-anything with glowing orb avatar =====
+   Scoped to .welcome-message-section.aurora so legacy ASK_ANYTHING is untouched. */
+.widget-container .welcome-orb {
+    width: 120px !important;
+    height: 120px !important;
+    border-radius: 50% !important;
+    flex-shrink: 0 !important;
+}
+.widget-container .welcome-message-section.aurora .welcome-avatar {
+    width: 120px !important;
+    height: 120px !important;
+    border: none !important;
+    box-shadow: 0 8px 40px rgba(157, 140, 255, 0.35) !important;
+}
+.widget-container .welcome-message-section.aurora .welcome-title {
+    color: #ffffff !important;
+}
+.widget-container .welcome-message-section.aurora .welcome-subtitle {
+    color: rgba(255, 255, 255, 0.6) !important;
+}
+.widget-container .welcome-message-section.aurora .welcome-message-input {
+    background: rgba(255, 255, 255, 0.05) !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    border-radius: 999px !important;
+    padding: 6px 6px 6px 8px !important;
+}
+.widget-container .welcome-message-section.aurora .welcome-message-field {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    color: #ffffff !important;
+    border-radius: 999px !important;
+}
+.widget-container .welcome-message-section.aurora .welcome-message-field::placeholder {
+    color: rgba(255, 255, 255, 0.45) !important;
+}
+.widget-container .welcome-message-section.aurora .welcome-send-button.aurora-send {
+    border-radius: 50% !important;
+    min-width: 48px !important;
+    width: 48px !important;
+    height: 48px !important;
+    padding: 0 !important;
+}
+
+
+
+
+
+
+
+/* Product Message Styles */
+.widget-container .message.product-message .message-bubble {
+    padding: 0 !important;
+    background: none !important;
+    border: none !important;
+    box-shadow: none !important;
+    width: 100% !important;
+    max-width: none !important;
+}
+
+.widget-container .product-message-container {
+    width: 100% !important;
+    margin: var(--space-sm) 0 !important;
+    padding: 0 var(--space-xs) !important;
+}
+
+.widget-container .products-carousel {
+    margin: var(--space-xs) 0 !important;
+    width: 100% !important;
+    padding: var(--space-xs) !important;
+    background: rgba(0, 0, 0, 0.02) !important;
+    border-radius: 20px !important;
+}
+
+.widget-container .carousel-title {
+    font-size: var(--text-base) !important;
+    font-weight: 600 !important;
+    margin-bottom: var(--space-sm) !important;
+    color: var(--text-primary) !important;
+    padding: 0 var(--space-xs) !important;
+}
+
+.widget-container .carousel-items {
+    display: flex !important;
+    flex-direction: row !important;
+    gap: var(--space-sm) !important;
+    margin-top: var(--space-xs) !important;
+    overflow-x: auto !important;
+    padding: var(--space-xs) !important;
+    padding-bottom: var(--space-md) !important;
+    scroll-snap-type: x mandatory !important;
+    -webkit-overflow-scrolling: touch !important;
+}
+
+.widget-container .product-card-compact {
+    background-color: white !important;
+    border: 1px solid rgba(0, 0, 0, 0.08) !important;
+    border-radius: 20px !important;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04) !important;
+    overflow: hidden !important;
+    width: 180px !important;
+    flex-shrink: 0 !important;
+    transition: all 0.2s ease !important;
+}
+
+.widget-container .product-card-compact:hover {
+    transform: translateY(-2px) !important;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08), 0 2px 4px rgba(0, 0, 0, 0.06) !important;
+}
+
+/* Rating Message Styles */
+.widget-container .message.rating-message {
+    align-self: center !important;
+    width: 100% !important;
+    max-width: 500px !important;
+    margin: var(--space-sm) 0 !important;
+}
+
+.widget-container .rating-message .message-bubble {
+    background-color: white !important;
+    padding: var(--space-md) var(--space-md) !important;
+    border-radius: 12px !important;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.08) !important;
+    border: 1px solid var(--border-color) !important;
+}
+
+.widget-container .rating-content {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    width: 100% !important;
+    padding: 0 !important;
+}
+
+.widget-container .star-rating {
+    display: flex !important;
+    gap: 0.75rem !important;
+    justify-content: center !important;
+    margin: 0 0 20px !important;
+}
+
+.widget-container .star-button {
+    background: none !important;
+    border: none !important;
+    cursor: pointer !important;
+    font-size: 28px !important;
+    color: #d1d5db !important;
+    transition: all 0.2s ease !important;
+    padding: 0 4px !important;
+    line-height: 1 !important;
+}
+
+.widget-container .star-button.selected.warning {
+    color: var(--error-color) !important;
+}
+
+.widget-container .star-button.selected.success {
+    color: var(--success-color) !important;
+}
+
+/* User Input Message Styles */
+.widget-container .user-input-content {
+    width: 100% !important;
+    display: flex !important;
+    flex-direction: column !important;
+    gap: var(--space-md) !important;
+}
+
+.widget-container .user-input-form {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: var(--space-sm) !important;
+    padding: var(--space-md) !important;
+    background: var(--background-soft) !important;
+    border-radius: var(--radius-md) !important;
+    border: 1px solid var(--border-color) !important;
+}
+
+.widget-container .user-input-textarea {
+    width: 100% !important;
+    padding: var(--space-sm) var(--space-md) !important;
+    border: 1px solid var(--border-color) !important;
+    border-radius: var(--radius-md) !important;
+    background: var(--background-base) !important;
+    color: var(--text-primary) !important;
+    font-size: var(--text-base) !important;
+    font-family: inherit !important;
+    resize: vertical !important;
+    min-height: 80px !important;
+}
+
+.widget-loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    color: #6b7280;
+    gap: 1rem;
+}
+
+.widget-loading i {
+    font-size: 2rem;
+    color: #6366f1;
+}
+
+.widget-loading p {
+    margin: 0;
+    font-size: 0.875rem;
+}
+
+/* ASK_ANYTHING Chat Style Overrides for Widget Container */
+.widget-container .chat-container.ask-anything-style {
+    max-width: 800px !important;
+    min-width: 400px !important;
+    margin: 0 auto !important;
+}
+
+.widget-container .chat-container.ask-anything-style .chat-messages {
+    max-width: 600px !important;
+    margin-left: auto !important;
+    margin-right: auto !important;
+    padding: var(--space-xl) !important;
+}
+
+.widget-container .chat-container.ask-anything-style .chat-messages .message {
+    max-width: 85% !important;
+}
+
+.widget-container .chat-container.ask-anything-style .message.user-message {
+    align-self: flex-end !important;
+    margin-left: auto !important;
+    margin-right: 0 !important;
+    flex-direction: row-reverse !important;
+}
+
+.widget-container .chat-container.ask-anything-style .message.agent-message {
+    align-self: flex-start !important;
+    margin-left: 0 !important;
+    margin-right: auto !important;
+    flex-direction: row !important;
+}
+
+.widget-container .chat-input.ask-anything-input {
+    padding: var(--space-xl) !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+}
+
+.widget-container .chat-input.ask-anything-input .message-input {
+    max-width: 600px !important;
+    margin: 0 auto !important;
+    gap: var(--space-md) !important;
+    width: 100% !important;
+}
+
+.widget-container .ask-anything-field {
+    padding: 18px 24px !important;
+    border: 2px solid color-mix(in srgb, var(--cm-accent, #C9F24E) 35%, transparent) !important;
+    border-radius: 16px !important;
+    font-size: 1rem !important;
+    font-weight: 500 !important;
+    background: var(--background-base) !important;
+    color: var(--text-primary) !important;
+    transition: all 0.3s ease !important;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05) !important;
+}
+
+.widget-container .send-button.ask-anything-send {
+    padding: 18px !important;
+    min-width: 56px !important;
+    height: 56px !important;
+    border-radius: 16px !important;
+    box-shadow: 0 4px 14px rgba(243, 70, 17, 0.3) !important;
+}
+
+/* Typing Indicator */
+.widget-container .typing-indicator {
+    display: flex !important;
+    gap: 4px !important;
+    padding: 12px 16px !important;
+    margin-top: var(--space-md) !important;
+    align-self: flex-start !important;
+}
+
+.widget-container .dot {
+    width: 8px !important;
+    height: 8px !important;
+    background: currentColor !important;
+    border-radius: 50% !important;
+    opacity: 0.6 !important;
+    animation: bounce 1.4s infinite ease-in-out !important;
+}
+
+/* Header Styles */
+.widget-container .chat-header {
+    padding: var(--space-md) !important;
+    display: flex !important;
+    justify-content: flex-start !important;
+    align-items: center !important;
+}
+
+.widget-container .header-content {
+    display: flex !important;
+    align-items: center !important;
+    gap: var(--space-sm) !important;
+}
+
+.widget-container .header-avatar {
+    width: 32px !important;
+    height: 32px !important;
+    border-radius: 50% !important;
+    object-fit: cover !important;
+}
+
+.widget-container .header-info h3 {
+    margin: 0 !important;
+    font-size: var(--text-md) !important;
+}
+
+.widget-container .status {
+    display: flex !important;
+    align-items: center !important;
+    gap: var(--space-xs) !important;
+    font-size: var(--text-sm) !important;
+}
+
+.widget-container .status-indicator {
+    width: 8px !important;
+    height: 8px !important;
+    border-radius: 50% !important;
+    background: var(--success-color) !important;
+}
+
+/* Powered by footer */
+.widget-container .powered-by,
+.widget-container .powered-by-welcome,
+.widget-container .powered-by-landing {
+    text-align: center !important;
+    font-size: 0.75rem !important;
+    opacity: 0.6 !important;
+    color: var(--text-muted) !important;
+    padding: var(--space-md) !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 6px !important;
+}
+
+/* Mobile widget container overrides */
+@media (max-width: 768px) {
+    .widget-container {
+        width: 100vw !important;
+        height: 100vh !important;
+        height: 100dvh !important;
+        max-width: 100vw !important;
+        max-height: 100vh !important;
+        max-height: 100dvh !important;
+        top: 0 !important;
+        left: 0 !important;
+        bottom: 0 !important;
+        right: 0 !important;
+        border-radius: 0 !important;
+        position: fixed !important;
+    }
+
+    .widget-container .chat-container {
+        /* Deduct topbar height when present (ASK_ANYTHING) */
+        height: calc(100vh - 60px) !important;
+        height: calc(100dvh - 60px) !important;
+        width: 100vw !important;
+        border-radius: 0 !important;
+    }
+
+    .widget-container .widget-root {
+        border-radius: 0 !important;
+    }
+
+    .widget-container .widget-builder {
+        border-radius: 0 !important;
+    }
+}
+
+/* Extra small screens */
+@media (max-width: 480px) {
+
+    
+    .widget-container .chat-container.ask-anything-style {
+        min-width: 100% !important;
+        max-width: 100% !important;
+    }
+    
+    .widget-container .chat-container.ask-anything-style .chat-messages {
+        padding: var(--space-lg) !important;
+        max-width: 100% !important;
+    }
+    
+    .widget-container .welcome-title {
+        font-size: 1.25rem !important;
+    }
+    
+    .widget-container .welcome-subtitle {
+        font-size: 0.9rem !important;
+    }
+}

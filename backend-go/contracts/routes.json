@@ -1,0 +1,3399 @@
+{
+  "rest": [
+    {
+      "handler": "index",
+      "methods": [
+        "GET"
+      ],
+      "module": "help_center_public",
+      "path": "/",
+      "registration_id": "rest-0061",
+      "scope": "public",
+      "status_code": null
+    },
+    {
+      "handler": "root",
+      "methods": [
+        "GET"
+      ],
+      "module": "main",
+      "path": "/",
+      "registration_id": "rest-0001",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "article",
+      "methods": [
+        "GET"
+      ],
+      "module": "help_center_public",
+      "path": "/a/{slug}",
+      "registration_id": "rest-0062",
+      "scope": "public",
+      "status_code": null
+    },
+    {
+      "handler": "article_feedback",
+      "methods": [
+        "POST"
+      ],
+      "module": "help_center_public",
+      "path": "/a/{slug}/feedback",
+      "registration_id": "rest-0064",
+      "scope": "public",
+      "status_code": null
+    },
+    {
+      "handler": "create_agent",
+      "methods": [
+        "POST"
+      ],
+      "module": "agent",
+      "path": "/api/v1/agent",
+      "registration_id": "rest-0005",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "generate_instructions",
+      "methods": [
+        "POST"
+      ],
+      "module": "agent",
+      "path": "/api/v1/agent/generate-instructions",
+      "registration_id": "rest-0019",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "get_guardrail_default",
+      "methods": [
+        "GET"
+      ],
+      "module": "agent",
+      "path": "/api/v1/agent/guardrail-default",
+      "registration_id": "rest-0009",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "get_organization_agents",
+      "methods": [
+        "GET"
+      ],
+      "module": "agent",
+      "path": "/api/v1/agent/list",
+      "registration_id": "rest-0011",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "get_organization_agents",
+      "methods": [
+        "GET"
+      ],
+      "module": "agent",
+      "path": "/api/v1/agent/list/shopify",
+      "registration_id": "rest-0010",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "get_agent_roster",
+      "methods": [
+        "GET"
+      ],
+      "module": "agent",
+      "path": "/api/v1/agent/roster",
+      "registration_id": "rest-0008",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "get_agent_by_id",
+      "methods": [
+        "GET"
+      ],
+      "module": "agent",
+      "path": "/api/v1/agent/{agent_id}",
+      "registration_id": "rest-0018",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "update_agent",
+      "methods": [
+        "PUT"
+      ],
+      "module": "agent",
+      "path": "/api/v1/agent/{agent_id}",
+      "registration_id": "rest-0007",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "create_agent_customization",
+      "methods": [
+        "POST"
+      ],
+      "module": "agent",
+      "path": "/api/v1/agent/{agent_id}/customization",
+      "registration_id": "rest-0013",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "upload_agent_photo",
+      "methods": [
+        "POST"
+      ],
+      "module": "agent",
+      "path": "/api/v1/agent/{agent_id}/customization/photo",
+      "registration_id": "rest-0015",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "upload_agent_photo",
+      "methods": [
+        "POST"
+      ],
+      "module": "agent",
+      "path": "/api/v1/agent/{agent_id}/customization/photo/shopify",
+      "registration_id": "rest-0014",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "create_agent_customization",
+      "methods": [
+        "POST"
+      ],
+      "module": "agent",
+      "path": "/api/v1/agent/{agent_id}/customization/shopify",
+      "registration_id": "rest-0012",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "update_agent_groups",
+      "methods": [
+        "PUT"
+      ],
+      "module": "agent",
+      "path": "/api/v1/agent/{agent_id}/groups",
+      "registration_id": "rest-0016",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "get_lead_capture_config",
+      "methods": [
+        "GET"
+      ],
+      "module": "lead_capture",
+      "path": "/api/v1/agent/{agent_id}/lead-capture",
+      "registration_id": "rest-0101",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "update_lead_capture_config",
+      "methods": [
+        "PUT"
+      ],
+      "module": "lead_capture",
+      "path": "/api/v1/agent/{agent_id}/lead-capture",
+      "registration_id": "rest-0102",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "get_agent_by_id",
+      "methods": [
+        "GET"
+      ],
+      "module": "agent",
+      "path": "/api/v1/agent/{agent_id}/shopify",
+      "registration_id": "rest-0017",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "update_agent",
+      "methods": [
+        "PUT"
+      ],
+      "module": "agent",
+      "path": "/api/v1/agent/{agent_id}/shopify",
+      "registration_id": "rest-0006",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "get_organization_ai_config",
+      "methods": [
+        "GET"
+      ],
+      "module": "ai_setup",
+      "path": "/api/v1/ai/config",
+      "registration_id": "rest-0022",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "update_ai_config",
+      "methods": [
+        "PUT"
+      ],
+      "module": "ai_setup",
+      "path": "/api/v1/ai/config",
+      "registration_id": "rest-0023",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "get_providers",
+      "methods": [
+        "GET"
+      ],
+      "module": "ai_setup",
+      "path": "/api/v1/ai/providers",
+      "registration_id": "rest-0020",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "setup_ai",
+      "methods": [
+        "POST"
+      ],
+      "module": "ai_setup",
+      "path": "/api/v1/ai/setup",
+      "registration_id": "rest-0021",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "get_analytics",
+      "methods": [
+        "GET"
+      ],
+      "module": "analytics",
+      "path": "/api/v1/analytics",
+      "registration_id": "rest-0025",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "get_agent_performance",
+      "methods": [
+        "GET"
+      ],
+      "module": "analytics",
+      "path": "/api/v1/analytics/agent-performance",
+      "registration_id": "rest-0024",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "get_customer_analytics",
+      "methods": [
+        "GET"
+      ],
+      "module": "analytics",
+      "path": "/api/v1/analytics/customer-analytics",
+      "registration_id": "rest-0026",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "get_customer_details",
+      "methods": [
+        "GET"
+      ],
+      "module": "analytics",
+      "path": "/api/v1/analytics/customer-details/{customer_id}",
+      "registration_id": "rest-0027",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "get_sentiment_analytics",
+      "methods": [
+        "GET"
+      ],
+      "module": "analytics",
+      "path": "/api/v1/analytics/sentiment",
+      "registration_id": "rest-0028",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "get_session_sentiment",
+      "methods": [
+        "GET"
+      ],
+      "module": "analytics",
+      "path": "/api/v1/analytics/session-sentiment/{session_id}",
+      "registration_id": "rest-0029",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "list_canned_responses",
+      "methods": [
+        "GET"
+      ],
+      "module": "canned_responses",
+      "path": "/api/v1/canned-responses",
+      "registration_id": "rest-0030",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "create_canned_response",
+      "methods": [
+        "POST"
+      ],
+      "module": "canned_responses",
+      "path": "/api/v1/canned-responses",
+      "registration_id": "rest-0031",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "delete_canned_response",
+      "methods": [
+        "DELETE"
+      ],
+      "module": "canned_responses",
+      "path": "/api/v1/canned-responses/{response_id}",
+      "registration_id": "rest-0033",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "update_canned_response",
+      "methods": [
+        "PUT"
+      ],
+      "module": "canned_responses",
+      "path": "/api/v1/canned-responses/{response_id}",
+      "registration_id": "rest-0032",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "list_channel_accounts",
+      "methods": [
+        "GET"
+      ],
+      "module": "channels.accounts",
+      "path": "/api/v1/channels/accounts",
+      "registration_id": "rest-0243",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "clear_account_agent",
+      "methods": [
+        "DELETE"
+      ],
+      "module": "channels.agent_config",
+      "path": "/api/v1/channels/agent-config/{account_id}",
+      "registration_id": "rest-0245",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "set_account_agent",
+      "methods": [
+        "POST"
+      ],
+      "module": "channels.agent_config",
+      "path": "/api/v1/channels/agent-config/{account_id}",
+      "registration_id": "rest-0244",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "connect_email",
+      "methods": [
+        "POST"
+      ],
+      "module": "channels.email",
+      "path": "/api/v1/channels/email",
+      "registration_id": "rest-0246",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "disconnect_email",
+      "methods": [
+        "DELETE"
+      ],
+      "module": "channels.email",
+      "path": "/api/v1/channels/email/{account_id}",
+      "registration_id": "rest-0248",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "get_email_webhook_url",
+      "methods": [
+        "GET"
+      ],
+      "module": "channels.email",
+      "path": "/api/v1/channels/email/{account_id}/webhook-url",
+      "registration_id": "rest-0247",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "connect_line",
+      "methods": [
+        "POST"
+      ],
+      "module": "channels.line",
+      "path": "/api/v1/channels/line",
+      "registration_id": "rest-0249",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "disconnect_line",
+      "methods": [
+        "DELETE"
+      ],
+      "module": "channels.line",
+      "path": "/api/v1/channels/line/{account_id}",
+      "registration_id": "rest-0250",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "get_embedded_signup_config",
+      "methods": [
+        "GET"
+      ],
+      "module": "channels.meta",
+      "path": "/api/v1/channels/meta/embedded-signup-config",
+      "registration_id": "rest-0251",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "connect_instagram",
+      "methods": [
+        "POST"
+      ],
+      "module": "channels.meta",
+      "path": "/api/v1/channels/meta/instagram",
+      "registration_id": "rest-0258",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "connect_instagram_login",
+      "methods": [
+        "POST"
+      ],
+      "module": "channels.meta",
+      "path": "/api/v1/channels/meta/instagram/login/connect",
+      "registration_id": "rest-0257",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "connect_messenger",
+      "methods": [
+        "POST"
+      ],
+      "module": "channels.meta",
+      "path": "/api/v1/channels/meta/messenger",
+      "registration_id": "rest-0254",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "connect_messenger_signup",
+      "methods": [
+        "POST"
+      ],
+      "module": "channels.meta",
+      "path": "/api/v1/channels/meta/messenger/signup/connect",
+      "registration_id": "rest-0256",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "list_messenger_signup_pages",
+      "methods": [
+        "POST"
+      ],
+      "module": "channels.meta",
+      "path": "/api/v1/channels/meta/messenger/signup/pages",
+      "registration_id": "rest-0255",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "connect_whatsapp",
+      "methods": [
+        "POST"
+      ],
+      "module": "channels.meta",
+      "path": "/api/v1/channels/meta/whatsapp",
+      "registration_id": "rest-0252",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "connect_whatsapp_embedded_signup",
+      "methods": [
+        "POST"
+      ],
+      "module": "channels.meta",
+      "path": "/api/v1/channels/meta/whatsapp/embedded-signup",
+      "registration_id": "rest-0253",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "start_whatsapp_conversation",
+      "methods": [
+        "POST"
+      ],
+      "module": "channels.whatsapp_messaging",
+      "path": "/api/v1/channels/meta/whatsapp/{account_id}/conversations",
+      "registration_id": "rest-0268",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "send_whatsapp_template",
+      "methods": [
+        "POST"
+      ],
+      "module": "channels.whatsapp_messaging",
+      "path": "/api/v1/channels/meta/whatsapp/{account_id}/send-template",
+      "registration_id": "rest-0269",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "get_whatsapp_template_library",
+      "methods": [
+        "GET"
+      ],
+      "module": "channels.whatsapp_messaging",
+      "path": "/api/v1/channels/meta/whatsapp/{account_id}/template-library",
+      "registration_id": "rest-0271",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "list_whatsapp_templates",
+      "methods": [
+        "GET"
+      ],
+      "module": "channels.whatsapp_messaging",
+      "path": "/api/v1/channels/meta/whatsapp/{account_id}/templates",
+      "registration_id": "rest-0270",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "disconnect_meta_account",
+      "methods": [
+        "DELETE"
+      ],
+      "module": "channels.meta",
+      "path": "/api/v1/channels/meta/{account_id}",
+      "registration_id": "rest-0259",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "slack_oauth_callback",
+      "methods": [
+        "GET"
+      ],
+      "module": "channels.slack",
+      "path": "/api/v1/channels/slack/callback",
+      "registration_id": "rest-0261",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "install_slack",
+      "methods": [
+        "GET"
+      ],
+      "module": "channels.slack",
+      "path": "/api/v1/channels/slack/install",
+      "registration_id": "rest-0260",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "disconnect_slack",
+      "methods": [
+        "DELETE"
+      ],
+      "module": "channels.slack",
+      "path": "/api/v1/channels/slack/{account_id}",
+      "registration_id": "rest-0262",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "connect_sms",
+      "methods": [
+        "POST"
+      ],
+      "module": "channels.sms",
+      "path": "/api/v1/channels/sms",
+      "registration_id": "rest-0264",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "list_sms_providers",
+      "methods": [
+        "GET"
+      ],
+      "module": "channels.sms",
+      "path": "/api/v1/channels/sms/providers",
+      "registration_id": "rest-0263",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "disconnect_sms",
+      "methods": [
+        "DELETE"
+      ],
+      "module": "channels.sms",
+      "path": "/api/v1/channels/sms/{account_id}",
+      "registration_id": "rest-0265",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "connect_telegram",
+      "methods": [
+        "POST"
+      ],
+      "module": "channels.telegram",
+      "path": "/api/v1/channels/telegram",
+      "registration_id": "rest-0266",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "disconnect_telegram",
+      "methods": [
+        "DELETE"
+      ],
+      "module": "channels.telegram",
+      "path": "/api/v1/channels/telegram/{account_id}",
+      "registration_id": "rest-0267",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "get_chat_history",
+      "methods": [
+        "GET"
+      ],
+      "module": "chat",
+      "path": "/api/v1/chats/",
+      "registration_id": "rest-0034",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "get_thread_unread_counts",
+      "methods": [
+        "GET"
+      ],
+      "module": "chat",
+      "path": "/api/v1/chats/inbox/thread-unread-counts",
+      "registration_id": "rest-0037",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "get_inbox_unread_counts",
+      "methods": [
+        "GET"
+      ],
+      "module": "chat",
+      "path": "/api/v1/chats/inbox/unread-counts",
+      "registration_id": "rest-0039",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "get_recent_chats",
+      "methods": [
+        "GET"
+      ],
+      "module": "chat",
+      "path": "/api/v1/chats/recent",
+      "registration_id": "rest-0036",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "get_recent_chats",
+      "methods": [
+        "GET"
+      ],
+      "module": "chat",
+      "path": "/api/v1/chats/recent/shopify",
+      "registration_id": "rest-0035",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "get_chat_detail",
+      "methods": [
+        "GET"
+      ],
+      "module": "chat",
+      "path": "/api/v1/chats/{session_id}",
+      "registration_id": "rest-0049",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "generate_copilot_draft",
+      "methods": [
+        "POST"
+      ],
+      "module": "chat",
+      "path": "/api/v1/chats/{session_id}/copilot-draft",
+      "registration_id": "rest-0050",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "get_customer_summary",
+      "methods": [
+        "GET"
+      ],
+      "module": "chat",
+      "path": "/api/v1/chats/{session_id}/customer-summary",
+      "registration_id": "rest-0041",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "mark_chat_read",
+      "methods": [
+        "PUT"
+      ],
+      "module": "chat",
+      "path": "/api/v1/chats/{session_id}/read",
+      "registration_id": "rest-0038",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "generate_reply_suggestions",
+      "methods": [
+        "POST"
+      ],
+      "module": "chat",
+      "path": "/api/v1/chats/{session_id}/reply-suggestions",
+      "registration_id": "rest-0051",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "get_chat_detail",
+      "methods": [
+        "GET"
+      ],
+      "module": "chat",
+      "path": "/api/v1/chats/{session_id}/shopify",
+      "registration_id": "rest-0048",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "get_shopify_orders",
+      "methods": [
+        "GET"
+      ],
+      "module": "chat",
+      "path": "/api/v1/chats/{session_id}/shopify/orders",
+      "registration_id": "rest-0040",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "get_shopify_order",
+      "methods": [
+        "GET"
+      ],
+      "module": "chat",
+      "path": "/api/v1/chats/{session_id}/shopify/orders/{order_id}",
+      "registration_id": "rest-0043",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "resend_shopify_order_invoice",
+      "methods": [
+        "POST"
+      ],
+      "module": "chat",
+      "path": "/api/v1/chats/{session_id}/shopify/orders/{order_id}/invoice",
+      "registration_id": "rest-0047",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "refund_shopify_order",
+      "methods": [
+        "POST"
+      ],
+      "module": "chat",
+      "path": "/api/v1/chats/{session_id}/shopify/orders/{order_id}/refund",
+      "registration_id": "rest-0045",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "get_shopify_refund_preview",
+      "methods": [
+        "GET"
+      ],
+      "module": "chat",
+      "path": "/api/v1/chats/{session_id}/shopify/orders/{order_id}/refund-preview",
+      "registration_id": "rest-0044",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "update_shopify_order_shipping_address",
+      "methods": [
+        "PUT"
+      ],
+      "module": "chat",
+      "path": "/api/v1/chats/{session_id}/shopify/orders/{order_id}/shipping-address",
+      "registration_id": "rest-0046",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "get_shopify_products",
+      "methods": [
+        "GET"
+      ],
+      "module": "chat",
+      "path": "/api/v1/chats/{session_id}/shopify/products",
+      "registration_id": "rest-0042",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "list_connections",
+      "methods": [
+        "GET"
+      ],
+      "module": "crm",
+      "path": "/api/v1/crm/connections",
+      "registration_id": "rest-0052",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "hubspot_uninstall_webhook",
+      "methods": [
+        "POST"
+      ],
+      "module": "crm",
+      "path": "/api/v1/crm/hubspot/uninstall",
+      "registration_id": "rest-0057",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "pipedrive_uninstall_webhook",
+      "methods": [
+        "POST"
+      ],
+      "module": "crm",
+      "path": "/api/v1/crm/pipedrive/uninstall",
+      "registration_id": "rest-0058",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "disconnect_crm",
+      "methods": [
+        "DELETE"
+      ],
+      "module": "crm",
+      "path": "/api/v1/crm/{provider}",
+      "registration_id": "rest-0056",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "crm_oauth_callback",
+      "methods": [
+        "GET"
+      ],
+      "module": "crm",
+      "path": "/api/v1/crm/{provider}/callback",
+      "registration_id": "rest-0054",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "install_crm",
+      "methods": [
+        "GET"
+      ],
+      "module": "crm",
+      "path": "/api/v1/crm/{provider}/install",
+      "registration_id": "rest-0053",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "test_crm_connection",
+      "methods": [
+        "POST"
+      ],
+      "module": "crm",
+      "path": "/api/v1/crm/{provider}/test",
+      "registration_id": "rest-0055",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "download_file",
+      "methods": [
+        "GET"
+      ],
+      "module": "file_upload",
+      "path": "/api/v1/files/download/{file_path:path}",
+      "registration_id": "rest-0059",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "generate_widget_token",
+      "methods": [
+        "POST"
+      ],
+      "module": "token",
+      "path": "/api/v1/generate-token",
+      "registration_id": "rest-0194",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "list_groups",
+      "methods": [
+        "GET"
+      ],
+      "module": "user_groups",
+      "path": "/api/v1/groups",
+      "registration_id": "rest-0215",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "create_group",
+      "methods": [
+        "POST"
+      ],
+      "module": "user_groups",
+      "path": "/api/v1/groups",
+      "registration_id": "rest-0216",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "delete_group",
+      "methods": [
+        "DELETE"
+      ],
+      "module": "user_groups",
+      "path": "/api/v1/groups/{group_id}",
+      "registration_id": "rest-0219",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "get_group",
+      "methods": [
+        "GET"
+      ],
+      "module": "user_groups",
+      "path": "/api/v1/groups/{group_id}",
+      "registration_id": "rest-0217",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "update_group",
+      "methods": [
+        "PUT"
+      ],
+      "module": "user_groups",
+      "path": "/api/v1/groups/{group_id}",
+      "registration_id": "rest-0218",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "remove_user_from_group",
+      "methods": [
+        "DELETE"
+      ],
+      "module": "user_groups",
+      "path": "/api/v1/groups/{group_id}/users/{user_id}",
+      "registration_id": "rest-0221",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "add_user_to_group",
+      "methods": [
+        "POST"
+      ],
+      "module": "user_groups",
+      "path": "/api/v1/groups/{group_id}/users/{user_id}",
+      "registration_id": "rest-0220",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "remove_favicon",
+      "methods": [
+        "DELETE"
+      ],
+      "module": "help_center.branding",
+      "path": "/api/v1/help-center/branding/favicon",
+      "registration_id": "rest-0277",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "upload_favicon",
+      "methods": [
+        "POST"
+      ],
+      "module": "help_center.branding",
+      "path": "/api/v1/help-center/branding/favicon",
+      "registration_id": "rest-0276",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "remove_logo",
+      "methods": [
+        "DELETE"
+      ],
+      "module": "help_center.branding",
+      "path": "/api/v1/help-center/branding/logo",
+      "registration_id": "rest-0275",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "upload_logo",
+      "methods": [
+        "POST"
+      ],
+      "module": "help_center.branding",
+      "path": "/api/v1/help-center/branding/logo",
+      "registration_id": "rest-0274",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "get_settings",
+      "methods": [
+        "GET"
+      ],
+      "module": "help_center.branding",
+      "path": "/api/v1/help-center/branding/settings",
+      "registration_id": "rest-0272",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "update_settings",
+      "methods": [
+        "PUT"
+      ],
+      "module": "help_center.branding",
+      "path": "/api/v1/help-center/branding/settings",
+      "registration_id": "rest-0273",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "remove_domain",
+      "methods": [
+        "DELETE"
+      ],
+      "module": "help_center.domain",
+      "path": "/api/v1/help-center/domain/domain",
+      "registration_id": "rest-0279",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "set_domain",
+      "methods": [
+        "POST"
+      ],
+      "module": "help_center.domain",
+      "path": "/api/v1/help-center/domain/domain",
+      "registration_id": "rest-0278",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "domain_status",
+      "methods": [
+        "GET"
+      ],
+      "module": "help_center.domain",
+      "path": "/api/v1/help-center/domain/domain/status",
+      "registration_id": "rest-0281",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "verify_domain",
+      "methods": [
+        "POST"
+      ],
+      "module": "help_center.domain",
+      "path": "/api/v1/help-center/domain/domain/verify",
+      "registration_id": "rest-0280",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "list_faqs",
+      "methods": [
+        "GET"
+      ],
+      "module": "help_center.faqs",
+      "path": "/api/v1/help-center/faqs/faqs",
+      "registration_id": "rest-0282",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "create_faq",
+      "methods": [
+        "POST"
+      ],
+      "module": "help_center.faqs",
+      "path": "/api/v1/help-center/faqs/faqs",
+      "registration_id": "rest-0284",
+      "scope": "api",
+      "status_code": 201
+    },
+    {
+      "handler": "bulk_delete",
+      "methods": [
+        "POST"
+      ],
+      "module": "help_center.faqs",
+      "path": "/api/v1/help-center/faqs/faqs/bulk-delete",
+      "registration_id": "rest-0289",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "bulk_set_status",
+      "methods": [
+        "POST"
+      ],
+      "module": "help_center.faqs",
+      "path": "/api/v1/help-center/faqs/faqs/bulk-status",
+      "registration_id": "rest-0288",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "list_categories",
+      "methods": [
+        "GET"
+      ],
+      "module": "help_center.faqs",
+      "path": "/api/v1/help-center/faqs/faqs/categories",
+      "registration_id": "rest-0283",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "upload_faq_image",
+      "methods": [
+        "POST"
+      ],
+      "module": "help_center.faqs",
+      "path": "/api/v1/help-center/faqs/faqs/image",
+      "registration_id": "rest-0285",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "delete_faq",
+      "methods": [
+        "DELETE"
+      ],
+      "module": "help_center.faqs",
+      "path": "/api/v1/help-center/faqs/faqs/{faq_id}",
+      "registration_id": "rest-0287",
+      "scope": "api",
+      "status_code": 204
+    },
+    {
+      "handler": "update_faq",
+      "methods": [
+        "PUT"
+      ],
+      "module": "help_center.faqs",
+      "path": "/api/v1/help-center/faqs/faqs/{faq_id}",
+      "registration_id": "rest-0286",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "start_generation",
+      "methods": [
+        "POST"
+      ],
+      "module": "help_center.generation",
+      "path": "/api/v1/help-center/generation/generate",
+      "registration_id": "rest-0291",
+      "scope": "api",
+      "status_code": 202
+    },
+    {
+      "handler": "generation_estimate",
+      "methods": [
+        "GET"
+      ],
+      "module": "help_center.generation",
+      "path": "/api/v1/help-center/generation/generate/estimate",
+      "registration_id": "rest-0290",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "start_import",
+      "methods": [
+        "POST"
+      ],
+      "module": "help_center.generation",
+      "path": "/api/v1/help-center/generation/import",
+      "registration_id": "rest-0292",
+      "scope": "api",
+      "status_code": 202
+    },
+    {
+      "handler": "start_pdf_import",
+      "methods": [
+        "POST"
+      ],
+      "module": "help_center.generation",
+      "path": "/api/v1/help-center/generation/import/pdf",
+      "registration_id": "rest-0293",
+      "scope": "api",
+      "status_code": 202
+    },
+    {
+      "handler": "get_job",
+      "methods": [
+        "GET"
+      ],
+      "module": "help_center.generation",
+      "path": "/api/v1/help-center/generation/jobs",
+      "registration_id": "rest-0294",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "get_job_by_id",
+      "methods": [
+        "GET"
+      ],
+      "module": "help_center.generation",
+      "path": "/api/v1/help-center/generation/jobs/{job_id}",
+      "registration_id": "rest-0295",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "get_article_image",
+      "methods": [
+        "GET"
+      ],
+      "module": "help_center_images",
+      "path": "/api/v1/help-center/images/{file_name}",
+      "registration_id": "rest-0060",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "get_agent_jira_config",
+      "methods": [
+        "GET"
+      ],
+      "module": "jira",
+      "path": "/api/v1/jira/agent-config/{agent_id}",
+      "registration_id": "rest-0080",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "save_agent_jira_config",
+      "methods": [
+        "POST"
+      ],
+      "module": "jira",
+      "path": "/api/v1/jira/agent-config/{agent_id}",
+      "registration_id": "rest-0079",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "authorize_jira",
+      "methods": [
+        "GET"
+      ],
+      "module": "jira",
+      "path": "/api/v1/jira/authorize",
+      "registration_id": "rest-0071",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "jira_oauth_callback",
+      "methods": [
+        "GET"
+      ],
+      "module": "jira",
+      "path": "/api/v1/jira/callback",
+      "registration_id": "rest-0072",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "disconnect_jira",
+      "methods": [
+        "DELETE"
+      ],
+      "module": "jira",
+      "path": "/api/v1/jira/disconnect",
+      "registration_id": "rest-0070",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "create_jira_issue",
+      "methods": [
+        "POST"
+      ],
+      "module": "jira",
+      "path": "/api/v1/jira/issues",
+      "registration_id": "rest-0078",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "get_jira_priorities",
+      "methods": [
+        "GET"
+      ],
+      "module": "jira",
+      "path": "/api/v1/jira/priorities",
+      "registration_id": "rest-0076",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "get_jira_projects",
+      "methods": [
+        "GET"
+      ],
+      "module": "jira",
+      "path": "/api/v1/jira/projects",
+      "registration_id": "rest-0074",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "get_jira_issue_types",
+      "methods": [
+        "GET"
+      ],
+      "module": "jira",
+      "path": "/api/v1/jira/projects/{project_key}/issue-types",
+      "registration_id": "rest-0075",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "check_priority_availability",
+      "methods": [
+        "GET"
+      ],
+      "module": "jira",
+      "path": "/api/v1/jira/projects/{project_key}/issue-types/{issue_type_id}/has-priority",
+      "registration_id": "rest-0077",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "refresh_jira_token",
+      "methods": [
+        "GET"
+      ],
+      "module": "jira",
+      "path": "/api/v1/jira/refresh",
+      "registration_id": "rest-0073",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "jira_status",
+      "methods": [
+        "GET"
+      ],
+      "module": "jira",
+      "path": "/api/v1/jira/status",
+      "registration_id": "rest-0069",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "add_text_source",
+      "methods": [
+        "POST"
+      ],
+      "module": "knowledge",
+      "path": "/api/v1/knowledge/add/text",
+      "registration_id": "rest-0084",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "add_urls",
+      "methods": [
+        "POST"
+      ],
+      "module": "knowledge",
+      "path": "/api/v1/knowledge/add/urls",
+      "registration_id": "rest-0083",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "get_knowledge_by_agent",
+      "methods": [
+        "GET"
+      ],
+      "module": "knowledge",
+      "path": "/api/v1/knowledge/agent/{agent_id}",
+      "registration_id": "rest-0087",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "get_explore_progress",
+      "methods": [
+        "GET"
+      ],
+      "module": "knowledge",
+      "path": "/api/v1/knowledge/explore/progress/{queue_id}",
+      "registration_id": "rest-0082",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "link_knowledge_to_agent",
+      "methods": [
+        "POST"
+      ],
+      "module": "knowledge",
+      "path": "/api/v1/knowledge/link",
+      "registration_id": "rest-0085",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "get_knowledge_by_organization",
+      "methods": [
+        "GET"
+      ],
+      "module": "knowledge",
+      "path": "/api/v1/knowledge/organization/{org_id}",
+      "registration_id": "rest-0091",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "get_processor_status",
+      "methods": [
+        "GET"
+      ],
+      "module": "knowledge",
+      "path": "/api/v1/knowledge/processor/status",
+      "registration_id": "rest-0093",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "get_agent_queue_items",
+      "methods": [
+        "GET"
+      ],
+      "module": "knowledge",
+      "path": "/api/v1/knowledge/queue/agent/{agent_id}",
+      "registration_id": "rest-0088",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "get_organization_queue_items",
+      "methods": [
+        "GET"
+      ],
+      "module": "knowledge",
+      "path": "/api/v1/knowledge/queue/organization/{org_id}",
+      "registration_id": "rest-0089",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "delete_queue_item",
+      "methods": [
+        "DELETE"
+      ],
+      "module": "knowledge",
+      "path": "/api/v1/knowledge/queue/{queue_id}",
+      "registration_id": "rest-0090",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "get_queue_status",
+      "methods": [
+        "GET"
+      ],
+      "module": "knowledge",
+      "path": "/api/v1/knowledge/queue/{queue_id}",
+      "registration_id": "rest-0092",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "unlink_knowledge_from_agent",
+      "methods": [
+        "DELETE"
+      ],
+      "module": "knowledge",
+      "path": "/api/v1/knowledge/unlink",
+      "registration_id": "rest-0086",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "upload_pdf_files",
+      "methods": [
+        "POST"
+      ],
+      "module": "knowledge",
+      "path": "/api/v1/knowledge/upload/pdf",
+      "registration_id": "rest-0081",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "delete_knowledge",
+      "methods": [
+        "DELETE"
+      ],
+      "module": "knowledge",
+      "path": "/api/v1/knowledge/{knowledge_id}",
+      "registration_id": "rest-0094",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "delete_chunk",
+      "methods": [
+        "DELETE"
+      ],
+      "module": "knowledge",
+      "path": "/api/v1/knowledge/{knowledge_id}/chunk/{chunk_id:path}",
+      "registration_id": "rest-0097",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "update_chunk_content",
+      "methods": [
+        "PUT"
+      ],
+      "module": "knowledge",
+      "path": "/api/v1/knowledge/{knowledge_id}/chunk/{chunk_id:path}",
+      "registration_id": "rest-0096",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "get_knowledge_content",
+      "methods": [
+        "GET"
+      ],
+      "module": "knowledge",
+      "path": "/api/v1/knowledge/{knowledge_id}/content",
+      "registration_id": "rest-0095",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "delete_page",
+      "methods": [
+        "DELETE"
+      ],
+      "module": "knowledge",
+      "path": "/api/v1/knowledge/{knowledge_id}/page/{page_id:path}",
+      "registration_id": "rest-0100",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "update_page_content",
+      "methods": [
+        "PUT"
+      ],
+      "module": "knowledge",
+      "path": "/api/v1/knowledge/{knowledge_id}/page/{page_id:path}",
+      "registration_id": "rest-0099",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "add_subpage",
+      "methods": [
+        "POST"
+      ],
+      "module": "knowledge",
+      "path": "/api/v1/knowledge/{knowledge_id}/subpage",
+      "registration_id": "rest-0098",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "get_organization_mcp_tools",
+      "methods": [
+        "GET"
+      ],
+      "module": "mcp_tool",
+      "path": "/api/v1/mcp-tools",
+      "registration_id": "rest-0104",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "create_mcp_tool",
+      "methods": [
+        "POST"
+      ],
+      "module": "mcp_tool",
+      "path": "/api/v1/mcp-tools",
+      "registration_id": "rest-0103",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "add_mcp_tool_to_agent",
+      "methods": [
+        "POST"
+      ],
+      "module": "mcp_tool",
+      "path": "/api/v1/mcp-tools/agent-association",
+      "registration_id": "rest-0109",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "remove_mcp_tool_from_agent",
+      "methods": [
+        "DELETE"
+      ],
+      "module": "mcp_tool",
+      "path": "/api/v1/mcp-tools/agent-association/{mcp_tool_id}/{agent_id}",
+      "registration_id": "rest-0110",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "get_agent_mcp_tools",
+      "methods": [
+        "GET"
+      ],
+      "module": "mcp_tool",
+      "path": "/api/v1/mcp-tools/agent/{agent_id}",
+      "registration_id": "rest-0111",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "delete_mcp_tool",
+      "methods": [
+        "DELETE"
+      ],
+      "module": "mcp_tool",
+      "path": "/api/v1/mcp-tools/{mcp_tool_id}",
+      "registration_id": "rest-0108",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "get_mcp_tool",
+      "methods": [
+        "GET"
+      ],
+      "module": "mcp_tool",
+      "path": "/api/v1/mcp-tools/{mcp_tool_id}",
+      "registration_id": "rest-0105",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "update_mcp_tool",
+      "methods": [
+        "PUT"
+      ],
+      "module": "mcp_tool",
+      "path": "/api/v1/mcp-tools/{mcp_tool_id}",
+      "registration_id": "rest-0107",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "test_mcp_tool",
+      "methods": [
+        "POST"
+      ],
+      "module": "mcp_tool",
+      "path": "/api/v1/mcp-tools/{mcp_tool_id}/test",
+      "registration_id": "rest-0106",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "clear_notifications",
+      "methods": [
+        "DELETE"
+      ],
+      "module": "notification",
+      "path": "/api/v1/notifications",
+      "registration_id": "rest-0116",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "list_notifications",
+      "methods": [
+        "GET"
+      ],
+      "module": "notification",
+      "path": "/api/v1/notifications",
+      "registration_id": "rest-0112",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "mark_all_as_read",
+      "methods": [
+        "POST"
+      ],
+      "module": "notification",
+      "path": "/api/v1/notifications/read-all",
+      "registration_id": "rest-0114",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "get_notification_settings",
+      "methods": [
+        "GET"
+      ],
+      "module": "notification",
+      "path": "/api/v1/notifications/settings",
+      "registration_id": "rest-0118",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "update_notification_settings",
+      "methods": [
+        "PUT"
+      ],
+      "module": "notification",
+      "path": "/api/v1/notifications/settings",
+      "registration_id": "rest-0119",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "send_test_notification",
+      "methods": [
+        "POST"
+      ],
+      "module": "notification",
+      "path": "/api/v1/notifications/test",
+      "registration_id": "rest-0120",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "get_unread_count",
+      "methods": [
+        "GET"
+      ],
+      "module": "notification",
+      "path": "/api/v1/notifications/unread-count",
+      "registration_id": "rest-0117",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "delete_notification",
+      "methods": [
+        "DELETE"
+      ],
+      "module": "notification",
+      "path": "/api/v1/notifications/{notification_id}",
+      "registration_id": "rest-0115",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "mark_as_read",
+      "methods": [
+        "PATCH"
+      ],
+      "module": "notification",
+      "path": "/api/v1/notifications/{notification_id}/read",
+      "registration_id": "rest-0113",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "create_organization",
+      "methods": [
+        "POST"
+      ],
+      "module": "organizations",
+      "path": "/api/v1/organizations",
+      "registration_id": "rest-0121",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "check_domain_availability",
+      "methods": [
+        "GET"
+      ],
+      "module": "organizations",
+      "path": "/api/v1/organizations/check-domain/{domain}",
+      "registration_id": "rest-0123",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "is_organization_setup",
+      "methods": [
+        "GET"
+      ],
+      "module": "organizations",
+      "path": "/api/v1/organizations/setup-status",
+      "registration_id": "rest-0122",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "get_organization",
+      "methods": [
+        "GET"
+      ],
+      "module": "organizations",
+      "path": "/api/v1/organizations/{org_id}",
+      "registration_id": "rest-0124",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "update_organization",
+      "methods": [
+        "PATCH"
+      ],
+      "module": "organizations",
+      "path": "/api/v1/organizations/{org_id}",
+      "registration_id": "rest-0125",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "get_organization_stats",
+      "methods": [
+        "GET"
+      ],
+      "module": "organizations",
+      "path": "/api/v1/organizations/{org_id}/stats",
+      "registration_id": "rest-0126",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "list_people",
+      "methods": [
+        "GET"
+      ],
+      "module": "people",
+      "path": "/api/v1/people",
+      "registration_id": "rest-0127",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "people_stats",
+      "methods": [
+        "GET"
+      ],
+      "module": "people",
+      "path": "/api/v1/people/stats",
+      "registration_id": "rest-0128",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "get_person",
+      "methods": [
+        "GET"
+      ],
+      "module": "people",
+      "path": "/api/v1/people/{customer_id}",
+      "registration_id": "rest-0129",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "update_person",
+      "methods": [
+        "PATCH"
+      ],
+      "module": "people",
+      "path": "/api/v1/people/{customer_id}",
+      "registration_id": "rest-0131",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "get_person_crm",
+      "methods": [
+        "GET"
+      ],
+      "module": "people",
+      "path": "/api/v1/people/{customer_id}/crm",
+      "registration_id": "rest-0132",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "sync_person_crm",
+      "methods": [
+        "POST"
+      ],
+      "module": "people",
+      "path": "/api/v1/people/{customer_id}/crm-sync",
+      "registration_id": "rest-0133",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "mark_as_customer",
+      "methods": [
+        "POST"
+      ],
+      "module": "people",
+      "path": "/api/v1/people/{customer_id}/mark-customer",
+      "registration_id": "rest-0130",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "revoke_widget_token",
+      "methods": [
+        "POST"
+      ],
+      "module": "token",
+      "path": "/api/v1/revoke-token",
+      "registration_id": "rest-0196",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "list_roles",
+      "methods": [
+        "GET"
+      ],
+      "module": "roles",
+      "path": "/api/v1/roles",
+      "registration_id": "rest-0135",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "create_role",
+      "methods": [
+        "POST"
+      ],
+      "module": "roles",
+      "path": "/api/v1/roles",
+      "registration_id": "rest-0134",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "list_permissions",
+      "methods": [
+        "GET"
+      ],
+      "module": "roles",
+      "path": "/api/v1/roles/permissions/all",
+      "registration_id": "rest-0141",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "delete_role",
+      "methods": [
+        "DELETE"
+      ],
+      "module": "roles",
+      "path": "/api/v1/roles/{role_id}",
+      "registration_id": "rest-0138",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "get_role",
+      "methods": [
+        "GET"
+      ],
+      "module": "roles",
+      "path": "/api/v1/roles/{role_id}",
+      "registration_id": "rest-0136",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "update_role",
+      "methods": [
+        "PUT"
+      ],
+      "module": "roles",
+      "path": "/api/v1/roles/{role_id}",
+      "registration_id": "rest-0137",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "remove_role_permission",
+      "methods": [
+        "DELETE"
+      ],
+      "module": "roles",
+      "path": "/api/v1/roles/{role_id}/permissions/{permission}",
+      "registration_id": "rest-0140",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "add_role_permission",
+      "methods": [
+        "POST"
+      ],
+      "module": "roles",
+      "path": "/api/v1/roles/{role_id}/permissions/{permission}",
+      "registration_id": "rest-0139",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "toggle_ai_auto_reply",
+      "methods": [
+        "POST"
+      ],
+      "module": "session_to_agent",
+      "path": "/api/v1/sessions/{session_id}/ai-auto-reply",
+      "registration_id": "rest-0147",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "end_chat",
+      "methods": [
+        "POST"
+      ],
+      "module": "session_to_agent",
+      "path": "/api/v1/sessions/{session_id}/end",
+      "registration_id": "rest-0145",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "hand_back_to_ai",
+      "methods": [
+        "POST"
+      ],
+      "module": "session_to_agent",
+      "path": "/api/v1/sessions/{session_id}/hand-back-to-ai",
+      "registration_id": "rest-0148",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "list_mentionable_teammates",
+      "methods": [
+        "GET"
+      ],
+      "module": "session_to_agent",
+      "path": "/api/v1/sessions/{session_id}/mentionable-teammates",
+      "registration_id": "rest-0142",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "reassign_chat",
+      "methods": [
+        "POST"
+      ],
+      "module": "session_to_agent",
+      "path": "/api/v1/sessions/{session_id}/reassign",
+      "registration_id": "rest-0149",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "route_chat_to_human",
+      "methods": [
+        "POST"
+      ],
+      "module": "session_to_agent",
+      "path": "/api/v1/sessions/{session_id}/route-to-human",
+      "registration_id": "rest-0146",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "update_conversation_tags",
+      "methods": [
+        "PUT"
+      ],
+      "module": "session_to_agent",
+      "path": "/api/v1/sessions/{session_id}/tags",
+      "registration_id": "rest-0143",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "takeover_chat",
+      "methods": [
+        "POST"
+      ],
+      "module": "session_to_agent",
+      "path": "/api/v1/sessions/{session_id}/takeover",
+      "registration_id": "rest-0144",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "get_agent_shopify_config",
+      "methods": [
+        "GET"
+      ],
+      "module": "shopify",
+      "path": "/api/v1/shopify/agent-config/{agent_id}",
+      "registration_id": "rest-0163",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "save_agent_shopify_config",
+      "methods": [
+        "POST"
+      ],
+      "module": "shopify",
+      "path": "/api/v1/shopify/agent-config/{agent_id}",
+      "registration_id": "rest-0164",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "begin_shopify_oauth",
+      "methods": [
+        "GET"
+      ],
+      "module": "shopify",
+      "path": "/api/v1/shopify/auth",
+      "registration_id": "rest-0150",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "complete_shopify_oauth",
+      "methods": [
+        "GET"
+      ],
+      "module": "shopify",
+      "path": "/api/v1/shopify/callback",
+      "registration_id": "rest-0151",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "get_connected_agents",
+      "methods": [
+        "GET"
+      ],
+      "module": "shopify",
+      "path": "/api/v1/shopify/connected-agents",
+      "registration_id": "rest-0162",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "exchange_session_token",
+      "methods": [
+        "POST"
+      ],
+      "module": "shopify",
+      "path": "/api/v1/shopify/exchange-token",
+      "registration_id": "rest-0152",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "link_shop_to_org",
+      "methods": [
+        "POST"
+      ],
+      "module": "shopify",
+      "path": "/api/v1/shopify/link-organization",
+      "registration_id": "rest-0153",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "link_shop_to_organization",
+      "methods": [
+        "POST"
+      ],
+      "module": "shopify",
+      "path": "/api/v1/shopify/link-shop/{shop_id}",
+      "registration_id": "rest-0157",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "get_organization_domain",
+      "methods": [
+        "GET"
+      ],
+      "module": "shopify",
+      "path": "/api/v1/shopify/organization-domain",
+      "registration_id": "rest-0160",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "get_shop_config_status",
+      "methods": [
+        "GET"
+      ],
+      "module": "shopify",
+      "path": "/api/v1/shopify/shop-config-status",
+      "registration_id": "rest-0159",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "get_shops",
+      "methods": [
+        "GET"
+      ],
+      "module": "shopify",
+      "path": "/api/v1/shopify/shops",
+      "registration_id": "rest-0154",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "delete_shop",
+      "methods": [
+        "DELETE"
+      ],
+      "module": "shopify",
+      "path": "/api/v1/shopify/shops/{shop_id}",
+      "registration_id": "rest-0156",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "get_shop",
+      "methods": [
+        "GET"
+      ],
+      "module": "shopify",
+      "path": "/api/v1/shopify/shops/{shop_id}",
+      "registration_id": "rest-0155",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "check_connection",
+      "methods": [
+        "GET"
+      ],
+      "module": "shopify",
+      "path": "/api/v1/shopify/status",
+      "registration_id": "rest-0158",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "update_organization_domain",
+      "methods": [
+        "PUT"
+      ],
+      "module": "shopify",
+      "path": "/api/v1/shopify/update-domain",
+      "registration_id": "rest-0161",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "shopify_app_uninstalled_webhook",
+      "methods": [
+        "POST"
+      ],
+      "module": "shopify",
+      "path": "/api/v1/shopify/webhooks/app-uninstalled",
+      "registration_id": "rest-0165",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "shopify_customers_data_request_webhook",
+      "methods": [
+        "POST"
+      ],
+      "module": "shopify",
+      "path": "/api/v1/shopify/webhooks/customers/data_request",
+      "registration_id": "rest-0166",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "shopify_customers_redact_webhook",
+      "methods": [
+        "POST"
+      ],
+      "module": "shopify",
+      "path": "/api/v1/shopify/webhooks/customers/redact",
+      "registration_id": "rest-0167",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "shopify_shop_redact_webhook",
+      "methods": [
+        "POST"
+      ],
+      "module": "shopify",
+      "path": "/api/v1/shopify/webhooks/shop/redact",
+      "registration_id": "rest-0168",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "list_connectors",
+      "methods": [
+        "GET"
+      ],
+      "module": "ticket_db_connectors",
+      "path": "/api/v1/ticket-db-connectors",
+      "registration_id": "rest-0187",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "create_connector",
+      "methods": [
+        "POST"
+      ],
+      "module": "ticket_db_connectors",
+      "path": "/api/v1/ticket-db-connectors",
+      "registration_id": "rest-0189",
+      "scope": "api",
+      "status_code": 201
+    },
+    {
+      "handler": "discover_tables",
+      "methods": [
+        "POST"
+      ],
+      "module": "ticket_db_connectors",
+      "path": "/api/v1/ticket-db-connectors/discover",
+      "registration_id": "rest-0188",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "delete_connector",
+      "methods": [
+        "DELETE"
+      ],
+      "module": "ticket_db_connectors",
+      "path": "/api/v1/ticket-db-connectors/{connector_id}",
+      "registration_id": "rest-0191",
+      "scope": "api",
+      "status_code": 204
+    },
+    {
+      "handler": "update_connector",
+      "methods": [
+        "PATCH"
+      ],
+      "module": "ticket_db_connectors",
+      "path": "/api/v1/ticket-db-connectors/{connector_id}",
+      "registration_id": "rest-0190",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "test_saved_connector",
+      "methods": [
+        "POST"
+      ],
+      "module": "ticket_db_connectors",
+      "path": "/api/v1/ticket-db-connectors/{connector_id}/test",
+      "registration_id": "rest-0192",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "list_tickets",
+      "methods": [
+        "GET"
+      ],
+      "module": "tickets",
+      "path": "/api/v1/tickets",
+      "registration_id": "rest-0169",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "create_ticket",
+      "methods": [
+        "POST"
+      ],
+      "module": "tickets",
+      "path": "/api/v1/tickets",
+      "registration_id": "rest-0175",
+      "scope": "api",
+      "status_code": 201
+    },
+    {
+      "handler": "get_ticket_by_session",
+      "methods": [
+        "GET"
+      ],
+      "module": "tickets",
+      "path": "/api/v1/tickets/by-session/{session_id}",
+      "registration_id": "rest-0173",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "draft_from_session",
+      "methods": [
+        "GET"
+      ],
+      "module": "tickets",
+      "path": "/api/v1/tickets/draft-from-session/{session_id}",
+      "registration_id": "rest-0174",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "get_settings",
+      "methods": [
+        "GET"
+      ],
+      "module": "tickets",
+      "path": "/api/v1/tickets/settings",
+      "registration_id": "rest-0171",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "update_settings",
+      "methods": [
+        "PUT"
+      ],
+      "module": "tickets",
+      "path": "/api/v1/tickets/settings",
+      "registration_id": "rest-0172",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "ticket_stats",
+      "methods": [
+        "GET"
+      ],
+      "module": "tickets",
+      "path": "/api/v1/tickets/stats",
+      "registration_id": "rest-0170",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "alert_intake",
+      "methods": [
+        "POST"
+      ],
+      "module": "ticket_webhooks",
+      "path": "/api/v1/tickets/webhooks/alerts/{org_id}/{secret}",
+      "registration_id": "rest-0193",
+      "scope": "api",
+      "status_code": 202
+    },
+    {
+      "handler": "get_ticket",
+      "methods": [
+        "GET"
+      ],
+      "module": "tickets",
+      "path": "/api/v1/tickets/{ticket_id}",
+      "registration_id": "rest-0176",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "update_ticket",
+      "methods": [
+        "PATCH"
+      ],
+      "module": "tickets",
+      "path": "/api/v1/tickets/{ticket_id}",
+      "registration_id": "rest-0177",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "add_comment",
+      "methods": [
+        "POST"
+      ],
+      "module": "tickets",
+      "path": "/api/v1/tickets/{ticket_id}/comments",
+      "registration_id": "rest-0178",
+      "scope": "api",
+      "status_code": 201
+    },
+    {
+      "handler": "investigate_ticket",
+      "methods": [
+        "POST"
+      ],
+      "module": "tickets",
+      "path": "/api/v1/tickets/{ticket_id}/investigate",
+      "registration_id": "rest-0181",
+      "scope": "api",
+      "status_code": 201
+    },
+    {
+      "handler": "get_investigation",
+      "methods": [
+        "GET"
+      ],
+      "module": "tickets",
+      "path": "/api/v1/tickets/{ticket_id}/investigation",
+      "registration_id": "rest-0182",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "approve_proposal",
+      "methods": [
+        "POST"
+      ],
+      "module": "tickets",
+      "path": "/api/v1/tickets/{ticket_id}/proposal/approve",
+      "registration_id": "rest-0183",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "reject_proposal",
+      "methods": [
+        "POST"
+      ],
+      "module": "tickets",
+      "path": "/api/v1/tickets/{ticket_id}/proposal/reject",
+      "registration_id": "rest-0184",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "update_rca",
+      "methods": [
+        "PATCH"
+      ],
+      "module": "tickets",
+      "path": "/api/v1/tickets/{ticket_id}/rca",
+      "registration_id": "rest-0185",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "send_rca_to_customer",
+      "methods": [
+        "POST"
+      ],
+      "module": "tickets",
+      "path": "/api/v1/tickets/{ticket_id}/rca/send-customer",
+      "registration_id": "rest-0186",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "reopen_ticket",
+      "methods": [
+        "POST"
+      ],
+      "module": "tickets",
+      "path": "/api/v1/tickets/{ticket_id}/reopen",
+      "registration_id": "rest-0180",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "resolve_ticket",
+      "methods": [
+        "POST"
+      ],
+      "module": "tickets",
+      "path": "/api/v1/tickets/{ticket_id}/resolve",
+      "registration_id": "rest-0179",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "list_users",
+      "methods": [
+        "GET"
+      ],
+      "module": "users",
+      "path": "/api/v1/users",
+      "registration_id": "rest-0198",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "create_user",
+      "methods": [
+        "POST"
+      ],
+      "module": "users",
+      "path": "/api/v1/users",
+      "registration_id": "rest-0197",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "login",
+      "methods": [
+        "POST"
+      ],
+      "module": "users",
+      "path": "/api/v1/users/login",
+      "registration_id": "rest-0204",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "logout",
+      "methods": [
+        "POST"
+      ],
+      "module": "users",
+      "path": "/api/v1/users/logout",
+      "registration_id": "rest-0206",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "update_profile",
+      "methods": [
+        "PATCH"
+      ],
+      "module": "users",
+      "path": "/api/v1/users/me",
+      "registration_id": "rest-0209",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "get_my_avatar",
+      "methods": [
+        "GET"
+      ],
+      "module": "users",
+      "path": "/api/v1/users/me/avatar",
+      "registration_id": "rest-0201",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "delete_profile_pic",
+      "methods": [
+        "DELETE"
+      ],
+      "module": "users",
+      "path": "/api/v1/users/me/profile-pic",
+      "registration_id": "rest-0214",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "upload_profile_pic",
+      "methods": [
+        "POST"
+      ],
+      "module": "users",
+      "path": "/api/v1/users/me/profile-pic",
+      "registration_id": "rest-0213",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "refresh_token",
+      "methods": [
+        "POST"
+      ],
+      "module": "users",
+      "path": "/api/v1/users/refresh",
+      "registration_id": "rest-0205",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "get_team_overview",
+      "methods": [
+        "GET"
+      ],
+      "module": "users",
+      "path": "/api/v1/users/team-overview",
+      "registration_id": "rest-0199",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "list_teammates",
+      "methods": [
+        "GET"
+      ],
+      "module": "users",
+      "path": "/api/v1/users/teammates",
+      "registration_id": "rest-0200",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "unregister_fcm_token",
+      "methods": [
+        "DELETE"
+      ],
+      "module": "users",
+      "path": "/api/v1/users/token/fcm-token",
+      "registration_id": "rest-0208",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "register_fcm_token",
+      "methods": [
+        "POST"
+      ],
+      "module": "users",
+      "path": "/api/v1/users/token/fcm-token",
+      "registration_id": "rest-0207",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "delete_user",
+      "methods": [
+        "DELETE"
+      ],
+      "module": "users",
+      "path": "/api/v1/users/{user_id}",
+      "registration_id": "rest-0203",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "get_user",
+      "methods": [
+        "GET"
+      ],
+      "module": "users",
+      "path": "/api/v1/users/{user_id}",
+      "registration_id": "rest-0202",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "update_user",
+      "methods": [
+        "PUT"
+      ],
+      "module": "users",
+      "path": "/api/v1/users/{user_id}",
+      "registration_id": "rest-0210",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "reset_user_password",
+      "methods": [
+        "POST"
+      ],
+      "module": "users",
+      "path": "/api/v1/users/{user_id}/reset-password",
+      "registration_id": "rest-0211",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "update_user_status",
+      "methods": [
+        "POST"
+      ],
+      "module": "users",
+      "path": "/api/v1/users/{user_id}/status",
+      "registration_id": "rest-0212",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "verify_widget_token",
+      "methods": [
+        "POST"
+      ],
+      "module": "token",
+      "path": "/api/v1/verify-token",
+      "registration_id": "rest-0195",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "email_webhook",
+      "methods": [
+        "POST"
+      ],
+      "module": "webhooks.email",
+      "path": "/api/v1/webhooks/email/{account_id}",
+      "registration_id": "rest-0296",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "line_webhook",
+      "methods": [
+        "POST"
+      ],
+      "module": "webhooks.line",
+      "path": "/api/v1/webhooks/line/{account_id}",
+      "registration_id": "rest-0297",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "meta_webhook_verify",
+      "methods": [
+        "GET"
+      ],
+      "module": "webhooks.meta",
+      "path": "/api/v1/webhooks/meta",
+      "registration_id": "rest-0298",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "meta_webhook",
+      "methods": [
+        "POST"
+      ],
+      "module": "webhooks.meta",
+      "path": "/api/v1/webhooks/meta",
+      "registration_id": "rest-0299",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "slack_webhook",
+      "methods": [
+        "POST"
+      ],
+      "module": "webhooks.slack",
+      "path": "/api/v1/webhooks/slack",
+      "registration_id": "rest-0300",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "sms_webhook",
+      "methods": [
+        "POST"
+      ],
+      "module": "webhooks.sms",
+      "path": "/api/v1/webhooks/sms/{provider}/{account_id}",
+      "registration_id": "rest-0301",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "telegram_webhook",
+      "methods": [
+        "POST"
+      ],
+      "module": "webhooks.telegram",
+      "path": "/api/v1/webhooks/telegram/{account_id}",
+      "registration_id": "rest-0302",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "list_widget_apps",
+      "methods": [
+        "GET"
+      ],
+      "module": "widget_apps",
+      "path": "/api/v1/widget-apps",
+      "registration_id": "rest-0230",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "create_widget_app",
+      "methods": [
+        "POST"
+      ],
+      "module": "widget_apps",
+      "path": "/api/v1/widget-apps",
+      "registration_id": "rest-0229",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "delete_widget_app",
+      "methods": [
+        "DELETE"
+      ],
+      "module": "widget_apps",
+      "path": "/api/v1/widget-apps/{app_id}",
+      "registration_id": "rest-0233",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "get_widget_app",
+      "methods": [
+        "GET"
+      ],
+      "module": "widget_apps",
+      "path": "/api/v1/widget-apps/{app_id}",
+      "registration_id": "rest-0231",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "update_widget_app",
+      "methods": [
+        "PATCH"
+      ],
+      "module": "widget_apps",
+      "path": "/api/v1/widget-apps/{app_id}",
+      "registration_id": "rest-0232",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "regenerate_api_key",
+      "methods": [
+        "POST"
+      ],
+      "module": "widget_apps",
+      "path": "/api/v1/widget-apps/{app_id}/regenerate-key",
+      "registration_id": "rest-0234",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "list_widgets",
+      "methods": [
+        "GET"
+      ],
+      "module": "widget",
+      "path": "/api/v1/widgets",
+      "registration_id": "rest-0226",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "create_new_widget",
+      "methods": [
+        "POST"
+      ],
+      "module": "widget",
+      "path": "/api/v1/widgets",
+      "registration_id": "rest-0222",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "get_widgets_by_agent",
+      "methods": [
+        "GET"
+      ],
+      "module": "widget",
+      "path": "/api/v1/widgets/agent/{agent_id}",
+      "registration_id": "rest-0227",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "remove_widget",
+      "methods": [
+        "DELETE"
+      ],
+      "module": "widget",
+      "path": "/api/v1/widgets/{widget_id}",
+      "registration_id": "rest-0228",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "get_widget_data",
+      "methods": [
+        "GET"
+      ],
+      "module": "widget",
+      "path": "/api/v1/widgets/{widget_id}",
+      "registration_id": "rest-0224",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "get_widget_ui",
+      "methods": [
+        "GET"
+      ],
+      "module": "widget",
+      "path": "/api/v1/widgets/{widget_id}/data",
+      "registration_id": "rest-0223",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "end_chat_acknowledgment",
+      "methods": [
+        "POST"
+      ],
+      "module": "widget",
+      "path": "/api/v1/widgets/{widget_id}/end-chat",
+      "registration_id": "rest-0225",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "create_workflow",
+      "methods": [
+        "POST"
+      ],
+      "module": "workflow",
+      "path": "/api/v1/workflow",
+      "registration_id": "rest-0235",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "get_workflow_by_agent_id",
+      "methods": [
+        "GET"
+      ],
+      "module": "workflow",
+      "path": "/api/v1/workflow/agent/{agent_id}",
+      "registration_id": "rest-0236",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "delete_workflow",
+      "methods": [
+        "DELETE"
+      ],
+      "module": "workflow",
+      "path": "/api/v1/workflow/{workflow_id}",
+      "registration_id": "rest-0238",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "update_workflow",
+      "methods": [
+        "PUT"
+      ],
+      "module": "workflow",
+      "path": "/api/v1/workflow/{workflow_id}",
+      "registration_id": "rest-0237",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "get_workflow_nodes",
+      "methods": [
+        "GET"
+      ],
+      "module": "workflow_node",
+      "path": "/api/v1/workflow/{workflow_id}/nodes",
+      "registration_id": "rest-0240",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "replace_workflow_nodes",
+      "methods": [
+        "PUT"
+      ],
+      "module": "workflow_node",
+      "path": "/api/v1/workflow/{workflow_id}/nodes",
+      "registration_id": "rest-0239",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "get_workflow_node",
+      "methods": [
+        "GET"
+      ],
+      "module": "workflow_node",
+      "path": "/api/v1/workflow/{workflow_id}/nodes/{node_id}",
+      "registration_id": "rest-0242",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "update_workflow_node",
+      "methods": [
+        "PUT"
+      ],
+      "module": "workflow_node",
+      "path": "/api/v1/workflow/{workflow_id}/nodes/{node_id}",
+      "registration_id": "rest-0241",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "ask",
+      "methods": [
+        "POST"
+      ],
+      "module": "help_center_public",
+      "path": "/ask",
+      "registration_id": "rest-0063",
+      "scope": "public",
+      "status_code": null
+    },
+    {
+      "handler": "get_health_check",
+      "methods": [
+        "GET"
+      ],
+      "module": "main",
+      "path": "/health",
+      "registration_id": "rest-0002",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "head_health_check",
+      "methods": [
+        "HEAD"
+      ],
+      "module": "main",
+      "path": "/health",
+      "registration_id": "rest-0003",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "help_center_domain_tls_check",
+      "methods": [
+        "GET"
+      ],
+      "module": "main",
+      "path": "/health/help-center-domain",
+      "registration_id": "rest-0004",
+      "scope": "api",
+      "status_code": null
+    },
+    {
+      "handler": "healthz",
+      "methods": [
+        "GET"
+      ],
+      "module": "help_center_public",
+      "path": "/healthz",
+      "registration_id": "rest-0067",
+      "scope": "public",
+      "status_code": null
+    },
+    {
+      "handler": "robots",
+      "methods": [
+        "GET"
+      ],
+      "module": "help_center_public",
+      "path": "/robots.txt",
+      "registration_id": "rest-0066",
+      "scope": "public",
+      "status_code": null
+    },
+    {
+      "handler": "sitemap",
+      "methods": [
+        "GET"
+      ],
+      "module": "help_center_public",
+      "path": "/sitemap.xml",
+      "registration_id": "rest-0065",
+      "scope": "public",
+      "status_code": null
+    },
+    {
+      "handler": "preserved_article",
+      "methods": [
+        "GET"
+      ],
+      "module": "help_center_public",
+      "path": "/{full_path:path}",
+      "registration_id": "rest-0068",
+      "scope": "public",
+      "status_code": null
+    }
+  ],
+  "socketio": [
+    {
+      "event": "agent_message",
+      "handler": "handle_agent_message",
+      "namespace": "/agent"
+    },
+    {
+      "event": "connect",
+      "handler": "agent_connect",
+      "namespace": "/agent"
+    },
+    {
+      "event": "join_room",
+      "handler": "handle_join_room",
+      "namespace": "/agent"
+    },
+    {
+      "event": "leave_room",
+      "handler": "handle_leave_room",
+      "namespace": "/agent"
+    },
+    {
+      "event": "taken_over",
+      "handler": "handle_taken_over",
+      "namespace": "/agent"
+    },
+    {
+      "event": "chat",
+      "handler": "handle_widget_chat",
+      "namespace": "/widget"
+    },
+    {
+      "event": "connect",
+      "handler": "widget_connect",
+      "namespace": "/widget"
+    },
+    {
+      "event": "end_chat",
+      "handler": "handle_end_chat",
+      "namespace": "/widget"
+    },
+    {
+      "event": "get_chat_history",
+      "handler": "get_widget_chat_history",
+      "namespace": "/widget"
+    },
+    {
+      "event": "get_workflow_state",
+      "handler": "handle_get_workflow_state",
+      "namespace": "/widget"
+    },
+    {
+      "event": "proceed_workflow",
+      "handler": "handle_proceed_workflow",
+      "namespace": "/widget"
+    },
+    {
+      "event": "submit_contact_info",
+      "handler": "handle_contact_info",
+      "namespace": "/widget"
+    },
+    {
+      "event": "submit_form",
+      "handler": "handle_form_submission",
+      "namespace": "/widget"
+    },
+    {
+      "event": "submit_rating",
+      "handler": "handle_rating_submission",
+      "namespace": "/widget"
+    }
+  ],
+  "source": "backend/app"
+}

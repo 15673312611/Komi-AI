@@ -1,0 +1,604 @@
+<!--
+Copyright 2024-2026 Komi AI
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+-->
+
+<script setup lang="ts">
+import { computed } from 'vue'
+
+// Define form field interface
+interface FormField {
+  name: string
+  label: string
+  type: string
+  required: boolean
+  placeholder: string
+  options: string | string[] // Can be string (for textarea display) or array (when saved)
+  minLength: number
+  maxLength: number
+}
+
+interface FormNodeData {
+  form_title: string
+  form_description: string
+  submit_button_text: string
+  form_full_screen: boolean
+  form_fields: FormField[]
+}
+
+const props = defineProps<{
+  modelValue: FormNodeData
+  validationErrors: Record<string, string>
+}>()
+
+const emit = defineEmits<{
+  (e: 'update:model-value', value: FormNodeData): void
+  (e: 'validate-field', field: string): void
+}>()
+
+const formData = computed({
+  get: () => props.modelValue,
+  set: (value: FormNodeData) => emit('update:model-value', value)
+})
+
+// Get field type icon
+const getFieldTypeIcon = (type: string) => {
+  const icons = {
+    text: '📝',
+    email: '📧',
+    number: '🔢',
+    tel: '📞',
+    textarea: '📄',
+    select: '📋',
+    checkbox: '☑️',
+    radio: '🔘'
+  }
+  return icons[type as keyof typeof icons] || '📝'
+}
+
+// Add form field
+const addFormField = () => {
+  const updatedFields = [...formData.value.form_fields, {
+    name: '',
+    label: '',
+    type: 'text',
+    required: false,
+    placeholder: '',
+    options: '',
+    minLength: 0,
+    maxLength: 255
+  }]
+  
+  formData.value = {
+    ...formData.value,
+    form_fields: updatedFields
+  }
+  
+  // Trigger validation for form fields
+  emit('validate-field', 'form_fields')
+}
+
+// Remove form field
+const removeFormField = (index: number) => {
+  const updatedFields = formData.value.form_fields.filter((_, i) => i !== index)
+  
+  formData.value = {
+    ...formData.value,
+    form_fields: updatedFields
+  }
+  
+  // Trigger validation for form fields
+  emit('validate-field', 'form_fields')
+}
+
+// Update individual field
+const updateField = (index: number, field: string, value: any) => {
+  const updatedFields = [...formData.value.form_fields]
+  updatedFields[index] = {
+    ...updatedFields[index],
+    [field]: value
+  }
+  
+  formData.value = {
+    ...formData.value,
+    form_fields: updatedFields
+  }
+  
+  emit('validate-field', 'form_fields')
+}
+
+// Update form data
+const updateFormData = (field: keyof FormNodeData, value: any) => {
+  formData.value = {
+    ...formData.value,
+    [field]: value
+  }
+  
+  if (field !== 'form_fields') {
+    emit('validate-field', field)
+  }
+}
+</script>
+
+<template>
+  <div class="form-node-config">
+    <div class="form-group">
+      <label for="form-title">表单标题 (Form Title)</label>
+      <input
+        id="form-title"
+        :value="formData.form_title"
+        @input="updateFormData('form_title', ($event.target as HTMLInputElement).value)"
+        type="text"
+        class="form-input"
+        placeholder="输入表单标题，如：联系客服 / 登记预约"
+      />
+    </div>
+    
+    <div class="form-group">
+      <label for="form-description">表单描述说明</label>
+      <textarea
+        id="form-description"
+        :value="formData.form_description"
+        @input="updateFormData('form_description', ($event.target as HTMLTextAreaElement).value)"
+        class="form-textarea"
+        placeholder="输入表单填写指引说明（可选）"
+        rows="3"
+      ></textarea>
+    </div>
+    
+    <div class="form-group">
+      <label for="submit-button-text">提交按钮文案</label>
+      <input
+        id="submit-button-text"
+        :value="formData.submit_button_text"
+        @input="updateFormData('submit_button_text', ($event.target as HTMLInputElement).value)"
+        type="text"
+        class="form-input"
+        placeholder="确认提交"
+      />
+    </div>
+    
+    <div class="form-group">
+      <label class="checkbox-group">
+        <input
+          :checked="formData.form_full_screen"
+          @change="updateFormData('form_full_screen', ($event.target as HTMLInputElement).checked)"
+          type="checkbox"
+          class="form-checkbox"
+        />
+        <span class="checkbox-label">以全屏模态弹窗形式展示表单</span>
+      </label>
+      <p class="help-text">开启后，表单将以全屏沉浸式覆盖窗口展开，而非嵌入在聊天气泡中</p>
+    </div>
+    
+    <div class="form-group">
+      <label>表单字段列表 (Form Fields)</label>
+      <div class="form-fields-container" :class="{ 'error': validationErrors.form_fields }">
+        <div
+          v-for="(field, index) in formData.form_fields"
+          :key="index"
+          class="form-field-item"
+        >
+          <div class="form-field-header">
+            <span class="field-type-badge" :class="`field-type-${field.type}`">
+              {{ getFieldTypeIcon(field.type) }} {{ field.type }}
+            </span>
+            <button
+              type="button"
+              class="remove-field-btn"
+              @click="removeFormField(index)"
+              title="删除此字段"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+              </svg>
+            </button>
+          </div>
+          
+          <div class="form-field-config">
+            <div class="field-row">
+              <div class="field-col">
+                <label class="field-label">字段变量名 (Field Name) *</label>
+                <input
+                  :value="field.name"
+                  @input="updateField(index, 'name', ($event.target as HTMLInputElement).value)"
+                  @blur="$emit('validate-field', 'form_fields')"
+                  type="text"
+                  class="field-input"
+                  placeholder="如：customer_email"
+                  required
+                />
+              </div>
+              <div class="field-col">
+                <label class="field-label">展示标签名称 (Label) *</label>
+                <input
+                  :value="field.label"
+                  @input="updateField(index, 'label', ($event.target as HTMLInputElement).value)"
+                  @blur="$emit('validate-field', 'form_fields')"
+                  type="text"
+                  class="field-input"
+                  placeholder="如：电子邮箱"
+                  required
+                />
+              </div>
+            </div>
+            
+            <div class="field-row">
+              <div class="field-col">
+                <label class="field-label">输入控件类型</label>
+                <select 
+                  :value="field.type" 
+                  @change="updateField(index, 'type', ($event.target as HTMLSelectElement).value)"
+                  class="field-select"
+                >
+                  <option value="text">单行文本 (Text)</option>
+                  <option value="email">电子邮箱 (Email)</option>
+                  <option value="number">数字 (Number)</option>
+                  <option value="tel">电话号码 (Phone)</option>
+                  <option value="textarea">多行文本 (Textarea)</option>
+                  <option value="select">下拉单选 (Select)</option>
+                  <option value="checkbox">复选框 (Checkbox)</option>
+                  <option value="radio">单选按钮 (Radio)</option>
+                </select>
+              </div>
+              <div class="field-col">
+                <label class="field-label">是否必填</label>
+                <label class="checkbox-label">
+                  <input
+                    :checked="field.required"
+                    @change="updateField(index, 'required', ($event.target as HTMLInputElement).checked)"
+                    type="checkbox"
+                    class="form-checkbox"
+                  />
+                  <span>必填项</span>
+                </label>
+              </div>
+            </div>
+            
+            <div class="field-row">
+              <div class="field-col-full">
+                <label class="field-label">输入提示占位符 (Placeholder)</label>
+                <input
+                  :value="field.placeholder"
+                  @input="updateField(index, 'placeholder', ($event.target as HTMLInputElement).value)"
+                  @blur="$emit('validate-field', 'form_fields')"
+                  type="text"
+                  class="field-input"
+                  placeholder="输入框内浅色提示文本"
+                />
+              </div>
+            </div>
+            
+            <!-- Options for select/radio fields -->
+            <div v-if="field.type === 'select' || field.type === 'radio'" class="field-row">
+              <div class="field-col-full">
+                <label class="field-label">可选项列表 (每行一个选项)</label>
+                <textarea
+                  :value="Array.isArray(field.options) ? field.options.join('\n') : field.options"
+                  @input="updateField(index, 'options', ($event.target as HTMLTextAreaElement).value)"
+                  @blur="$emit('validate-field', 'form_fields')"
+                  class="field-textarea"
+                  placeholder="选项一&#10;选项二&#10;选项三"
+                  rows="3"
+                ></textarea>
+              </div>
+            </div>
+            
+            <!-- Validation for text fields -->
+            <div v-if="field.type === 'text' || field.type === 'textarea'" class="field-row">
+              <div class="field-col">
+                <label class="field-label">最小字符长度</label>
+                <input
+                  :value="field.minLength"
+                  @input="updateField(index, 'minLength', parseInt(($event.target as HTMLInputElement).value) || 0)"
+                  @blur="$emit('validate-field', 'form_fields')"
+                  type="number"
+                  class="field-input"
+                  min="0"
+                  placeholder="0"
+                />
+              </div>
+              <div class="field-col">
+                <label class="field-label">最大字符长度</label>
+                <input
+                  :value="field.maxLength"
+                  @input="updateField(index, 'maxLength', parseInt(($event.target as HTMLInputElement).value) || 255)"
+                  @blur="$emit('validate-field', 'form_fields')"
+                  type="number"
+                  class="field-input"
+                  min="1"
+                  placeholder="255"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <button
+          type="button"
+          class="add-field-btn"
+          @click="addFormField"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="12" y1="5" x2="12" y2="19"></line>
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+          </svg>
+          + 添加表单字段
+        </button>
+      </div>
+      <div v-if="validationErrors.form_fields" class="error-message">
+        {{ validationErrors.form_fields }}
+      </div>
+    </div>
+  </div>
+</template>
+
+<style scoped>
+.form-node-config {
+  width: 100%;
+}
+
+.form-group {
+  margin-bottom: var(--space-sm);
+}
+
+.form-group label {
+  display: block;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--text-color);
+  margin-bottom: 4px;
+}
+
+.form-input,
+.form-textarea,
+.form-select {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: var(--background-color);
+  color: var(--text-color);
+  font-size: 0.85rem;
+  transition: border-color 0.2s ease;
+}
+
+.form-input:focus,
+.form-textarea:focus,
+.form-select:focus {
+  outline: none;
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 2px rgba(201, 242, 78, 0.15);
+}
+
+.form-textarea {
+  resize: vertical;
+  min-height: 70px;
+}
+
+.checkbox-group {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 8px 0;
+}
+
+.checkbox-group input[type="checkbox"] {
+  margin-top: 2px;
+  flex-shrink: 0;
+}
+
+.checkbox-label {
+  font-size: 0.85rem;
+  color: var(--text-color);
+  line-height: 1.4;
+  cursor: pointer;
+  user-select: none;
+}
+
+.form-checkbox {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.help-text {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-top: 4px;
+  line-height: 1.3;
+}
+
+.error-message {
+  color: var(--error-color);
+  font-size: 0.75rem;
+  margin-top: 4px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.error-message::before {
+  content: "⚠";
+  font-size: 0.8rem;
+}
+
+/* Form Fields Styles */
+.form-fields-container {
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: var(--background-color);
+  padding: var(--space-sm);
+  max-height: none;
+  overflow: visible;
+}
+
+.form-fields-container.error {
+  border-color: var(--error-color);
+  background-color: rgba(239, 68, 68, 0.05);
+}
+
+.form-field-item {
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: var(--background-soft);
+  margin-bottom: var(--space-sm);
+  overflow: hidden;
+}
+
+.form-field-item:last-child {
+  margin-bottom: 0;
+}
+
+.form-field-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--space-sm) var(--space-md);
+  background: var(--background-muted);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.field-type-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  font-size: 0.7rem;
+  font-weight: 500;
+  text-transform: capitalize;
+  background: var(--primary-soft);
+  color: var(--primary-color);
+}
+
+.remove-field-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.remove-field-btn:hover {
+  background: var(--error-color);
+  color: white;
+}
+
+.remove-field-btn svg {
+  width: 12px;
+  height: 12px;
+}
+
+.form-field-config {
+  padding: var(--space-md);
+}
+
+.field-row {
+  display: flex;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-sm);
+}
+
+.field-row:last-child {
+  margin-bottom: 0;
+}
+
+.field-col {
+  flex: 1;
+}
+
+.field-col-full {
+  flex: 1;
+  width: 100%;
+}
+
+.field-label {
+  display: block;
+  font-size: 0.7rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+
+.field-input,
+.field-textarea,
+.field-select {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: var(--background-color);
+  color: var(--text-color);
+  font-size: 0.75rem;
+  transition: border-color 0.2s ease;
+}
+
+.field-input:focus,
+.field-textarea:focus,
+.field-select:focus {
+  outline: none;
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 1px rgba(201, 242, 78, 0.15);
+}
+
+.field-input.error,
+.field-textarea.error,
+.field-select.error {
+  border-color: var(--error-color);
+  background-color: rgba(239, 68, 68, 0.05);
+}
+
+.field-textarea {
+  resize: vertical;
+  min-height: 60px;
+}
+
+.add-field-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-xs);
+  width: 100%;
+  padding: var(--space-sm);
+  background: var(--background-muted);
+  border: 1px dashed var(--border-color);
+  border-radius: var(--radius-md);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+
+.add-field-btn:hover {
+  background: var(--primary-soft);
+  border-color: var(--primary-color);
+  color: var(--primary-color);
+}
+
+.add-field-btn svg {
+  width: 14px;
+  height: 14px;
+}
+</style> 

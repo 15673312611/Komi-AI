@@ -1,0 +1,264 @@
+"""
+Copyright 2024-2026 Komi AI
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+"""
+
+import asyncio
+from app.database import SessionLocal
+from app.repositories.knowledge_queue import KnowledgeQueueRepository
+from app.repositories.knowledge import KnowledgeRepository
+from app.knowledge.knowledge_base import KnowledgeManager
+from app.knowledge import page_editor
+from app.services import knowledge_vector_links
+from app.models.knowledge_queue import QueueStatus, ProcessingStage
+from app.core.logger import get_logger
+import os
+from app.core.processor import PROCESSOR_STATUS
+from datetime import datetime
+from app.models.notification import Notification, NotificationType
+from app.services.user import send_fcm_notification
+from urllib.parse import urlparse, unquote
+
+logger = get_logger(__name__)
+
+
+def get_user_friendly_filename(source: str, source_type: str) -> str:
+    """Extract a user-friendly filename from the source URL or path"""
+    try:
+        if source_type in ('website', 'sitemap'):
+            # For websites/sitemaps, just return the domain
+            parsed = urlparse(source)
+            return parsed.netloc or source
+        
+        # For files (PDF, etc.), extract filename from URL or path
+        if source.startswith('http'):
+            # Parse URL to get the path
+            parsed = urlparse(source)
+            path = parsed.path
+            
+            # Extract filename from path
+            if path:
+                # Get the last part of the path (filename)
+                filename = path.split('/')[-1]
+                # URL decode the filename to handle encoded characters like %20
+                filename = unquote(filename)
+                # Remove query parameters if any
+                filename = filename.split('?')[0]
+                if filename:
+                    return filename
+            
+            # Fallback to domain if no filename found
+            return parsed.netloc or source
+        else:
+            # For local file paths, just get the basename
+            return os.path.basename(source)
+            
+    except Exception as e:
+        logger.warning(f"Error extracting filename from {source}: {e}")
+        return source
+
+
+def _sync_vector_agent_links(db, queue_item) -> None:
+    """Point the ingested chunks at every agent the source is linked to.
+
+    Ingestion writes ``filters.agent_id`` from the queue row's single optional
+    ``agent_id``, so a run queued without one leaves every chunk with an empty
+    list. Retrieval matches on that filter, so the source is invisible to the
+    agent while the dashboard still shows it as linked — the failure that left
+    two production sources unreadable until the links were rebuilt by hand.
+
+    The relational links are the authority, so re-derive from them. Idempotent,
+    and non-fatal: the content is already ingested, and losing the run over a
+    filter refresh would be worse than the stale filter.
+    """
+    try:
+        knowledge_repo = KnowledgeRepository(db)
+        sources = knowledge_repo.get_by_sources(
+            queue_item.organization_id, [queue_item.source]
+        )
+        if not sources:
+            return
+
+        # An org can hold more than one knowledge row for the same URL, and they
+        # share one set of vector chunks (keyed on the source name). Sync the
+        # union of their links once, rather than per row where the last write
+        # would drop the other rows' agents.
+        agent_ids = sorted({
+            agent_id
+            for knowledge in sources
+            for agent_id in page_editor.agent_ids_for(knowledge)
+        })
+        knowledge_vector_links.sync_agent_ids(db, sources[0], agent_ids)
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        logger.error(
+            f"Could not refresh vector agent filters for {queue_item.source} "
+            f"(non-fatal, content was ingested): {e}"
+        )
+
+
+async def process_queue_item(queue_item_id: int):
+    """Process a single queue item"""
+    with SessionLocal() as db:
+        try:
+            queue_repo = KnowledgeQueueRepository(db)
+            queue_item = queue_repo.get_by_id(queue_item_id)
+
+            if not queue_item:
+                logger.error(f"Queue item {queue_item_id} not found")
+                return
+
+            # Get knowledge manager instance
+            knowledge = KnowledgeManager(
+                org_id=queue_item.organization_id,
+                agent_id=queue_item.agent_id
+            )
+
+            # Process if status is pending
+            if queue_item.status == QueueStatus.PENDING:
+                # Update to processing
+                queue_item.status = QueueStatus.PROCESSING
+                queue_item.processing_stage = ProcessingStage.NOT_STARTED
+                queue_item.progress_percentage = 0.0
+                db.commit()
+
+                await knowledge.process_knowledge(queue_item)
+
+                _sync_vector_agent_links(db, queue_item)
+
+                # Create notification for successful processing
+                user_friendly_name = get_user_friendly_filename(queue_item.source, queue_item.source_type)
+                notification = Notification(
+                    user_id=queue_item.user_id,
+                    type=NotificationType.KNOWLEDGE_PROCESSED,
+                    title="Knowledge Processing Complete",
+                    message=f"Successfully processed {user_friendly_name}",
+                    # The column is notification_metadata; the old metadata=
+                    # kwarg silently shadowed Base.metadata and stored nothing.
+                    notification_metadata={"queue_id": queue_item.id}
+                )
+                db.add(notification)
+                db.commit()
+
+                # Send FCM notification
+                await send_fcm_notification(queue_item.user_id, notification, db)
+
+                # Auto-draft FAQs from the new source for orgs using the help
+                # center. Fully non-fatal — even an import failure of the FAQ
+                # stack must not flip an already-successful run to FAILED.
+                try:
+                    from app.services.faq_generation import maybe_enqueue_auto_faq_job
+                    maybe_enqueue_auto_faq_job(db, queue_item)
+                except Exception as faq_hook_err:
+                    logger.error(f"Auto FAQ hook unavailable (non-fatal): {faq_hook_err}")
+
+            queue_item.status = QueueStatus.COMPLETED
+            db.commit()
+
+        except Exception as e:
+            logger.error(f"Error processing queue item {queue_item_id}: {str(e)}")
+            try:
+                queue_item.status = QueueStatus.FAILED
+                # Persist the reason so the UI can show why it failed.
+                queue_item.error = str(e)
+
+                # Create notification for failed processing
+                user_friendly_name = get_user_friendly_filename(queue_item.source, queue_item.source_type)
+                notification = Notification(
+                    user_id=queue_item.user_id,
+                    type=NotificationType.KNOWLEDGE_FAILED,
+                    title="Knowledge Processing Failed",
+                    message=f"Failed to process {user_friendly_name}: {str(e)}",
+                    notification_metadata={"queue_id": queue_item.id}
+                )
+                db.add(notification)
+                db.commit()
+
+                # Send FCM notification for failure
+                await send_fcm_notification(queue_item.user_id, notification, db)
+            except Exception as notify_err:
+                logger.error(f"Error creating failure notification: {notify_err}")
+
+            raise
+
+
+async def run_processor():
+    """Single run of the processor"""
+    try:
+        PROCESSOR_STATUS["is_running"] = True
+        PROCESSOR_STATUS["error"] = None
+
+        # Get pending items with proper connection handling
+        with SessionLocal() as db:
+            queue_repo = KnowledgeQueueRepository(db)
+            pending_items = queue_repo.get_pending()
+            # Extract IDs before closing the session
+            pending_item_ids = [item.id for item in pending_items] if pending_items else []
+
+        if pending_item_ids:
+            # Reduce concurrent processing to 2 to conserve connections on t3.micro
+            semaphore = asyncio.Semaphore(2)
+
+            async def process_with_semaphore(item_id):
+                async with semaphore:
+                    await process_queue_item(item_id)
+
+            # Process items with semaphore control
+            await asyncio.gather(*[process_with_semaphore(item_id) for item_id in pending_item_ids])
+
+        PROCESSOR_STATUS["last_run"] = datetime.utcnow().isoformat()
+
+    except Exception as e:
+        logger.error(f"Error in knowledge processor: {str(e)}")
+        PROCESSOR_STATUS["error"] = str(e)
+        raise
+
+    finally:
+        PROCESSOR_STATUS["is_running"] = False
+
+
+# Main entry point for running as a standalone service
+if __name__ == "__main__":
+    import time
+    
+    logger.info("Starting knowledge processor service")
+    
+    async def processor_loop():
+        while True:
+            try:
+                logger.info("Running knowledge processor")
+                await run_processor()
+                logger.info("Knowledge processor completed, sleeping for 60 seconds")
+            except Exception as e:
+                logger.error(f"Error in knowledge processor loop: {str(e)}")
+
+            # Sleep for 60 seconds before next run
+            await asyncio.sleep(60)
+
+    async def main():
+        """Knowledge and FAQ loops run as independent tasks in this container:
+        a long FAQ generation job never delays knowledge ingestion, and an
+        import failure of the FAQ stack only disables the FAQ half."""
+        tasks = [processor_loop()]
+        try:
+            from app.workers.faq_processor import run_faq_processor_loop
+            tasks.append(run_faq_processor_loop())
+        except Exception as e:
+            logger.error(f"FAQ processor unavailable, running knowledge only: {e}")
+        await asyncio.gather(*tasks)
+
+    # Run both loops
+    asyncio.run(main())
+    

@@ -1,0 +1,401 @@
+"""
+Copyright 2024-2026 Komi AI
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+"""
+
+import os
+import sys as _sys
+
+# Set before any app import: app.core.encryption reads these when it first loads a
+# key, and a fixed key keeps encrypted fixtures reproducible across runs. This key
+# is for tests only — deployments generate their own (see backend/.env.example).
+os.environ.setdefault("ENVIRONMENT", "test")
+os.environ.setdefault(
+    "ENCRYPTION_KEY", "QmFTbXc5RWQ4czRfQWpqSnhqZjhraGtYSGFYaXZ4SkRNS2kxZFB1Y2NrMD0=")
+
+
+# NO_ENTERPRISE=1 — run the suite the way CI does.
+#
+# CI checks out with actions/checkout@v3 and no `submodules: recursive`, so
+# app/enterprise is empty there and every `try: import app.enterprise` falls
+# back to community mode. Locally the submodule IS populated, so plan and
+# subscription gating switches on and ~30 API tests return a 403 they never
+# see in CI. Setting this makes the import fail the same way, so a local run
+# is comparable to the CI result:
+#
+#     NO_ENTERPRISE=1 python -m pytest tests/
+#
+# An env var rather than a CLI flag because the blocker has to be installed
+# before this module's own `from app...` imports below, which happens before
+# pytest would hand us a parsed option.
+if os.getenv("NO_ENTERPRISE") == "1":
+
+    class _BlockEnterprise:
+        """Meta-path finder that makes app.enterprise look un-checked-out."""
+
+        def find_spec(self, fullname, path=None, target=None):
+            if fullname == "app.enterprise" or fullname.startswith("app.enterprise."):
+                # ModuleNotFoundError, not bare ImportError: that is what an
+                # un-checked-out submodule actually raises, and it is what
+                # pytest.importorskip and the app's own guards look for.
+                raise ModuleNotFoundError(
+                    f"No module named {fullname!r} (disabled by NO_ENTERPRISE=1)",
+                    name=fullname,
+                )
+            return None
+
+    _sys.meta_path.insert(0, _BlockEnterprise())
+
+import pytest
+import uuid
+import asyncio
+import sys
+from sqlalchemy import create_engine, event, DDL, String
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
+from sqlalchemy.dialects import postgresql
+from sqlalchemy.ext.compiler import compiles
+from app.database import Base
+from typing import Generator
+from sqlalchemy.schema import CreateTable, Table
+from app.models.organization import Organization
+from uuid import UUID, uuid4
+
+# Register a custom type compiler for PostgreSQL UUID to work with SQLite
+# This teaches SQLite how to compile the PostgreSQL UUID type
+@compiles(postgresql.UUID, 'sqlite')
+def compile_uuid_sqlite(type_, compiler, **kw):
+    """Compile PostgreSQL UUID type as CHAR(36) for SQLite"""
+    return "CHAR(36)"
+
+# Teach SQLite how to compile the pgvector column (tickets.embedding).
+# Similarity queries are Postgres-only and guarded in the repository; tests
+# only need the table to create.
+from pgvector.sqlalchemy import Vector
+
+@compiles(Vector, 'sqlite')
+def compile_vector_sqlite(type_, compiler, **kw):
+    return "TEXT"
+from app.models.widget import Widget
+from app.models.agent import Agent, AgentType
+from app.models.ai_config import AIConfig, AIModelType
+from app.models.customer import Customer
+from app.models.user import User
+from app.repositories.agent import AgentRepository
+from app.repositories.widget import WidgetRepository
+from app.models.schemas.widget import WidgetCreate
+from app.core.security import encrypt_api_key, get_password_hash, create_access_token, create_refresh_token, create_conversation_token
+from unittest.mock import MagicMock
+from fastapi.testclient import TestClient
+from app.main import app
+from app.models.shopify.shopify_shop import ShopifyShop
+from app.models.shopify.agent_shopify_config import AgentShopifyConfig
+import jwt
+from datetime import datetime, timedelta
+from app.core.config import settings
+from app.models.role import Role
+from app.models.permission import Permission
+
+# Test database URL
+SQLALCHEMY_DATABASE_URL = "sqlite:///:memory:"
+
+# Configure asyncio event loop policy to prevent "Event loop is closed" errors
+@pytest.fixture(scope="function")
+def event_loop():
+    """Create a fresh event loop for each test function.
+
+    This prevents test pollution where one test's asyncio operations
+    affect subsequent tests.
+    """
+    if sys.platform == "win32":
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
+    # Create a new event loop for this test
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+
+    yield loop
+
+    # Clean up: cancel all pending tasks and close the loop
+    try:
+        pending = asyncio.all_tasks(loop)
+        for task in pending:
+            task.cancel()
+        if pending:
+            loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
+    except Exception:
+        pass  # Ignore cleanup errors
+    finally:
+        try:
+            loop.close()
+        except Exception:
+            pass
+        # Reset the event loop to None so the next test gets a fresh one
+        asyncio.set_event_loop(None)
+
+
+@pytest.fixture(autouse=True)
+def setup_event_loop_for_sync_tests():
+    """Ensure an event loop exists for synchronous tests that use asyncio internally.
+
+    This fixture runs automatically for every test and ensures that
+    asyncio.get_event_loop() doesn't raise RuntimeError.
+    """
+    try:
+        loop = asyncio.get_event_loop()
+        if loop.is_closed():
+            raise RuntimeError("Event loop is closed")
+    except RuntimeError:
+        # No event loop exists, create one
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
+    yield
+
+    # Don't close the loop here - let the event_loop fixture handle cleanup
+    # for async tests, and for sync tests we just leave it for the next test
+
+
+# Create test engine
+engine = create_engine(
+    SQLALCHEMY_DATABASE_URL,
+    connect_args={"check_same_thread": False},
+    poolclass=StaticPool,
+)
+
+# Create TestingSessionLocal class
+TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+@event.listens_for(engine, "connect")
+def do_connect(dbapi_connection, connection_record):
+    # Disable foreign key constraint enforcement
+    cursor = dbapi_connection.cursor()
+    cursor.execute("PRAGMA foreign_keys=OFF")
+    cursor.close()
+
+@event.listens_for(Table, 'before_create')
+def _before_create_table(target, connection, **kw):
+    # For SQLite, we need to remove schema prefixes
+    if connection.engine.dialect.name == 'sqlite':
+        target.schema = None
+
+def create_tables():
+    """Create all tables in the test database"""
+    Base.metadata.create_all(bind=engine)
+
+@pytest.fixture(scope="function")
+def db() -> Generator:
+    """Create a fresh database for each test."""
+    # Create all tables
+    create_tables()
+
+    # Create a new session for testing
+    db = TestingSessionLocal()
+    real_close = db.close
+    # Handlers under test now close their own db session (see the widget_chat.py DB
+    # pool leak fix) via `db = next(get_db())` monkeypatched to this shared fixture
+    # session. A real close() here would expunge/detach fixture objects mid-test, so
+    # it's neutered until the fixture's own teardown below.
+    db.close = lambda: None
+    try:
+        yield db
+    finally:
+        real_close()
+        # Drop all tables after test
+        Base.metadata.drop_all(bind=engine)
+
+@pytest.fixture
+def test_organization(db) -> Organization:
+    """Create a test organization"""
+    org = Organization(
+        name="Test Organization",
+        domain="test.com",
+        timezone="UTC"
+    )
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+    return org
+
+@pytest.fixture
+def test_organization_id(test_organization) -> UUID:
+    """Return the ID of the test organization"""
+    return test_organization.id
+
+@pytest.fixture
+def test_ai_config(db, test_organization) -> AIConfig:
+    """Create a test AI config"""
+    ai_config = AIConfig(
+        organization_id=test_organization.id,
+        model_type=AIModelType.OPENAI,
+        model_name="gpt-4",
+        encrypted_api_key=encrypt_api_key("test_key"),
+        is_active=True
+    )
+    db.add(ai_config)
+    db.commit()
+    db.refresh(ai_config)
+    return ai_config
+
+@pytest.fixture
+def test_agent(db, test_organization) -> Agent:
+    """Create a test agent"""
+    agent_repo = AgentRepository(db)
+    agent = agent_repo.create_agent(
+        name="Test Agent",
+        agent_type=AgentType.CUSTOMER_SUPPORT,
+        instructions=["Test instructions"],
+        org_id=test_organization.id
+    )
+    return agent
+
+@pytest.fixture
+def test_widget(db, test_agent) -> Widget:
+    """Create a test widget"""
+    widget_repo = WidgetRepository(db)
+    widget_create = WidgetCreate(
+        name="Test Widget",
+        agent_id=test_agent.id
+    )
+    widget = widget_repo.create_widget(
+        widget=widget_create,
+        organization_id=test_agent.organization_id
+    )
+    return widget
+
+@pytest.fixture
+def test_customer(db, test_organization) -> Customer:
+    """Create a test customer"""
+    customer = Customer(
+        id=uuid4(),
+        organization_id=test_organization.id,
+        email="test.customer@example.com",
+        full_name="Test Customer"
+    )
+    db.add(customer)
+    db.commit()
+    db.refresh(customer)
+    return customer
+
+@pytest.fixture
+def test_permissions(db):
+    """Create test permissions"""
+    permissions = []
+    for perm_name in ["manage_organization", "manage_users", "manage_agents"]:
+        perm = Permission(name=perm_name)
+        db.add(perm)
+        permissions.append(perm)
+    db.commit()
+    for perm in permissions:
+        db.refresh(perm)
+    return permissions
+
+@pytest.fixture
+def test_role(db, test_permissions, test_organization):
+    """Create a test role with permissions"""
+    role = Role(
+        name="Test Admin",
+        organization_id=test_organization.id
+    )
+    role.permissions = test_permissions
+    db.add(role)
+    db.commit()
+    db.refresh(role)
+    return role
+
+@pytest.fixture
+def test_user(db, test_organization, test_role) -> User:
+    """Create a test user"""
+    user = User(
+        id=uuid4(),
+        organization_id=test_organization.id,
+        email="test.user@example.com",
+        full_name="Test User",
+        hashed_password=get_password_hash("test_password"),
+        is_active=True,
+        role_id=test_role.id
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return user
+
+@pytest.fixture
+def test_access_token(test_user) -> str:
+    """Create a test access token"""
+    token_data = {
+        "sub": str(test_user.id),
+        "org": str(test_user.organization_id)
+    }
+    return create_access_token(token_data)
+
+@pytest.fixture
+def test_refresh_token(test_user) -> str:
+    """Create a test refresh token"""
+    token_data = {
+        "sub": str(test_user.id),
+        "org": str(test_user.organization_id)
+    }
+    return create_refresh_token(token_data)
+
+@pytest.fixture
+def test_conversation_token(test_widget, test_customer) -> str:
+    """Create a test conversation token"""
+    return create_conversation_token(
+        widget_id=str(test_widget.id),
+        customer_id=str(test_customer.id)
+    )
+
+@pytest.fixture
+def mock_socketio():
+    """Create a mock SocketIO instance"""
+    mock_sio = MagicMock()
+    mock_sio.emit = MagicMock()
+    mock_sio.save_session = MagicMock()
+    mock_sio.get_session = MagicMock()
+    return mock_sio
+
+@pytest.fixture
+def test_shopify_shop(db, test_organization):
+    """Create a test Shopify shop."""
+    shop = ShopifyShop(
+        id=str(uuid.uuid4()),
+        shop_domain="test-store.myshopify.com",
+        access_token="test_access_token",
+        scope="read_products,write_products",
+        is_installed=True,
+        organization_id=test_organization.id
+    )
+    db.add(shop)
+    db.commit()
+    db.refresh(shop)
+    yield shop
+    db.delete(shop)
+    db.commit()
+
+@pytest.fixture
+def test_agent_shopify_config(db, test_agent, test_shopify_shop):
+    """Create a test agent Shopify config."""
+    config = AgentShopifyConfig(
+        id=str(uuid.uuid4()),
+        agent_id=str(test_agent.id),
+        shop_id=test_shopify_shop.id,
+        enabled=True
+    )
+    db.add(config)
+    db.commit()
+    db.refresh(config)
+    yield config
+    db.delete(config)
+    db.commit() 

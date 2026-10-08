@@ -1,0 +1,566 @@
+/*
+Copyright 2024-2026 Komi AI
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+import { computed, ref } from 'vue'
+import { toast } from 'vue-sonner'
+
+import { faqService } from '@/services/faq'
+import { knowledgeService } from '@/services/knowledge'
+import type { FaqGenerationJob, FaqImportMode, FaqItem, FaqStatus, GenerateEstimate, HelpCenterSettings } from '@/types/faq'
+
+export type WorkspacePhase = 'loading' | 'empty' | 'generating' | 'populated'
+
+// Fast tick while a job is running; relaxed tick while a domain/SSL state is
+// pending. Idle = no requests at all.
+const ACTIVE_POLL_MS = 3000
+const IDLE_POLL_MS = 10000
+
+export function useFaqWorkspace(organizationId: () => string | undefined) {
+  const faqs = ref<FaqItem[]>([])
+  const job = ref<FaqGenerationJob | null>(null)
+  const settings = ref<HelpCenterSettings | null>(null)
+  const estimate = ref<GenerateEstimate | null>(null)
+  const sourceCount = ref(0)
+  const pageCount = ref(0)
+  const isLoading = ref(false)
+  const loadedOnce = ref(false)
+  const bulkBusy = ref(false)
+  const jobActionBusy = ref(false)
+
+  // Multi-select state for bulk publish/unpublish/delete.
+  const selectedIds = ref<Set<string>>(new Set())
+  const selectionActive = computed(() => selectedIds.value.size > 0)
+
+  function toggleSelect(id: string): void {
+    const next = new Set(selectedIds.value)
+    if (next.has(id)) next.delete(id)
+    else next.add(id)
+    selectedIds.value = next
+  }
+
+  function setSelected(items: FaqItem[], on: boolean): void {
+    const next = new Set(selectedIds.value)
+    for (const item of items) {
+      if (on) next.add(item.id)
+      else next.delete(item.id)
+    }
+    selectedIds.value = next
+  }
+
+  function clearSelection(): void {
+    selectedIds.value = new Set()
+  }
+
+  async function bulkSetStatus(status: FaqStatus): Promise<void> {
+    const ids = [...selectedIds.value]
+    if (!ids.length) return
+    if (bulkBusy.value) return
+    const idsSet = new Set(ids)
+    bulkBusy.value = true
+    try {
+      const updated = await faqService.setStatus(ids, status)
+      faqs.value = faqs.value.map((f) => (idsSet.has(f.id) ? { ...f, status } : f))
+      const remainingSelection = new Set(selectedIds.value)
+      idsSet.forEach((id) => remainingSelection.delete(id))
+      selectedIds.value = remainingSelection
+      toast.success(`${updated} FAQ${updated === 1 ? '' : 's'} ${status === 'published' ? 'published' : 'moved to draft'}`)
+    } catch (error: any) {
+      toast.error(error.message)
+      // A batch may have partially applied server-side (>200 selection splits
+      // into requests) — refetch so the list matches the backend.
+      await refresh()
+    } finally {
+      bulkBusy.value = false
+    }
+  }
+
+  async function bulkDelete(): Promise<void> {
+    const ids = [...selectedIds.value]
+    if (!ids.length) return
+    if (bulkBusy.value) return
+    const idsSet = new Set(ids)
+    bulkBusy.value = true
+    try {
+      const deleted = await faqService.bulkDelete(ids)
+      faqs.value = faqs.value.filter((f) => !idsSet.has(f.id))
+      const remainingSelection = new Set(selectedIds.value)
+      idsSet.forEach((id) => remainingSelection.delete(id))
+      selectedIds.value = remainingSelection
+      toast.success(`${deleted} FAQ${deleted === 1 ? '' : 's'} deleted`)
+      // Deleting a source's FAQs makes it eligible for generation again — the
+      // Generate button's new-source count must not stay stale/disabled.
+      void fetchEstimate()
+    } catch (error: any) {
+      toast.error(error.message)
+      await refresh() // partial batch may have deleted server-side; resync
+    } finally {
+      bulkBusy.value = false
+    }
+  }
+
+  // Inline edit state (one card at a time).
+  const editingId = ref<string | null>(null)
+  const isNewFaq = ref(false)
+  const draftQuestion = ref('')
+  const draftAnswer = ref('')
+  // Topic (stored as the FAQ's free-form category). Empty on create means the
+  // server default; empty on edit means "keep the current topic".
+  const draftCategory = ref('')
+  // Per-article SEO overrides. Empty means "derive it" — the server normalizes
+  // a hand-typed slug and treats blanks as cleared, so no client-side slugify.
+  const draftSlug = ref('')
+  const draftUrlPath = ref('')
+  const draftMetaTitle = ref('')
+  const draftMetaDescription = ref('')
+  const isSaving = ref(false)
+  const pendingStatusIds = new Set<string>()
+  const pendingDeleteIds = new Set<string>()
+
+  let pollTimer: ReturnType<typeof setInterval> | null = null
+  let pollInFlight = false
+  let lastPollAt = 0
+  let refreshRequestVersion = 0
+  let faqsRequestVersion = 0
+  let jobRequestVersion = 0
+  let jobStateVersion = 0
+  let settingsRequestVersion = 0
+  let countsRequestVersion = 0
+  let estimateRequestVersion = 0
+
+  const isJobActive = computed(
+    () => job.value?.status === 'pending' || job.value?.status === 'processing',
+  )
+
+  const phase = computed<WorkspacePhase>(() => {
+    if (isLoading.value && !loadedOnce.value) return 'loading'
+    // Regenerating with existing FAQs keeps the list visible — only the
+    // generate bar flips; the full progress card is for first-run only.
+    if (isJobActive.value && faqs.value.length === 0) return 'generating'
+    return faqs.value.length > 0 ? 'populated' : 'empty'
+  })
+
+  const barPhase = computed<'idle' | 'generating' | 'ready'>(() => {
+    if (isJobActive.value) return 'generating'
+    return faqs.value.length > 0 ? 'ready' : 'idle'
+  })
+
+  const publishedCount = computed(() => faqs.value.filter((f) => f.status === 'published').length)
+
+  // ---- search + filter + collapse (all client-side over the loaded set) ----
+  const searchQuery = ref('')
+  const categoryFilter = ref<string | null>(null)
+  const statusFilter = ref<'all' | FaqStatus>('all')
+  const collapsedCategories = ref<Set<string>>(new Set())
+
+  const categories = computed(() =>
+    [...new Set(faqs.value.map((f) => f.category))].sort((a, b) => a.localeCompare(b)),
+  )
+
+  const hasActiveFilters = computed(
+    () =>
+      searchQuery.value.trim() !== '' ||
+      categoryFilter.value !== null ||
+      statusFilter.value !== 'all',
+  )
+
+  const filteredFaqs = computed(() => {
+    // Tokenized: every term must appear somewhere (question/answer/category),
+    // so "close my" matches "How to close my account".
+    const terms = searchQuery.value.trim().toLowerCase().split(/\s+/).filter(Boolean)
+    return faqs.value.filter((f) => {
+      if (categoryFilter.value && f.category !== categoryFilter.value) return false
+      if (statusFilter.value !== 'all' && f.status !== statusFilter.value) return false
+      if (terms.length) {
+        const haystack = `${f.question} ${f.answer} ${f.category}`.toLowerCase()
+        if (!terms.every((t) => haystack.includes(t))) return false
+      }
+      return true
+    })
+  })
+
+  const filteredCount = computed(() => filteredFaqs.value.length)
+
+  const groupedFaqs = computed(() => {
+    const groups = new Map<string, FaqItem[]>()
+    for (const faq of filteredFaqs.value) {
+      const list = groups.get(faq.category) || []
+      list.push(faq)
+      groups.set(faq.category, list)
+    }
+    return groups
+  })
+
+  function resetFilters(): void {
+    searchQuery.value = ''
+    categoryFilter.value = null
+    statusFilter.value = 'all'
+  }
+
+  function toggleCategory(category: string): void {
+    const next = new Set(collapsedCategories.value)
+    if (next.has(category)) next.delete(category)
+    else next.add(category)
+    collapsedCategories.value = next
+  }
+
+  // While filtering/searching, always show matches regardless of collapse state.
+  function isCategoryOpen(category: string): boolean {
+    return hasActiveFilters.value || !collapsedCategories.value.has(category)
+  }
+
+  const domainPending = computed(() => {
+    const domain = settings.value?.domain
+    if (!domain?.custom_domain) return false
+    return domain.domain_status !== 'verified' || domain.ssl_status === 'pending'
+  })
+
+  // Bounded safety cap; a curated FAQ list should never approach this.
+  const MAX_FAQ_PAGES = 10
+
+  async function fetchFaqs(): Promise<void> {
+    const requestVersion = ++faqsRequestVersion
+    const all: FaqItem[] = []
+    let page = 1
+    for (;;) {
+      const response = await faqService.getFaqs({ page })
+      const pageFaqs = Array.isArray(response?.faqs) ? response.faqs : []
+      all.push(...pageFaqs)
+      const totalPages = response?.pagination?.total_pages || 0
+      if (page >= totalPages || page >= MAX_FAQ_PAGES) break
+      page += 1
+    }
+    if (requestVersion !== faqsRequestVersion) return
+    faqs.value = all
+  }
+
+  async function fetchJob(): Promise<void> {
+    const requestVersion = ++jobRequestVersion
+    const stateVersion = jobStateVersion
+    const nextJob = await faqService.getJob(true)
+    if (requestVersion === jobRequestVersion && stateVersion === jobStateVersion) {
+      job.value = nextJob
+    }
+  }
+
+  async function fetchSettings(): Promise<void> {
+    const requestVersion = ++settingsRequestVersion
+    const nextSettings = await faqService.getSettings()
+    if (requestVersion === settingsRequestVersion) settings.value = nextSettings
+  }
+
+  async function fetchEstimate(includePages = false): Promise<void> {
+    const requestVersion = ++estimateRequestVersion
+    // Background fetches (page load, deletes, job completion) skip the
+    // per-source page scan — the button label only needs new_sources. The
+    // confirm dialog passes includePages=true for the full call estimate.
+    // Non-fatal: locked plans 403 here; the generate button then just says
+    // "Generate" without the new-source count.
+    try {
+      const nextEstimate = await faqService.getGenerateEstimate(includePages)
+      if (requestVersion === estimateRequestVersion) estimate.value = nextEstimate
+    } catch {
+      if (requestVersion === estimateRequestVersion) estimate.value = null
+    }
+  }
+
+  async function fetchCounts(): Promise<void> {
+    const requestVersion = ++countsRequestVersion
+    const orgId = organizationId()
+    if (!orgId) return
+    const response = await knowledgeService.getKnowledgeByOrganization(orgId, 1, 100)
+    if (requestVersion !== countsRequestVersion) return
+    const items = Array.isArray(response?.knowledge) ? response.knowledge : []
+    sourceCount.value = response?.pagination?.total ?? response?.pagination?.total_count ?? items.length
+    pageCount.value = items.reduce(
+      (sum: number, item: { pages?: unknown[] }) => sum + (item.pages?.length || 1),
+      0,
+    )
+  }
+
+  async function refresh(): Promise<void> {
+    const requestVersion = ++refreshRequestVersion
+    isLoading.value = true
+    clearSelection()
+    try {
+      await Promise.all([fetchFaqs(), fetchJob(), fetchSettings(), fetchCounts(), fetchEstimate()])
+      if (requestVersion === refreshRequestVersion) loadedOnce.value = true
+    } catch (error: any) {
+      if (requestVersion === refreshRequestVersion) toast.error(error.message)
+    } finally {
+      if (requestVersion === refreshRequestVersion) isLoading.value = false
+    }
+  }
+
+  async function pollTick(): Promise<void> {
+    if (pollInFlight) return
+    const interval = isJobActive.value ? ACTIVE_POLL_MS : IDLE_POLL_MS
+    if (!isJobActive.value && !domainPending.value) return
+    const now = Date.now()
+    if (now - lastPollAt < interval - 100) return
+    lastPollAt = now
+    pollInFlight = true
+    try {
+      if (isJobActive.value) {
+        const wasActive = job.value?.id
+        await fetchJob()
+        const stillActive = job.value?.status === 'pending' || job.value?.status === 'processing'
+        if (wasActive && !stillActive) {
+          await Promise.all([fetchFaqs(), fetchSettings(), fetchEstimate()])
+          const finished = await faqService.getJob(false)
+          if (finished?.status === 'failed') {
+            toast.error(finished.error || 'FAQ generation failed')
+          } else if (finished) {
+            toast.success(
+              finished.faqs_created
+                ? `${finished.faqs_created} draft FAQ${finished.faqs_created === 1 ? '' : 's'} ready to review`
+                : 'No new FAQs found — existing FAQs already cover this content',
+            )
+          }
+        }
+      } else if (domainPending.value) {
+        await fetchSettings()
+      }
+    } catch {
+      // Transient polling errors are silent; the next tick retries.
+    } finally {
+      pollInFlight = false
+    }
+  }
+
+  function startPolling(): void {
+    stopPolling()
+    pollTimer = setInterval(pollTick, ACTIVE_POLL_MS)
+  }
+
+  function stopPolling(): void {
+    if (pollTimer) {
+      clearInterval(pollTimer)
+      pollTimer = null
+    }
+  }
+
+  async function startJob(action: () => Promise<FaqGenerationJob>, successMessage?: string): Promise<boolean> {
+    if (jobActionBusy.value || isJobActive.value) return false
+    const actionVersion = ++jobStateVersion
+    jobActionBusy.value = true
+    try {
+      const nextJob = await action()
+      if (actionVersion !== jobStateVersion) return false
+      // Invalidate polls started while the create request was in flight before
+      // publishing the new job, so an older server snapshot cannot overwrite it.
+      ++jobStateVersion
+      job.value = nextJob
+      if (successMessage) toast.success(successMessage)
+      return true
+    } catch (error: any) {
+      toast.error(error.message)
+      return false
+    } finally {
+      if (actionVersion === jobStateVersion) ++jobStateVersion
+      jobActionBusy.value = false
+    }
+  }
+
+  async function startGeneration(knowledgeIds?: number[]): Promise<boolean> {
+    return startJob(() => faqService.startGeneration(knowledgeIds))
+  }
+
+  async function submitImport(
+    url: string,
+    mode: FaqImportMode = 'qa',
+    preserveUrls = false,
+  ): Promise<boolean> {
+    if (!url.trim()) return false
+    return startJob(
+      () => faqService.importFaq(url, mode, preserveUrls),
+      'Import started — drafts will appear when it finishes',
+    )
+  }
+
+  async function submitPdfImport(file: File): Promise<boolean> {
+    if (!file) return false
+    return startJob(
+      () => faqService.importPdf(file),
+      'Import started — drafts will appear when it finishes',
+    )
+  }
+
+  async function togglePublish(faq: FaqItem): Promise<void> {
+    if (bulkBusy.value || pendingStatusIds.has(faq.id)) return
+    const nextStatus = faq.status === 'published' ? 'draft' : 'published'
+    const previous = faq.status
+    pendingStatusIds.add(faq.id)
+    faq.status = nextStatus // optimistic
+    try {
+      await faqService.setStatus([faq.id], nextStatus)
+    } catch (error: any) {
+      faq.status = previous
+      toast.error(error.message)
+    } finally {
+      pendingStatusIds.delete(faq.id)
+    }
+  }
+
+  function setSeoDraft(faq: FaqItem | null): void {
+    draftSlug.value = faq?.slug || ''
+    draftUrlPath.value = faq?.url_path || ''
+    draftMetaTitle.value = faq?.meta_title || ''
+    draftMetaDescription.value = faq?.meta_description || ''
+  }
+
+  function startEdit(faq: FaqItem): void {
+    editingId.value = faq.id
+    isNewFaq.value = false
+    draftQuestion.value = faq.question
+    draftAnswer.value = faq.answer
+    draftCategory.value = faq.category
+    setSeoDraft(faq)
+  }
+
+  function startAdd(): void {
+    editingId.value = 'new'
+    isNewFaq.value = true
+    draftQuestion.value = ''
+    draftAnswer.value = ''
+    draftCategory.value = ''
+    setSeoDraft(null)
+  }
+
+  function cancelEdit(): void {
+    editingId.value = null
+    isNewFaq.value = false
+    draftQuestion.value = ''
+    draftAnswer.value = ''
+    draftCategory.value = ''
+    setSeoDraft(null)
+  }
+
+  async function saveEdit(): Promise<void> {
+    if (isSaving.value) return
+    const question = draftQuestion.value.trim()
+    const answer = draftAnswer.value.trim()
+    if (!question || !answer) {
+      toast.error('Both a question and an answer are required')
+      return
+    }
+    // Blank SEO fields are sent through so clearing one in the UI clears it
+    // server-side, restoring the derived title/description (and, for the slug,
+    // keeping whatever is already assigned).
+    const seo = {
+      slug: draftSlug.value.trim(),
+      url_path: draftUrlPath.value.trim(),
+      meta_title: draftMetaTitle.value.trim(),
+      meta_description: draftMetaDescription.value.trim(),
+    }
+    // The server rejects a blank category, so only send one when set: on
+    // create a blank falls back to the server default, on edit it keeps the
+    // FAQ's current topic.
+    const category = draftCategory.value.trim()
+    const withCategory = category ? { category } : {}
+    isSaving.value = true
+    try {
+      if (isNewFaq.value) {
+        const created = await faqService.createFaq({ question, answer, ...withCategory, ...seo })
+        faqs.value = [...faqs.value, created]
+      } else if (editingId.value) {
+        const updated = await faqService.updateFaq(editingId.value, { question, answer, ...withCategory, ...seo })
+        faqs.value = faqs.value.map((f) => (f.id === updated.id ? updated : f))
+      }
+      cancelEdit()
+    } catch (error: any) {
+      toast.error(error.message)
+    } finally {
+      isSaving.value = false
+    }
+  }
+
+  async function deleteFaq(faq: FaqItem): Promise<void> {
+    if (bulkBusy.value || pendingDeleteIds.has(faq.id)) return
+    pendingDeleteIds.add(faq.id)
+    try {
+      await faqService.deleteFaq(faq.id)
+      faqs.value = faqs.value.filter((f) => f.id !== faq.id)
+      const nextSelected = new Set(selectedIds.value)
+      nextSelected.delete(faq.id)
+      selectedIds.value = nextSelected
+      if (editingId.value === faq.id) cancelEdit()
+      // Keep the Generate button's new-source count fresh (see bulkDelete).
+      void fetchEstimate()
+    } catch (error: any) {
+      toast.error(error.message)
+    } finally {
+      pendingDeleteIds.delete(faq.id)
+    }
+  }
+
+  return {
+    faqs,
+    job,
+    settings,
+    estimate,
+    fetchEstimate,
+    sourceCount,
+    pageCount,
+    isLoading,
+    bulkBusy,
+    jobActionBusy,
+    phase,
+    barPhase,
+    publishedCount,
+    groupedFaqs,
+    searchQuery,
+    categoryFilter,
+    statusFilter,
+    categories,
+    hasActiveFilters,
+    filteredCount,
+    resetFilters,
+    toggleCategory,
+    isCategoryOpen,
+    isJobActive,
+    selectedIds,
+    selectionActive,
+    toggleSelect,
+    setSelected,
+    clearSelection,
+    bulkSetStatus,
+    bulkDelete,
+    editingId,
+    isNewFaq,
+    draftQuestion,
+    draftAnswer,
+    draftCategory,
+    draftSlug,
+    draftUrlPath,
+    draftMetaTitle,
+    draftMetaDescription,
+    isSaving,
+    refresh,
+    fetchSettings,
+    startPolling,
+    stopPolling,
+    pollTick,
+    startGeneration,
+    submitImport,
+    submitPdfImport,
+    togglePublish,
+    startEdit,
+    startAdd,
+    cancelEdit,
+    saveEdit,
+    deleteFaq,
+  }
+}

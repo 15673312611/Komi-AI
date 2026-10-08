@@ -1,0 +1,278 @@
+"""
+Copyright 2024-2026 Komi AI
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+"""
+
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.orm import Session
+from typing import List
+from app.database import get_db
+from app.models.user import User
+from app.core.auth import get_current_user
+from app.models.notification import Notification
+from app.models.schemas.notification import (
+    NotificationResponse,
+    NotificationSettingsOut,
+    NotificationSettingsUpdate,
+)
+from app.repositories.notification_settings import UserNotificationSettingsRepository
+from app.core.logger import get_logger
+from app.services.user import send_fcm_notification
+
+router = APIRouter()
+logger = get_logger(__name__)
+
+
+@router.get("", response_model=List[NotificationResponse])
+async def list_notifications(
+    skip: int = 0,
+    limit: int = 50,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get user's notifications with pagination"""
+    try:
+        notifications = db.query(Notification)\
+            .filter(Notification.user_id == current_user.id)\
+            .order_by(Notification.created_at.desc())\
+            .offset(skip)\
+            .limit(limit)\
+            .all()
+
+        return notifications
+    except Exception as e:
+        logger.error(f"Error fetching notifications: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to fetch notifications"
+        )
+
+
+@router.patch("/{notification_id}/read")
+async def mark_as_read(
+    notification_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Mark a notification as read"""
+    try:
+        notification = db.query(Notification)\
+            .filter(
+                Notification.id == notification_id,
+                Notification.user_id == current_user.id
+        ).first()
+
+        if not notification:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Notification not found"
+            )
+
+        notification.is_read = True
+        db.commit()
+
+        return {"message": "Notification marked as read"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error marking notification as read: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to update notification"
+        )
+
+
+@router.post("/read-all")
+async def mark_all_as_read(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Mark every unread notification as read, in one statement.
+
+    The client used to loop over the notifications it had fetched and PATCH each
+    one. That page is 50 rows, so anyone with more unread than that could never
+    clear the badge however often they tapped "Mark all read" — and it cost 50
+    round trips to not fix it.
+    """
+    try:
+        updated = db.query(Notification)\
+            .filter(
+                Notification.user_id == current_user.id,
+                Notification.is_read == False
+        ).update({Notification.is_read: True}, synchronize_session=False)
+        db.commit()
+
+        return {"message": "Notifications marked as read", "updated": updated}
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error marking all notifications as read: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to update notifications"
+        )
+
+
+@router.delete("/{notification_id}")
+async def delete_notification(
+    notification_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Delete one notification.
+
+    Scoped to the caller: another user's id must 404 rather than delete.
+    """
+    try:
+        notification = db.query(Notification)\
+            .filter(
+                Notification.id == notification_id,
+                Notification.user_id == current_user.id
+        ).first()
+
+        if not notification:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Notification not found"
+            )
+
+        db.delete(notification)
+        db.commit()
+
+        return {"message": "Notification deleted"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error deleting notification: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to delete notification"
+        )
+
+
+@router.delete("")
+async def clear_notifications(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Delete all of the caller's notifications."""
+    try:
+        deleted = db.query(Notification)\
+            .filter(Notification.user_id == current_user.id)\
+            .delete(synchronize_session=False)
+        db.commit()
+
+        return {"message": "Notifications cleared", "deleted": deleted}
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error clearing notifications: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to clear notifications"
+        )
+
+
+@router.get("/unread-count")
+async def get_unread_count(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get count of unread notifications"""
+    try:
+        count = db.query(Notification)\
+            .filter(
+                Notification.user_id == current_user.id,
+                Notification.is_read == False
+        ).count()
+        return {"count": count}
+    except Exception as e:
+        logger.error(f"Error getting unread count: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to get unread count"
+        )
+
+
+@router.get("/settings", response_model=NotificationSettingsOut)
+async def get_notification_settings(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get the current user's chat notification preferences"""
+    try:
+        return UserNotificationSettingsRepository(db).get_or_create(current_user.id)
+    except Exception as e:
+        logger.error(f"Error fetching notification settings: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to fetch notification settings"
+        )
+
+
+@router.put("/settings", response_model=NotificationSettingsOut)
+async def update_notification_settings(
+    payload: NotificationSettingsUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Update the current user's chat notification preferences.
+
+    Always scoped to the caller — there is no way to address another user's
+    settings, so no permission check beyond authentication is needed.
+    """
+    try:
+        settings = UserNotificationSettingsRepository(db).get_or_create(current_user.id)
+
+        for key, value in payload.model_dump(exclude_unset=True).items():
+            setattr(settings, key, value)
+
+        db.commit()
+        db.refresh(settings)
+        return settings
+    except Exception as e:
+        logger.error(f"Error updating notification settings: {str(e)}")
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to update notification settings"
+        )
+
+
+@router.post("/test")
+async def send_test_notification(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Send a test notification to the current user"""
+    try:
+        # Create test notification
+        notification = Notification(
+            user_id=current_user.id,
+            type="CHAT",
+            title="Test Notification",
+            message="This is a test notification from Komi AI",
+            notification_metadata={"test": True}
+        )
+        db.add(notification)
+        db.commit()
+        # Send FCM notification
+        await send_fcm_notification(current_user.id, notification, db)
+
+        return {"message": "Test notification sent successfully"}
+    except Exception as e:
+        logger.error(f"Error sending test notification: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to send test notification"
+        )

@@ -1,0 +1,54 @@
+/*
+Copyright 2024-2026 Komi AI
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+/**
+ * Channels served by our own widget rather than an external messaging platform.
+ * Mirrors WIDGET_CHANNELS in backend/app/channels/constants.py — keep the two
+ * in step. 'shopify' is the widget embedded in a storefront: a separate label
+ * in the inbox, the same chat surface.
+ */
+const WIDGET_CHANNELS = ['web', 'shopify']
+
+/**
+ * Rating is a widget-only feature. External channels (WhatsApp, Messenger,
+ * Instagram, Telegram, ...) render plain text and have no rating UI, so asking
+ * there leaves the customer a question they cannot answer. The backend applies
+ * the same rule to AI-ended chats.
+ */
+export const canRequestRating = (channel?: string | null): boolean =>
+  !channel || WIDGET_CHANNELS.includes(channel)
+
+/** Closing message shown to the customer when an agent ends the chat. */
+export const endChatMessage = (channel?: string | null): string =>
+  canRequestRating(channel)
+    ? 'Thank you for contacting us. Do you mind rating our service?'
+    : 'Thank you for contacting us.'
+
+interface EndChatCandidate {
+  attributes?: { end_chat?: boolean } | null
+}
+
+/**
+ * Whether a widget message is the one that actually ends the conversation.
+ *
+ * `attributes.end_chat` is the only signal for this — message_type and the
+ * presence of a session_id are not. The takeover notice and form prompts are
+ * ordinary conversation messages that happen to carry a real session_id, and
+ * treating those as an end-chat closed live conversations the moment a human
+ * agent joined.
+ */
+export const isEndChatMessage = (message?: EndChatCandidate | null): boolean =>
+  Boolean(message?.attributes?.end_chat)

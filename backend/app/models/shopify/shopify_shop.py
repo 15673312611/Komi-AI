@@ -1,0 +1,44 @@
+"""
+Copyright 2024-2026 Komi AI
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+"""
+
+from sqlalchemy import Column, String, Boolean, DateTime, Integer, ForeignKey
+from sqlalchemy.orm import relationship
+from sqlalchemy.sql import func
+from sqlalchemy.dialects.postgresql import UUID
+import uuid
+from app.database import Base
+
+
+class ShopifyShop(Base):
+    """Shopify shop model for storing shop information and credentials"""
+    __tablename__ = "shopify_shops"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    shop_domain = Column(String, nullable=False, unique=True, index=True)
+    access_token = Column(String, nullable=True)
+    scope = Column(String, nullable=True)
+    is_installed = Column(Boolean, default=False)
+    
+    # OAuth state for CSRF protection
+    oauth_state = Column(String, nullable=True)
+    oauth_state_expiry = Column(DateTime, nullable=True)
+    
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
+    
+    # Use UUID type to match the database schema from Alembic migration
+    organization_id = Column(UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=True)
+    organization = relationship("Organization", back_populates="shopify_shops") 

@@ -1,0 +1,114 @@
+"""
+Copyright 2024-2026 Komi AI
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+"""
+
+import uuid
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, JSON, func, event
+from sqlalchemy.orm import relationship
+from app.database import Base
+from app.models.role import Role
+from sqlalchemy.dialects.postgresql import UUID
+from app.core.logger import get_logger
+
+logger = get_logger(__name__)
+
+class Organization(Base):
+    __tablename__ = "organizations"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, index=True,default=uuid.uuid4)
+    name = Column(String(100), nullable=False)
+    domain = Column(String(100), unique=True, nullable=False)
+    timezone = Column(String(50), nullable=False, default='UTC')
+    business_hours = Column(JSON, default={
+        'monday': {'start': '09:00', 'end': '17:00', 'enabled': True},
+        'tuesday': {'start': '09:00', 'end': '17:00', 'enabled': True},
+        'wednesday': {'start': '09:00', 'end': '17:00', 'enabled': True},
+        'thursday': {'start': '09:00', 'end': '17:00', 'enabled': True},
+        'friday': {'start': '09:00', 'end': '17:00', 'enabled': True},
+        'saturday': {'start': '09:00', 'end': '17:00', 'enabled': False},
+        'sunday': {'start': '09:00', 'end': '17:00', 'enabled': False}
+    })
+    settings = Column(JSON, default={})
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, server_default=func.now(),
+                        onupdate=func.now())
+
+    # Define relationships
+    chat_histories = relationship("ChatHistory", back_populates="organization")
+    users = relationship("User", back_populates="organization",
+                         cascade="all, delete-orphan")
+    customers = relationship(
+        "Customer", back_populates="organization", cascade="all, delete-orphan")
+    roles = relationship("Role", back_populates="organization",
+                         cascade="all, delete-orphan")
+    ai_configs = relationship("AIConfig", back_populates="organization",
+                              cascade="all, delete-orphan")
+    agents = relationship("Agent", back_populates="organization")
+    knowledge_sources = relationship(
+        "Knowledge", back_populates="organization")
+    mcp_tools = relationship("MCPTool", back_populates="organization")
+    widgets = relationship("Widget", back_populates="organization")
+    widget_apps = relationship("WidgetApp", back_populates="organization", cascade="all, delete-orphan")
+    groups = relationship("UserGroup", back_populates="organization")
+    workflows = relationship("Workflow", back_populates="organization")
+ 
+    jira_tokens = relationship("JiraToken", back_populates="organization", cascade="all, delete-orphan")
+    shopify_shops = relationship("ShopifyShop", back_populates="organization", cascade="all, delete-orphan")
+    
+    class Config:
+        orm_mode = True
+
+# Try to set up enterprise relationships after mapper configuration
+@event.listens_for(Organization, 'mapper_configured')
+def setup_enterprise_relationships(mapper, class_):
+    try:
+        from app.enterprise.models.subscription import Subscription
+        from app.enterprise.models.order import PayPalOrder
+        
+        if not hasattr(class_, 'subscription'):
+            class_.subscription = relationship(
+                Subscription,
+                back_populates="organization",
+                uselist=False
+            )
+            
+        if not hasattr(class_, 'paypal_orders'):
+            class_.paypal_orders = relationship(
+                PayPalOrder,
+                back_populates="organization",
+                cascade="all, delete-orphan"
+            )
+            logger.info("Enterprise subscription and paypal_orders relationships configured")
+    except ImportError:
+        logger.info("Enterprise module not available - subscription relationship not configured")
+        class_.subscription = None
+
+# Set up Jira relationships after mapper configuration
+@event.listens_for(Organization, 'mapper_configured')
+def setup_jira_relationships(mapper, class_):
+    try:
+        from app.models.jira import JiraToken
+        
+        if not hasattr(class_, 'jira_tokens'):
+            class_.jira_tokens = relationship(
+                JiraToken,
+                back_populates="organization",
+                cascade="all, delete-orphan"
+            )
+            logger.info("Jira tokens relationship configured")
+    except ImportError:
+        logger.info("Jira module not available - jira_tokens relationship not configured")
+        class_.jira_tokens = None

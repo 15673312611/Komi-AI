@@ -1,0 +1,230 @@
+version: '3.8'
+
+services:
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    ports:
+      - "3000:3000"
+    env_file:
+      - ./frontend/.env
+    volumes:
+      - ./frontend:/app
+      - frontend_node_modules:/app/node_modules
+      - backend_assets:/app/backend-assets
+    networks:
+      - app-network
+
+
+  backend:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    env_file:
+      - ./backend/.env
+    environment:
+      - PYTHONUNBUFFERED=1
+      # Development mode
+      - DEBUG=True
+      - ENVIRONMENT=development
+      # HuggingFace caching configuration
+      - HF_HOME=/app/.cache/huggingface
+      - TRANSFORMERS_CACHE=/app/.cache/huggingface/transformers
+      - SENTENCE_TRANSFORMERS_HOME=/app/.cache/huggingface/sentence_transformers
+      - HF_HUB_CACHE=/app/.cache/huggingface/hub
+      - HF_HUB_DISABLE_TELEMETRY=1
+      # PyTorch configuration
+      - TORCH_HOME=/app/.cache/torch
+      - PYTORCH_TRANSFORMERS_CACHE=/app/.cache/pytorch_transformers
+      # Reduce parallelism to avoid conflicts
+      - EMBEDDING_MAX_WORKERS=4
+      - KB_MAX_WORKERS=4
+      # Enable safe embedding mode for Docker
+      - EMBEDDING_SINGLE_THREADED=true
+      - EMBEDDING_SEQUENTIAL_FALLBACK=true
+    volumes:
+      # Hot reload: mount source code over the built code
+      - ./backend/app:/app/app
+      - ./backend/alembic:/app/alembic
+      - ./backend/alembic.ini:/app/alembic.ini
+      - ./backend/requirements.txt:/app/requirements.txt
+      - ./uploads:/app/uploads
+      - ./config:/app/config
+      - backend_assets:/app/assets
+      # Add caching volumes for models
+      - huggingface_cache:/app/.cache/huggingface
+      - torch_cache:/app/.cache/torch
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-X", "GET", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - app-network
+    # Use watchdog for file change detection and auto-reload
+    command: bash -c "python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+    # Keep container running
+    stdin_open: true
+    tty: true
+
+  knowledge_processor:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    command: python -m app.workers.knowledge_processor
+    env_file:
+      - ./backend/.env
+    environment:
+      - PYTHONUNBUFFERED=1
+      - DEBUG=True
+      - ENVIRONMENT=development
+      # HuggingFace caching configuration (shared with backend)
+      - HF_HOME=/app/.cache/huggingface
+      - TRANSFORMERS_CACHE=/app/.cache/huggingface/transformers
+      - SENTENCE_TRANSFORMERS_HOME=/app/.cache/huggingface/sentence_transformers
+      - HF_HUB_CACHE=/app/.cache/huggingface/hub
+      - HF_HUB_DISABLE_TELEMETRY=1
+      # PyTorch configuration (shared with backend)
+      - TORCH_HOME=/app/.cache/torch
+      - PYTORCH_TRANSFORMERS_CACHE=/app/.cache/pytorch_transformers
+      # Reduce parallelism to avoid conflicts
+      - EMBEDDING_MAX_WORKERS=2
+      - KB_MAX_WORKERS=2
+      # Enable safe embedding mode for Docker
+      - EMBEDDING_SINGLE_THREADED=true
+      - EMBEDDING_SEQUENTIAL_FALLBACK=true
+    volumes:
+      - ./backend:/app
+      - ./uploads:/app/uploads
+      - ./config:/app/config
+      # Share the same caching volumes with backend
+      - huggingface_cache:/app/.cache/huggingface
+      - torch_cache:/app/.cache/torch
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: always
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - app-network
+
+  ticket_investigator:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: python -m app.workers.ticket_investigator
+    env_file:
+      - ./backend/.env
+    environment:
+      - PYTHONUNBUFFERED=1
+      - DEBUG=True
+      - ENVIRONMENT=development
+      # FastEmbed (dedup embeddings) shares the HuggingFace cache
+      - HF_HOME=/app/.cache/huggingface
+      - HF_HUB_CACHE=/app/.cache/huggingface/hub
+      - HF_HUB_DISABLE_TELEMETRY=1
+    volumes:
+      - ./backend:/app
+      - huggingface_cache:/app/.cache/huggingface
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: always
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - app-network
+
+  crm_sync:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: python -m app.workers.crm_sync
+    env_file:
+      - ./backend/.env
+    environment:
+      - PYTHONUNBUFFERED=1
+      - DEBUG=True
+      - ENVIRONMENT=development
+    volumes:
+      - ./backend:/app
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: always
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - app-network
+
+  db:
+    build:
+      context: .
+      dockerfile: Dockerfile.postgres
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_DB=komi
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - app-network
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge
+      
+volumes:
+  postgres_data:
+  redis_data:
+  frontend_node_modules:
+  backend_assets:
+  # Add new volumes for model caching
+  huggingface_cache:
+  torch_cache: 

@@ -1,0 +1,360 @@
+"""
+Copyright 2024-2026 Komi AI
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+"""
+
+from pydantic import BaseModel, Field, model_validator
+from typing import List, Optional, Dict, Any
+from uuid import UUID
+from datetime import datetime
+from enum import Enum
+from app.models.session_to_agent import SessionStatus
+
+
+class CustomerInfo(BaseModel):
+    id: UUID
+    email: Optional[str]
+    full_name: Optional[str]
+    # Integrator-supplied fields (e.g. student_name, center_name) set via
+    # POST /generate-token's `custom_data`, shown to agents in the chat inbox.
+    meta_data: Optional[Dict[str, Any]] = None
+class AgentInfo(BaseModel):
+    id: UUID
+    name: str
+    display_name: Optional[str]
+    # False means this agent never answers with AI, so an unclaimed chat of its
+    # is waiting for a person rather than being handled.
+    ai_replies_enabled: bool = True
+    # Composer capabilities are part of the conversation contract so the
+    # dashboard can disable controls before the server rejects a send.
+    allow_attachments: bool = False
+    allowed_attachment_types: Optional[List[str]] = None
+
+class TransferReasonType(str, Enum):
+    UNABLE_TO_ANSWER = "UNABLE_TO_ANSWER"
+    NEED_MORE_INFO = "NEED_MORE_INFO"
+    KNOWLEDGE_GAP = "KNOWLEDGE_GAP"
+    NEED_TO_CALL = "NEED_TO_CALL"
+    NEED_TO_EMAIL = "NEED_TO_EMAIL"
+    NEED_TO_MEET = "NEED_TO_MEET"
+    FRUSTRATED = "FRUSTRATED"
+    REPEAT_INSTRUCTIONS = "REPEAT_INSTRUCTIONS"
+    DIRECT_REQUEST = "DIRECT_REQUEST"
+    HIGH_PRIORITY_ISSUE = "HIGH_PRIORITY_ISSUE"
+    COMPLIANCE_ISSUE = "COMPLIANCE_ISSUE"
+
+class EndChatReasonType(str, Enum):
+    ISSUE_RESOLVED = "ISSUE_RESOLVED"
+    CUSTOMER_REQUEST = "CUSTOMER_REQUEST"
+    CONFIRMATION_RECEIVED = "CONFIRMATION_RECEIVED"
+    FAREWELL = "FAREWELL"
+    THANK_YOU = "THANK_YOU"
+    NATURAL_CONCLUSION = "NATURAL_CONCLUSION"
+    TASK_COMPLETED = "TASK_COMPLETED"
+
+# Define a model for a single Shopify product image
+class ShopifyProductImage(BaseModel):
+    src: Optional[str] = Field(default=None)
+    alt: Optional[str] = Field(default=None)
+
+    class Config:
+        json_encoders = {
+            UUID: str  # Convert UUID to string
+        }
+        from_attributes = True
+
+# Define a model for a single Shopify product
+class ShopifyProduct(BaseModel):
+    id: Optional[str] = Field(default=None)
+    title: Optional[str] = Field(default=None)
+    description: Optional[str] = Field(default=None)
+    handle: Optional[str] = Field(default=None)
+    product_type: Optional[str] = Field(default=None)
+    vendor: Optional[str] = Field(default=None)
+    total_inventory: Optional[int] = Field(default=None)
+    price: Optional[str] = Field(default=None)
+    price_max: Optional[str] = Field(default=None)
+    currency: Optional[str] = Field(default=None)
+    image: Optional[ShopifyProductImage] = Field(default=None)
+    tags: Optional[List[str]] = Field(default_factory=list)
+    created_at: Optional[str] = Field(default=None)
+    updated_at: Optional[str] = Field(default=None)
+    price_formatted: Optional[str] = Field(default=None)
+    variant_title: Optional[str] = Field(default=None)
+
+    class Config:
+        json_encoders = {
+            UUID: str  # Convert UUID to string
+        }
+        from_attributes = True
+
+# LLM Response Model - ONLY cache key and product IDs (ultra-minimal)
+class ShopifyOutputDataLLM(BaseModel):
+    """Shopify output model for LLM responses - ONLY cache key and product IDs to minimize tokens"""
+    product_cache_key: str = Field(description="Redis cache key - REQUIRED when Shopify tools return products")
+    product_ids: List[str] = Field(description="List of product IDs - REQUIRED when Shopify tools return products")
+
+    class Config:
+        json_encoders = {
+            UUID: str
+        }
+        from_attributes = True
+
+# Socket/Frontend Response Model - WITH products field (what frontend receives)
+class ShopifyOutputData(BaseModel):
+    """Shopify output model for socket/frontend responses - includes full product data"""
+    products: Optional[List[ShopifyProduct]] = Field(default_factory=list)
+    search_query: Optional[str] = Field(default=None)
+    search_type: Optional[str] = Field(default=None)
+    total_count: Optional[int] = Field(default=None)
+    has_more: Optional[bool] = Field(default=None)
+    shop_domain: Optional[str] = Field(default=None, description="Shopify shop domain for constructing product URLs")
+    product_cache_key: Optional[str] = Field(default=None, description="Redis cache key for backend reference")
+    product_ids: Optional[List[str]] = Field(default=None, description="List of product IDs for backend reference")
+
+    class Config:
+        json_encoders = {
+            UUID: str  # Convert UUID to string
+        }
+        from_attributes = True
+
+    def dict(self, *args, **kwargs):
+        # Override dict method to ensure proper serialization
+        d = super().dict(*args, **kwargs)
+        # Convert any remaining non-serializable objects to strings
+        return d
+
+    def json(self, *args, **kwargs):
+        # Override json method to ensure proper serialization
+        return self.dict()
+
+class Message(BaseModel):
+    # Persistent message identifiers let dashboard clients reconcile an
+    # optimistic send with the Socket.IO echo without comparing timestamps.
+    id: Optional[int] = None
+    message: str
+    message_type: str
+    created_at: datetime
+    session_id: Optional[UUID] = None
+    client_message_id: Optional[str] = None
+    attributes: Optional[dict] = None
+    shopify_output: Optional[ShopifyOutputData] = None
+    end_chat: Optional[bool] = None
+    end_chat_reason: Optional[EndChatReasonType] = None
+    end_chat_description: Optional[str] = None
+    agent_name: Optional[str] = None
+    user_name: Optional[str] = None
+    attachments: Optional[list] = None  # List of file attachments with signed URLs
+    
+    @model_validator(mode='before')
+    @classmethod
+    def validate_end_chat_reason(cls, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Validate end_chat_reason field to ensure it's a valid enum value or None."""
+        if isinstance(data, dict) and 'end_chat_reason' in data and data['end_chat_reason'] is not None:
+            valid_reasons = [reason.value for reason in EndChatReasonType]
+            if data['end_chat_reason'] not in valid_reasons:
+                # If invalid value, set to None
+                data['end_chat_reason'] = None
+        return data
+
+    class Config:
+        from_attributes = True
+        json_encoders = {
+            UUID: str,
+            datetime: lambda v: v.isoformat()
+        }
+
+class ChatOverviewResponse(BaseModel):
+    customer: CustomerInfo
+    agent: AgentInfo
+    last_message: str
+    updated_at: datetime
+    message_count: int
+    status: SessionStatus
+    channel: str = 'web'
+    group_id: Optional[UUID]
+    # The human agent handling the chat, if one has taken it over. None means
+    # the AI still has it — the inbox needs this to label the row.
+    user_id: Optional[UUID] = None
+    user_name: Optional[str] = None
+    # Effective per-conversation auto-reply state, including any session override.
+    ai_auto_reply: bool = True
+    session_id: UUID
+
+class ChatDetailResponse(BaseModel):
+    customer: CustomerInfo
+    agent: AgentInfo
+    messages: List[Message]
+    status: SessionStatus
+    channel: str = 'web'
+    # Which connected channel account this conversation arrived on; None for web.
+    channel_account_id: Optional[UUID] = None
+    group_id: Optional[UUID]
+    session_id: UUID
+    user_id: Optional[UUID]
+    user_name: Optional[str]
+    # The effective per-conversation setting.  It falls back to the agent
+    # default when no session override has been saved.
+    ai_auto_reply: bool = True
+    # Durable, agent-managed labels for this specific conversation. Kept in
+    # SessionToAgent.workflow_state to avoid coupling support workflow labels
+    # to a customer's organization-wide profile.
+    tags: List[str] = Field(default_factory=list)
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+        json_encoders = {
+            UUID: str,
+            datetime: lambda v: v.isoformat()
+        }
+
+class SourceRef(BaseModel):
+    """A knowledge-base source used to ground an answer (for citation chips)."""
+    name: str
+    type: str
+
+
+class ChatResponse(BaseModel):
+    message: str = Field(description="The response from the agent. IMPORTANT: When shopify_output is present, DO NOT include product images, URLs, prices, or product details in this field - all product info should ONLY go in the shopify_output field. Keep the message conversational.")
+    transfer_to_human: bool = Field(description="Whether to transfer the conversation to a human")
+    end_chat: bool = Field(description="Whether to end the chat and request rating")
+    transfer_reason: Optional[TransferReasonType] = Field(default=None, description="Transfer reason Type should be one of the following: UNABLE_TO_ANSWER, NEED_MORE_INFO, KNOWLEDGE_GAP, NEED_TO_CALL, NEED_TO_EMAIL, NEED_TO_MEET, FRUSTRATED, REPEAT_INSTRUCTIONS, DIRECT_REQUEST, HIGH_PRIORITY_ISSUE, COMPLIANCE_ISSUE")
+    transfer_description: Optional[str] = Field(default=None, description="Detailed description for the transfer")
+    end_chat_reason: Optional[EndChatReasonType] = Field(default=None, description="End chat reason Type should be one of the following: ISSUE_RESOLVED, CUSTOMER_REQUEST, CONFIRMATION_RECEIVED, FAREWELL, THANK_YOU, NATURAL_CONCLUSION, TASK_COMPLETED")
+    end_chat_description: Optional[str] = Field(default=None, description="Detailed description for ending the chat")
+    request_rating: bool = Field(description="Whether to request a rating from the customer")
+
+    # Ticket creation fields
+    create_ticket: bool = Field(description="Whether to create a ticket in the integrated system (Jira, Zendesk, etc.)")
+    ticket_summary: Optional[str] = Field(default=None, description="Summary/title for the ticket to be created")
+    ticket_description: Optional[str] = Field(default=None, description="Detailed description for the ticket to be created")
+    integration_type: Optional[str] = Field(default=None, description="Type of integration to use for ticket creation")
+    ticket_id: Optional[str] = Field(default=None, description="ID of the created ticket (filled after creation)")
+    ticket_status: Optional[str] = Field(default=None, description="Status of the created ticket (filled after creation)")
+    ticket_priority: Optional[str] = Field(default=None, description="Priority level for the ticket (e.g., 'High', 'Medium', 'Low')")
+
+    # Shopify Output Field - Uses LLM model (no products field)
+    shopify_output: Optional[ShopifyOutputDataLLM] = Field(default=None, description="Shopify product cache info. ONLY include: product_cache_key, product_ids, shop_domain, total_count. DO NOT include products array.")
+
+    # Knowledge-base citations (system-managed). The LLM must NOT populate this; it is
+    # filled automatically from the knowledge search tool after the response is generated.
+    sources: Optional[List[SourceRef]] = Field(default=None, description="System-managed knowledge citations. Do not populate — set automatically.")
+
+    # System-managed: set when a handoff/ticket happens so the widget shows the contact form
+    # (even when no agents are available and transfer_to_human ends up False).
+    request_contact: Optional[bool] = Field(default=False, description="System-managed. Do not populate — set automatically on handoff.")
+
+    # LLM-set (only when lead capture is enabled): the agent collects details
+    # conversationally and reports them here, mirroring how transfer_to_human works.
+    request_lead_capture: bool = Field(default=False, description="Set to true ONLY when you have collected the visitor's contact details (at least a valid email in lead_email) and — if consent is required — they have explicitly agreed to be contacted. This records the lead.")
+    # Explicit scalar fields for the standard contact details. These are used INSTEAD of a
+    # free-form dict because OpenAI strict structured outputs cannot emit an open-ended
+    # object (additionalProperties) — a Dict field always comes back empty. Named scalar
+    # fields populate reliably. The widget records the lead from these.
+    lead_email: Optional[str] = Field(default=None, description="The visitor's email address exactly as they gave it, e.g. 'jane@acme.com'. Fill this as soon as they share it.")
+    lead_name: Optional[str] = Field(default=None, description="The visitor's name, if they share it.")
+    lead_company: Optional[str] = Field(default=None, description="The visitor's company/organization, if they share it.")
+    lead_phone: Optional[str] = Field(default=None, description="The visitor's phone number, if they share it.")
+    lead_data: Optional[Dict[str, Any]] = Field(default=None, description="System-managed. Do not populate — use lead_email/lead_name/lead_company/lead_phone instead.")
+    lead_summary: Optional[str] = Field(default=None, description="A 1-2 sentence qualification summary of this lead from the whole conversation (e.g. '40-person fintech replacing Intercom, ~800 Shopify orders/week, wants a demo this week').")
+    lead_consent: bool = Field(default=False, description="Set to true only when the visitor has explicitly agreed to be contacted / share their details.")
+
+    class Config:
+        from_attributes = True
+    
+    @model_validator(mode='before')
+    @classmethod
+    def normalize_fields(cls, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Normalize incoming fields and provide default values for missing fields."""
+        if isinstance(data, dict):
+            normalized = dict(data)
+            
+            key_mappings = {
+                'requestRating': 'request_rating',
+                'requestrating': 'request_rating',
+                'transferToHuman': 'transfer_to_human',
+                'transfertohuman': 'transfer_to_human',
+                'endChat': 'end_chat',
+                'endchat': 'end_chat',
+                'createTicket': 'create_ticket',
+                'createticket': 'create_ticket',
+                'requestLeadCapture': 'request_lead_capture',
+                'requestleadcapture': 'request_lead_capture',
+                'transferReason': 'transfer_reason',
+                'transferreason': 'transfer_reason',
+                'transferDescription': 'transfer_description',
+                'transferdescription': 'transfer_description',
+                'endChatReason': 'end_chat_reason',
+                'endchatreason': 'end_chat_reason',
+                'endChatDescription': 'end_chat_description',
+                'endchatdescription': 'end_chat_description',
+                'ticketSummary': 'ticket_summary',
+                'ticketsummary': 'ticket_summary',
+                'ticketDescription': 'ticket_description',
+                'ticketdescription': 'ticket_description',
+                'integrationType': 'integration_type',
+                'integrationtype': 'integration_type',
+                'ticketId': 'ticket_id',
+                'ticketid': 'ticket_id',
+                'ticketStatus': 'ticket_status',
+                'ticketstatus': 'ticket_status',
+                'ticketpriority': 'ticket_priority',
+                'content': 'message',
+                # Map incoming shopifyOutput/shopify_output to the new field name
+                'shopifyOutput': 'shopify_output',
+                'shopifyoutput': 'shopify_output',
+            }
+            
+            for key in list(normalized.keys()):
+                if key in key_mappings:
+                    normalized[key_mappings[key]] = normalized.pop(key)
+
+            # Drop explicit nulls so each field's default applies. Models often emit
+            # `"transfer_to_human": null` / `"create_ticket": null` for the flags they
+            # aren't setting; without this, pydantic rejects null on the non-nullable
+            # boolean fields and the whole response is discarded (losing end_chat,
+            # lead_email, etc.). Optional fields default to None anyway, so dropping is safe.
+            normalized = {k: v for k, v in normalized.items() if v is not None}
+
+            # Set default values for missing fields
+            if 'message' not in normalized:
+                normalized['message'] = "No response generated"
+            if 'transfer_to_human' not in normalized:
+                normalized['transfer_to_human'] = False
+            if 'end_chat' not in normalized:
+                normalized['end_chat'] = False
+            if 'request_rating' not in normalized:
+                normalized['request_rating'] = False
+            if 'create_ticket' not in normalized:
+                normalized['create_ticket'] = False
+                
+            # Validate enum fields
+            # Validate end_chat_reason
+            if 'end_chat_reason' in normalized and normalized['end_chat_reason'] is not None:
+                valid_reasons = [reason.value for reason in EndChatReasonType]
+                if normalized['end_chat_reason'] not in valid_reasons:
+                    # If invalid value, set to None
+                    normalized['end_chat_reason'] = None
+                    
+            # Validate transfer_reason
+            if 'transfer_reason' in normalized and normalized['transfer_reason'] is not None:
+                valid_reasons = [reason.value for reason in TransferReasonType]
+                if normalized['transfer_reason'] not in valid_reasons:
+                    # If invalid value, set to None
+                    normalized['transfer_reason'] = None
+            
+            return normalized
+        return data

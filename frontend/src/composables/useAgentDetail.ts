@@ -1,0 +1,367 @@
+/*
+Copyright 2024-2026 Komi AI
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+import { ref, onUnmounted } from 'vue'
+import type { AgentWithCustomization, AgentUpdate } from '@/types/agent'
+import { agentService } from '@/services/agent'
+import { widgetService } from '@/services/widget'
+import { storeService } from '@/services/store'
+import type { Widget } from '@/types/widget'
+import { toast } from 'vue-sonner'
+import type { UserGroup } from '@/types/user'
+import { listGroups } from '@/services/groups'
+import { agentStorage } from '@/utils/storage'
+import { useJiraIntegration } from './useJiraIntegration'
+import { useEnterpriseFeatures } from '@/composables/useEnterpriseFeatures'
+import { buildWidgetEmbed } from '@/utils/widgetEmbed'
+import { copyTextToClipboard } from '@/utils/clipboard'
+
+const { hasEnterpriseModule, loadModule, moduleImports } = useEnterpriseFeatures()
+
+// Lazy load Shopify integration only if enterprise module is available
+let useShopifyIntegration: any = null
+if (hasEnterpriseModule) {
+  // Load Shopify integration asynchronously
+  ;(async () => {
+    try {
+      const shopifyIntegrationModule = await loadModule(moduleImports.shopifyIntegration)
+      if (shopifyIntegrationModule?.useShopifyIntegration) {
+        useShopifyIntegration = shopifyIntegrationModule.useShopifyIntegration
+      }
+    } catch (error) {
+      console.warn('Failed to load Shopify integration:', error)
+    }
+  })()
+}
+
+export function useAgentDetail(agentData: { value: AgentWithCustomization }, emit: (e: 'close') => void) {
+  const fileInput = ref<HTMLInputElement | null>(null)
+  const isUploading = ref(false)
+  const showCropper = ref(false)
+  const cropperImage = ref('')
+  const cropper = ref<any>(null)
+  const widget = ref<Widget | null>(null)
+  const widgetLoading = ref(false)
+  const userGroups = ref<UserGroup[]>([])
+  const selectedGroupIds = ref<string[]>([])
+  const loadingGroups = ref(false)
+  const updatingGroups = ref(false)
+
+  // Initialize Jira integration
+  const jiraIntegration = useJiraIntegration(agentData.value.id)
+
+  // Initialize Shopify integration only if enterprise module is available
+  const shopifyIntegration = hasEnterpriseModule && useShopifyIntegration
+    ? useShopifyIntegration(agentData.value.id)
+    : {
+        shopifyConnected: ref(false),
+        shopifyShopDomain: ref(''),
+        shopifyLoading: ref(false),
+        shopifyIntegrationEnabled: ref(false),
+        checkShopifyStatus: () => Promise.resolve(),
+        fetchAgentShopifyConfig: () => Promise.resolve(),
+        toggleShopifyIntegration: () => Promise.resolve(),
+        saveShopifyConfig: () => Promise.resolve()
+      }
+
+  const MAX_FILE_SIZE = 5 * 1024 * 1024 // 5MB
+  const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp']
+
+  const revokeCropperImage = () => {
+    if (!cropperImage.value) return
+    URL.revokeObjectURL(cropperImage.value)
+    cropperImage.value = ''
+  }
+
+  const triggerFileUpload = () => {
+    fileInput.value?.click()
+  }
+
+  const handleFileUpload = async (event: Event) => {
+    const file = (event.target as HTMLInputElement).files?.[0]
+    if (!file) return
+
+    // Validate file size
+    if (file.size > MAX_FILE_SIZE) {
+      toast.error('文件大小不能超过 5MB')
+      return
+    }
+
+    // Validate file type
+    if (!ALLOWED_TYPES.includes(file.type)) {
+      toast.error('仅支持 JPEG、PNG 和 WebP 图片格式')
+      return
+    }
+
+    // Show cropper
+    revokeCropperImage()
+    cropperImage.value = URL.createObjectURL(file)
+    showCropper.value = true
+  }
+
+  const handleCrop = async () => {
+    if (!cropper.value) return
+
+    try {
+      isUploading.value = true
+      const { canvas } = cropper.value.getResult()
+      if (!canvas) throw new Error('Canvas not found')
+
+      const blob = await new Promise<Blob>((resolve, reject) => {
+        canvas.toBlob((blob: Blob | null) => {
+          if (blob) resolve(blob)
+          else reject(new Error('Failed to create blob'))
+        }, 'image/png')
+      })
+
+      const croppedFile = new File([blob], 'profile.png', { type: 'image/png' })
+      const updatedCustomization = await agentService.uploadAgentPhoto(agentData.value.id, croppedFile)
+      agentData.value.customization = updatedCustomization
+
+      // A real picture was just uploaded — turn off the aurora orb if it was on.
+      const meta = updatedCustomization?.customization_metadata as Record<string, unknown> | undefined
+      if (meta?.avatar_style === 'orb') {
+        agentData.value.customization = await agentService.updateCustomization(agentData.value.id, {
+          ...updatedCustomization,
+          customization_metadata: { ...meta, avatar_style: 'photo' },
+        })
+      }
+
+      showCropper.value = false
+      revokeCropperImage()
+    } catch (error) {
+      console.error('Failed to upload photo:', error)
+      toast.error('上传头像图片失败')
+    } finally {
+      isUploading.value = false
+    }
+  }
+
+  const cancelCrop = () => {
+    showCropper.value = false
+    revokeCropperImage()
+  }
+
+  // Apply a bundled preset avatar (fetched into a File) via the photo endpoint
+  const applyPresetAvatar = async (url: string): Promise<boolean> => {
+    try {
+      isUploading.value = true
+      const res = await fetch(url)
+      if (!res.ok) throw new Error(`Failed to fetch preset avatar: ${res.status}`)
+      const blob = await res.blob()
+      const file = new File([blob], 'profile.png', { type: blob.type || 'image/png' })
+      const updatedCustomization = await agentService.uploadAgentPhoto(agentData.value.id, file)
+      agentData.value.customization = updatedCustomization
+      return true
+    } catch (error) {
+      console.error('Failed to apply preset avatar:', error)
+      toast.error('设置头像失败')
+      return false
+    } finally {
+      isUploading.value = false
+    }
+  }
+
+  const handleClose = (cleanup: () => void) => {
+    cleanup()
+    emit('close')
+  }
+
+  const initializeWidget = async () => {
+    try {
+      widgetLoading.value = true
+      // Try to fetch existing widget
+      const widgets = await widgetService.getWidgets()
+      const existingWidget = widgets.find((w: Widget) => w.agent_id === agentData.value.id)
+
+      if (existingWidget) {
+        widget.value = existingWidget
+      } else {
+        // Create new widget if none exists
+        const newWidget = await widgetService.createWidget({
+          name: `${agentData.value.name} 挂件`,
+          agent_id: agentData.value.id
+        })
+        widget.value = newWidget
+
+        // Automatically sync to store management
+        try {
+          const stores = await storeService.getStores()
+          const hasStore = stores.some(s => s.agent_id === agentData.value.id)
+          if (!hasStore) {
+            await storeService.createStore({
+              name: `${agentData.value.display_name || agentData.value.name} 挂件店铺`,
+              platform: 'email_custom',
+              agent_id: agentData.value.id,
+              is_active: true,
+              currency: 'USD',
+              timezone: 'America/New_York',
+            })
+          }
+        } catch (e) {
+          console.warn('Auto store creation skipped:', e)
+        }
+      }
+    } catch (error) {
+      console.error('Failed to initialize widget:', error)
+    } finally {
+      widgetLoading.value = false
+    }
+  }
+
+  const copyWidgetCode = async (requireTokenAuth?: boolean) => {
+    if (!widget.value) return
+
+    // Single source of truth for the embed snippet (see buildWidgetEmbed) so the
+    // copied code never drifts from the AI Agents list or the on-screen preview.
+    const code = buildWidgetEmbed(widget.value.id, requireTokenAuth)
+
+    const copied = await copyTextToClipboard(code)
+    if (copied) {
+      toast.success(requireTokenAuth
+        ? '安全令牌认证挂件代码已复制到剪贴板！'
+        : '挂件嵌入代码已复制到剪贴板！',
+        { duration: 3000 }
+      )
+    } else {
+      toast.error('复制失败，请手动选择并复制代码')
+    }
+  }
+
+  const toggleAskForRating = async () => {
+    try {
+      console.log('toggleAskForRating', agentData.value.ask_for_rating)
+      const updatedAgent = await agentService.updateAgent(agentData.value.id, {
+        ask_for_rating: !agentData.value.ask_for_rating
+      })
+      agentData.value = {
+        ...agentData.value,
+        ask_for_rating: updatedAgent.ask_for_rating
+      }
+      toast.success(updatedAgent.ask_for_rating ? '已启用会话结束评价邀请' : '已停用会话结束评价邀请', {
+        duration: 4000,
+        closeButton: true
+      })
+    } catch (error) {
+      console.error('Failed to update rating setting:', error)
+      toast.error('更新评价设置失败', {
+        duration: 4000,
+        closeButton: true
+      })
+    }
+  }
+
+  const toggleTransferToHuman = async () => {
+    try {
+      const updatedAgent = await agentService.updateAgent(agentData.value.id, {
+        transfer_to_human: !agentData.value.transfer_to_human
+      })
+      agentData.value = {
+        ...agentData.value,
+        transfer_to_human: updatedAgent.transfer_to_human
+      }
+      toast.success(updatedAgent.transfer_to_human ? '已启用自动转人工' : '已停用自动转人工', {
+        duration: 4000,
+        closeButton: true
+      })
+    } catch (error) {
+      console.error('Failed to update transfer setting:', error)
+      toast.error('更新转人工设置失败', {
+        duration: 4000,
+        closeButton: true
+      })
+    }
+  }
+
+  const fetchUserGroups = async () => {
+    try {
+      loadingGroups.value = true
+      // Get all available groups
+      const groups = await listGroups()
+      userGroups.value = groups
+
+      // Get agent's current groups and details
+      const updatedAgent = await agentService.getAgentById(agentData.value.id)
+        
+      // Update agent data and storage
+      agentData.value = updatedAgent
+      agentStorage.updateAgent(updatedAgent)
+      
+      // Set selected groups
+      selectedGroupIds.value = updatedAgent.groups?.map(g => g.id) || []
+    } catch (error) {
+      console.error('Failed to fetch user groups:', error)
+      toast.error('加载客服分组失败')
+    } finally {
+      loadingGroups.value = false
+    }
+  }
+
+  const updateAgentGroups = async (groupIds: string[]) => {
+    if (updatingGroups.value) return false
+    try {
+      updatingGroups.value = true
+      const updatedAgent = await agentService.updateAgentGroups(agentData.value.id, groupIds)
+      agentData.value = {
+        ...agentData.value,
+        groups: updatedAgent.groups
+      }
+      selectedGroupIds.value = [...groupIds]
+      agentStorage.updateAgent(updatedAgent)
+      toast.success('转接客服分组已更新')
+      return true
+    } catch (error) {
+      console.error('Failed to update agent groups:', error)
+      toast.error('更新转接客服分组失败')
+      return false
+    } finally {
+      updatingGroups.value = false
+    }
+  }
+
+  onUnmounted(revokeCropperImage)
+
+  return {
+    fileInput,
+    isUploading,
+    showCropper,
+    cropperImage,
+    cropper,
+    widget,
+    widgetLoading,
+    triggerFileUpload,
+    handleFileUpload,
+    handleCrop,
+    cancelCrop,
+    applyPresetAvatar,
+    handleClose,
+    initializeWidget,
+    copyWidgetCode,
+    toggleAskForRating,
+    toggleTransferToHuman,
+    userGroups,
+    selectedGroupIds,
+    loadingGroups,
+    fetchUserGroups,
+    updateAgentGroups,
+    
+    // Jira integration - spread all properties and methods from jiraIntegration
+    ...jiraIntegration,
+    
+    // Shopify integration - spread all properties and methods from shopifyIntegration
+    ...shopifyIntegration
+  }
+}

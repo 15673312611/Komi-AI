@@ -1,0 +1,596 @@
+/*
+Copyright 2024-2026 Komi AI
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+import { ref, type Ref } from 'vue'
+import { widgetEnv, resolveWidgetUploadUrl } from '../webclient/widget-env'
+import { isAbsoluteUrl } from '../utils/avatars'
+
+// Allowed file types configuration (matching backend)
+const ALLOWED_IMAGE_TYPES = new Set(['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'])
+const ALLOWED_DOCUMENT_TYPES = new Set([
+  'application/pdf',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'text/plain',
+  'text/csv',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+])
+const ALLOWED_FILE_TYPES = new Set([...ALLOWED_IMAGE_TYPES, ...ALLOWED_DOCUMENT_TYPES])
+
+// Extension to MIME type mapping
+const EXTENSION_TO_MIME: Record<string, string> = {
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.png': 'image/png',
+  '.gif': 'image/gif',
+  '.webp': 'image/webp',
+  '.pdf': 'application/pdf',
+  '.doc': 'application/msword',
+  '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  '.txt': 'text/plain',
+  '.csv': 'text/csv',
+  '.xls': 'application/vnd.ms-excel',
+  '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+}
+
+// Magic byte signatures for client-side validation
+const MAGIC_BYTES: Record<string, { bytes: number[]; offset: number }[]> = {
+  'image/jpeg': [
+    { bytes: [0xff, 0xd8, 0xff, 0xe0], offset: 0 },
+    { bytes: [0xff, 0xd8, 0xff, 0xe1], offset: 0 },
+    { bytes: [0xff, 0xd8, 0xff, 0xe2], offset: 0 },
+    { bytes: [0xff, 0xd8, 0xff, 0xdb], offset: 0 },
+    { bytes: [0xff, 0xd8, 0xff, 0xee], offset: 0 }
+  ],
+  'image/png': [{ bytes: [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a], offset: 0 }],
+  'image/gif': [
+    { bytes: [0x47, 0x49, 0x46, 0x38, 0x37, 0x61], offset: 0 }, // GIF87a
+    { bytes: [0x47, 0x49, 0x46, 0x38, 0x39, 0x61], offset: 0 }  // GIF89a
+  ],
+  'image/webp': [{ bytes: [0x52, 0x49, 0x46, 0x46], offset: 0 }], // RIFF
+  'application/pdf': [{ bytes: [0x25, 0x50, 0x44, 0x46, 0x2d], offset: 0 }] // %PDF-
+}
+
+// Validate file magic bytes
+async function validateMagicBytes(file: File): Promise<{ valid: boolean; error?: string }> {
+  const mimeType = file.type
+  
+  // Text files don't have magic bytes
+  if (mimeType === 'text/plain' || mimeType === 'text/csv') {
+    return { valid: true }
+  }
+  
+  // Office files (ZIP-based) start with PK
+  if (mimeType.includes('openxmlformats') || mimeType === 'application/msword') {
+    const buffer = await file.slice(0, 4).arrayBuffer()
+    const bytes = new Uint8Array(buffer)
+    // PK signature for ZIP-based or OLE for old Office
+    if ((bytes[0] === 0x50 && bytes[1] === 0x4b) || 
+        (bytes[0] === 0xd0 && bytes[1] === 0xcf)) {
+      return { valid: true }
+    }
+    return { valid: false, error: 'File content does not match Office document format' }
+  }
+  
+  const signatures = MAGIC_BYTES[mimeType]
+  if (!signatures) {
+    // Unknown type, will be validated server-side
+    return { valid: true }
+  }
+  
+  // Read first 16 bytes
+  const buffer = await file.slice(0, 16).arrayBuffer()
+  const fileBytes = new Uint8Array(buffer)
+  
+  // WebP special check
+  if (mimeType === 'image/webp') {
+    if (fileBytes[0] === 0x52 && fileBytes[1] === 0x49 && 
+        fileBytes[2] === 0x46 && fileBytes[3] === 0x46 &&
+        fileBytes[8] === 0x57 && fileBytes[9] === 0x45 &&
+        fileBytes[10] === 0x42 && fileBytes[11] === 0x50) {
+      return { valid: true }
+    }
+    return { valid: false, error: 'File content does not match WebP format' }
+  }
+  
+  // Check signatures
+  for (const sig of signatures) {
+    let match = true
+    for (let i = 0; i < sig.bytes.length; i++) {
+      if (fileBytes[sig.offset + i] !== sig.bytes[i]) {
+        match = false
+        break
+      }
+    }
+    if (match) return { valid: true }
+  }
+  
+  return { valid: false, error: `File content does not match ${mimeType} format` }
+}
+
+// Validate file extension matches MIME type
+function validateExtension(filename: string, mimeType: string): { valid: boolean; error?: string } {
+  const ext = filename.toLowerCase().substring(filename.lastIndexOf('.'))
+  
+  if (!ext || ext === '.') {
+    return { valid: false, error: 'File must have an extension' }
+  }
+  
+  if (!(ext in EXTENSION_TO_MIME)) {
+    const allowed = Object.keys(EXTENSION_TO_MIME).map(e => e.toUpperCase().replace('.', '')).join(', ')
+    return { valid: false, error: `File type not allowed. Allowed: ${allowed}` }
+  }
+  
+  const expectedMime = EXTENSION_TO_MIME[ext]
+  
+  // Handle jpg/jpeg equivalence
+  if ((mimeType === 'image/jpeg' || mimeType === 'image/jpg') && 
+      (expectedMime === 'image/jpeg' || expectedMime === 'image/jpg')) {
+    return { valid: true }
+  }
+  
+  if (expectedMime !== mimeType) {
+    return { valid: false, error: `File extension ${ext} does not match content type` }
+  }
+  
+  return { valid: true }
+}
+
+export function useWidgetFiles(token: Ref<string | null>, fileInputRef: Ref<HTMLInputElement | null>) {
+  // File handling state
+  const uploadedAttachments = ref<Array<{
+    content: string
+    filename: string
+    type: string
+    size: number
+    url: string
+    file_url: string
+  }>>([])
+  
+  const previewModal = ref(false)
+  const previewFile = ref<{
+    url: string
+    filename: string
+    type: string
+    file_url?: string
+    size?: number
+  } | null>(null)
+  const isUploading = ref(false)
+  let previewClearTimer: ReturnType<typeof setTimeout> | null = null
+
+  const revokeAttachmentUrls = (file: { url?: string; file_url?: string }) => {
+    for (const url of [file.url, file.file_url]) {
+      if (url?.startsWith('blob:')) URL.revokeObjectURL(url)
+    }
+  }
+
+  const clearAttachments = () => {
+    if (previewClearTimer) {
+      clearTimeout(previewClearTimer)
+      previewClearTimer = null
+    }
+    uploadedAttachments.value.forEach(revokeAttachmentUrls)
+    uploadedAttachments.value = []
+    previewModal.value = false
+    previewFile.value = null
+  }
+
+  // Format file size for display
+  const formatFileSize = (bytes: number): string => {
+    if (bytes === 0) return '0 Bytes'
+    const k = 1024
+    const sizes = ['Bytes', 'KB', 'MB', 'GB']
+    const i = Math.floor(Math.log(bytes) / Math.log(k))
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
+  }
+
+  // Check if file is an image
+  const isImageAttachment = (contentType: string): boolean => {
+    return contentType.startsWith('image/')
+  }
+
+  // Generate download URL for attachments
+  const getDownloadUrl = (fileUrl: string | undefined | null): string => {
+    if (!fileUrl) return ''
+    
+    // Blob previews and absolute S3 URLs pass through; local paths already
+    // carry the /api/v1 prefix, so they resolve against the API origin.
+    return resolveWidgetUploadUrl(fileUrl)
+  }
+
+  // Generate preview URL for file display (similar to FileUpload.vue)
+  const getPreviewUrl = (file: {url: string, file_url?: string}): string => {
+    const urlToUse = file.file_url || file.url
+    if (!urlToUse) return ''
+    
+    return resolveWidgetUploadUrl(urlToUse)
+  }
+
+  // Handle file selection from input
+  const handleFileSelect = async (event: Event) => {
+    const target = event.target as HTMLInputElement
+    if (target.files && target.files.length > 0) {
+      await uploadFiles(Array.from(target.files))
+      // Reset the input value to allow selecting the same file again
+      target.value = ''
+    }
+  }
+
+  // Handle drag and drop
+  const handleDrop = async (event: DragEvent) => {
+    event.preventDefault()
+    const files = event.dataTransfer?.files
+    if (files && files.length > 0) {
+      await uploadFiles(Array.from(files))
+    }
+  }
+
+  const handleDragOver = (event: DragEvent) => {
+    event.preventDefault()
+  }
+
+  const handleDragLeave = (event: DragEvent) => {
+    event.preventDefault()
+  }
+
+  // Handle paste events
+  const handlePaste = async (event: ClipboardEvent) => {
+    const items = event.clipboardData?.items
+    if (!items) return
+
+    const files: File[] = []
+    for (const item of Array.from(items)) {
+      if (item.kind === 'file') {
+        const file = item.getAsFile()
+        if (file) {
+          files.push(file)
+        }
+      }
+    }
+
+    if (files.length > 0) {
+      await uploadFiles(files)
+    }
+  }
+
+  // Compress image if it's too large
+  const compressImage = async (file: File, maxSizeKB: number = 500, outputType = file.type): Promise<{blob: Blob, base64: string}> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = (e) => {
+        const img = new Image()
+        img.onload = () => {
+          const canvas = document.createElement('canvas')
+          let width = img.width
+          let height = img.height
+          
+          // Calculate new dimensions (max 1920px width/height while maintaining aspect ratio)
+          const maxDimension = 1920
+          if (width > maxDimension || height > maxDimension) {
+            if (width > height) {
+              height = (height / width) * maxDimension
+              width = maxDimension
+            } else {
+              width = (width / height) * maxDimension
+              height = maxDimension
+            }
+          }
+          
+          canvas.width = width
+          canvas.height = height
+          
+          const ctx = canvas.getContext('2d')
+          if (!ctx) {
+            reject(new Error('Failed to get canvas context'))
+            return
+          }
+          
+          ctx.drawImage(img, 0, 0, width, height)
+          
+          // Start with quality 0.9 and reduce if needed
+          let quality = 0.9
+          const tryCompress = () => {
+            canvas.toBlob((blob) => {
+              if (!blob) {
+                reject(new Error('Failed to compress image'))
+                return
+              }
+              
+              const sizeKB = blob.size / 1024
+              
+              // If still too large and quality can be reduced, try again
+              if (sizeKB > maxSizeKB && quality > 0.3) {
+                quality -= 0.1
+                tryCompress()
+              } else {
+                // Convert blob to base64
+                const reader = new FileReader()
+                reader.onload = () => {
+                  const base64 = (reader.result as string).split(',')[1]
+                  resolve({ blob, base64 })
+                }
+                reader.readAsDataURL(blob)
+              }
+            }, outputType === 'image/png' ? 'image/png' : 'image/jpeg', quality)
+          }
+          
+          tryCompress()
+        }
+        img.onerror = () => reject(new Error('Failed to load image'))
+        img.src = e.target?.result as string
+      }
+      reader.onerror = () => reject(new Error('Failed to read file'))
+      reader.readAsDataURL(file)
+    })
+  }
+
+  const readFileAsBase64 = (file: File): Promise<string> => new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => {
+      const result = typeof reader.result === 'string' ? reader.result : ''
+      const commaIndex = result.indexOf(',')
+      if (commaIndex === -1 || !result.slice(commaIndex + 1)) {
+        reject(new Error('Failed to read file contents'))
+        return
+      }
+      resolve(result.slice(commaIndex + 1))
+    }
+    reader.onerror = () => reject(new Error('Failed to read file'))
+    reader.readAsDataURL(file)
+  })
+
+  // Upload files (convert to base64 and store locally)
+  const uploadFiles = async (files: File[]) => {
+    if (isUploading.value || files.length === 0) return
+    isUploading.value = true
+
+    const MAX_FILES = 3 // Maximum 3 files per message
+    const MAX_FILE_SIZE = 5 * 1024 * 1024 // 5MB for images
+    const MAX_DOCUMENT_SIZE = 10 * 1024 * 1024 // 10MB for documents
+    const TARGET_SIZE_KB = 500 // Target 500KB after compression
+    
+    try {
+      // Check if adding these files would exceed the limit
+      if (uploadedAttachments.value.length >= MAX_FILES) {
+        alert(`Maximum ${MAX_FILES} files allowed per message`)
+        return
+      }
+
+      const remainingSlots = MAX_FILES - uploadedAttachments.value.length
+      const filesToUpload = files.slice(0, remainingSlots)
+
+      if (files.length > remainingSlots) {
+        alert(`Only ${remainingSlots} more file(s) can be uploaded. Maximum ${MAX_FILES} files per message.`)
+      }
+
+      for (const file of filesToUpload) {
+        try {
+        // Check if file with same name already exists
+        const isDuplicate = uploadedAttachments.value.some(att => att.filename === file.name)
+        if (isDuplicate) {
+          console.warn(`File ${file.name} is already selected`)
+          alert(`File "${file.name}" is already selected`)
+          continue
+        }
+        
+        const extension = file.name.toLowerCase().substring(file.name.lastIndexOf('.'))
+        const mimeType = file.type || EXTENSION_TO_MIME[extension] || ''
+        if (!ALLOWED_FILE_TYPES.has(mimeType)) {
+          alert(`File "${file.name}" has an unsupported file type`)
+          continue
+        }
+
+        const extensionValidation = validateExtension(file.name, mimeType)
+        if (!extensionValidation.valid) {
+          alert(extensionValidation.error || `File "${file.name}" has an invalid extension`)
+          continue
+        }
+
+        const magicValidation = await validateMagicBytes(file)
+        if (!magicValidation.valid) {
+          alert(magicValidation.error || `File "${file.name}" has invalid contents`)
+          continue
+        }
+
+        const isImage = mimeType.startsWith('image/')
+        const maxSize = isImage ? MAX_FILE_SIZE : MAX_DOCUMENT_SIZE
+        
+        // Validate file size before upload
+        if (file.size > maxSize) {
+          const maxSizeMB = maxSize / (1024 * 1024)
+          console.error(`File ${file.name} is too large. Maximum size is ${maxSizeMB}MB`)
+          alert(`File "${file.name}" is too large. Maximum size for ${isImage ? 'images' : 'documents'} is ${maxSizeMB}MB`)
+          continue
+        }
+        
+        // Canvas compression converts GIF/WebP to JPEG in most browsers. Keep
+        // those formats intact so filename, content type, and bytes agree.
+        const canCompress = mimeType === 'image/jpeg' || mimeType === 'image/jpg' || mimeType === 'image/png'
+        if (isImage && canCompress) {
+          // Compress image before upload
+          try {
+            const { blob, base64 } = await compressImage(file, TARGET_SIZE_KB, mimeType)
+            const compressedSize = blob.size
+            
+            console.log(`Compressed ${file.name}: ${(file.size / 1024).toFixed(2)}KB → ${(compressedSize / 1024).toFixed(2)}KB`)
+            
+            uploadedAttachments.value.push({
+              content: base64,
+              filename: file.name,
+              type: mimeType,
+              size: compressedSize,
+              url: URL.createObjectURL(blob),
+              file_url: URL.createObjectURL(blob)
+            })
+          } catch (error) {
+            console.error('Image compression failed, uploading original:', error)
+            // Fallback to original file if compression fails
+            const base64Data = await readFileAsBase64(file)
+            uploadedAttachments.value.push({
+              content: base64Data,
+              filename: file.name,
+              type: mimeType,
+              size: file.size,
+              url: URL.createObjectURL(file),
+              file_url: URL.createObjectURL(file)
+            })
+          }
+        } else {
+          // For non-images, read as-is
+          const base64Data = await readFileAsBase64(file)
+          uploadedAttachments.value.push({
+            content: base64Data,
+            filename: file.name,
+            type: mimeType,
+            size: file.size,
+            url: '',
+            file_url: ''
+          })
+        }
+        } catch (error) {
+          console.error('File upload error:', error)
+        }
+      }
+    } finally {
+      isUploading.value = false
+    }
+  }
+
+  // Remove attachment and call delete API
+  const removeAttachment = async (index: number) => {
+    const file = uploadedAttachments.value[index]
+    if (!file) return
+    
+    // Call delete API to remove file from storage
+    try {
+      // Local files are only previews until the message is sent; they do not
+      // have a server-side object to delete yet.
+      let filePath = file.url
+      if (!filePath || filePath.startsWith('blob:')) filePath = ''
+      
+      // Remove /uploads/ prefix if present
+      if (filePath && filePath.startsWith('/uploads/')) {
+        filePath = filePath.substring(9)
+      } else if (filePath && filePath.startsWith('/')) {
+        filePath = filePath.substring(1)
+      }
+      
+      // For absolute S3/CDN URLs, reduce to the object key (the URL path).
+      // Parsing the URL avoids matching a host substring, which is unreliable
+      // and flagged by static analysis (js/incomplete-url-substring-sanitization).
+      if (filePath && isAbsoluteUrl(filePath)) {
+        try {
+          filePath = new URL(filePath).pathname.replace(/^\/+/, '')
+        } catch {
+          // Not a parseable URL — leave the path as-is.
+        }
+      }
+      
+      if (filePath) {
+        const headers: Record<string, string> = {}
+        if (token.value) {
+          headers['Authorization'] = `Bearer ${token.value}`
+        }
+
+        // API_URL already ends in /api/v1 — do not repeat it here.
+        const response = await fetch(`${widgetEnv.API_URL}/files/upload/${filePath}`, {
+          method: 'DELETE',
+          headers: headers
+        })
+
+        if (!response.ok) {
+          console.error('Failed to delete file:', response.status)
+        }
+      }
+    } catch (error) {
+      console.error('Error calling delete API:', error)
+    }
+    
+    // Revoke blob URLs to free memory
+    revokeAttachmentUrls(file)
+
+    if (previewFile.value === file) {
+      previewModal.value = false
+      previewFile.value = null
+    }
+
+    // Another removal can finish first, so remove by object identity instead
+    // of the stale array index captured before the async delete request.
+    const currentIndex = uploadedAttachments.value.indexOf(file)
+    if (currentIndex !== -1) uploadedAttachments.value.splice(currentIndex, 1)
+  }
+
+  // Open file preview modal
+  const openPreview = (file: {
+    url: string
+    filename: string
+    type: string
+    file_url?: string
+    size?: number
+  }) => {
+    if (previewClearTimer) {
+      clearTimeout(previewClearTimer)
+      previewClearTimer = null
+    }
+    previewFile.value = file
+    previewModal.value = true
+  }
+
+  // Close preview modal
+  const closePreview = () => {
+    previewModal.value = false
+    // Don't clear previewFile immediately to allow smooth transition
+    if (previewClearTimer) clearTimeout(previewClearTimer)
+    previewClearTimer = setTimeout(() => {
+      previewFile.value = null
+      previewClearTimer = null
+    }, 300)
+  }
+
+  // Open file picker
+  const openFilePicker = () => {
+    fileInputRef.value?.click()
+  }
+
+  // Check if file type is image (utility function)
+  const isImage = (type: string): boolean => {
+    return type.startsWith('image/')
+  }
+
+  return {
+    uploadedAttachments,
+    isUploading,
+    previewModal,
+    previewFile,
+    formatFileSize,
+    isImageAttachment,
+    getDownloadUrl,
+    getPreviewUrl,
+    handleFileSelect,
+    handleDrop,
+    handleDragOver,
+    handleDragLeave,
+    handlePaste,
+    uploadFiles,
+    clearAttachments,
+    removeAttachment,
+    openPreview,
+    closePreview,
+    openFilePicker,
+    isImage
+  }
+}

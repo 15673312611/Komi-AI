@@ -1,0 +1,189 @@
+/*
+Copyright 2024-2026 Komi AI
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+/**
+ * API Configuration - Uses runtime config from window.APP_CONFIG
+ * Functions are used instead of constants to ensure runtime config is read at call time
+ */
+
+import { buildUploadUrl } from '@/utils/avatars'
+
+// API URLs - Dynamic functions..
+export function getApiUrl(): string {
+  if (window.APP_CONFIG?.API_URL) return window.APP_CONFIG.API_URL
+  if (import.meta.env.VITE_API_URL) return import.meta.env.VITE_API_URL
+  if (typeof window !== 'undefined' && window.location) {
+    if (window.location.port === '3001') {
+      return `${window.location.protocol}//${window.location.hostname}:8001/api/v1`
+    }
+    if (window.location.port === '5173' || window.location.port === '3000') {
+      return `${window.location.protocol}//${window.location.hostname}:8000/api/v1`
+    }
+    return `${window.location.origin}/api/v1`
+  }
+  return 'http://localhost:8000/api/v1'
+}
+
+export function getWsUrl(): string {
+  if (window.APP_CONFIG?.WS_URL) return window.APP_CONFIG.WS_URL
+  if (import.meta.env.VITE_WS_URL) return import.meta.env.VITE_WS_URL
+  if (typeof window !== 'undefined' && window.location) {
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+    if (window.location.port === '3001') {
+      return `${protocol}//${window.location.hostname}:8001`
+    }
+    if (window.location.port === '5173' || window.location.port === '3000') {
+      return `${protocol}//${window.location.hostname}:8000`
+    }
+    return `${protocol}//${window.location.host}`
+  }
+  return 'ws://localhost:8000'
+}
+
+/**
+ * An absolute API URL for `path`, for the places that need a real URL string
+ * rather than an axios call — browser navigations (OAuth installs), download
+ * links, webhook URLs we show the user.
+ *
+ * Use this instead of `${getApiUrl()}${path}` by hand. A self-hoster is free to
+ * set API_URL with a trailing slash, and hand-concatenation then emits
+ * `/api/v1//crm/...`; Starlette matches paths exactly, so that 404s.
+ */
+export function apiPath(path: string): string {
+  return `${getApiUrl().replace(/\/+$/, '')}/${path.replace(/^\/+/, '')}`
+}
+
+/**
+ * URL for a stored upload path (avatar, attachment). Always use this instead of
+ * concatenating getApiUrl() by hand — stored local paths already include the
+ * /api/v1 prefix. See buildUploadUrl.
+ */
+export function resolveUploadUrl(stored?: string | null): string {
+  return buildUploadUrl(stored, getApiUrl())
+}
+
+/**
+ * The logged-in user's own avatar, signed when the browser asks for it.
+ *
+ * Not resolveUploadUrl(user.profile_pic): for S3 storage that value is a
+ * presigned URL, and the copy the dashboard holds comes from the `user_info`
+ * blob written at login and never rewritten. The signature dies an hour later
+ * and the avatar stays broken until the next login. This path re-signs per
+ * request, so it cannot go stale.
+ *
+ * Other people's avatars need no equivalent — those arrive on API responses,
+ * which sign afresh every time.
+ */
+export function myAvatarUrl(cacheBuster?: string | number): string {
+  const base = apiPath('/users/me/avatar')
+  return cacheBuster ? `${base}?t=${cacheBuster}` : base
+}
+
+export function getWidgetUrl(): string {
+  return window.APP_CONFIG?.WIDGET_URL || import.meta.env.VITE_WIDGET_URL || 'http://localhost:8000'
+}
+
+// Razorpay Checkout - Dynamic function
+// Firebase Configuration - Dynamic functions
+export function getFirebaseApiKey(): string {
+  return window.APP_CONFIG?.FIREBASE_API_KEY || import.meta.env.VITE_FIREBASE_API_KEY || ''
+}
+
+export function getFirebaseAuthDomain(): string {
+  return window.APP_CONFIG?.FIREBASE_AUTH_DOMAIN || import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || ''
+}
+
+export function getFirebaseProjectId(): string {
+  return window.APP_CONFIG?.FIREBASE_PROJECT_ID || import.meta.env.VITE_FIREBASE_PROJECT_ID || ''
+}
+
+export function getFirebaseMessagingSenderId(): string {
+  return (
+    window.APP_CONFIG?.FIREBASE_MESSAGING_SENDER_ID ||
+    import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID ||
+    ''
+  )
+}
+
+export function getFirebaseAppId(): string {
+  return window.APP_CONFIG?.FIREBASE_APP_ID || import.meta.env.VITE_FIREBASE_APP_ID || ''
+}
+
+export function getFirebaseStorageBucket(): string {
+  return (
+    window.APP_CONFIG?.FIREBASE_STORAGE_BUCKET || import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || ''
+  )
+}
+
+export function getFirebaseMeasurementId(): string {
+  return (
+    window.APP_CONFIG?.FIREBASE_MEASUREMENT_ID || import.meta.env.VITE_FIREBASE_MEASUREMENT_ID || ''
+  )
+}
+
+export function getFirebaseVapidKey(): string {
+  return window.APP_CONFIG?.FIREBASE_VAPID_KEY || import.meta.env.VITE_FIREBASE_VAPID_KEY || ''
+}
+
+// Google Fonts API - Dynamic function
+export function getGoogleFontsApiKey(): string {
+  return window.APP_CONFIG?.GOOGLE_FONTS_API_KEY || import.meta.env.VITE_GOOGLE_FONTS_API_KEY || ''
+}
+
+// Node Environment - Dynamic functions
+export function getNodeEnv(): string {
+  return window.APP_CONFIG?.NODE_ENV || import.meta.env.NODE_ENV || 'development'
+}
+
+export function getHost(): string {
+  return window.APP_CONFIG?.HOST || import.meta.env.HOST || '0.0.0.0'
+}
+
+// Explore Configuration - Dynamic function
+export function getDemoWidgetId(): string {
+  return (
+    (window.APP_CONFIG as any)?.DEMO_WIDGET_ID ||
+    import.meta.env.VITE_DEMO_WIDGET_ID ||
+    '397046dc-0093-4499-ab45-a0afe3c3ee14'
+  )
+}
+
+// Explore Configuration - Dynamic function
+export function getSHOPIFY_API_KEY(): string {
+  return (
+    (window.APP_CONFIG as any)?.VITE_SHOPIFY_API_KEY ||
+    import.meta.env.VITE_SHOPIFY_API_KEY ||
+    '397046dc-0093-4499-ab45-a0afe3c3ee14'
+  )
+}
+
+// Legacy exports for backward compatibility - using getters to ensure dynamic evaluation
+export const config = {
+  get API_URL() {
+    return getApiUrl()
+  },
+  get WS_URL() {
+    return getWsUrl()
+  },
+  get WIDGET_URL() {
+    return getWidgetUrl()
+  },
+}
+
+// Direct exports that work dynamically
+export { getApiUrl as API_URL }
+export { getWsUrl as WS_URL }
+export { getWidgetUrl as WIDGET_URL }

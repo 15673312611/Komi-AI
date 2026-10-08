@@ -1,0 +1,46 @@
+FROM node:20-slim
+
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    wget \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+
+
+# Copy package files first
+COPY frontend/package*.json ./
+
+
+
+
+# Copy frontend source code
+COPY frontend/ .
+
+RUN npm install 
+
+# Create startup script in /usr/local/bin
+RUN echo '#!/bin/bash\n\
+echo "Waiting for backend..."\n\
+until curl -f http://backend:8000/health; do\n\
+    echo "Backend not ready - sleeping"\n\
+    sleep 5\n\
+done\n\
+\n\
+echo "Backend is ready - building widget and webclient"\n\
+cd /app && npm run build:widgetdocker\n\
+cd /app && npm run build:webclient\n\
+\n\
+echo "Starting frontend development server"\n\
+cd /app && npm run dev -- --host 0.0.0.0 --port 3000' > /usr/local/bin/start.sh
+
+# Make startup script executable
+RUN chmod +x /usr/local/bin/start.sh
+
+# Expose port
+EXPOSE 3000
+
+# Start the application in development mode
+CMD ["/bin/bash", "/usr/local/bin/start.sh"] 

@@ -1,0 +1,1059 @@
+<!--
+Copyright 2024-2026 Komi AI
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+-->
+
+<script setup lang="ts">
+import { ref } from 'vue'
+import { useRouter } from 'vue-router'
+import { authService } from '@/services/auth'
+import { resolveLandingRoute } from '@/router/landing'
+import { useEnterpriseFeatures } from '@/composables/useEnterpriseFeatures'
+import { useForgotPassword } from '@/composables/useForgotPassword'
+import InstallPrompt from '@/components/pwa/InstallPrompt.vue'
+import { apiPath, getApiUrl } from '@/config/api'
+import type { AxiosError } from 'axios'
+interface ErrorResponse {
+    detail: string
+}
+
+const router = useRouter()
+const { loadModule } = useEnterpriseFeatures()
+
+const trackLogin = async (method: string) => {
+  const mod = await loadModule('/src/modules/enterprise/utils/analytics.ts') as any
+  mod?.trackLogin?.(method)
+}
+const email = ref('')
+const password = ref('')
+const error = ref('')
+const isLoading = ref(false)
+
+// Check if enterprise module is available
+const { hasEnterpriseModule } = useEnterpriseFeatures()
+
+// Forgot password composable - only initialize if enterprise module is available
+const showForgotPasswordModal = ref(false)
+const forgotPassword = hasEnterpriseModule ? useForgotPassword() : null
+
+// Destructure with fallbacks for when enterprise module is not available
+const isForgotPasswordLoading = forgotPassword?.isLoading ?? ref(false)
+const forgotPasswordError = forgotPassword?.error ?? ref('')
+const forgotPasswordSuccess = forgotPassword?.success ?? ref('')
+const forgotPasswordStep = forgotPassword?.currentStep ?? ref(1)
+const forgotPasswordEmail = forgotPassword?.email ?? ref('')
+const forgotPasswordOtp = forgotPassword?.otp ?? ref('')
+const newPassword = forgotPassword?.newPassword ?? ref('')
+const confirmPassword = forgotPassword?.confirmPassword ?? ref('')
+const passwordValidation = forgotPassword?.passwordValidation ?? ref({
+    score: 0,
+    hasMinLength: false,
+    hasUpperCase: false,
+    hasLowerCase: false,
+    hasNumber: false,
+    hasSpecialChar: false
+})
+const requestPasswordReset = forgotPassword?.requestPasswordReset ?? (() => Promise.resolve(false))
+const verifyAndResetPassword = forgotPassword?.verifyAndResetPassword ?? (() => Promise.resolve(false))
+const resetForgotPasswordForm = forgotPassword?.resetForm ?? (() => {})
+const goBackToEmailStep = forgotPassword?.goBackToEmailStep ?? (() => {})
+
+// One ordered candidate list, shared with '/', the catch-all and the 403 page.
+// It used to end at '/403', which is not somewhere to land — and the route was
+// not even registered, so the user silently ended up on /ai-agents instead.
+const getInitialRoute = () => resolveLandingRoute()
+
+const handleLogin = async () => {
+    if (isLoading.value) return
+
+    try {
+        isLoading.value = true
+        error.value = ''
+
+        await authService.login(email.value, password.value)
+
+        // Analytics is optional; a failed dynamic import must not turn a
+        // successful login into an unhandled rejection.
+        void trackLogin('email').catch((trackingError) => {
+            console.warn('Login analytics unavailable:', trackingError)
+        })
+
+        // Check if this is Shopify flow (new managed installation)
+        const urlParams = new URLSearchParams(window.location.search)
+        const isShopifyFlow = urlParams.get('shopify_flow') === '1'
+        const shopId = urlParams.get('shop_id')
+        const returnTo = urlParams.get('return_to')
+
+        if (isShopifyFlow && shopId) {
+            console.log('🔗 Shopify flow detected, linking organization')
+
+            try {
+
+
+                // If return_to is specified, redirect there
+                if (returnTo) {
+                    console.log('📍 Redirecting to return_to:', returnTo)
+                    window.location.href = returnTo
+                    return
+                }
+            } catch (linkError: any) {
+                console.error('❌ Failed to link organization:', linkError)
+                error.value = linkError.response?.data?.detail || 'Failed to link organization'
+                isLoading.value = false
+                return
+            }
+        }
+        
+        // Check if this is an OLD embedded Shopify login (opened in popup) - for backward compatibility
+        const isEmbedded = router.currentRoute.value.query.embedded === 'true'
+        const legacyShopId = router.currentRoute.value.query.shop_id as string
+        
+        if (isEmbedded && legacyShopId && window.opener) {
+            // This is a popup for Shopify embedded app (old flow)
+            console.log('Login successful in popup, notifying parent window')
+            
+            // Show success state
+            isLoading.value = true
+            error.value = ''
+            
+            // Notify the parent window of successful login
+            if (window.opener && !window.opener.closed) {
+                window.opener.postMessage(
+                    { type: 'login_success', shop_id: legacyShopId },
+                    window.location.origin
+                )
+                
+                // Close the popup after a brief delay to ensure message is sent
+                setTimeout(() => {
+                    window.close()
+                }, 300)
+            } else {
+                // If opener is gone, just close the window
+                setTimeout(() => {
+                    window.close()
+                }, 300)
+            }
+            
+            return
+        }
+       
+        // Check for Shopify flow (new simplified flow)
+        if (router.currentRoute.value.query.shopify_flow === '1') {
+            const shop = router.currentRoute.value.query.shop as string
+            const shopId = router.currentRoute.value.query.shop_id as string
+            const host = router.currentRoute.value.query.host as string
+            const returnTo = router.currentRoute.value.query.return_to as string
+
+            // Redirect to auth complete page
+            const query: any = { shop, shop_id: shopId, host }
+            if (returnTo) {
+                query.return_to = returnTo
+            }
+
+            router.push({
+                path: '/shopify/auth-complete',
+                query
+            })
+            return
+        }
+       
+        // Check if there's a Shopify redirect pending in localStorage (legacy flow)
+        const shopifyRedirectData = localStorage.getItem('shopifyRedirect')
+        if (shopifyRedirectData) {
+            try {
+                const redirectInfo = JSON.parse(shopifyRedirectData)
+                // Clear the stored redirect
+                localStorage.removeItem('shopifyRedirect')
+                
+                // Build the full URL with all query parameters
+                const queryParams = new URLSearchParams()
+                for (const [key, value] of Object.entries(redirectInfo)) {
+                    queryParams.append(key, value as string)
+                }
+                
+                // Redirect to the backend Shopify auth endpoint
+                window.location.href = apiPath(`/shopify/auth?${queryParams.toString()}`)
+                return // Don't do the normal navigation
+            } catch (e) {
+                console.error('Failed to parse shopifyRedirect data:', e)
+                // Clear invalid data
+                localStorage.removeItem('shopifyRedirect')
+            }
+        }
+
+        // Check for redirect query parameter (internal frontend route)
+        const redirectPath = router.currentRoute.value.query.redirect as string
+        if (redirectPath) {
+            // If it's an internal route (starts with /), use router.push
+            if (redirectPath.startsWith('/')) {
+                router.push(redirectPath)
+                return
+            }
+            // Otherwise treat as API redirect (legacy behavior)
+            window.location.href = `${getApiUrl()}${redirectPath}`
+            return
+        }
+
+        // Determine initial route based on permissions
+        const initialRoute = getInitialRoute()
+        router.push(initialRoute)
+
+    } catch (err) {
+        console.log(err)
+        const axiosError = err as AxiosError<ErrorResponse>
+        error.value = axiosError.response?.data?.detail
+            || (err instanceof Error ? err.message : 'Login failed')
+        console.error('Login error:', err)
+    } finally {
+        isLoading.value = false
+    }
+}
+
+const navigateToSignup = () => {
+    // Preserve embedded, shop_id, return_to, redirect query params if present
+    const isEmbedded = router.currentRoute.value.query.embedded
+    const shopId = router.currentRoute.value.query.shop_id
+    const returnTo = router.currentRoute.value.query.return_to
+    const shopifyFlow = router.currentRoute.value.query.shopify_flow
+    const redirect = router.currentRoute.value.query.redirect
+
+    const query: any = {}
+
+    if (isEmbedded) query.embedded = isEmbedded
+    if (shopId) query.shop_id = shopId
+    if (returnTo) query.return_to = returnTo
+    if (shopifyFlow) query.shopify_flow = shopifyFlow
+    if (redirect) query.redirect = redirect
+
+    if (Object.keys(query).length > 0) {
+        console.log('Navigating to signup with params:', query)
+        router.push({
+            path: '/signup',
+            query
+        })
+    } else {
+        router.push('/signup')
+    }
+}
+
+const openForgotPasswordModal = () => {
+    resetForgotPasswordForm()
+    showForgotPasswordModal.value = true
+}
+
+const closeForgotPasswordModal = () => {
+    showForgotPasswordModal.value = false
+    resetForgotPasswordForm()
+}
+
+const handleRequestPasswordReset = async () => {
+    const success = await requestPasswordReset()
+    // Keep modal open to proceed to step 2
+}
+
+const handleVerifyAndResetPassword = async () => {
+    const success = await verifyAndResetPassword()
+    if (success) {
+        // Wait a moment to show success message, then close modal
+        setTimeout(() => {
+            closeForgotPasswordModal()
+            // Optionally pre-fill the email in login form
+            email.value = forgotPasswordEmail.value
+        }, 2000)
+    }
+}
+</script>
+
+<template>
+    <div class="auth-page">
+        <!-- Left: form panel -->
+        <div class="form-panel">
+            <!-- Logo mark -->
+            <div class="auth-logo">
+                <div class="logo-mark">
+                    <div class="dot"></div>
+                    <div class="dot"></div>
+                    <div class="dot"></div>
+                </div>
+                <span class="logo-word">Komi AI</span>
+            </div>
+
+            <h1 class="auth-title">欢迎回来</h1>
+            <p class="auth-sub">登录以进入您的智能客服工作台</p>
+
+            <form @submit.prevent="handleLogin" class="auth-form">
+                <div class="field">
+                    <label for="email">电子邮箱</label>
+                    <input id="email" v-model="email" type="email" required placeholder="name@company.com" autocomplete="email" />
+                </div>
+
+                <div class="field">
+                    <label for="password">密码</label>
+                    <input id="password" v-model="password" type="password" required placeholder="••••••••" autocomplete="current-password" />
+                    <a v-if="hasEnterpriseModule" href="#" @click.prevent="openForgotPasswordModal" class="forgot-link">忘记密码？</a>
+                </div>
+
+                <div v-if="error" class="auth-error" role="alert">{{ error }}</div>
+
+                <button type="submit" class="auth-submit" :disabled="isLoading">
+                    <span v-if="isLoading">{{ router.currentRoute.value.query.embedded === 'true' ? '正在连接…' : '正在登录…' }}</span>
+                    <span v-else>立即登录</span>
+                </button>
+
+                <p v-if="hasEnterpriseModule" class="signup-prompt">
+                    还没有账号？
+                    <a href="#" @click.prevent="navigateToSignup" class="signup-link">立即注册</a>
+                </p>
+            </form>
+
+            <div class="install-hint-slot">
+                <InstallPrompt />
+            </div>
+        </div>
+
+        <!-- Right: brand panel with aurora -->
+        <div class="brand-panel">
+            <div class="aurora-blob blob-lime"></div>
+            <div class="aurora-blob blob-purple"></div>
+            <div class="aurora-blob blob-teal"></div>
+
+            <div class="brand-copy">
+                <!-- Siri orb -->
+                <div class="orb">
+                    <div class="orb-glow"></div>
+                    <div class="orb-gradient"></div>
+                    <div class="orb-core"></div>
+                    <div class="orb-ring"></div>
+                </div>
+
+                <div class="brand-badge">
+                    <span class="badge-dot"></span>
+                    开源原生 · 支持 MCP 协议
+                </div>
+
+                <h2>会<em>自主持续进化</em>的智能客服</h2>
+                <p class="brand-lede">自动吸纳知识库，秒级适配任意对话渠道，无缝流转人机协作，并通过开放 MCP 协议联动多智能体。</p>
+
+                <ul class="feature-list">
+                    <li><span class="check">✓</span> 自动学习知识库 — 支持拖拽 PDF、Word、Sitemap 与 URL</li>
+                    <li><span class="check">✓</span> 携带完整上下文的人工客服极速接管</li>
+                    <li><span class="check">✓</span> 私有化自建或云端部署 — 支持自带主流大模型 API</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- Forgot Password Modal - only show if enterprise module is available -->
+        <div v-if="hasEnterpriseModule && showForgotPasswordModal" class="modal-overlay">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2>{{ forgotPasswordStep === 1 ? '重置登录密码' : '验证并重置' }}</h2>
+                    <button class="close-btn" @click="closeForgotPasswordModal" aria-label="关闭">×</button>
+                </div>
+
+                <div class="modal-body">
+                    <!-- Step 1: Request OTP -->
+                    <div v-if="forgotPasswordStep === 1" class="forgot-password-step">
+                        <p class="step-description">请输入您的注册邮箱，系统将向您发送 6 位验证码以重置密码。</p>
+                        
+                        <div class="form-group">
+                            <label for="forgot-email">注册邮箱</label>
+                            <div class="input-wrapper">
+                                <input 
+                                    id="forgot-email" 
+                                    v-model="forgotPasswordEmail" 
+                                    type="email" 
+                                    required 
+                                    placeholder="请输入注册邮箱"
+                                    :disabled="isForgotPasswordLoading"
+                                />
+                            </div>
+                        </div>
+
+                        <div v-if="forgotPasswordError" class="error-message" role="alert">
+                            {{ forgotPasswordError }}
+                        </div>
+
+                        <div v-if="forgotPasswordSuccess" class="success-message" role="status">
+                            {{ forgotPasswordSuccess }}
+                        </div>
+
+                        <button 
+                            class="modal-submit-btn" 
+                            @click="handleRequestPasswordReset"
+                            :disabled="isForgotPasswordLoading || !forgotPasswordEmail"
+                        >
+                            {{ isForgotPasswordLoading ? '正在发送...' : '获取验证码' }}
+                        </button>
+                    </div>
+
+                    <!-- Step 2: Verify OTP and Reset Password -->
+                    <div v-if="forgotPasswordStep === 2" class="forgot-password-step">
+                        <p class="step-description">请输入邮箱收到的 6 位验证码及您的新登录密码。</p>
+                        
+                        <div class="form-group">
+                            <label for="forgot-otp">验证码</label>
+                            <div class="input-wrapper">
+                                <input 
+                                    id="forgot-otp" 
+                                    v-model="forgotPasswordOtp" 
+                                    type="text" 
+                                    required 
+                                    placeholder="输入 6 位验证码"
+                                    maxlength="6"
+                                    :disabled="isForgotPasswordLoading"
+                                />
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="new-password">新密码</label>
+                            <div class="input-wrapper">
+                                <input 
+                                    id="new-password" 
+                                    v-model="newPassword" 
+                                    type="password" 
+                                    required 
+                                    placeholder="输入新密码"
+                                    :disabled="isForgotPasswordLoading"
+                                />
+                            </div>
+                            <div class="password-requirements">
+                                <p class="requirements-title">密码强度要求：</p>
+                                <ul>
+                                    <li :class="{ valid: passwordValidation.hasMinLength }">至少 8 个字符</li>
+                                    <li :class="{ valid: passwordValidation.hasUpperCase }">包含至少一个大写字母</li>
+                                    <li :class="{ valid: passwordValidation.hasLowerCase }">包含至少一个小写字母</li>
+                                    <li :class="{ valid: passwordValidation.hasNumber }">包含至少一个数字</li>
+                                    <li :class="{ valid: passwordValidation.hasSpecialChar }">包含至少一个特殊字符 (!@#$%^&*)</li>
+                                </ul>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="confirm-password">确认新密码</label>
+                            <div class="input-wrapper">
+                                <input 
+                                    id="confirm-password" 
+                                    v-model="confirmPassword" 
+                                    type="password" 
+                                    required 
+                                    placeholder="再次输入新密码"
+                                    :disabled="isForgotPasswordLoading"
+                                />
+                            </div>
+                        </div>
+
+                        <div v-if="forgotPasswordError" class="error-message" role="alert">
+                            {{ forgotPasswordError }}
+                        </div>
+
+                        <div v-if="forgotPasswordSuccess" class="success-message" role="status">
+                            {{ forgotPasswordSuccess }}
+                        </div>
+
+                        <div class="modal-actions">
+                            <button 
+                                class="modal-back-btn" 
+                                @click="goBackToEmailStep"
+                                :disabled="isForgotPasswordLoading"
+                            >
+                                上一步
+                            </button>
+                            <button 
+                                class="modal-submit-btn" 
+                                @click="handleVerifyAndResetPassword"
+                                :disabled="isForgotPasswordLoading || !forgotPasswordOtp || !newPassword || !confirmPassword"
+                            >
+                                {{ isForgotPasswordLoading ? '正在重置...' : '确认重置密码' }}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</template>
+
+<style scoped>
+/* Auth page is always dark — do not inherit app theme */
+.auth-page {
+    min-height: 100vh;
+    display: grid;
+    grid-template-columns: 1.02fr .98fr;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-sans);
+}
+
+/* ── Form panel ── */
+.form-panel {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 60px 56px;
+    background: var(--bg);
+    min-height: 100vh;
+    min-height: 100dvh;
+}
+
+/* Install hint (design: dashed card under the form) — mobile only */
+.install-hint-slot {
+    display: none;
+    margin-top: var(--space-lg);
+    padding-bottom: var(--safe-bottom);
+}
+
+@media (max-width: 768px) {
+    .install-hint-slot {
+        display: block;
+    }
+}
+
+.auth-logo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 44px;
+}
+
+.logo-mark {
+    width: 32px;
+    height: 32px;
+    background: var(--accent-solid);
+    border-radius: 10px 10px 10px 2px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 3.5px;
+    flex-shrink: 0;
+}
+
+.dot {
+    width: 4.5px;
+    height: 4.5px;
+    background: var(--on-accent);
+    border-radius: 50%;
+}
+
+.logo-word {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 18px;
+    letter-spacing: -0.01em;
+    color: var(--text);
+}
+
+.auth-title {
+    font-family: var(--font-display);
+    font-size: 40px;
+    font-weight: 700;
+    letter-spacing: -0.03em;
+    color: var(--text);
+    margin-bottom: 10px;
+    line-height: 1.1;
+}
+
+.auth-sub {
+    color: var(--muted);
+    font-size: 15px;
+    margin-bottom: 36px;
+}
+
+/* Form */
+.auth-form {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    max-width: 400px;
+}
+
+.field {
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+}
+
+.field-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.field label {
+    font-size: 13.5px;
+    font-weight: 500;
+    color: var(--text3);
+}
+
+.field input {
+    width: 100%;
+    padding: 14px 16px;
+    background: var(--o04);
+    border: 1px solid var(--o12);
+    border-radius: 12px;
+    color: var(--text);
+    font-family: var(--font-sans);
+    font-size: 15px;
+    transition: border-color 0.18s, box-shadow 0.18s;
+}
+
+.field input::placeholder { color: var(--faint); }
+
+.field input:focus {
+    outline: none;
+    border-color: var(--accent-ink);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-ink) 15%, transparent);
+}
+
+.field input:-webkit-autofill,
+.field input:-webkit-autofill:hover,
+.field input:-webkit-autofill:focus {
+    -webkit-box-shadow: 0 0 0 1000px var(--bg2) inset !important;
+    -webkit-text-fill-color: var(--text) !important;
+    caret-color: var(--text);
+    border: 1px solid var(--o12) !important;
+    transition: background-color 9999s ease-in-out 0s;
+}
+
+.forgot-link {
+    align-self: flex-end;
+    margin-top: 2px;
+    font-size: 13px;
+    color: var(--accent-ink);
+    text-decoration: none;
+}
+.forgot-link:hover { text-decoration: underline; }
+
+.auth-error {
+    color: var(--c-coral);
+    background: color-mix(in srgb, var(--c-coral) 10%, transparent);
+    border: 1px solid color-mix(in srgb, var(--c-coral) 20%, transparent);
+    border-radius: 10px;
+    padding: 10px 14px;
+    font-size: 13.5px;
+}
+
+.auth-submit {
+    width: 100%;
+    padding: 15px;
+    background: var(--accent-solid);
+    color: var(--on-accent-solid);
+    border: none;
+    border-radius: 12px;
+    font-family: var(--font-sans);
+    font-weight: 600;
+    font-size: 15px;
+    cursor: pointer;
+    transition: opacity 0.18s;
+}
+
+.auth-submit:hover:not(:disabled) { opacity: 0.88; }
+.auth-submit:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.signup-prompt {
+    text-align: center;
+    font-size: 14px;
+    color: var(--muted2);
+}
+
+.signup-link {
+    color: var(--accent-ink);
+    text-decoration: none;
+    font-weight: 500;
+}
+.signup-link:hover { text-decoration: underline; }
+
+/* ── Brand panel ── */
+.brand-panel {
+    position: relative;
+    background: linear-gradient(160deg, var(--bg-elevated), var(--bg-deep));
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 56px 6vw;
+    min-height: 100vh;
+    border-left: 1px solid var(--o06);
+}
+
+/* Aurora blobs */
+.aurora-blob {
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(80px);
+    animation: cm-aurora 14s ease-in-out infinite;
+}
+
+.blob-lime {
+    width: 420px;
+    height: 420px;
+    background: radial-gradient(circle, color-mix(in srgb, var(--accent-solid) 32%, transparent), color-mix(in srgb, var(--accent-solid) 6%, transparent));
+    top: -80px;
+    right: -60px;
+    animation-duration: 16s;
+}
+
+.blob-purple {
+    width: 360px;
+    height: 360px;
+    background: radial-gradient(circle, color-mix(in srgb, var(--c-purple) 28%, transparent), color-mix(in srgb, var(--c-purple) 4%, transparent));
+    top: 20%;
+    left: -80px;
+    animation-duration: 20s;
+    animation-delay: -5s;
+}
+
+.blob-teal {
+    width: 300px;
+    height: 300px;
+    background: radial-gradient(circle, color-mix(in srgb, var(--c-teal) 22%, transparent), color-mix(in srgb, var(--c-teal) 3%, transparent));
+    bottom: 15%;
+    right: 10%;
+    animation-duration: 18s;
+    animation-delay: -9s;
+}
+
+/* Brand copy */
+.brand-copy {
+    position: relative;
+    z-index: 1;
+    max-width: 460px;
+}
+
+/* Siri orb */
+.orb {
+    position: relative;
+    width: 120px;
+    height: 120px;
+    margin-bottom: 38px;
+    animation: cm-float 7s ease-in-out infinite;
+}
+
+.orb-glow {
+    position: absolute;
+    inset: -36px;
+    border-radius: 50%;
+    background: radial-gradient(circle, color-mix(in srgb, var(--accent-solid) 20%, transparent), transparent 70%);
+    filter: blur(10px);
+}
+
+.orb-gradient {
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    background: conic-gradient(from 0deg, var(--accent-solid), var(--c-purple), var(--c-teal), var(--c-coral), var(--accent-solid));
+    filter: blur(6px);
+    animation: cm-spin 6s linear infinite;
+}
+
+.orb-core {
+    position: absolute;
+    inset: 24px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 40% 35%, color-mix(in srgb, var(--text) 92%, transparent), color-mix(in srgb, var(--text) 12%, transparent) 55%, transparent 72%);
+    animation: cm-pulse 2.6s ease-in-out infinite;
+}
+
+.orb-ring {
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    box-shadow: inset 0 0 26px color-mix(in srgb, var(--bg-deep) 55%, transparent);
+}
+
+/* Badge pill */
+.brand-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
+    padding: 7px 14px;
+    border: 1px solid var(--o12);
+    border-radius: 999px;
+    background: var(--o03);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--text3);
+    margin-bottom: 26px;
+}
+
+.badge-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--accent-solid);
+    box-shadow: 0 0 10px var(--accent-ink);
+    animation: cm-pulse 2.6s ease-in-out infinite;
+}
+
+.brand-copy h2 {
+    font-family: var(--font-display);
+    font-size: 42px;
+    font-weight: 700;
+    letter-spacing: -0.03em;
+    color: var(--text);
+    line-height: 1.06;
+    margin: 0 0 18px;
+}
+
+.brand-copy h2 em {
+    font-style: normal;
+    color: var(--accent-ink);
+}
+
+.brand-lede {
+    font-size: 17px;
+    line-height: 1.6;
+    color: var(--muted);
+    margin: 0 0 30px;
+}
+
+.feature-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.feature-list li {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 15px;
+    color: var(--text3);
+}
+
+.check {
+    color: var(--accent-ink);
+    font-weight: 700;
+    font-size: 14px;
+}
+
+/* ── Responsive ── */
+@media (max-width: 1024px) {
+    .auth-page { grid-template-columns: 1fr; }
+    .brand-panel { display: none; }
+}
+
+@media (max-width: 600px) {
+    .form-panel { padding: 40px 28px; }
+    .auth-title { font-size: 30px; }
+}
+
+/* Modal Overlay */
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(5,6,9,.7);
+    backdrop-filter: blur(4px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    padding: 1rem;
+}
+
+.modal-content {
+    background: var(--surface);
+    border: 1px solid var(--o10);
+    border-radius: 20px;
+    width: 100%;
+    max-width: 500px;
+    max-height: 90vh;
+    overflow-y: auto;
+    box-shadow: 0 20px 50px rgba(0,0,0,.5);
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1.5rem;
+    border-bottom: 1px solid var(--o08);
+}
+
+.modal-header h2 {
+    font-family: var(--font-display);
+    font-size: 1.25rem;
+    font-weight: 600;
+    margin: 0;
+    color: var(--text);
+}
+
+.close-btn {
+    background: none;
+    border: 1px solid var(--o12);
+    border-radius: 8px;
+    font-size: 1.5rem;
+    color: var(--muted2);
+    cursor: pointer;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: 0.18s;
+}
+
+.close-btn:hover {
+    background: var(--o06);
+    color: var(--text);
+}
+
+.modal-body {
+    padding: 1.5rem;
+}
+
+.forgot-password-step {
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+}
+
+.step-description {
+    color: var(--muted);
+    margin: 0;
+    line-height: 1.5;
+    font-size: 14px;
+}
+
+.success-message {
+    color: #0f9d6e;
+    text-align: center;
+    padding: 0.75rem;
+    background: rgba(15,157,110,.1);
+    border-radius: 10px;
+    font-size: 0.875rem;
+    margin: 0;
+}
+
+/* Password requirements styling matching signup */
+.password-requirements {
+    margin-top: 0.5rem;
+}
+
+.password-requirements .requirements-title {
+    margin: 0 0 0.25rem 0;
+    font-size: 0.75rem;
+    color: var(--muted2);
+}
+
+.password-requirements ul {
+    margin: 0;
+    padding-left: 1rem;
+}
+
+.password-requirements li {
+    font-size: 0.8125rem;
+    color: var(--muted);
+    margin: 0.125rem 0;
+}
+
+.password-requirements li.valid {
+    color: var(--success-color, #10b981);
+}
+
+/* Modal uses the same dark form-field style as the auth form */
+.form-group { margin-bottom: 0; }
+
+.form-group label {
+    display: block;
+    margin-bottom: 9px;
+    font-size: 13.5px;
+    font-weight: 500;
+    color: var(--text3);
+}
+
+.input-wrapper input {
+    width: 100%;
+    padding: 13px 15px;
+    background: var(--o04);
+    border: 1px solid var(--o12);
+    border-radius: 12px;
+    color: var(--text);
+    font-family: var(--font-sans);
+    font-size: 14px;
+    transition: border-color 0.18s, box-shadow 0.18s;
+}
+
+.input-wrapper input::placeholder { color: var(--faint); }
+.input-wrapper input:focus {
+    outline: none;
+    border-color: var(--accent-ink);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-ink) 15%, transparent);
+}
+.input-wrapper input:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.error-message {
+    color: var(--c-coral);
+    background: color-mix(in srgb, var(--c-coral) 10%, transparent);
+    border: 1px solid color-mix(in srgb, var(--c-coral) 20%, transparent);
+    border-radius: 10px;
+    padding: 10px 14px;
+    font-size: 13.5px;
+}
+
+.modal-submit-btn {
+    width: 100%;
+    padding: 13px;
+    background: var(--accent-solid);
+    color: var(--on-accent-solid);
+    border: none;
+    border-radius: 12px;
+    font-family: var(--font-sans);
+    font-weight: 600;
+    font-size: 15px;
+    cursor: pointer;
+    transition: opacity 0.18s;
+}
+
+.modal-submit-btn:hover:not(:disabled) { opacity: 0.88; }
+.modal-submit-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.modal-actions {
+    display: flex;
+    gap: 1rem;
+    margin-top: 1rem;
+}
+
+.modal-back-btn {
+    flex: 1;
+    padding: 13px;
+    background: var(--o06);
+    color: var(--text3);
+    border: 1px solid var(--o12);
+    border-radius: 12px;
+    font-family: var(--font-sans);
+    font-weight: 600;
+    font-size: 15px;
+    cursor: pointer;
+    transition: 0.18s;
+}
+
+.modal-back-btn:hover:not(:disabled) {
+    background: var(--o10);
+    color: var(--text);
+}
+
+.modal-back-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+@media (max-width: 640px) {
+    .modal-content { max-width: 100%; margin: 1rem; }
+    .modal-header, .modal-body { padding: 1rem; }
+}
+</style>

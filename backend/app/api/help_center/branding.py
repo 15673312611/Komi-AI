@@ -1,0 +1,245 @@
+"""
+Copyright 2024-2026 Komi AI
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+
+Help-center settings + branding endpoints (settings get/put, logo upload).
+"""
+
+from uuid import UUID, uuid4
+
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
+from sqlalchemy.orm import Session, selectinload
+
+from app.core.auth import require_permissions
+from app.core.config import settings as app_settings
+from app.core.cors import update_cors_middleware
+from app.database import get_db
+from app.models.agent import Agent
+from app.models.help_center import HelpCenterSettings
+from app.models.schemas.help_center import (
+    DnsRecord,
+    DomainStatusResponse,
+    HelpCenterAgentOption,
+    HelpCenterSettingsResponse,
+    HelpCenterSettingsUpdate,
+)
+from app.models.user import User
+from app.repositories.faq import FAQRepository
+from app.repositories.help_center import HelpCenterRepository
+from app.services.file_storage import resolve_public_url, store_upload
+from app.services.help_center_access import check_help_center_access, help_center_allowed
+from app.services.help_center_settings import get_or_create_settings, live_url
+from app.services.help_center_images import absolute_upload_url
+from app.services.image_security import sanitize_image
+
+router = APIRouter()
+
+MAX_LOGO_BYTES = 2 * 1024 * 1024
+# Raster only — SVG is active markup and would be stored XSS on the public help
+# center, so it is not accepted; the admin cropper rasterises to PNG client-side.
+_LOGO_TYPES = {"image/png", "image/jpeg", "image/webp"}
+# Reject anything larger than this on a side up front (decompression-bomb guard);
+# the stored logo is then downscaled to LOGO_FIT_DIM (header renders it ~30px).
+MAX_LOGO_DIM = 4000
+LOGO_FIT_DIM = 512
+
+# Favicon: same raster-only policy (SVG/ICO rejected — stored XSS / unsupported by
+# sanitize_image). Stored small and square-ish; the browser scales the PNG.
+MAX_FAVICON_BYTES = 1 * 1024 * 1024
+_FAVICON_TYPES = {"image/png", "image/jpeg", "image/webp"}
+MAX_FAVICON_DIM = 2000
+FAVICON_FIT_DIM = 128
+
+
+def domain_status_response(row: HelpCenterSettings) -> DomainStatusResponse:
+    """DNS-records table for the admin UI, shaped from stored state."""
+    records = []
+    if row.custom_domain:
+        records = [
+            DnsRecord(
+                type="CNAME",
+                host=row.custom_domain,
+                value=app_settings.HELP_CENTER_CNAME_TARGET,
+                verified=row.cname_record_verified,
+            ),
+            DnsRecord(
+                type="TXT",
+                host=f"_chattermate.{row.custom_domain}",
+                value=f"cm-verify={row.domain_verification_token}",
+                verified=row.txt_record_verified,
+            ),
+        ]
+    return DomainStatusResponse(
+        custom_domain=row.custom_domain,
+        domain_status=row.domain_status,
+        ssl_status=row.ssl_status,
+        records=records,
+        domain_verified_at=row.domain_verified_at,
+    )
+
+
+async def settings_response(
+    db: Session, row: HelpCenterSettings, organization_id: UUID
+) -> HelpCenterSettingsResponse:
+    agents = (
+        db.query(Agent)
+        .options(selectinload(Agent.widgets))  # avoid a lazy-load query per agent
+        .filter(Agent.organization_id == organization_id)
+        .order_by(Agent.name)
+        .all()
+    )
+    response = HelpCenterSettingsResponse.model_validate(row)
+    # Absolute (api-origin) URL: the admin runs on app.komi.ai, whose
+    # nginx serves any *.png path as a static asset — a host-relative
+    # /api/v1/uploads/*.png would 404 there. Anchor to the backend origin.
+    response.logo_url = (
+        absolute_upload_url(await resolve_public_url(row.logo_url)) if row.logo_url else None
+    )
+    response.favicon_url = (
+        absolute_upload_url(await resolve_public_url(row.favicon_url)) if row.favicon_url else None
+    )
+    response.live_url = live_url(row)
+    response.published_count = FAQRepository(db).count_published(organization_id)
+    response.plan_allowed = help_center_allowed(db, organization_id)
+    response.agents = [
+        HelpCenterAgentOption(
+            id=agent.id,
+            name=agent.display_name or agent.name,
+            has_widget=bool(agent.widgets),
+        )
+        for agent in agents
+    ]
+    response.domain = domain_status_response(row)
+    return response
+
+
+@router.get("/settings", response_model=HelpCenterSettingsResponse)
+async def get_settings(
+    current_user: User = Depends(require_permissions("manage_knowledge")),
+    db: Session = Depends(get_db),
+):
+    """Get-or-create the org's help center settings. Ungated read: the response
+    carries plan_allowed so the UI can render the upgrade lock."""
+    row = get_or_create_settings(db, current_user.organization)
+    return await settings_response(db, row, current_user.organization_id)
+
+
+@router.put("/settings", response_model=HelpCenterSettingsResponse)
+async def update_settings(
+    payload: HelpCenterSettingsUpdate,
+    request: Request,
+    current_user: User = Depends(require_permissions("manage_knowledge")),
+    db: Session = Depends(get_db),
+):
+    check_help_center_access(db, current_user.organization_id)
+    row = get_or_create_settings(db, current_user.organization)
+    updates = payload.model_dump(exclude_unset=True)
+    if updates.get("agent_id") is not None:
+        agent = db.query(Agent).filter(
+            Agent.id == updates["agent_id"],
+            Agent.organization_id == current_user.organization_id,
+        ).first()
+        if not agent:
+            raise HTTPException(status_code=404, detail="Agent not found")
+    was_enabled = row.enabled
+    for field, value in updates.items():
+        setattr(row, field, value)
+    row = HelpCenterRepository(db).update(row)
+    # Toggling `enabled` changes which {slug}.{base} origins the widget may call,
+    # so refresh the CORS allowlist (and propagate to other workers via Redis).
+    if "enabled" in updates and updates["enabled"] != was_enabled:
+        update_cors_middleware(request.app)
+    return await settings_response(db, row, current_user.organization_id)
+
+
+@router.post("/logo", response_model=HelpCenterSettingsResponse)
+async def upload_logo(
+    file: UploadFile = File(...),
+    current_user: User = Depends(require_permissions("manage_knowledge")),
+    db: Session = Depends(get_db),
+):
+    check_help_center_access(db, current_user.organization_id)
+    row = get_or_create_settings(db, current_user.organization)
+
+    content = await file.read()
+    # Validate, bomb-guard, downscale and re-encode to a clean PNG/JPEG — the
+    # stored bytes carry no metadata or non-image payload.
+    safe_bytes, content_type, ext = sanitize_image(
+        content,
+        allowed_content_types=_LOGO_TYPES,
+        max_bytes=MAX_LOGO_BYTES,
+        max_dim=MAX_LOGO_DIM,
+        fit=LOGO_FIT_DIM,
+    )
+    file_name = f"{uuid4()}{ext}"
+    row.logo_url = await store_upload(
+        safe_bytes,
+        f"help_center/{current_user.organization_id}",
+        file_name,
+        content_type=content_type,
+    )
+    row = HelpCenterRepository(db).update(row)
+    return await settings_response(db, row, current_user.organization_id)
+
+
+@router.delete("/logo", response_model=HelpCenterSettingsResponse)
+async def remove_logo(
+    current_user: User = Depends(require_permissions("manage_knowledge")),
+    db: Session = Depends(get_db),
+):
+    check_help_center_access(db, current_user.organization_id)
+    row = get_or_create_settings(db, current_user.organization)
+    row.logo_url = None
+    row = HelpCenterRepository(db).update(row)
+    return await settings_response(db, row, current_user.organization_id)
+
+
+@router.post("/favicon", response_model=HelpCenterSettingsResponse)
+async def upload_favicon(
+    file: UploadFile = File(...),
+    current_user: User = Depends(require_permissions("manage_knowledge")),
+    db: Session = Depends(get_db),
+):
+    check_help_center_access(db, current_user.organization_id)
+    row = get_or_create_settings(db, current_user.organization)
+
+    content = await file.read()
+    safe_bytes, content_type, ext = sanitize_image(
+        content,
+        allowed_content_types=_FAVICON_TYPES,
+        max_bytes=MAX_FAVICON_BYTES,
+        max_dim=MAX_FAVICON_DIM,
+        fit=FAVICON_FIT_DIM,
+    )
+    file_name = f"{uuid4()}{ext}"
+    row.favicon_url = await store_upload(
+        safe_bytes,
+        f"help_center/{current_user.organization_id}",
+        file_name,
+        content_type=content_type,
+    )
+    row = HelpCenterRepository(db).update(row)
+    return await settings_response(db, row, current_user.organization_id)
+
+
+@router.delete("/favicon", response_model=HelpCenterSettingsResponse)
+async def remove_favicon(
+    current_user: User = Depends(require_permissions("manage_knowledge")),
+    db: Session = Depends(get_db),
+):
+    check_help_center_access(db, current_user.organization_id)
+    row = get_or_create_settings(db, current_user.organization)
+    row.favicon_url = None
+    row = HelpCenterRepository(db).update(row)
+    return await settings_response(db, row, current_user.organization_id)

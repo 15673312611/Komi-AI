@@ -1,0 +1,1616 @@
+"""
+Copyright 2024-2026 Komi AI
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+"""
+
+from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Depends, Body, Query, status
+from typing import List, Optional
+from app.models.user import User
+from app.core.auth import get_current_user, require_any_permission, require_permissions
+from app.core.logger import get_logger
+import os
+import asyncio
+from pydantic import BaseModel, field_validator
+from sqlalchemy import text
+from uuid import UUID
+from app.database import get_db
+from app.models.knowledge_to_agent import KnowledgeToAgent
+from app.models.agent import Agent
+from app.models.knowledge import Knowledge
+from app.repositories.knowledge import KnowledgeRepository
+from app.knowledge import page_editor
+from app.knowledge.crawl_scope import CRAWL_SCOPES
+from app.repositories.knowledge_to_agent import KnowledgeToAgentRepository
+from app.repositories.agent import AgentRepository
+from app.models.knowledge_queue import KnowledgeQueue, QueueStatus
+from app.repositories.knowledge_queue import KnowledgeQueueRepository
+from app.core.config import settings
+from app.services import knowledge_vector_links
+from sqlalchemy.orm import Session
+from app.core.s3 import upload_file_to_s3, get_s3_signed_url
+from app.core.file_validation import read_validated, safe_filename, PDF_MAGIC
+from app.repositories.user import UserRepository
+from app.models.notification import Notification, NotificationType
+from app.services.user import send_fcm_notification
+from app.workers.knowledge_processor import process_queue_item, run_processor
+
+# Try to import enterprise modules
+try:
+    from app.enterprise.services.feature_access import require_accessible_subscription
+    HAS_ENTERPRISE = True
+except ImportError:
+    HAS_ENTERPRISE = False
+
+router = APIRouter()
+logger = get_logger(__name__)
+
+# Add this near the top of the file with other constants
+TEMP_DIR = "temp"
+
+# PDF upload limits (see app/core/file_validation.py)
+MAX_PDF_SIZE = 25 * 1024 * 1024  # 25MB per file
+MAX_PDF_FILES = 20  # per request
+ALLOWED_PDF_TYPES = ("application/pdf",)
+
+# Import processor status from shared module
+from app.core.processor import PROCESSOR_STATUS
+
+
+def resolve_plan_max_links(subscription) -> int:
+    """Per-source sub-page crawl cap: the enterprise plan's ``max_sub_pages``
+    when enterprise is active, otherwise the self-host configurable
+    ``KB_MAX_LINKS`` (so self-hosted installs actually control crawl scope)."""
+    if HAS_ENTERPRISE and subscription:
+        return subscription.plan.max_sub_pages
+    return settings.KB_MAX_LINKS
+
+
+class UrlsRequest(BaseModel):
+    org_id: UUID
+    pdf_urls: List[str] = []
+    websites: List[str] = []
+    sitemaps: List[str] = []
+    agent_id: Optional[str] = None
+    # Optional cap on pages per website source (e.g. 1 = "this page only"). Always
+    # clamped to the plan's max_sub_pages server-side; None uses the plan limit.
+    max_links: Optional[int] = None
+    # How far link-following may wander from the seed URL: 'path' | 'host' |
+    # 'domain'. None uses the default (the seed's own host).
+    crawl_scope: Optional[str] = None
+
+    @field_validator('max_links')
+    @classmethod
+    def validate_max_links(cls, v):
+        if v is not None and v < 1:
+            raise ValueError('max_links must be at least 1')
+        return v
+
+    @field_validator('crawl_scope')
+    @classmethod
+    def validate_crawl_scope(cls, v):
+        if v is not None and v not in CRAWL_SCOPES:
+            raise ValueError(f"crawl_scope must be one of {', '.join(CRAWL_SCOPES)}")
+        return v
+
+
+    @field_validator('websites', 'sitemaps')
+    @classmethod
+    def validate_website_url_format(cls, v):
+        """Validate that each website/sitemap URL is in https://domainname format"""
+        import re
+        validated_urls = []
+        
+        for url in v:
+            if not url:
+                raise ValueError('URL cannot be empty')
+            
+            # Remove trailing slashes and whitespace
+            url = url.strip().rstrip('/')
+            
+            # Check if URL starts with https://
+            if not url.startswith('https://'):
+                raise ValueError('URL must start with https://')
+            
+            # Extract domain part after https://
+            domain_part = url[8:]  # Remove 'https://'
+            
+            # Check if domain part is not empty
+            if not domain_part:
+                raise ValueError('URL must contain a domain name')
+            
+            # Allow alphanumeric, dots, hyphens, and forward slashes for paths
+            if not re.match(r'^[a-zA-Z0-9.-]+(/.*)?$', domain_part):
+                raise ValueError('Invalid URL format')
+            
+            # Ensure domain has at least one dot (for TLD)
+            domain_only = domain_part.split('/')[0]  # Get just the domain part before any path
+            if '.' not in domain_only:
+                raise ValueError('URL must contain a valid domain with TLD')
+            
+            validated_urls.append(url)
+        
+        return validated_urls
+    
+    @field_validator('pdf_urls')
+    @classmethod
+    def validate_pdf_url_format(cls, v):
+        """Validate that each PDF URL is in https://domainname format"""
+        import re
+        validated_urls = []
+        
+        for url in v:
+            if not url:
+                raise ValueError('URL cannot be empty')
+            
+            # Remove trailing slashes and whitespace
+            url = url.strip().rstrip('/')
+            
+            # Check if URL starts with https://
+            if not url.startswith('https://'):
+                raise ValueError('URL must start with https://')
+            
+            # Extract domain part after https://
+            domain_part = url[8:]  # Remove 'https://'
+            
+            # Check if domain part is not empty
+            if not domain_part:
+                raise ValueError('URL must contain a domain name')
+            
+            # Allow alphanumeric, dots, hyphens, and forward slashes for paths
+            if not re.match(r'^[a-zA-Z0-9.-]+(/.*)?$', domain_part):
+                raise ValueError('Invalid URL format')
+            
+            # Ensure domain has at least one dot (for TLD)
+            domain_only = domain_part.split('/')[0]  # Get just the domain part before any path
+            if '.' not in domain_only:
+                raise ValueError('URL must contain a valid domain with TLD')
+            
+            validated_urls.append(url)
+        
+        return validated_urls
+    
+
+@router.post("/upload/pdf")
+async def upload_pdf_files(
+    files: List[UploadFile] = File(...),
+    org_id: str = Form(...),
+    agent_id: Optional[str] = Form(None),
+    current_user: User = Depends(require_permissions("manage_knowledge")),
+    db: Session = Depends(get_db)
+):
+    """Upload PDF files to knowledge base"""
+    try:
+        # Convert org_id string to UUID for comparison
+        try:
+            org_uuid = UUID(org_id)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid org_id")
+        if current_user.organization_id != org_uuid:
+            raise HTTPException(status_code=403, detail="Unauthorized access to organization")
+
+        if len(files) > MAX_PDF_FILES:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Too many files: at most {MAX_PDF_FILES} per request",
+            )
+
+        # Validate the agent (format + ownership) once, up front.
+        agent_uuid = None
+        if agent_id:
+            try:
+                agent_uuid = UUID(agent_id)
+            except ValueError:
+                raise HTTPException(status_code=400, detail="Invalid agent_id")
+            agent = AgentRepository(db).get_agent(agent_uuid)
+            if not agent or agent.organization_id != org_uuid:
+                # 404 (not 403) so we don't reveal another org's agent existence.
+                raise HTTPException(status_code=404, detail="Agent not found")
+
+        # Bound for the non-enterprise path (resolve_plan_max_links below).
+        subscription = None
+        # Check enterprise subscription limits if enterprise module is available
+        if HAS_ENTERPRISE:
+            knowledge_repo = KnowledgeRepository(db)
+
+            # Accessible = active/trial/past-due-in-period OR cancelled-but-
+            # still-in-paid-period; raises 403 when the org has no plan.
+            subscription = require_accessible_subscription(db, org_uuid)
+
+            # Get current knowledge sources count
+            current_count = knowledge_repo.count_by_organization(org_uuid)
+
+            # Check if adding these files would exceed the limit
+            new_count = current_count + len(files)
+            if subscription.plan.max_knowledge_sources is not None and new_count > subscription.plan.max_knowledge_sources:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail=f"Cannot add files: Maximum number of knowledge sources ({subscription.plan.max_knowledge_sources}) would be exceeded"
+                )
+
+        queue_repo = KnowledgeQueueRepository(db)
+        queued_items = []
+
+        # Process each file
+        for file in files:
+            # Validate content-type, size, and magic bytes; returns the bytes.
+            content = await read_validated(
+                file,
+                max_size=MAX_PDF_SIZE,
+                allowed_content_types=ALLOWED_PDF_TYPES,
+                magic_prefix=PDF_MAGIC,
+                label="PDF",
+            )
+            # Sanitize the filename (strip path components, add a UUID prefix)
+            # to prevent path traversal and overwrites.
+            stored_name = safe_filename(file.filename)
+            source_type = "pdf_file"
+
+            # Check if S3 storage is enabled
+            if settings.S3_FILE_STORAGE:
+                folder = f"knowledge/{org_uuid}"
+                file_url = await upload_file_to_s3(content, folder, stored_name, content_type="application/pdf")
+                logger.debug(f"Uploaded PDF to S3: {file_url}")
+                file_path = await get_s3_signed_url(file_url)
+                source_type = "pdf_url"
+            else:
+                # Save file locally
+                os.makedirs(TEMP_DIR, exist_ok=True)
+                file_path = os.path.join(TEMP_DIR, stored_name)
+                with open(file_path, "wb") as f:
+                    f.write(content)
+
+            # Create queue item with user_id
+            queue_item = KnowledgeQueue(
+                organization_id=org_uuid,
+                agent_id=agent_uuid,
+                user_id=current_user.id,
+                source_type=source_type,
+                source=file_path,
+                status=QueueStatus.PENDING,
+                queue_metadata={
+                    "max_links": resolve_plan_max_links(subscription)
+                }
+            )
+            queued_items.append(queue_repo.create(queue_item))
+
+        return {
+            "message": "PDFs queued for processing,it will take a while to process, we will notify you when it is done",
+            "queue_items": [{"id": item.id, "status": item.status} for item in queued_items]
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error uploading PDFs: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to upload files")
+
+
+def _get_crawled_urls_info(crawled_urls):
+    """Get comprehensive information about crawled URLs"""
+    if not crawled_urls or not isinstance(crawled_urls, list):
+        return {
+            "latest_url": None,
+            "all_urls": [],
+            "count": 0
+        }
+    
+    all_urls = []
+    latest_url = None
+    
+    try:
+        for item in crawled_urls:
+            if isinstance(item, str):
+                # New format: just URL strings
+                all_urls.append(item)
+                latest_url = item  # Keep updating to get the last one
+            elif isinstance(item, dict) and "url" in item:
+                # Legacy format: objects with url, timestamp, status
+                all_urls.append(item["url"])
+                latest_url = item["url"]
+    except (KeyError, TypeError) as e:
+        logger.warning(f"Error processing crawled URLs: {str(e)}")
+    
+    return {
+        "latest_url": latest_url,
+        "all_urls": all_urls,
+        "count": len(all_urls)
+    }
+
+
+@router.get("/explore/progress/{queue_id}")
+async def get_explore_progress(
+    queue_id: int,
+    db: Session = Depends(get_db)
+):
+    """Get progress status for knowledge base processing"""
+    try:
+        # Deliberately unauthenticated — it polls the job the equally public
+        # /explore/add-url just created. That makes scoping it to the shared
+        # explore org essential: queue ids are sequential, so an unscoped
+        # lookup let anyone walk every tenant's ingestion jobs and read their
+        # source URLs and crawled-page lists.
+        queue_item = db.query(KnowledgeQueue).filter(
+            KnowledgeQueue.id == queue_id,
+            KnowledgeQueue.organization_id == UUID(settings.EXPLORE_SOURCE_ORG_ID)
+        ).first()
+
+        # Refresh the item to get the latest data from the database
+        if queue_item:
+            db.refresh(queue_item)
+
+        if not queue_item:
+            raise HTTPException(status_code=404, detail="Queue item not found")
+
+        # Get processing stage information
+        stage_info = {
+            "not_started": {"label": "Initializing", "step": 1, "total": 4},
+            "NOT_STARTED": {"label": "Initializing", "step": 1, "total": 4},
+            "crawling": {"label": "Crawling Website", "step": 2, "total": 4},
+            "CRAWLING": {"label": "Crawling Website", "step": 2, "total": 4},
+            "embedding": {"label": "Processing Content", "step": 3, "total": 4},
+            "EMBEDDING": {"label": "Processing Content", "step": 3, "total": 4},
+            "completed": {"label": "Completed", "step": 4, "total": 4},
+            "COMPLETED": {"label": "Completed", "step": 4, "total": 4}
+        }
+        
+        # Safely get enum values
+        def get_enum_value(enum_field):
+            if enum_field is None:
+                return None
+            return enum_field.value if hasattr(enum_field, 'value') else str(enum_field)
+        
+        # Get processing stage as string
+        processing_stage_str = get_enum_value(queue_item.processing_stage) or "NOT_STARTED"
+        status_str = get_enum_value(queue_item.status) or "PENDING"
+        
+        # Override stage to "COMPLETED" if status is COMPLETED
+        if status_str.upper() == "COMPLETED":
+            processing_stage_str = "COMPLETED"
+        
+        logger.debug(f"Queue {queue_id}: status='{status_str}', stage='{processing_stage_str}', progress={queue_item.progress_percentage}, is_complete={status_str.upper() in ['COMPLETED', 'FAILED']}")
+        logger.debug(f"Queue {queue_id}: crawled_urls count={len(queue_item.crawled_urls) if queue_item.crawled_urls else 0}")
+        logger.debug(f"Queue {queue_id}: crawled_urls raw value: {queue_item.crawled_urls}")
+        
+        current_stage = stage_info.get(processing_stage_str, 
+                                     {"label": "Processing", "step": 1, "total": 4})
+        
+        # Calculate overall progress based on stage and percentage
+        if status_str.upper() == "COMPLETED":
+            overall_progress = 100.0
+        else:
+            stage_weight = (current_stage["step"] - 1) / current_stage["total"] * 100
+            stage_progress = (queue_item.progress_percentage or 0) / current_stage["total"]
+            overall_progress = min(100, stage_weight + stage_progress)
+        
+        # Get crawled URLs information
+        crawled_urls_info = _get_crawled_urls_info(queue_item.crawled_urls)
+        
+        return {
+            "queue_id": queue_item.id,
+            "status": status_str,
+            "processing_stage": processing_stage_str,
+            "progress_percentage": queue_item.progress_percentage or 0,
+            "overall_progress": round(overall_progress, 1),
+            "current_stage": current_stage,
+            "source": queue_item.source,
+            "total_items": queue_item.total_items or 0,
+            "processed_items": queue_item.processed_items or 0,
+            "created_at": queue_item.created_at.isoformat() if queue_item.created_at else None,
+            "updated_at": queue_item.updated_at.isoformat() if queue_item.updated_at else None,
+            "crawled_url": crawled_urls_info["latest_url"],
+            "crawled_urls": crawled_urls_info["all_urls"],
+            "crawled_count": crawled_urls_info["count"],
+            "is_complete": status_str.upper() in ["COMPLETED", "FAILED"],
+            "error_message": getattr(queue_item, 'error_message', None)
+        }
+
+    except HTTPException:
+        # Otherwise the not-found above is reported as a 500 echoing its detail.
+        raise
+    except Exception as e:
+        logger.error(f"Error getting progress for queue {queue_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/add/urls")
+async def add_urls(
+    request: UrlsRequest = Body(...),
+    current_user: User = Depends(require_permissions("manage_knowledge")),
+    db: Session = Depends(get_db)
+):
+    """Add URLs to knowledge base"""
+    try:
+        # Verify organization access
+        if current_user.organization_id != request.org_id:
+            raise HTTPException(status_code=403, detail="Unauthorized access to organization")
+
+        # Validate the agent (format + ownership) once, up front.
+        agent_uuid = None
+        if request.agent_id:
+            try:
+                agent_uuid = UUID(request.agent_id)
+            except (ValueError, TypeError):
+                raise HTTPException(status_code=400, detail="Invalid agent_id")
+            agent = AgentRepository(db).get_agent(agent_uuid)
+            if not agent or agent.organization_id != request.org_id:
+                # 404 (not 403) so we don't reveal another org's agent existence.
+                raise HTTPException(status_code=404, detail="Agent not found")
+
+        # Bound for the non-enterprise path (resolve_plan_max_links below).
+        subscription = None
+        # Check enterprise subscription limits if enterprise module is available
+        if HAS_ENTERPRISE:
+            knowledge_repo = KnowledgeRepository(db)
+
+            # Accessible = active/trial/past-due-in-period OR cancelled-but-
+            # still-in-paid-period; raises 403 when the org has no plan.
+            subscription = require_accessible_subscription(db, request.org_id)
+
+            # Get current knowledge sources count
+            current_count = knowledge_repo.count_by_organization(request.org_id)
+
+            # Calculate total new URLs to be added (each sitemap is one source)
+            total_new_urls = len(request.pdf_urls) + len(request.websites) + len(request.sitemaps)
+
+            # Check if adding these URLs would exceed the limit
+            new_count = current_count + total_new_urls
+            if subscription.plan.max_knowledge_sources is not None and new_count > subscription.plan.max_knowledge_sources:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail=f"Cannot add URLs: Maximum number of knowledge sources ({subscription.plan.max_knowledge_sources}) would be exceeded"
+                )
+
+        queue_repo = KnowledgeQueueRepository(db)
+        knowledge_repo = KnowledgeRepository(db)
+        queued_items = []
+
+        # Per-source sub-page cap: the plan limit, optionally narrowed by the
+        # request (e.g. "this page only" -> max_links=1), never allowed to
+        # exceed the plan limit.
+        plan_sub_pages = resolve_plan_max_links(subscription)
+        website_max_links = (
+            min(request.max_links, plan_sub_pages) if request.max_links else plan_sub_pages
+        )
+
+        # Check for duplicate URLs
+        all_urls = request.pdf_urls + request.websites + request.sitemaps
+        existing_sources = knowledge_repo.get_by_sources(request.org_id, all_urls)
+
+        if existing_sources:
+            duplicate_urls = [source.source for source in existing_sources]
+            return {
+                "error": "Some URLs already exist in your knowledge base",
+                "duplicate_urls": duplicate_urls
+            }
+
+        # Queue PDF URLs with user_id
+        for url in request.pdf_urls:
+            queue_item = KnowledgeQueue(
+                organization_id=request.org_id,
+                agent_id=agent_uuid,
+                user_id=current_user.id,
+                source_type='pdf_url',
+                source=url,
+                status=QueueStatus.PENDING,
+                queue_metadata={"max_links": plan_sub_pages}
+            )
+            queued_items.append(queue_repo.create(queue_item))
+
+        # Queue websites with user_id
+        for url in request.websites:
+            queue_item = KnowledgeQueue(
+                organization_id=request.org_id,
+                agent_id=agent_uuid,
+                user_id=current_user.id,
+                source_type='website',
+                source=url,
+                status=QueueStatus.PENDING,
+                queue_metadata={
+                    "max_links": website_max_links,
+                    # Omitted (None) means the crawler's default: the seed's host.
+                    "crawl_scope": request.crawl_scope,
+                }
+            )
+            queued_items.append(queue_repo.create(queue_item))
+
+        # Queue sitemaps — one source each; pages are discovered from the sitemap
+        # and capped at the plan's sub-page limit (no per-request crawl scope).
+        for url in request.sitemaps:
+            queue_item = KnowledgeQueue(
+                organization_id=request.org_id,
+                agent_id=agent_uuid,
+                user_id=current_user.id,
+                source_type='sitemap',
+                source=url,
+                status=QueueStatus.PENDING,
+                queue_metadata={"max_links": plan_sub_pages}
+            )
+            queued_items.append(queue_repo.create(queue_item))
+
+        return {
+            "message": "URLs queued for processing, it will take a while to process, we will notify you when it is done",
+            "queue_items": [{"id": item.id, "status": item.status} for item in queued_items]
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error adding URLs: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to add URLs")
+
+
+class TextSourceRequest(BaseModel):
+    org_id: UUID
+    title: str
+    content: str
+    agent_id: Optional[str] = None
+
+    @field_validator('title')
+    @classmethod
+    def validate_title(cls, v):
+        if not v or not v.strip():
+            raise ValueError('Title cannot be empty')
+        return v.strip()
+
+    @field_validator('content')
+    @classmethod
+    def validate_content(cls, v):
+        if not v or not v.strip():
+            raise ValueError('Content cannot be empty')
+        return v
+
+
+@router.post("/add/text")
+async def add_text_source(
+    request: TextSourceRequest = Body(...),
+    current_user: User = Depends(require_permissions("manage_knowledge")),
+    db: Session = Depends(get_db)
+):
+    """Create a knowledge source from pasted text and index it immediately."""
+    try:
+        if current_user.organization_id != request.org_id:
+            raise HTTPException(status_code=403, detail="Unauthorized access to organization")
+
+        # Validate the agent (format + ownership) up front.
+        agent_uuid = None
+        if request.agent_id:
+            try:
+                agent_uuid = UUID(request.agent_id)
+            except (ValueError, TypeError):
+                raise HTTPException(status_code=400, detail="Invalid agent_id")
+            agent = AgentRepository(db).get_agent(agent_uuid)
+            if not agent or agent.organization_id != request.org_id:
+                raise HTTPException(status_code=404, detail="Agent not found")
+
+        knowledge_repo = KnowledgeRepository(db)
+
+        # Enforce the source-count limit (enterprise only).
+        if HAS_ENTERPRISE:
+            subscription = require_accessible_subscription(db, request.org_id)
+            current_count = knowledge_repo.count_by_organization(request.org_id)
+            max_sources = subscription.plan.max_knowledge_sources
+            if max_sources is not None and current_count + 1 > max_sources:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail=f"Cannot add source: Maximum number of knowledge sources ({max_sources}) would be exceeded"
+                )
+
+        # Reject a duplicate source title.
+        if knowledge_repo.get_by_sources(request.org_id, [request.title]):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="A knowledge source with this title already exists"
+            )
+
+        knowledge = page_editor.create_text_source(
+            db, request.org_id, request.title, request.content, agent_uuid
+        )
+        return {
+            "message": "Text source added",
+            "knowledge": {"id": knowledge.id, "name": knowledge.source, "type": knowledge.source_type.value},
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error adding text source: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to add text source")
+
+
+@router.post("/link")
+async def link_knowledge_to_agent(
+    knowledge_id: int,
+    agent_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Link existing knowledge to an agent"""
+    try:
+        knowledge_repo = KnowledgeRepository(db)
+        link_repo = KnowledgeToAgentRepository(db)
+
+        # Verify knowledge exists and belongs to user's org
+        knowledge = knowledge_repo.get_by_id(knowledge_id)
+        if not knowledge or knowledge.organization_id != current_user.organization_id:
+            raise HTTPException(status_code=404, detail="Knowledge source not found or unauthorized access")
+
+        # Convert agent_id to UUID
+        try:
+            agent_uuid = UUID(agent_id)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid agent ID format")
+
+        # The agent must belong to the caller's org, not just the knowledge.
+        # 404 (not 403) so we don't reveal another org's agent existence.
+        agent = AgentRepository(db).get_agent(agent_uuid)
+        if not agent or agent.organization_id != current_user.organization_id:
+            raise HTTPException(status_code=404, detail="Agent not found")
+
+        # Check if link already exists
+        existing_link = link_repo.get_by_ids(knowledge_id, agent_uuid)
+        if existing_link:
+            raise HTTPException(status_code=400, detail="Knowledge is already linked to this agent")
+
+        # The link row and the vector-store filters must land together: retrieval
+        # matches on filters->'agent_id', so a committed link whose filter update
+        # failed shows as linked in the dashboard while the agent can retrieve
+        # nothing. commit=False defers to the single commit below.
+        link_repo.create(
+            KnowledgeToAgent(knowledge_id=knowledge_id, agent_id=agent_uuid),
+            commit=False,
+        )
+        knowledge_vector_links.add_agent(db, knowledge, agent_uuid)
+        db.commit()
+
+        return {"message": "Knowledge linked to agent successfully"}
+
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error linking knowledge: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/unlink")
+async def unlink_knowledge_from_agent(
+    knowledge_id: int,
+    agent_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Unlink knowledge from an agent"""
+    try:
+        # Convert agent_id to UUID
+        try:
+            agent_uuid = UUID(agent_id)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid agent ID format")
+
+        knowledge_repo = KnowledgeRepository(db)
+        link_repo = KnowledgeToAgentRepository(db)
+
+        # Verify knowledge exists and belongs to user's org
+        knowledge = knowledge_repo.get_by_id(knowledge_id)
+        if not knowledge or knowledge.organization_id != current_user.organization_id:
+            raise HTTPException(status_code=404, detail="Knowledge source not found or unauthorized access")
+
+        # And the agent must be in the caller's org too.
+        agent = AgentRepository(db).get_agent(agent_uuid)
+        if not agent or agent.organization_id != current_user.organization_id:
+            raise HTTPException(status_code=404, detail="Agent not found")
+
+        # Same transaction as the filter update below — an unlink that commits
+        # the row deletion but leaves the agent_id in the vector filters keeps
+        # the source retrievable by an agent the dashboard shows as unlinked.
+        success = link_repo.delete_by_ids(knowledge_id, agent_uuid, commit=False)
+        if not success:
+            raise HTTPException(status_code=404, detail="Link not found")
+
+        knowledge_vector_links.remove_agent(db, knowledge, agent_uuid)
+        db.commit()
+
+        return {"message": "Knowledge unlinked from agent successfully"}
+
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error unlinking knowledge: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+def _linked_agents_map(db: Session, knowledge_items) -> dict:
+    """Map knowledge_id -> [{id, name}] of the agents each source is linked to.
+
+    Batched into a single query over the page's sources to avoid N+1 lookups.
+    """
+    ids = [k.id for k in knowledge_items]
+    if not ids:
+        return {}
+    rows = (
+        db.query(KnowledgeToAgent.knowledge_id, Agent.id, Agent.name, Agent.display_name)
+        .join(Agent, Agent.id == KnowledgeToAgent.agent_id)
+        .filter(KnowledgeToAgent.knowledge_id.in_(ids))
+        .all()
+    )
+    result: dict = {}
+    for knowledge_id, agent_id, name, display_name in rows:
+        result.setdefault(knowledge_id, []).append(
+            {"id": str(agent_id), "name": display_name or name}
+        )
+    return result
+
+
+@router.get("/agent/{agent_id}")
+async def get_knowledge_by_agent(
+    agent_id: str,
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=10, ge=1, le=100),
+    current_user: User = Depends(
+        require_any_permission("view_knowledge", "manage_knowledge")),
+    db: Session = Depends(get_db)
+):
+    """Get knowledge sources and their data for an agent with pagination"""
+    try:
+        # Convert agent_id to UUID
+        try:
+            agent_uuid = UUID(agent_id)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid agent ID format")
+
+        # The agent must belong to the caller's organization. count_by_agent and
+        # get_by_agent below filter on agent_uuid alone, so without this an id
+        # from another tenant returns that tenant's knowledge inventory — the
+        # link/unlink routes have always checked this; this read never did.
+        agent = db.query(Agent).filter(Agent.id == agent_uuid).first()
+        if not agent or agent.organization_id != current_user.organization_id:
+            raise HTTPException(status_code=404, detail="Agent not found")
+
+        logger.debug(f"Getting knowledge for agent {agent_uuid}")
+        knowledge_repo = KnowledgeRepository(db)
+
+        # Get total count and paginated knowledge items
+        total_count = knowledge_repo.count_by_agent(agent_uuid)
+        logger.debug(f"Total count for agent {agent_uuid}: {total_count}")
+
+        knowledge_items = knowledge_repo.get_by_agent(
+            agent_uuid,
+            skip=(page - 1) * page_size,
+            limit=page_size
+        )
+
+
+        agents_map = _linked_agents_map(db, knowledge_items)
+        result = []
+        for k in knowledge_items:
+            # Base knowledge data
+            knowledge_data = {
+                "id": k.id,
+                "name": k.source,
+                "type": k.source_type.value,
+                "agents": agents_map.get(k.id, []),
+                "pages": []
+            }
+
+            # Query the actual data if table_name is specified
+            if k.table_name and k.schema:
+                try:
+                    # Create a safe query to get unique records with cleaned source
+                    query = text(f"""
+                        SELECT DISTINCT
+                            {page_editor.PAGE_ID_EXPR} as subpage,
+                            id,
+                            created_at,
+                            updated_at
+                        FROM {k.schema}."{k.table_name}"
+                        WHERE name = :source
+                    """)
+
+                    # Execute query with parameters
+                    rows = db.execute(query, {"source": k.source})
+
+                    # Group pages by subpage
+                    pages_dict = {}
+                    for row in rows:
+                        subpage = row.subpage
+                        if subpage not in pages_dict:
+                            pages_dict[subpage] = {
+                                "subpage": subpage,
+                                "created_at": row.created_at.isoformat() if row.created_at else None,
+                                "updated_at": row.updated_at.isoformat() if row.updated_at else None
+                            }
+
+                    knowledge_data["pages"] = list(pages_dict.values())
+
+                except Exception as e:
+                    logger.error(f"Error querying table {k.table_name}: {str(e)}")
+                    knowledge_data["error"] = f"Error accessing data: {str(e)}"
+
+            result.append(knowledge_data)
+
+        
+        return {
+            "knowledge": result,
+            "pagination": {
+                "total": total_count,
+                "page": page,
+                "page_size": page_size,
+                "total_pages": (total_count + page_size - 1) // page_size
+            }
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting knowledge by agent: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+def _enum_value(enum_field):
+    """Safely unwrap an enum field to its string value (or None)."""
+    if enum_field is None:
+        return None
+    return enum_field.value if hasattr(enum_field, 'value') else str(enum_field)
+
+
+def _serialize_queue_item(item: KnowledgeQueue) -> dict:
+    """Shape a KnowledgeQueue row for the queue-list API responses."""
+    return {
+        "id": item.id,
+        "source": item.source,
+        "source_type": item.source_type,
+        "status": _enum_value(item.status),
+        "error": item.error,
+        "created_at": item.created_at.isoformat() if item.created_at else None,
+        "updated_at": item.updated_at.isoformat() if item.updated_at else None,
+        "processing_stage": _enum_value(item.processing_stage),
+        "progress_percentage": item.progress_percentage or 0,
+    }
+
+
+@router.get("/queue/agent/{agent_id}")
+async def get_agent_queue_items(
+    agent_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get all queue items (pending, processing, failed) for an agent"""
+    try:
+        # Convert agent_id to UUID
+        try:
+            agent_uuid = UUID(agent_id)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid agent ID format")
+
+        logger.debug(f"Getting queue items for agent {agent_uuid}")
+
+        # Get queue items for this agent (excluding completed ones)
+        queue_items = db.query(KnowledgeQueue).filter(
+            KnowledgeQueue.agent_id == agent_uuid,
+            KnowledgeQueue.organization_id == current_user.organization_id,
+            KnowledgeQueue.status.in_([QueueStatus.PENDING, QueueStatus.PROCESSING, QueueStatus.FAILED])
+        ).order_by(KnowledgeQueue.created_at.desc()).all()
+
+        return {"queue_items": [_serialize_queue_item(item) for item in queue_items]}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting queue items for agent: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/queue/organization/{org_id}")
+async def get_organization_queue_items(
+    org_id: UUID,
+    current_user: User = Depends(
+        require_any_permission("view_knowledge", "manage_knowledge")),
+    db: Session = Depends(get_db)
+):
+    """Get all in-flight queue items (pending, processing, failed) for an org."""
+    try:
+        if current_user.organization_id != org_id:
+            raise HTTPException(status_code=403, detail="Unauthorized access to organization")
+
+        queue_items = db.query(KnowledgeQueue).filter(
+            KnowledgeQueue.organization_id == org_id,
+            KnowledgeQueue.status.in_([QueueStatus.PENDING, QueueStatus.PROCESSING, QueueStatus.FAILED])
+        ).order_by(KnowledgeQueue.created_at.desc()).all()
+
+        return {"queue_items": [_serialize_queue_item(item) for item in queue_items]}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting queue items for org: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/queue/{queue_id}")
+async def delete_queue_item(
+    queue_id: int,
+    current_user: User = Depends(require_permissions("manage_knowledge")),
+    db: Session = Depends(get_db)
+):
+    """Delete a queue item (only if failed or pending)"""
+    try:
+        queue_repo = KnowledgeQueueRepository(db)
+        item = queue_repo.get_by_id(queue_id)
+        
+        if not item:
+            raise HTTPException(status_code=404, detail="Queue item not found")
+            
+        if item.organization_id != current_user.organization_id:
+            raise HTTPException(status_code=403, detail="Unauthorized")
+            
+        # Only allow deleting failed or pending items
+        # We might want to allow deleting processing items if they are stuck, but let's be safe for now
+        if item.status not in [QueueStatus.FAILED, QueueStatus.PENDING]:
+            raise HTTPException(
+                status_code=400, 
+                detail="Only failed or pending items can be removed from queue"
+            )
+            
+        db.delete(item)
+        db.commit()
+        
+        return {"message": "Queue item deleted successfully"}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error deleting queue item: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/organization/{org_id}")
+
+async def get_knowledge_by_organization(
+    org_id: str,
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=10, ge=1, le=100),
+    current_user: User = Depends(
+        require_any_permission("view_knowledge", "manage_knowledge")),
+    db: Session = Depends(get_db)
+):
+    """Get knowledge sources and their data for an organization with pagination"""
+    try:
+        # Convert org_id to UUID
+        try:
+            org_uuid = UUID(org_id)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid organization ID format")
+
+        logger.debug(f"Getting knowledge for organization {org_uuid}")
+
+        # Verify organization access
+        if current_user.organization_id != org_uuid:
+            raise HTTPException(status_code=403, detail="Unauthorized access to organization")
+
+        knowledge_repo = KnowledgeRepository(db)
+
+        # Get total count and paginated knowledge items
+        total_count = knowledge_repo.count_by_organization(org_uuid)
+        logger.debug(f"Total count for organization {org_uuid}: {total_count}")
+
+        knowledge_items = knowledge_repo.get_by_organization(
+            org_uuid,
+            skip=(page - 1) * page_size,
+            limit=page_size
+        )
+        logger.debug(f"Knowledge items for organization {org_uuid}: {knowledge_items}")
+
+        agents_map = _linked_agents_map(db, knowledge_items)
+        result = []
+        for k in knowledge_items:
+            # Base knowledge data
+            knowledge_data = {
+                "id": k.id,
+                "name": k.source,
+                "type": k.source_type.value,
+                "agents": agents_map.get(k.id, []),
+                "pages": []
+            }
+
+            # Query the actual data if table_name is specified
+            if k.table_name and k.schema:
+                try:
+                    # Create a safe query to get unique records with cleaned source
+                    query = text(f"""
+                        SELECT DISTINCT
+                            {page_editor.PAGE_ID_EXPR} as subpage,
+                            id,
+                            created_at,
+                            updated_at
+                        FROM {k.schema}."{k.table_name}"
+                        WHERE name = :source
+                    """)
+
+                    # Execute query with parameters
+                    rows = db.execute(query, {"source": k.source})
+
+                    # Group pages by subpage
+                    pages_dict = {}
+                    for row in rows:
+                        subpage = row.subpage
+                        if subpage not in pages_dict:
+                            pages_dict[subpage] = {
+                                "subpage": subpage,
+                                "created_at": row.created_at.isoformat() if row.created_at else None,
+                                "updated_at": row.updated_at.isoformat() if row.updated_at else None
+                            }
+
+                    knowledge_data["pages"] = list(pages_dict.values())
+
+                except Exception as e:
+                    logger.error(f"Error querying table {k.table_name}: {str(e)}")
+                    knowledge_data["error"] = f"Error accessing data: {str(e)}"
+
+            result.append(knowledge_data)
+
+        
+        return {
+            "knowledge": result,
+            "pagination": {
+                "total": total_count,
+                "page": page,
+                "page_size": page_size,
+                "total_pages": (total_count + page_size - 1) // page_size
+            }
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting knowledge by organization: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/queue/{queue_id}")
+async def get_queue_status(
+    queue_id: int,
+    current_user: User = Depends(
+        require_any_permission("view_knowledge", "manage_knowledge")),
+    db: Session = Depends(get_db)
+):
+    """Get status of a queued knowledge item"""
+    try:
+        queue_repo = KnowledgeQueueRepository(db)
+        item = db.query(KnowledgeQueue).filter(
+            KnowledgeQueue.id == queue_id).first()
+
+        if not item:
+            return {"error": "Queue item not found"}
+
+        if item.organization_id != current_user.organization_id:
+            return {"error": "Unauthorized access to queue item"}
+
+        return {
+            "id": item.id,
+            "status": item.status,
+            "error": item.error,
+            "created_at": item.created_at,
+            "updated_at": item.updated_at
+        }
+
+    except Exception as e:
+        logger.error(f"Error getting queue status: {str(e)}")
+        return {"error": str(e)}
+
+
+@router.get("/processor/status")
+async def get_processor_status(
+    current_user: User = Depends(
+        require_any_permission("view_knowledge", "manage_knowledge")),
+    db: Session = Depends(get_db)
+):
+    """Get status of the knowledge processor for user's organization"""
+    try:
+        # Get counts of items in different states for user's items
+        base_query = db.query(KnowledgeQueue)\
+            .filter(
+                KnowledgeQueue.organization_id == current_user.organization_id,
+                KnowledgeQueue.user_id == current_user.id  # Add user filter
+        )
+
+        pending_count = base_query.filter(
+            KnowledgeQueue.status == QueueStatus.PENDING
+        ).count()
+
+        processing_count = base_query.filter(
+            KnowledgeQueue.status == QueueStatus.PROCESSING
+        ).count()
+
+        completed_count = base_query.filter(
+            KnowledgeQueue.status == QueueStatus.COMPLETED
+        ).count()
+
+        failed_count = base_query.filter(
+            KnowledgeQueue.status == QueueStatus.FAILED
+        ).count()
+
+        return {
+            "last_run": PROCESSOR_STATUS["last_run"],
+            "is_running": PROCESSOR_STATUS["is_running"],
+            "error": PROCESSOR_STATUS["error"],
+            "queue_status": {
+                "pending": pending_count,
+                "processing": processing_count,
+                "completed": completed_count,
+                "failed": failed_count
+            }
+        }
+
+    except Exception as e:
+        logger.error(f"Error getting processor status: {str(e)}")
+        return {"error": str(e)}
+
+
+@router.delete("/{knowledge_id}")
+async def delete_knowledge(
+    knowledge_id: int,
+    current_user: User = Depends(require_permissions("manage_knowledge")),
+    db: Session = Depends(get_db)
+):
+    """Delete a knowledge source and its associated data"""
+    try:
+        knowledge_repo = KnowledgeRepository(db)
+
+        # Verify knowledge exists and belongs to user's org
+        knowledge = knowledge_repo.get_by_id(knowledge_id)
+        if not knowledge:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Knowledge source not found"
+            )
+
+        if knowledge.organization_id != current_user.organization_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Unauthorized access to knowledge source"
+            )
+
+        # Delete knowledge and associated data
+        success = knowledge_repo.delete_with_data(knowledge_id)
+
+        if success:
+            return {"message": "Knowledge source deleted successfully"}
+        
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to delete knowledge source"
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error deleting knowledge: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
+
+
+@router.get("/{knowledge_id}/content")
+async def get_knowledge_content(
+    knowledge_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get knowledge content chunks from vector database"""
+    try:
+        knowledge_repo = KnowledgeRepository(db)
+        
+        # Verify knowledge exists and belongs to user's org
+        knowledge = knowledge_repo.get_by_id(knowledge_id)
+        if not knowledge:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Knowledge source not found"
+            )
+        
+        if knowledge.organization_id != current_user.organization_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Unauthorized access to knowledge source"
+            )
+        
+        # Query the vector database for content chunks
+        if not knowledge.table_name or not knowledge.schema:
+            return {
+                "knowledge_id": knowledge_id,
+                "source": knowledge.source,
+                "chunks": []
+            }
+        
+        try:
+            # Get all chunks for this knowledge source
+            query = text(f"""
+                SELECT 
+                    id,
+                    content,
+                    meta_data,
+                    created_at
+                FROM {knowledge.schema}."{knowledge.table_name}"
+                WHERE name = :source
+                ORDER BY created_at ASC
+            """)
+
+            
+            rows = db.execute(query, {"source": knowledge.source}).fetchall()
+            
+            chunks = []
+            for row in rows:
+                chunks.append({
+                    "id": row.id,
+                    "content": row.content,
+                    "metadata": row.meta_data,
+                    "created_at": row.created_at.isoformat() if row.created_at else None
+                })
+            
+            return {
+                "knowledge_id": knowledge_id,
+                "source": knowledge.source,
+                "source_type": knowledge.source_type.value,
+                "chunks": chunks
+            }
+            
+        except Exception as e:
+            logger.error(f"Error querying content for knowledge {knowledge_id}: {str(e)}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Error accessing content: {str(e)}"
+            )
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting knowledge content: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
+
+
+def _require_editable_knowledge(
+    db: Session, knowledge_id: int, current_user: User
+) -> Knowledge:
+    """Load a knowledge source, enforcing ownership and a usable vector table.
+
+    Raises 404 if missing, 403 if it belongs to another org, 400 if it has no
+    vector table yet (e.g. a crawl that has not produced any rows).
+    """
+    knowledge = KnowledgeRepository(db).get_by_id(knowledge_id)
+    if not knowledge:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Knowledge source not found"
+        )
+    if knowledge.organization_id != current_user.organization_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Unauthorized access to knowledge source"
+        )
+    if not knowledge.table_name or not knowledge.schema:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Knowledge source has no vector database table"
+        )
+    return knowledge
+
+
+@router.put("/{knowledge_id}/chunk/{chunk_id:path}")
+async def update_chunk_content(
+    knowledge_id: int,
+    chunk_id: str,
+    content: str = Body(..., embed=True),
+    current_user: User = Depends(require_permissions("manage_knowledge")),
+    db: Session = Depends(get_db)
+):
+    """Update a single chunk's content in vector database"""
+    try:
+        knowledge = _require_editable_knowledge(db, knowledge_id, current_user)
+
+        try:
+            # Verify the chunk exists AND belongs to this source (the vector
+            # table is shared across the org's sources, so scope by name).
+            query = text(f"""
+                SELECT 1
+                FROM {knowledge.schema}."{knowledge.table_name}"
+                WHERE id = :chunk_id AND name = :source
+            """)
+            row = db.execute(
+                query, {"chunk_id": chunk_id, "source": knowledge.source}
+            ).fetchone()
+
+            if not row:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Chunk not found"
+                )
+
+            # Re-embed the updated content in place
+            page_editor.reembed_chunk(db, knowledge, chunk_id, content)
+            db.commit()
+            
+            logger.info(f"Updated chunk {chunk_id} for knowledge {knowledge_id}")
+            
+            return {"message": "Chunk updated successfully"}
+            
+        except HTTPException:
+            raise
+        except Exception as e:
+            db.rollback()
+            logger.error(f"Error updating chunk {chunk_id}: {str(e)}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Error updating chunk: {str(e)}"
+            )
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating chunk: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
+
+
+@router.delete("/{knowledge_id}/chunk/{chunk_id:path}")
+async def delete_chunk(
+    knowledge_id: int,
+    chunk_id: str,
+    current_user: User = Depends(require_permissions("manage_knowledge")),
+    db: Session = Depends(get_db)
+):
+    """Delete a single chunk from vector database"""
+    try:
+        knowledge = _require_editable_knowledge(db, knowledge_id, current_user)
+
+        try:
+            # Delete the chunk from the database (scoped to this source, since the
+            # vector table is shared across the org's sources).
+            delete_query = text(f"""
+                DELETE FROM {knowledge.schema}."{knowledge.table_name}"
+                WHERE id = :chunk_id AND name = :source
+            """)
+
+            result = db.execute(
+                delete_query, {"chunk_id": chunk_id, "source": knowledge.source}
+            )
+            db.commit()
+            
+            if result.rowcount == 0:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Chunk not found"
+                )
+            
+            logger.info(f"Deleted chunk {chunk_id} from knowledge {knowledge_id}")
+            
+            return {"message": "Chunk deleted successfully"}
+            
+        except HTTPException:
+            raise
+        except Exception as e:
+            db.rollback()
+            logger.error(f"Error deleting chunk {chunk_id}: {str(e)}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Error deleting chunk: {str(e)}"
+            )
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error deleting chunk: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
+
+
+@router.post("/{knowledge_id}/subpage")
+async def add_subpage(
+    knowledge_id: int,
+    subpage_name: str = Body(..., embed=True),
+    content: str = Body(..., embed=True),
+    url: Optional[str] = Body(None, embed=True),
+    current_user: User = Depends(require_permissions("manage_knowledge")),
+    db: Session = Depends(get_db)
+):
+    """Add a new subpage to existing knowledge"""
+    try:
+        knowledge_repo = KnowledgeRepository(db)
+        
+        # Verify knowledge exists and belongs to user's org
+        knowledge = knowledge_repo.get_by_id(knowledge_id)
+        if not knowledge:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Knowledge source not found"
+            )
+        
+        if knowledge.organization_id != current_user.organization_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Unauthorized access to knowledge source"
+            )
+        
+        if not knowledge.table_name or not knowledge.schema:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Knowledge source has no vector database table"
+            )
+        
+        # Check subscription limits if enterprise module is available
+        if HAS_ENTERPRISE:
+            try:
+                from app.enterprise.repositories.subscription import SubscriptionRepository
+
+                subscription_repo = SubscriptionRepository(db)
+                subscription = subscription_repo.get_active_subscription(str(knowledge.organization_id))
+
+                if subscription and subscription.plan:
+                    # Count existing subpages for this knowledge source
+                    current_count = page_editor.count_subpages(db, knowledge)
+
+                    # Check against max_sub_pages limit from the plan
+                    subpages_limit = subscription.plan.max_sub_pages
+
+                    if current_count >= subpages_limit:
+                        raise HTTPException(
+                            status_code=status.HTTP_402_PAYMENT_REQUIRED,
+                            detail=f"Subpage limit reached. Your plan allows {subpages_limit} subpages per knowledge source. Please upgrade your plan."
+                        )
+            except ImportError:
+                # Enterprise module not available, skip limit check
+                pass
+        
+        try:
+            # Check if subpage name already exists within this source
+            check_query = text(f"""
+                SELECT id FROM {knowledge.schema}."{knowledge.table_name}"
+                WHERE id = :subpage_name AND name = :source
+            """)
+            existing = db.execute(
+                check_query, {"subpage_name": subpage_name, "source": knowledge.source}
+            ).fetchone()
+            
+            if existing:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Subpage name already exists. Please use a unique name."
+                )
+
+            # A subpage of a URL-based source must be on the SAME registrable
+            # domain as that source — otherwise a single plan-limited source
+            # could accumulate content from arbitrary other domains. domain_of_url
+            # normalizes a scheme-less value (so 'evil.com/x' can't parse as a
+            # path with no host and slip past) and is ccTLD-aware (so a *.co.uk
+            # source can't accept another *.co.uk domain).
+            clean_url = (url or "").strip() or None
+            if clean_url:
+                from app.knowledge.domains import domain_of_url
+
+                parent_domain = domain_of_url(knowledge.source)
+                if parent_domain and domain_of_url(clean_url) != parent_domain:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail=f"Subpage URL must be on the same domain as the source ({parent_domain}).",
+                    )
+
+            # Embed and insert the new subpage into the vector database
+            page_editor.insert_subpage(knowledge, subpage_name, content, clean_url)
+
+            logger.info(f"Added new subpage '{subpage_name}' to knowledge {knowledge_id}")
+            
+            return {"message": "Subpage added successfully", "subpage_id": subpage_name}
+            
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Error adding subpage: {str(e)}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Error adding subpage: {str(e)}"
+            )
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error adding subpage: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
+
+
+@router.put("/{knowledge_id}/page/{page_id:path}")
+async def update_page_content(
+    knowledge_id: int,
+    page_id: str,
+    content: str = Body(..., embed=True),
+    title: Optional[str] = Body(None, embed=True),
+    current_user: User = Depends(require_permissions("manage_knowledge")),
+    db: Session = Depends(get_db)
+):
+    """Replace a sub-page's content and re-embed it.
+
+    A page may span several ``_N`` chunks; this collapses it into one freshly
+    embedded chunk keyed by the page id, keeping the source's answers current.
+    """
+    if not (content or "").strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Page content cannot be empty"
+        )
+
+    knowledge = _require_editable_knowledge(db, knowledge_id, current_user)
+    try:
+        replaced = page_editor.replace_page(db, knowledge, page_id, content, title)
+        if replaced == 0:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Page not found"
+            )
+        logger.info(f"Updated page '{page_id}' for knowledge {knowledge_id}")
+        return {"message": "Page updated successfully", "page_id": page_id}
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error updating page '{page_id}': {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error updating page: {str(e)}"
+        )
+
+
+@router.delete("/{knowledge_id}/page/{page_id:path}")
+async def delete_page(
+    knowledge_id: int,
+    page_id: str,
+    current_user: User = Depends(require_permissions("manage_knowledge")),
+    db: Session = Depends(get_db)
+):
+    """Delete a whole sub-page (all of its chunks) from a knowledge source."""
+    knowledge = _require_editable_knowledge(db, knowledge_id, current_user)
+    try:
+        removed = page_editor.delete_page_chunks(db, knowledge, page_id)
+        if removed == 0:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Page not found"
+            )
+        db.commit()
+        logger.info(
+            f"Deleted page '{page_id}' ({removed} chunk(s)) from knowledge {knowledge_id}"
+        )
+        return {"message": "Page deleted successfully", "removed_chunks": removed}
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error deleting page '{page_id}': {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error deleting page: {str(e)}"
+        )
+
+
