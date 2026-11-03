@@ -29,6 +29,35 @@ interface LoginResponse {
   user: User
 }
 
+export const registrationService = {
+  async isEnabled(): Promise<boolean> {
+    try {
+      const response = await api.get<{ enabled: boolean }>('/users/registration-status')
+      return response.data?.enabled === true
+    } catch {
+      return false
+    }
+  },
+
+  async register(organizationName: string, email: string, password: string) {
+    try {
+      const response = await api.post<LoginResponse>('/users/register', {
+        organization_name: organizationName,
+        email,
+        password,
+      })
+      if (response.data.access_token) {
+        localStorage.setItem('access_token', response.data.access_token)
+      }
+      userService.setCurrentUser(response.data.user)
+      return response.data.user
+    } catch (err) {
+      const axiosError = err as AxiosError<ErrorResponse>
+      throw new Error(axiosError.response?.data?.detail || 'Registration failed')
+    }
+  },
+}
+
 export const authService = {
   async login(email: string, password: string) {
     try {

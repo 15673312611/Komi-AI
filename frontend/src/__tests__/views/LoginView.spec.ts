@@ -22,11 +22,14 @@ import LoginView from '../../views/LoginView.vue'
 import { createPinia, setActivePinia } from 'pinia'
 
 // Mock the services
-vi.mock('@/services/auth', () => ({
-  authService: {
-    login: vi.fn()
+vi.mock('@/services/auth', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/services/auth')>()
+  return {
+    ...actual,
+    authService: { ...actual.authService, login: vi.fn() },
+    registrationService: { isEnabled: vi.fn().mockResolvedValue(true), register: vi.fn() },
   }
-}))
+})
 
 // The landing route is resolved from the real permission checks reading the
 // cached user, so this drives the user rather than mocking the checks away.
@@ -82,6 +85,7 @@ vi.mock('@/composables/useNotifications', () => ({
 
 // Import the mocked modules
 import { authService } from '@/services/auth'
+import { registrationService } from '@/services/auth'
 import { userWithPermissions } from '../fixtures/permissions'
 
 describe('LoginView', () => {
@@ -94,6 +98,7 @@ describe('LoginView', () => {
       history: createWebHistory(),
       routes: [
         { path: '/', name: 'home', component: { template: '<div>Home</div>' } },
+        { path: '/register', name: 'register', component: LoginView },
         { path: '/ai-agents', name: 'ai-agents', component: { template: '<div>AI Agents</div>' } },
         { path: '/conversations', name: 'conversations', component: { template: '<div>Conversations</div>' } },
         { path: '/human-agents', name: 'human-agents', component: { template: '<div>Human Agents</div>' } },
@@ -129,13 +134,13 @@ describe('LoginView', () => {
 
   it('renders login form properly', () => {
     expect(wrapper.find('.auth-page').exists()).toBe(true)
-    expect(wrapper.find('input[type="email"]').exists()).toBe(true)
+    expect(wrapper.find('#email').exists()).toBe(true)
     expect(wrapper.find('input[type="password"]').exists()).toBe(true)
     expect(wrapper.find('button[type="submit"]').exists()).toBe(true)
   })
 
   it('updates email and password inputs', async () => {
-    const emailInput = wrapper.find('input[type="email"]')
+    const emailInput = wrapper.find('#email')
     const passwordInput = wrapper.find('input[type="password"]')
 
     await emailInput.setValue('test@example.com')
@@ -149,7 +154,7 @@ describe('LoginView', () => {
     const mockLogin = vi.fn(() => new Promise(resolve => setTimeout(resolve, 100)))
     ;(authService.login as any) = mockLogin
 
-    await wrapper.find('input[type="email"]').setValue('test@example.com')
+    await wrapper.find('#email').setValue('test@example.com')
     await wrapper.find('input[type="password"]').setValue('password123')
     
     const submitButton = wrapper.find('button[type="submit"]')
@@ -166,7 +171,7 @@ describe('LoginView', () => {
     // User can manage agents
     currentUser.value = userWithPermissions(['manage_agents'])
 
-    await wrapper.find('input[type="email"]').setValue('test@example.com')
+    await wrapper.find('#email').setValue('test@example.com')
     await wrapper.find('input[type="password"]').setValue('password123')
     await wrapper.find('form').trigger('submit')
 
@@ -189,13 +194,31 @@ describe('LoginView', () => {
       }
     })
 
-    await wrapper.find('input[type="email"]').setValue('test@example.com')
+    await wrapper.find('#email').setValue('test@example.com')
     await wrapper.find('input[type="password"]').setValue('wrong-password')
     await wrapper.find('form').trigger('submit')
 
     // Wait for error to be displayed
     await flushPromises()
     expect(wrapper.find('.auth-error').text()).toBe(errorMessage)
+  })
+
+  it('registers with the backend and signs in with the new account', async () => {
+    const newUser = userWithPermissions(['manage_agents'])
+    currentUser.value = newUser
+    vi.mocked(registrationService.register).mockResolvedValueOnce(newUser as any)
+    await router.push('/register')
+    await flushPromises()
+
+    await wrapper.find('#organization-name').setValue('Example Company')
+    await wrapper.find('#email').setValue('new@example.com')
+    await wrapper.find('#password').setValue('Good-pass1')
+    await wrapper.find('#confirm-password').setValue('Good-pass1')
+    await wrapper.find('form').trigger('submit')
+    await flushPromises()
+
+    expect(registrationService.register).toHaveBeenCalledWith('Example Company', 'new@example.com', 'Good-pass1')
+    expect(router.currentRoute.value.path).toBe('/ai-agents')
   })
 
   it('redirects to correct route based on permissions', async () => {
@@ -217,7 +240,7 @@ describe('LoginView', () => {
       await router.isReady()
       await nextTick()
 
-      await wrapper.find('input[type="email"]').setValue('test@example.com')
+      await wrapper.find('#email').setValue('test@example.com')
       await wrapper.find('input[type="password"]').setValue('password123')
       await wrapper.find('form').trigger('submit')
 
@@ -234,7 +257,7 @@ describe('LoginView', () => {
     ;(authService.login as any).mockResolvedValue({ id: 1, email: 'test@example.com' })
     currentUser.value = userWithPermissions([])
 
-    await wrapper.find('input[type="email"]').setValue('test@example.com')
+    await wrapper.find('#email').setValue('test@example.com')
     await wrapper.find('input[type="password"]').setValue('password123')
     await wrapper.find('form').trigger('submit')
 

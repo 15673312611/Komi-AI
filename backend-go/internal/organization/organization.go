@@ -7,9 +7,11 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -18,6 +20,7 @@ import (
 )
 
 var ErrAlreadyExists = errors.New("organization already exists")
+var ErrAccountAlreadyExists = errors.New("account already exists")
 
 var defaultPermissions = []struct {
 	Name        string
@@ -134,17 +137,30 @@ func (r *Repository) Create(ctx context.Context, input CreateInput) (*Created, e
 	if r == nil || r.pool == nil {
 		return nil, errors.New("database is not configured")
 	}
+	input.Name = strings.TrimSpace(input.Name)
+	input.Domain = strings.ToLower(strings.TrimSpace(input.Domain))
+	input.AdminEmail = strings.ToLower(strings.TrimSpace(input.AdminEmail))
+	input.AdminName = strings.TrimSpace(input.AdminName)
+	if input.Name == "" || utf8.RuneCountInString(input.Name) > 100 || input.AdminEmail == "" || input.AdminPassword == "" {
+		return nil, errors.New("invalid organization or admin data")
+	}
+	if input.AdminName == "" {
+		input.AdminName = strings.SplitN(input.AdminEmail, "@", 2)[0]
+	}
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return nil, err
 	}
 	defer tx.Rollback(ctx)
-	var exists bool
-	if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM organizations)`).Scan(&exists); err != nil {
+	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(7319401)`); err != nil {
 		return nil, err
 	}
-	if exists {
-		return nil, ErrAlreadyExists
+	var accountExists bool
+	if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM users WHERE lower(email) = $1)`, input.AdminEmail).Scan(&accountExists); err != nil {
+		return nil, err
+	}
+	if accountExists {
+		return nil, ErrAccountAlreadyExists
 	}
 	businessHours := input.BusinessHours
 	if businessHours == nil {
@@ -163,12 +179,20 @@ func (r *Repository) Create(ctx context.Context, input CreateInput) (*Created, e
 		return nil, err
 	}
 	var org Organization
+	orgID := uuid.New()
+	if input.Domain == "" {
+		input.Domain = fmt.Sprintf("org-%s.local.komi.ai", strings.ReplaceAll(orgID.String(), "-", ""))
+	}
 	if err := tx.QueryRow(ctx, `
 INSERT INTO organizations (id, name, domain, timezone, business_hours, settings, is_active)
 VALUES ($1,$2,$3,$4,$5,$6,TRUE)
 RETURNING id, name, domain, timezone, business_hours, settings, is_active`,
-		uuid.New(), input.Name, input.Domain, fallback(input.Timezone, "UTC"), businessHoursJSON, settingsJSON,
+		orgID, input.Name, input.Domain, fallback(input.Timezone, "UTC"), businessHoursJSON, settingsJSON,
 	).Scan(&org.ID, &org.Name, &org.Domain, &org.Timezone, &businessHoursJSON, &settingsJSON, &org.IsActive); err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" && pgErr.TableName == "organizations" {
+			return nil, ErrAlreadyExists
+		}
 		return nil, err
 	}
 	org.BusinessHours = objectJSON(businessHoursJSON)
@@ -215,6 +239,10 @@ INSERT INTO users (id, email, full_name, hashed_password, organization_id, role_
 VALUES ($1,$2,$3,$4,$5,$6,TRUE,FALSE)
 RETURNING id, email, full_name, is_active, organization_id`, uuid.New(), input.AdminEmail, input.AdminName, hash, org.ID, adminRoleID).
 		Scan(&admin.ID, &admin.Email, &admin.FullName, &admin.IsActive, &adminOrganizationID); err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" && pgErr.TableName == "users" {
+			return nil, ErrAccountAlreadyExists
+		}
 		return nil, err
 	}
 	if adminOrganizationID.Valid {
@@ -229,6 +257,16 @@ RETURNING id, email, full_name, is_active, organization_id`, uuid.New(), input.A
 		return nil, err
 	}
 	return &Created{Organization: &org, Admin: &admin}, nil
+}
+
+func (r *Repository) Register(ctx context.Context, organizationName, email, password string) (*Created, error) {
+	if r == nil || r.pool == nil {
+		return nil, errors.New("database is not configured")
+	}
+	return r.Create(ctx, CreateInput{
+		Name: organizationName, Timezone: "Asia/Shanghai",
+		AdminEmail: email, AdminPassword: password,
+	})
 }
 
 func (r *Repository) SetupStatus(ctx context.Context) (bool, error) {

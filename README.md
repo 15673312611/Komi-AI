@@ -134,30 +134,11 @@ flowchart TB
 
 ## 🚀 快速开始
 
-### 方式一：Docker 一键极速部署（推荐）
+### 本地运行（Windows，无需 Docker）
 
-Komi AI 提供了开箱即用的 Docker Compose 编排文件：
+在 Windows 上使用项目内置 PostgreSQL，双击仓库根目录的 `start-all.bat`，然后访问 `http://localhost:3001`。Go API 网关运行在 `http://localhost:8001/api/v1`。本地注册由 `backend-go/.env` 中的 `ALLOW_PUBLIC_SIGNUP` 开关控制；生产环境建议关闭公开注册。
 
-```bash
-# 1. 克隆代码仓库
-git clone https://github.com/15673312611/Komi-AI.git
-cd Komi-AI
-
-# 2. 配置环境变量（从安全模板复制，按需配置密钥）
-cp backend/.env.example backend/.env
-cp frontend/.env.example frontend/.env
-
-# 3. 启动全栈服务（包含前端、后端、Go网关与数据库）
-docker compose up -d
-```
-
-启动完成后，在浏览器中访问：
-- **控制台看板**：`http://localhost:3000`
-- **后端 API 文档**：`http://localhost:8000/docs`
-
----
-
-### 方式二：本地源码开发调试
+### 本地源码开发调试
 
 #### 1. 前端环境构建
 ```bash
@@ -185,6 +166,30 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 cd backend-go
 go run main.go
 ```
+
+## SaaS 多租户注册
+
+每次公开注册都会创建一个独立企业空间。注册人自动成为该企业管理员，拥有企业配置、智能体、知识库、渠道和团队管理权限。企业管理员可以在团队管理中创建坐席或客服子账号，并为其分配企业内角色；不同企业之间的数据和账号相互隔离。
+
+注册账号使用邮箱格式作为登录标识，目前不发送邮箱验证码。生产环境建议关闭 `ALLOW_PUBLIC_SIGNUP`，改用邀请或管理员审批流程。
+
+## 产品界面
+
+### AI 智能体创建
+
+![AI 智能体创建](docs/screenshots/ai-agent-onboarding.png)
+
+### 智能体总览
+
+![智能体总览](docs/screenshots/ai-agents-overview.png)
+
+### 店铺管理
+
+![店铺管理](docs/screenshots/store-management.png)
+
+### 会话工作台
+
+![会话工作台](docs/screenshots/conversations-workbench.png)
 
 ---
 

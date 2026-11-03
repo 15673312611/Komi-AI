@@ -46,6 +46,9 @@ test.db
 *.db.tar.lzma
 
 docs/
+!/docs/
+!/docs/screenshots/
+!/docs/screenshots/*.png
 .env.prod
 .env.dev
 backend/app/enterprise/

@@ -1,15 +1,19 @@
 package httpapi
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
+	"net/mail"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
 	"github.com/komi/komi/backend-go/internal/auth"
+	"github.com/komi/komi/backend-go/internal/organization"
 	"github.com/komi/komi/backend-go/internal/user"
 )
 
@@ -55,8 +59,80 @@ type userInfoCookie struct {
 
 func registerAuthRoutes(r chi.Router, deps Dependencies) {
 	r.Post("/users/login", login(deps))
+	r.Get("/users/registration-status", registrationStatus(deps))
+	r.Post("/users/register", register(deps))
 	r.Post("/users/refresh", refresh(deps))
 	r.Post("/users/logout", logout(deps))
+}
+
+type registerUserRequest struct {
+	OrganizationName string `json:"organization_name"`
+	Email            string `json:"email"`
+	Password         string `json:"password"`
+}
+
+func registrationStatus(deps Dependencies) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		JSON(w, http.StatusOK, map[string]bool{"enabled": deps.Config.AllowPublicSignup})
+	}
+}
+
+func register(deps Dependencies) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if !deps.Config.AllowPublicSignup {
+			Error(w, http.StatusForbidden, "Registration is disabled")
+			return
+		}
+		if deps.Organizations == nil || deps.Users == nil {
+			Error(w, http.StatusInternalServerError, "Registration is unavailable")
+			return
+		}
+		var body registerUserRequest
+		if err := decodeJSON(r, &body); err != nil {
+			Error(w, http.StatusUnprocessableEntity, err.Error())
+			return
+		}
+		body.Email = strings.ToLower(strings.TrimSpace(body.Email))
+		body.OrganizationName = strings.TrimSpace(body.OrganizationName)
+		if body.OrganizationName == "" || utf8.RuneCountInString(body.OrganizationName) > 100 {
+			Error(w, http.StatusUnprocessableEntity, "Company name is required and must be at most 100 characters")
+			return
+		}
+		address, err := mail.ParseAddress(body.Email)
+		if err != nil || address.Address != body.Email {
+			Error(w, http.StatusUnprocessableEntity, "Enter a valid email address")
+			return
+		}
+		if len(body.Password) < 8 {
+			Error(w, http.StatusUnprocessableEntity, "Password must be at least 8 characters long")
+			return
+		}
+		registrar, ok := deps.Organizations.(interface {
+			Register(context.Context, string, string, string) (*organization.Created, error)
+		})
+		if !ok {
+			Error(w, http.StatusInternalServerError, "Registration is unavailable")
+			return
+		}
+		created, err := registrar.Register(r.Context(), body.OrganizationName, body.Email, body.Password)
+		if errors.Is(err, organization.ErrAccountAlreadyExists) {
+			Error(w, http.StatusConflict, "An account with this email already exists")
+			return
+		}
+		if err != nil {
+			deps.Logger.Error().Err(err).Msg("registration failed")
+			Error(w, http.StatusInternalServerError, "Registration failed. Please try again later.")
+			return
+		}
+		response, err := makeTokenResponse(deps, created.Admin)
+		if err != nil {
+			deps.Logger.Error().Err(err).Msg("create registration token failed")
+			Error(w, http.StatusInternalServerError, "Registration failed. Please try again later.")
+			return
+		}
+		setAuthCookies(w, response, false)
+		JSON(w, http.StatusCreated, response)
+	}
 }
 
 func login(deps Dependencies) http.HandlerFunc {

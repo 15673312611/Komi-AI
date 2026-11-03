@@ -36,6 +36,10 @@ func registerOrganizationRoutes(r chi.Router, deps Dependencies) {
 
 func createOrganization(deps Dependencies) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		if !deps.Config.AllowPublicSignup {
+			Error(w, http.StatusForbidden, "Registration is disabled")
+			return
+		}
 		if deps.Organizations == nil {
 			Error(w, http.StatusInternalServerError, "Failed to create organization: database is not configured")
 			return
@@ -54,7 +58,11 @@ func createOrganization(deps Dependencies) http.HandlerFunc {
 			Settings: body.Settings, AdminEmail: body.AdminEmail, AdminName: body.AdminName, AdminPassword: body.AdminPassword,
 		})
 		if errors.Is(err, organization.ErrAlreadyExists) {
-			Error(w, http.StatusForbidden, "Organization already exists")
+			Error(w, http.StatusConflict, "Organization domain already exists")
+			return
+		}
+		if errors.Is(err, organization.ErrAccountAlreadyExists) {
+			Error(w, http.StatusConflict, "An account with this email already exists")
 			return
 		}
 		if err != nil {

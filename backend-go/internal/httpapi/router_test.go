@@ -89,6 +89,23 @@ func TestRootAndHealthContract(t *testing.T) {
 	}
 }
 
+func TestRegistrationStatusAndDisabledSignup(t *testing.T) {
+	handler := testRouter()
+	statusReq := httptest.NewRequest(http.MethodGet, "/api/v1/users/registration-status", nil)
+	statusRes := httptest.NewRecorder()
+	handler.ServeHTTP(statusRes, statusReq)
+	if statusRes.Code != http.StatusOK || !strings.Contains(statusRes.Body.String(), `"enabled":false`) {
+		t.Fatalf("registration status = %d %s", statusRes.Code, statusRes.Body.String())
+	}
+	registerReq := httptest.NewRequest(http.MethodPost, "/api/v1/users/register", strings.NewReader(`{"organization_name":"Test Company","email":"new@example.com","password":"Good-pass1"}`))
+	registerReq.Header.Set("Content-Type", "application/json")
+	registerRes := httptest.NewRecorder()
+	handler.ServeHTTP(registerRes, registerReq)
+	if registerRes.Code != http.StatusForbidden {
+		t.Fatalf("disabled registration status = %d body=%s", registerRes.Code, registerRes.Body.String())
+	}
+}
+
 func TestCORSAllowsConfiguredOrigin(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/health", nil)
 	req.Header.Set("Origin", "http://localhost:5173")

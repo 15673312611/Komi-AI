@@ -19,7 +19,6 @@ powershell -ExecutionPolicy Bypass -File "%~dp0backup-db.ps1" >nul 2>&1
 if exist "%~dp0pgsql\bin\pg_ctl.exe" (
     "%~dp0pgsql\bin\pg_ctl.exe" -D "%~dp0pgsql\data" stop >nul 2>&1
 )
-for /f "tokens=5" %%a in ('netstat -aon ^| findstr :15432 ^| findstr LISTENING') do taskkill /f /pid %%a >nul 2>&1
 
 echo [4/4] 正在检查端口释放状态...
 echo.

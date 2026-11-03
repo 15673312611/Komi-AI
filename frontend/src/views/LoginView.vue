@@ -15,9 +15,9 @@ limitations under the License.
 -->
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { authService } from '@/services/auth'
+import { authService, registrationService } from '@/services/auth'
 import { resolveLandingRoute } from '@/router/landing'
 import { useEnterpriseFeatures } from '@/composables/useEnterpriseFeatures'
 import { useForgotPassword } from '@/composables/useForgotPassword'
@@ -36,9 +36,18 @@ const trackLogin = async (method: string) => {
   mod?.trackLogin?.(method)
 }
 const email = ref('')
+const organizationName = ref('')
 const password = ref('')
+const registrationConfirmPassword = ref('')
 const error = ref('')
 const isLoading = ref(false)
+const registrationEnabled = ref(false)
+const isRegisterMode = computed(() => router.currentRoute.value.path === '/register')
+
+onMounted(async () => {
+    registrationEnabled.value = await registrationService.isEnabled()
+    if (isRegisterMode.value && !registrationEnabled.value) await router.replace('/login')
+})
 
 // Check if enterprise module is available
 const { hasEnterpriseModule } = useEnterpriseFeatures()
@@ -80,6 +89,14 @@ const handleLogin = async () => {
     try {
         isLoading.value = true
         error.value = ''
+
+        if (isRegisterMode.value) {
+            if (!registrationEnabled.value) throw new Error('当前暂不开放注册')
+            if (password.value !== registrationConfirmPassword.value) throw new Error('两次输入的密码不一致')
+            await registrationService.register(organizationName.value, email.value, password.value)
+            await router.push(getInitialRoute())
+            return
+        }
 
         await authService.login(email.value, password.value)
 
@@ -243,9 +260,11 @@ const navigateToSignup = () => {
             query
         })
     } else {
-        router.push('/signup')
+        router.push('/register')
     }
 }
+
+const navigateToLogin = () => router.push('/login')
 
 const openForgotPasswordModal = () => {
     resetForgotPasswordForm()
@@ -289,31 +308,42 @@ const handleVerifyAndResetPassword = async () => {
                 <span class="logo-word">Komi AI</span>
             </div>
 
-            <h1 class="auth-title">欢迎回来</h1>
-            <p class="auth-sub">登录以进入您的智能客服工作台</p>
+            <h1 class="auth-title">{{ isRegisterMode ? '创建账号' : '欢迎回来' }}</h1>
+            <p class="auth-sub">{{ isRegisterMode ? '注册后即可进入智能客服工作台' : '登录以进入您的智能客服工作台' }}</p>
 
             <form @submit.prevent="handleLogin" class="auth-form">
+                <div v-if="isRegisterMode" class="field">
+                    <label for="organization-name">企业名称</label>
+                    <input id="organization-name" v-model="organizationName" type="text" required maxlength="100" autocomplete="organization" placeholder="请输入企业名称" />
+                </div>
+
                 <div class="field">
-                    <label for="email">电子邮箱</label>
-                    <input id="email" v-model="email" type="email" required placeholder="name@company.com" autocomplete="email" />
+                    <label for="email">{{ isRegisterMode ? '管理员账号（邮箱）' : '登录账号（邮箱）' }}</label>
+                    <input id="email" v-model="email" :type="isRegisterMode ? 'email' : 'text'" required placeholder="请输入邮箱账号" autocomplete="username" />
+                    <span v-if="isRegisterMode" class="field-hint">邮箱仅作为管理员登录账号，无需邮箱验证码。</span>
                 </div>
 
                 <div class="field">
                     <label for="password">密码</label>
-                    <input id="password" v-model="password" type="password" required placeholder="••••••••" autocomplete="current-password" />
+                    <input id="password" v-model="password" type="password" required :minlength="isRegisterMode ? 8 : undefined" placeholder="••••••••" :autocomplete="isRegisterMode ? 'new-password' : 'current-password'" />
                     <a v-if="hasEnterpriseModule" href="#" @click.prevent="openForgotPasswordModal" class="forgot-link">忘记密码？</a>
+                </div>
+
+                <div v-if="isRegisterMode" class="field">
+                    <label for="confirm-password">确认密码</label>
+                    <input id="confirm-password" v-model="registrationConfirmPassword" type="password" required minlength="8" autocomplete="new-password" placeholder="再次输入密码" />
                 </div>
 
                 <div v-if="error" class="auth-error" role="alert">{{ error }}</div>
 
                 <button type="submit" class="auth-submit" :disabled="isLoading">
-                    <span v-if="isLoading">{{ router.currentRoute.value.query.embedded === 'true' ? '正在连接…' : '正在登录…' }}</span>
-                    <span v-else>立即登录</span>
+                    <span v-if="isLoading">{{ isRegisterMode ? '正在创建企业…' : (router.currentRoute.value.query.embedded === 'true' ? '正在连接…' : '正在登录…') }}</span>
+                    <span v-else>{{ isRegisterMode ? '注册并进入' : '立即登录' }}</span>
                 </button>
 
-                <p v-if="hasEnterpriseModule" class="signup-prompt">
-                    还没有账号？
-                    <a href="#" @click.prevent="navigateToSignup" class="signup-link">立即注册</a>
+                <p v-if="registrationEnabled || isRegisterMode" class="signup-prompt">
+                    {{ isRegisterMode ? '已有账号？' : '还没有账号？' }}
+                    <a href="#" @click.prevent="isRegisterMode ? navigateToLogin() : navigateToSignup()" class="signup-link">{{ isRegisterMode ? '立即登录' : '立即注册' }}</a>
                 </p>
             </form>
 
@@ -594,6 +624,12 @@ const handleVerifyAndResetPassword = async () => {
     font-size: 13.5px;
     font-weight: 500;
     color: var(--text3);
+}
+
+.field-hint {
+    color: var(--muted2);
+    font-size: 12px;
+    line-height: 1.45;
 }
 
 .field input {

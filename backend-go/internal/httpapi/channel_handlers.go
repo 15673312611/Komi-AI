@@ -73,7 +73,7 @@ func registerChannelRoutes(r chi.Router, deps Dependencies) {
 	r.With(inboxSender).Post("/channels/meta/whatsapp/{account_id}/send-template", sendWhatsAppTemplate(deps))
 	r.With(inbox).Get("/channels/meta/whatsapp/{account_id}/templates", listWhatsAppTemplates(deps))
 	r.With(manageOrg).Get("/channels/meta/whatsapp/{account_id}/template-library", whatsappTemplateLibrary(deps))
-	r.Post("/channels/simulator/simulate", simulateChannelMessage(deps))
+	r.With(inbox).Post("/channels/simulator/simulate", simulateChannelMessage(deps))
 }
 
 func channelRepository(w http.ResponseWriter, deps Dependencies) *channel.Repository {
@@ -1712,8 +1712,6 @@ func simulateChannelMessage(deps Dependencies) http.HandlerFunc {
 		var orgID uuid.UUID
 		if user, ok := currentUserFromContext(r); ok && user != nil && user.OrganizationID != nil {
 			orgID = *user.OrganizationID
-		} else if deps.DB != nil {
-			_ = deps.DB.QueryRow(ctx, `SELECT id FROM organizations WHERE is_active = true LIMIT 1`).Scan(&orgID)
 		}
 		if orgID == uuid.Nil {
 			Error(w, http.StatusBadRequest, "No active organization found")

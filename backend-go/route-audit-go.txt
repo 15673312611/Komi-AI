@@ -9,21 +9,22 @@
     route_dump_test.go:17: GET /api/v1/agent/list
     route_dump_test.go:17: GET /api/v1/agent/list/shopify
     route_dump_test.go:17: GET /api/v1/agent/roster
-    route_dump_test.go:17: GET /api/v1/agent/{agent_id}
     route_dump_test.go:17: PUT /api/v1/agent/{agent_id}
+    route_dump_test.go:17: GET /api/v1/agent/{agent_id}
     route_dump_test.go:17: POST /api/v1/agent/{agent_id}/customization
     route_dump_test.go:17: POST /api/v1/agent/{agent_id}/customization/photo
     route_dump_test.go:17: POST /api/v1/agent/{agent_id}/customization/photo/shopify
     route_dump_test.go:17: POST /api/v1/agent/{agent_id}/customization/shopify
     route_dump_test.go:17: PUT /api/v1/agent/{agent_id}/groups
-    route_dump_test.go:17: PUT /api/v1/agent/{agent_id}/lead-capture
     route_dump_test.go:17: GET /api/v1/agent/{agent_id}/lead-capture
+    route_dump_test.go:17: PUT /api/v1/agent/{agent_id}/lead-capture
     route_dump_test.go:17: PUT /api/v1/agent/{agent_id}/shopify
     route_dump_test.go:17: GET /api/v1/agent/{agent_id}/shopify
     route_dump_test.go:17: GET /api/v1/ai/config
     route_dump_test.go:17: PUT /api/v1/ai/config
     route_dump_test.go:17: GET /api/v1/ai/providers
     route_dump_test.go:17: POST /api/v1/ai/setup
+    route_dump_test.go:17: POST /api/v1/ai/test
     route_dump_test.go:17: GET /api/v1/analytics
     route_dump_test.go:17: GET /api/v1/analytics/agent-performance
     route_dump_test.go:17: GET /api/v1/analytics/customer-analytics
@@ -55,6 +56,7 @@
     route_dump_test.go:17: GET /api/v1/channels/meta/whatsapp/{account_id}/template-library
     route_dump_test.go:17: GET /api/v1/channels/meta/whatsapp/{account_id}/templates
     route_dump_test.go:17: DELETE /api/v1/channels/meta/{account_id}
+    route_dump_test.go:17: POST /api/v1/channels/simulator/simulate
     route_dump_test.go:17: GET /api/v1/channels/slack/callback
     route_dump_test.go:17: GET /api/v1/channels/slack/install
     route_dump_test.go:17: DELETE /api/v1/channels/slack/{account_id}
@@ -98,30 +100,54 @@
     route_dump_test.go:17: DELETE /api/v1/groups/{group_id}
     route_dump_test.go:17: POST /api/v1/groups/{group_id}/users/{user_id}
     route_dump_test.go:17: DELETE /api/v1/groups/{group_id}/users/{user_id}
-    route_dump_test.go:17: POST /api/v1/help-center/branding/favicon
     route_dump_test.go:17: DELETE /api/v1/help-center/branding/favicon
+    route_dump_test.go:17: POST /api/v1/help-center/branding/favicon
     route_dump_test.go:17: POST /api/v1/help-center/branding/logo
     route_dump_test.go:17: DELETE /api/v1/help-center/branding/logo
     route_dump_test.go:17: GET /api/v1/help-center/branding/settings
     route_dump_test.go:17: PUT /api/v1/help-center/branding/settings
-    route_dump_test.go:17: DELETE /api/v1/help-center/domain/domain
+    route_dump_test.go:17: POST /api/v1/help-center/domain
+    route_dump_test.go:17: DELETE /api/v1/help-center/domain
     route_dump_test.go:17: POST /api/v1/help-center/domain/domain
+    route_dump_test.go:17: DELETE /api/v1/help-center/domain/domain
     route_dump_test.go:17: GET /api/v1/help-center/domain/domain/status
     route_dump_test.go:17: POST /api/v1/help-center/domain/domain/verify
-    route_dump_test.go:17: POST /api/v1/help-center/faqs/faqs
+    route_dump_test.go:17: GET /api/v1/help-center/domain/status
+    route_dump_test.go:17: POST /api/v1/help-center/domain/verify
+    route_dump_test.go:17: POST /api/v1/help-center/faqs
+    route_dump_test.go:17: GET /api/v1/help-center/faqs
+    route_dump_test.go:17: POST /api/v1/help-center/faqs/bulk-delete
+    route_dump_test.go:17: POST /api/v1/help-center/faqs/bulk-status
+    route_dump_test.go:17: GET /api/v1/help-center/faqs/categories
     route_dump_test.go:17: GET /api/v1/help-center/faqs/faqs
+    route_dump_test.go:17: POST /api/v1/help-center/faqs/faqs
     route_dump_test.go:17: POST /api/v1/help-center/faqs/faqs/bulk-delete
     route_dump_test.go:17: POST /api/v1/help-center/faqs/faqs/bulk-status
     route_dump_test.go:17: GET /api/v1/help-center/faqs/faqs/categories
     route_dump_test.go:17: POST /api/v1/help-center/faqs/faqs/image
     route_dump_test.go:17: PUT /api/v1/help-center/faqs/faqs/{faq_id}
     route_dump_test.go:17: DELETE /api/v1/help-center/faqs/faqs/{faq_id}
+    route_dump_test.go:17: POST /api/v1/help-center/faqs/image
+    route_dump_test.go:17: PUT /api/v1/help-center/faqs/{faq_id}
+    route_dump_test.go:17: DELETE /api/v1/help-center/faqs/{faq_id}
+    route_dump_test.go:17: POST /api/v1/help-center/favicon
+    route_dump_test.go:17: DELETE /api/v1/help-center/favicon
+    route_dump_test.go:17: POST /api/v1/help-center/generate
+    route_dump_test.go:17: GET /api/v1/help-center/generate/estimate
     route_dump_test.go:17: POST /api/v1/help-center/generation/generate
     route_dump_test.go:17: GET /api/v1/help-center/generation/generate/estimate
     route_dump_test.go:17: POST /api/v1/help-center/generation/import
     route_dump_test.go:17: POST /api/v1/help-center/generation/import/pdf
     route_dump_test.go:17: GET /api/v1/help-center/generation/jobs
     route_dump_test.go:17: GET /api/v1/help-center/generation/jobs/{job_id}
+    route_dump_test.go:17: POST /api/v1/help-center/import
+    route_dump_test.go:17: POST /api/v1/help-center/import/pdf
+    route_dump_test.go:17: GET /api/v1/help-center/jobs
+    route_dump_test.go:17: GET /api/v1/help-center/jobs/{job_id}
+    route_dump_test.go:17: POST /api/v1/help-center/logo
+    route_dump_test.go:17: DELETE /api/v1/help-center/logo
+    route_dump_test.go:17: PUT /api/v1/help-center/settings
+    route_dump_test.go:17: GET /api/v1/help-center/settings
     route_dump_test.go:17: POST /api/v1/jira/agent-config/{agent_id}
     route_dump_test.go:17: GET /api/v1/jira/agent-config/{agent_id}
     route_dump_test.go:17: GET /api/v1/jira/authorize
@@ -180,8 +206,8 @@
     route_dump_test.go:17: GET /api/v1/organizations/{org_id}/stats
     route_dump_test.go:17: GET /api/v1/people
     route_dump_test.go:17: GET /api/v1/people/stats
-    route_dump_test.go:17: GET /api/v1/people/{customer_id}
     route_dump_test.go:17: PATCH /api/v1/people/{customer_id}
+    route_dump_test.go:17: GET /api/v1/people/{customer_id}
     route_dump_test.go:17: GET /api/v1/people/{customer_id}/crm
     route_dump_test.go:17: POST /api/v1/people/{customer_id}/crm-sync
     route_dump_test.go:17: POST /api/v1/people/{customer_id}/mark-customer
@@ -189,9 +215,9 @@
     route_dump_test.go:17: POST /api/v1/roles
     route_dump_test.go:17: GET /api/v1/roles
     route_dump_test.go:17: GET /api/v1/roles/permissions/all
-    route_dump_test.go:17: DELETE /api/v1/roles/{role_id}
     route_dump_test.go:17: GET /api/v1/roles/{role_id}
     route_dump_test.go:17: PUT /api/v1/roles/{role_id}
+    route_dump_test.go:17: DELETE /api/v1/roles/{role_id}
     route_dump_test.go:17: POST /api/v1/roles/{role_id}/permissions/{permission}
     route_dump_test.go:17: DELETE /api/v1/roles/{role_id}/permissions/{permission}
     route_dump_test.go:17: POST /api/v1/sessions/{session_id}/ai-auto-reply
@@ -221,6 +247,12 @@
     route_dump_test.go:17: POST /api/v1/shopify/webhooks/customers/data_request
     route_dump_test.go:17: POST /api/v1/shopify/webhooks/customers/redact
     route_dump_test.go:17: POST /api/v1/shopify/webhooks/shop/redact
+    route_dump_test.go:17: GET /api/v1/stores
+    route_dump_test.go:17: POST /api/v1/stores
+    route_dump_test.go:17: GET /api/v1/stores/options
+    route_dump_test.go:17: GET /api/v1/stores/{id}
+    route_dump_test.go:17: PUT /api/v1/stores/{id}
+    route_dump_test.go:17: DELETE /api/v1/stores/{id}
     route_dump_test.go:17: GET /api/v1/ticket-db-connectors
     route_dump_test.go:17: POST /api/v1/ticket-db-connectors
     route_dump_test.go:17: POST /api/v1/ticket-db-connectors/discover
@@ -231,8 +263,8 @@
     route_dump_test.go:17: POST /api/v1/tickets
     route_dump_test.go:17: GET /api/v1/tickets/by-session/{session_id}
     route_dump_test.go:17: GET /api/v1/tickets/draft-from-session/{session_id}
-    route_dump_test.go:17: PUT /api/v1/tickets/settings
     route_dump_test.go:17: GET /api/v1/tickets/settings
+    route_dump_test.go:17: PUT /api/v1/tickets/settings
     route_dump_test.go:17: GET /api/v1/tickets/stats
     route_dump_test.go:17: POST /api/v1/tickets/webhooks/alerts/{org_id}/{secret}
     route_dump_test.go:17: PATCH /api/v1/tickets/{ticket_id}
@@ -246,15 +278,18 @@
     route_dump_test.go:17: POST /api/v1/tickets/{ticket_id}/rca/send-customer
     route_dump_test.go:17: POST /api/v1/tickets/{ticket_id}/reopen
     route_dump_test.go:17: POST /api/v1/tickets/{ticket_id}/resolve
+    route_dump_test.go:17: GET /api/v1/user-groups/{group_id}
     route_dump_test.go:17: GET /api/v1/users
     route_dump_test.go:17: POST /api/v1/users
     route_dump_test.go:17: POST /api/v1/users/login
     route_dump_test.go:17: POST /api/v1/users/logout
     route_dump_test.go:17: PATCH /api/v1/users/me
     route_dump_test.go:17: GET /api/v1/users/me/avatar
-    route_dump_test.go:17: POST /api/v1/users/me/profile-pic
     route_dump_test.go:17: DELETE /api/v1/users/me/profile-pic
+    route_dump_test.go:17: POST /api/v1/users/me/profile-pic
     route_dump_test.go:17: POST /api/v1/users/refresh
+    route_dump_test.go:17: POST /api/v1/users/register
+    route_dump_test.go:17: GET /api/v1/users/registration-status
     route_dump_test.go:17: GET /api/v1/users/team-overview
     route_dump_test.go:17: GET /api/v1/users/teammates
     route_dump_test.go:17: POST /api/v1/users/token/fcm-token
@@ -274,12 +309,12 @@
     route_dump_test.go:17: POST /api/v1/webhooks/telegram/{account_id}
     route_dump_test.go:17: POST /api/v1/widget-apps
     route_dump_test.go:17: GET /api/v1/widget-apps
+    route_dump_test.go:17: GET /api/v1/widget-apps/{app_id}
     route_dump_test.go:17: PATCH /api/v1/widget-apps/{app_id}
     route_dump_test.go:17: DELETE /api/v1/widget-apps/{app_id}
-    route_dump_test.go:17: GET /api/v1/widget-apps/{app_id}
     route_dump_test.go:17: POST /api/v1/widget-apps/{app_id}/regenerate-key
-    route_dump_test.go:17: GET /api/v1/widgets
     route_dump_test.go:17: POST /api/v1/widgets
+    route_dump_test.go:17: GET /api/v1/widgets
     route_dump_test.go:17: GET /api/v1/widgets/agent/{agent_id}
     route_dump_test.go:17: DELETE /api/v1/widgets/{widget_id}
     route_dump_test.go:17: GET /api/v1/widgets/{widget_id}
@@ -289,13 +324,13 @@
     route_dump_test.go:17: GET /api/v1/workflow/agent/{agent_id}
     route_dump_test.go:17: PUT /api/v1/workflow/{workflow_id}
     route_dump_test.go:17: DELETE /api/v1/workflow/{workflow_id}
-    route_dump_test.go:17: GET /api/v1/workflow/{workflow_id}/nodes
     route_dump_test.go:17: PUT /api/v1/workflow/{workflow_id}/nodes
+    route_dump_test.go:17: GET /api/v1/workflow/{workflow_id}/nodes
     route_dump_test.go:17: PUT /api/v1/workflow/{workflow_id}/nodes/{node_id}
     route_dump_test.go:17: GET /api/v1/workflow/{workflow_id}/nodes/{node_id}
     route_dump_test.go:17: POST /ask
-    route_dump_test.go:17: GET /health
     route_dump_test.go:17: HEAD /health
+    route_dump_test.go:17: GET /health
     route_dump_test.go:17: GET /health/help-center-domain
     route_dump_test.go:17: GET /healthz
     route_dump_test.go:17: GET /robots.txt
@@ -303,4 +338,4 @@
     route_dump_test.go:17: GET /*
 --- PASS: TestDumpRoutesForMigrationAudit (0.00s)
 PASS
-ok  	github.com/komi/komi/backend-go/internal/httpapi	0.031s
+ok  	github.com/komi/komi/backend-go/internal/httpapi	0.044s

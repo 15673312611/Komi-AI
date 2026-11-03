@@ -25,13 +25,13 @@ if exist ".env" (
     set "ENVIRONMENT=development"
     set "HTTP_ADDR=:8001"
     set "PORT=8001"
-    set "DATABASE_URL=postgresql://postgres:postgres@localhost:15432/komi"
-    set "REDIS_URL=redis://localhost:16379/0"
-    set "REDIS_ENABLED=true"
+    set "DATABASE_URL=postgresql://postgres:postgres@localhost:15433/komi"
+    set "REDIS_URL=redis://localhost:6379/0"
+    set "REDIS_ENABLED=false"
     set "BACKEND_URL=http://localhost:8001"
     set "VITE_WIDGET_URL=http://localhost:8001"
-    set "FRONTEND_URL=http://localhost:3000"
-    set "CORS_ORIGINS=http://localhost:3000,http://localhost:5173,http://localhost:8000,http://localhost:8001"
+    set "FRONTEND_URL=http://localhost:3001"
+    set "CORS_ORIGINS=http://localhost:3001,http://localhost:5173,http://localhost:8000,http://localhost:8001"
 )
 
 :: 确保项目根目录的 assets 目录存在
@@ -64,7 +64,7 @@ echo.
 
 :: 在项目根目录下运行服务，确保静态资源和配置路径正常解析
 cd /d "%~dp0\.."
-"%~dp0chattermate-server.exe"
+"%~dp0komi-server.exe"
 
 if errorlevel 1 (
     echo.

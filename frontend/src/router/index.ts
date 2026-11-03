@@ -17,7 +17,6 @@ limitations under the License.
 import { createRouter, createWebHistory } from 'vue-router'
 import type { RouteLocationNormalized, NavigationGuardNext } from 'vue-router'
 import { userService } from '@/services/user'
-import { getSetupStatus } from '@/services/organization'
 import { canAccessMatchedPaths } from '@/router/routePermissions'
 import { resolveLandingRoute } from '@/router/landing'
 import { getApiUrl } from '@/config/api'
@@ -49,7 +48,13 @@ const baseRoutes = [
   {
     path: '/setup',
     name: 'setup',
-    component: () => import('@/views/SetupView.vue'),
+    redirect: '/login',
+    meta: { requiresAuth: false },
+  },
+  {
+    path: '/register',
+    name: 'register',
+    component: () => import('@/views/LoginView.vue'),
     meta: { requiresAuth: false },
   },
   {
@@ -330,8 +335,6 @@ if (hasEnterpriseModule) {
   loadGuard()
 }
 
-let cachedSetupComplete: boolean | null = null
-
 // Navigation guard
 router.beforeEach(async (to, from, next) => {
   if (to.path.startsWith('/shopify/')) {
@@ -343,22 +346,15 @@ router.beforeEach(async (to, from, next) => {
   }
 
   const isAuthenticated = userService.isAuthenticated()
-  let isSetupComplete = cachedSetupComplete
-  if (isSetupComplete === null) {
-    isSetupComplete = await getSetupStatus()
-    if (isSetupComplete) cachedSetupComplete = true
-  }
   const requiresAuth = to.matched.some((record) => record.meta.requiresAuth)
 
   if (!isAuthenticated) {
-    if (!isSetupComplete && to.path !== '/setup') {
-      return next('/setup')
-    } else if (requiresAuth) {
+    if (requiresAuth) {
       return next({ path: '/login', query: { redirect: to.fullPath } })
     }
     return next()
   } else {
-    if (to.path === '/setup') {
+    if (to.path === '/setup' || to.path === '/register') {
       return next('/')
     }
   }

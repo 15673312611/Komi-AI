@@ -9,18 +9,10 @@ echo.
 
 cd /d "%~dp0"
 
-rem 1. Ensure database is running (Portable local PostgreSQL :15432)
-echo [1/3] Starting local database (PostgreSQL :15432)...
-netstat -aon | findstr :15432 | findstr LISTENING >nul 2>&1
-if errorlevel 1 (
-    if exist "%~dp0pgsql\bin\pg_ctl.exe" (
-        "%~dp0pgsql\bin\pg_ctl.exe" -D "%~dp0pgsql\data" -o "-p 15432" -l "%~dp0pgsql\server.log" start >nul 2>&1
-        timeout /t 1 >nul
-    ) else (
-        docker start komi-db-1 >nul 2>&1
-    )
-)
-echo   - Local Database (15432) is ready
+rem 1. Verify this project's database using backend-go/.env.
+echo [1/3] Starting and checking database...
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0start-db.ps1"
+if errorlevel 1 exit /b 1
 
 rem 2. Rebuild the Go backend from the current source on every start
 echo [2/3] Cleaning up prior instances and building Go backend...

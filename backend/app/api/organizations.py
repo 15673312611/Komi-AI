@@ -70,18 +70,6 @@ async def create_organization(
         if HAS_EMAIL_VALIDATION:
             ensure_not_disposable(org_data.admin_email)
 
-        # Check if any organization exists
-        existing_orgs = db.query(Organization).first()
-        
-        # If organizations exist, return 403 Forbidden
-        if existing_orgs:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Organization already exists"
-            )
-
-        
-      
         # Create organization
         org_repo = OrganizationRepository(db)
         organization = org_repo.create_organization(
